@@ -1,0 +1,11 @@
+stages:
+  - test
+
+test:
+  stage: test
+  image: rust:1.27
+  when: always
+  tags:
+    - docker
+  script:
+    - cargo test
