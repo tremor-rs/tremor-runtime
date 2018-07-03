@@ -1,0 +1,20 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - classifier::json:
+          rules:
+            - rule: 'a:"b"'
+              class: default
+      - grouper::bucket:
+          buckets:
+            default:
+              rate: 100
+      - render::json
+      - offramp::file:
+          file: {out}

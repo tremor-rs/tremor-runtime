@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+xs 1366207634 797040568 860912174 269275026 # shrinks to ref s = Tick
+xs 392929836 3606145946 1562021996 2953472922 # shrinks to ref s = Step { next: [Step { next: [Step { next: [Step { next: [Step { next: [Step { next: [Step { next: [New], step: Inc }], step: Inc }], step: Inc }], step: Inc }], step: Tick }], step: Inc }], step: Inc }
+xs 649893252 461117190 3117905910 2017291472 # shrinks to size = 10, max = 10, ref s = Step { next: [Step { next: [Step { next: [Step { next: [Step { next: [Step { next: [New], step: Inc }], step: Inc }], step: Inc }], step: Inc }], step: Inc }], step: Inc }

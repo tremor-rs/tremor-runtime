@@ -1,0 +1,16 @@
+---
+onramps:
+  - onramp::blaster:
+      source: ./demo/data.json.xz
+      interval: 1
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - render::json
+      - offramp::blackhole:
+          warmup_secs: 10
+          stop_after_secs: 120
+          significant_figures: 2

@@ -1,0 +1,8 @@
+onramps:
+  - onramp::http:
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - offramp::stdout

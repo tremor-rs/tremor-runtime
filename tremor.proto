@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package wayfair.tremor;
+option php_namespace = "Wayfair\\Tremor\\Proto";
+
+message Event {
+  message Header {
+    enum ContentType {
+      UNKNOWN = 0;
+      JSON = 1;
+      MSGPACK = 2;
+    }
+    ContentType content_type = 1;
+    bytes uuid = 2;
+    bytes parent_uuid = 3;
+  }
+  Header header = 1;
+  bytes body = 2;
+}

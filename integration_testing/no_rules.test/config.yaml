@@ -1,0 +1,14 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - classifier::json
+      - grouper::bucket
+      - render::json
+      - offramp::file:
+          file: {out}

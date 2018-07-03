@@ -1,0 +1,14 @@
+onramps:
+  - onramp::mssql:
+      pipeline: main
+      host: mssql
+      host: "mssql"
+      username: "sa"
+      password: "8Characters!"
+      query: "select * from sys.tables"
+      interval_ms: 10000
+
+pipelines:
+  - name: main
+    steps:
+      - offramp::stdout

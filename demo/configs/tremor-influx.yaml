@@ -1,0 +1,21 @@
+onramps:
+  - onramp::kafka:
+      pipeline: main
+      group-id: demo
+      topics:
+        - demo
+      brokers:
+        - kafka:9092
+
+pipelines:
+  - name: main
+    steps:
+      # - parse::influx
+      # - render::influx
+      - offramp::influx:
+          endpoints:
+            - "http://influx:8086"
+          database: demo
+          batch:
+            size: 100
+            timeout: 500

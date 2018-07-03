@@ -1,0 +1,58 @@
+[package]
+name = "tremor-runtime"
+version = "0.3.1"
+description = "Tremor Runtime"
+authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>"]
+
+[profile.release]
+lto = false
+
+[dependencies]
+reqwest = "0.8"
+futures = "0.1"
+rand = "0.5"
+clap = "2.23"
+rdkafka = "0.17"
+rdkafka-sys = "0.11.4-0"
+log = "0.4"
+env_logger = "0.5"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.8"
+prometheus = { version = "0.4", features = ["process"] }
+lazy_static = "0.2"
+elastic = "0.20"
+elastic_derive = "0.20"
+threadpool = "1.7.1"
+hyper = "0.12"
+chrono = "0.4"
+regex = "1"
+hostname = "0.1"
+openssl = { version="0.10" }
+base64 = "0.9"
+dot = "0.1.4"
+tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"] }
+futures-state-stream = "0.1"
+tokio = "0.1.8"
+tokio-current-thread = "0.1.1"
+tokio-threadpool = "0.1.7"
+uuid = { version = "0.7", features = ["serde", "v4"] }
+error-chain="0.12"
+actix = "0.7"
+actix-web = { version = "0.7", features = ["alpn"] }
+bytes = "0.4"
+window = { path = "window" }
+hdrhistogram = "6.0.6"
+xz2 = "0.1.5"
+libc = "0.2.43"
+spmc = "0.2.2"
+maplit = "1.0"
+
+[dev-dependencies]
+matches = "0.1.8"
+
+
+[features]
+default = []
+try_spmc = []

@@ -1,0 +1,22 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - classifier::json:
+          rules:
+            - class: 'bad1'
+              rule: ''
+            - class: 'bad2'
+              rule: 'key:'
+            - class: 'bad3'
+              rule: '42'
+            - class: 'bad4'
+              rule: '"bad'
+      - render::json
+      - offramp::file:
+          file: {out}

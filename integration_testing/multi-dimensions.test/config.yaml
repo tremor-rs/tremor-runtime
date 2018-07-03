@@ -1,0 +1,24 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - op::set:
+          var: classification
+          val: test
+      - op::into_vars:
+          keys:
+            - 'log_level'
+            - 'logstash_l1'
+          var: 'dimensions'
+      - grouper::bucket:
+          buckets:
+            test:
+              rate: 1
+      - render::json
+      - offramp::file:
+          file: {out}

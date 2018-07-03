@@ -1,0 +1,147 @@
+---
+onramps:
+  - onramp::blaster:
+      source: ./demo/data.json.xz
+      interval: 0
+      pipeline: main
+
+pipelines:
+  - name: main
+    subpipelines:
+      - name: done
+        steps:
+          - op::into_var:
+              key: wf_index_type
+              var: index
+          - render::json
+          - grouper::bucket:
+              buckets:
+                applog_recsvc:
+                  rate: 1250
+                applog_sayl:
+                  rate: 2500
+                applog_purest:
+                  rate: 18750
+                applog_admin:
+                  rate: 750
+                applog_supply_chain_services:
+                  rate: 18750
+                applog_logs:
+                  rate: 4500
+                syslog_haproxy:
+                  rate: 2500
+                syslog_cisco:
+                  rate: 125
+                syslog_logs:
+                  rate: 1750
+                syslog_influxdb:
+                  rate: 1750
+                syslog_ftpd:
+                  rate: 7500
+                syslog_hypernova:
+                  rate: 125
+                edilog:
+                  rate: 3750
+                sqlserverlog:
+                  rate: 125
+                applog:
+                  rate: 75
+                default:
+                  rate: 250
+          - offramp::blackhole:
+              warmup_secs: 10
+              stop_after_secs: 40
+              significant_figures: 2
+      - name: application
+        steps:
+          - op::into_var:
+              var: dimensions
+              key: application
+          - sub::done
+      - name: logger_name
+        steps:
+          - op::into_var:
+              var: dimensions
+              key: logger_name
+          - sub::done
+      - name: syslog_hostname
+        steps:
+          - op::into_var:
+              var: dimensions
+              key: syslog_hostname
+          - sub::done
+      - name: ips
+        steps:
+          - op::into_vars:
+              var: dimensions
+              keys:
+                - src_ip
+                - dst_ip
+          - sub::done
+    steps:
+      - parse::json
+      - classifier::json:
+          rules:
+            - rule: application="recsvc"
+              class: applog_recsvc
+            - rule: application="sayl"
+              class: applog_sayl
+            - rule: wf_index_type="applog_purest"
+              class: applog_purest
+            - rule: wf_index_type="applog_admin"
+              class: applog_admin
+            - rule: wf_index_type="applog_supply_chain_services"
+              class: applog_supply_chain_services
+            - rule: wf_index_type="applog_logs"
+              class: applog_logs
+            - rule: wf_index_type="syslog_haproxy"
+              class: syslog_haproxy
+            - rule: tags:"cisco"
+              class: syslog_cisco
+            - rule: wf_index_type="syslog_logs"
+              class: syslog_logs
+            - rule: wf_index_type="syslog_influxdb"
+              class: syslog_influxdb
+            - rule: wf_index_type="syslog_ftpd"
+              class: syslog_ftpd
+            - rule: wf_index_type="syslog_hypernova"
+              class: syslog_hypernova
+            - rule: wf_index_type="edilog"
+              class: edilog
+            - rule: wf_index_type="sqlserverlog"
+              class: sqlserverlog
+            - rule: type="applog"
+              class: applog
+      - op::route:
+          var: classification
+          vals:
+            - applog_recsvc
+            - applog_sayl
+            - applog_logs
+            - applog
+
+            - applog_purest
+            - applog_admin
+
+            - syslog_haproxy
+            - syslog_logs
+            - syslog_ftpd
+            - syslog_hypernova
+
+            - syslog_cisco
+          outputs:
+            - sub::application
+            - sub::application
+            - sub::application
+            - sub::application
+
+            - sub::logger_name
+            - sub::logger_name
+
+            - sub::syslog_hostname
+            - sub::syslog_hostname
+            - sub::syslog_hostname
+            - sub::syslog_hostname
+
+            - sub::ips
+      - sub::done

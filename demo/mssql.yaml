@@ -1,0 +1,20 @@
+version: '3.3'
+services:
+  mssql:
+    image: 'microsoft/mssql-server-linux:2017-latest'
+    ports:
+      - '1433:1433'
+    environment:
+      - ACCEPT_EULA=Y
+      - 'SA_PASSWORD=8Characters!'
+  tremor:
+    image: tremor-runtime
+    depends_on:
+      - mssql
+    ports:
+      - 9898:9898
+    environment:
+      - SLEEP=20
+      - CONFIG_FILE=/configs/tremor-mssql.yaml
+    volumes:
+      - ./configs:/configs:ro

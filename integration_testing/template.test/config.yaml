@@ -1,0 +1,10 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - offramp::file:
+          file: {out}
