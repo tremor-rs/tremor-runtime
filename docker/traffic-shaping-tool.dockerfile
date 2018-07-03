@@ -41,7 +41,7 @@ FROM artifactory.service.bo1.csnzoo.com/external/alpine:3.6
 #
 # 2. Start at a version semantic version you prefer to use.
 #
-ARG tag=0.1.1
+ARG tag=0.1.2
 ENV wf_version=$tag
 
 # This ENV declaration uses a base image build hook defined in `centos74-base`.
