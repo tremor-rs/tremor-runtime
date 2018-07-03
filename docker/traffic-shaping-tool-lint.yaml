@@ -1,0 +1,19 @@
+#
+# docker/example-lint.yaml
+#
+# Lint rules for the example container image.
+#
+# @author Nick Hentschel <nhentschel@wayfair.com>
+# @copyright 2018 Wayfair, LLC. -- All rights reserved.
+
+---
+line_rules:
+  EXPOSE:
+    paramSyntaxRegex: /.+/
+    rules:
+    - label: "must_two_stage_build"
+      description: "Image must use two stage builds."
+      inverse_rule: false
+      level: "error"
+      message: "Image must use two stage builds."
+      regex: /\b^COPY --from=0$\b/

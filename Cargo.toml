@@ -1,0 +1,6 @@
+[package]
+name = "traffic-shaping-tool"
+version = "0.1.0"
+authors = ["Heinz Gies <hgies@wayfair.com>"]
+
+[dependencies]

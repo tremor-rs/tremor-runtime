@@ -1,0 +1,24 @@
+#
+# docker-compose.yaml
+#
+# Sample Docker Compose file used for building an example image.
+#
+# More information on using Docker Compose is available in the official docs:
+# https://docs.docker.com/compose/.
+#
+# @author Nick Hentschel <nhentschel@wayfair.com>
+# @copyright 2018 Wayfair, LLC. -- All rights reserved.
+
+# Set the Docker Compose API version. Don't change this unless you know what
+# you're doing.
+version: '3.4'
+
+# Define the Docker Compose services that are available to build and run.
+services:
+
+  # Defines the example service, which uses the example Docker image.
+  traffic-shaping-tool:
+    image: wayfair/data-engineering/traffic-shaping-tool
+    build:
+      dockerfile: docker/traffic-shaping-tool.dockerfile
+      context: .

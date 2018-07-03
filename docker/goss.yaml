@@ -1,0 +1,26 @@
+#
+# docker/goss.yaml
+#
+# Goss testing file for the example container, which makes sure that the Python
+# webserver is running correctly.
+#
+# @author Matthew Coleman <mcoleman@wayfair.com>
+# @copyright 2018 Wayfair, LLC. -- All rights reserved.
+
+---
+#process:
+#  traffic-shaping-tool:
+#    running: true
+file:
+  /root/traffic-shaping-tool:
+    exists: true
+    mode: "0755"
+    owner: root
+    group: root
+    filetype: file
+  /root/traffic-shaping-tool.sh:
+    exists: true
+    mode: "0755"
+    owner: root
+    group: root
+    filetype: file

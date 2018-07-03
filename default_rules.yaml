@@ -1,0 +1,139 @@
+#
+# global.yaml
+#
+# Global lint rules for all Wayfair Dockerfiles. Every dockerfile in this repo
+# is tested against these rules.
+#
+# @author Oleksandr Didenko <odidneko@wayfair.com>
+# @author Nick Hentschel <nhentschel@wayfair.com>
+# @copyright 2018 Wayfair, LLC. -- All rights reserved.
+
+---
+line_rules:
+
+  FROM:
+    paramSyntaxRegex: /.+/
+    rules:
+    - label: "is_latest_tag"
+      regex: /latest/
+      level: "error"
+      message: "Base image uses 'latest' tag"
+      description: >
+        "Using the 'latest' tag may cause unpredictable builds. It is
+        recommended that a specific tag is used in the FROM line"
+      reference_url:
+      - "https://docs.docker.com/engine/reference/builder/"
+      - "#from"
+    - label: "not_from_wayfair"
+      regex: /\bwayfair\/|\bscratch\b|\bexternal\b/
+      inverse_rule: true
+      level: "error"
+      message: "Image is not from Wayfair"
+      description: "It must be from Wayfair (wayfair/*-base)"
+    - label: "no_tag"
+      regex: /:|\bscratch\b/
+      level: "error"
+      inverse_rule: true
+      message: "No tag is used"
+      description: >
+        "It is recommended that a specific tag is used in the FROM line"
+      reference_url:
+      - "https://docs.docker.com/engine/reference/builder/"
+      - "#from"
+
+  MAINTAINER:
+    paramSyntaxRegex: /.+/
+    rules:
+    - label: "maintainer_deprecated"
+      regex: /.+/
+      level: "info"
+      message: "the MAINTAINER command is deprecated"
+      description: >
+        "MAINTAINER is deprecated in favor of using LABEL since Docker v1.13.0"
+      reference_url:
+      - "https://github.com/docker/cli/blob/master/docs/deprecated.md"
+      - "#maintainer-in-dockerfile"
+
+  RUN:
+    paramSyntaxRegex: /.+/
+    rules:
+    - label: "semi_colon_usage"
+      regex: /;/
+      level: "error"
+      message: "Using ; instead of &&"
+      description: >
+        "RUN do_1 && do_2: The ampersands change the resulting evaluation into
+        do_1 and then do_2 only if do_1 was successful"
+      reference_url:
+      - "http://docs.projectatomic.io/container-best-practices/"
+      - "#_using_double_ampersands_vs_semi_colons"
+    - label: "no_yum_clean_all"
+      regex: /yum(?!.+clean all|.+\.repo|-config|\.conf)/g
+      level: "warn"
+      message: "yum clean all is not used"
+      description: >
+        "the yum cache will remain in this layer making the layer
+        unnecessarily large"
+      reference_url:
+      - "http://docs.projectatomic.io/container-best-practices/#"
+      - "_clear_packaging_caches_and_temporary_package_downloads"
+    - label: "yum_update_all"
+      regex: /yum(.+update all|.+upgrade|.+update)/
+      level: "info"
+      message: >
+        "updating the entire base image may add unnecessary size to the
+        container"
+      description: >
+        "update the entire base image may add unnecessary size to the
+        container"
+      reference_url:
+      - "http://docs.projectatomic.io/container-best-practices/#"
+      - "_clear_packaging_caches_and_temporary_package_downloads"
+
+  LABEL:
+    paramSyntaxRegex: /.+/
+    defined_namevals:
+      com.wayfair.maintainer:
+        description: "Please use your Wayfair email address"
+        inverse_rule: true
+        level: "error"
+        message: "Maintainer email is not from Wayfair"
+        regex: /@wayfair.com\b/
+      com.wayfair.vendor:
+        level: error
+        message: "Label 'com.wayfair.vendor' has invalid format"
+        required: true
+        valueRegex: /Wayfair LLC\./
+      com.wayfair.version:
+        level: error
+        message: "Label 'com.wayfair.version' has invalid format"
+        required: true
+        valueRegex: /.+/
+      com.wayfair.app:
+        level: error
+        message: "Label 'com.wayfair.app' has invalid format"
+        required: true
+        valueRegex: /.+/
+      com.wayfair.description:
+        level: error
+        message: "Label 'com.wayfair.description' has invalid format"
+        required: true
+        valueRegex: /.+/
+    nameval_defaults:
+      keyRegex: /.+/
+      level: error
+      name_error_message: "The key of the label has the wrong format"
+      reference_url:
+      - "https://docs.docker.com/engine/reference/builder/"
+      - "#label"
+      valueRegex: /.+/
+      value_error_message: "The value of the label has the wrong format"
+
+required_instructions:
+- instruction: LABEL
+  level: error
+  message: "No LABELs are defined"
+  description: "Labels are needed because...."
+  reference_url:
+  - "https://docs.docker.com/engine/reference/builder/"
+  - "#label"
