@@ -14,6 +14,7 @@ pub fn new(name: &str, opts: &str) -> Classifiers {
 pub enum Classifiers {
     Static(StaticClassifier),
 }
+
 impl Classifier for Classifiers {
     fn classify(&self, msg: Parsed) -> Result<Classified, TSError> {
         match self {
@@ -21,6 +22,7 @@ impl Classifier for Classifiers {
         }
     }
 }
+
 /// The result of the classification
 pub struct Classified {
     pub msg: Parsed,

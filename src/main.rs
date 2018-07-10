@@ -8,12 +8,18 @@ extern crate rand;
 extern crate rdkafka;
 extern crate rdkafka_sys;
 extern crate serde_json;
+#[macro_use]
+extern crate prometheus;
+#[macro_use]
+extern crate lazy_static;
+extern crate hyper;
 
 mod classifier;
 mod error;
 mod grouping;
 mod input;
 mod limiting;
+mod metrics;
 mod output;
 mod parser;
 mod pipeline;
@@ -21,6 +27,12 @@ mod pipeline;
 use clap::{App, Arg};
 use input::Input;
 use pipeline::Pipeline;
+
+use hyper::rt::Future;
+use hyper::service::service_fn;
+use hyper::Server;
+
+use std::thread;
 
 // consumer example: https://github.com/fede1024/rust-rdkafka/blob/db7cf0883b6086300b7f61998e9fbcfe67cc8e73/examples/at_least_once.rs
 
@@ -147,6 +159,16 @@ fn main() {
     let limiting = limiting::new(limiting, limiting_config);
 
     let pipeline = Pipeline::new(parser, classifier, grouping, limiting, output);
+
+    // We spawn the HTTP endpoint in an own thread so it doens't block the main loop.
+    thread::spawn(move || {
+        let addr = ([0, 0, 0, 0], 9898).into();
+        println!("Listening at: http://{}", addr);
+        let server = Server::bind(&addr)
+            .serve(|| service_fn(metrics::dispatch))
+            .map_err(|e| error!("server error: {}", e));
+        hyper::rt::run(server);
+    });
 
     let _ = input.enter_loop(pipeline);
 }

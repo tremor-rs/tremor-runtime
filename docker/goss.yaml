@@ -24,3 +24,9 @@ file:
     owner: root
     group: root
     filetype: file
+http:
+  "http://localhost:9898/metrics":
+    allow-insecure: false
+    no-follow-redirects: false
+    status: 200
+    timeout: 1000

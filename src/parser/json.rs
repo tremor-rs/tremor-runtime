@@ -1,6 +1,6 @@
 use error::TSError;
 use parser::utils::{Parsed, Parser as ParserT};
-use serde_json::{self, Error, Value};
+use serde_json::{self, Value};
 
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`

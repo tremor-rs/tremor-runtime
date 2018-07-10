@@ -5,6 +5,21 @@ use limiting::{Limiters, Limitier};
 use output::{Output, Outputs};
 use parser::{Parser, Parsers};
 
+use prometheus::Counter;
+
+lazy_static! {
+    /*
+     * Number of errors read received from the input
+     */
+    static ref OPTOUT_DROPED: Counter =
+        register_counter!(opts!("ts_output_droped", "Messages dropped.")).unwrap();
+    /*
+     * Number of successes read received from the input
+     */
+    static ref OUTPUT_DELIVERED: Counter =
+        register_counter!(opts!("ts_output_delivered", "Messages delivered.")).unwrap();
+}
+
 /// Pipeline struct, collecting all the steps of our internal pipeline
 pub struct Pipeline {
     parser: Parsers,
@@ -40,12 +55,14 @@ impl Pipeline {
             .and_then(|grouped| self.limiting.apply(grouped))
             .and_then(|r| {
                 if !r.drop {
+                    OUTPUT_DELIVERED.inc();
                     if let Some(key) = msg.key() {
                         self.output.send(Some(key.as_str()), msg.payload().as_str())
                     } else {
                         self.output.send(None, msg.payload().as_str())
                     }
                 } else {
+                    OPTOUT_DROPED.inc();
                     Ok(())
                 }
             })

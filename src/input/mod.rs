@@ -13,6 +13,21 @@ use rdkafka::Message;
 use rdkafka_sys;
 use std::io::{self, BufRead, BufReader};
 
+use prometheus::Counter;
+
+lazy_static! {
+    /*
+     * Number of errors read received from the input
+     */
+    static ref INPUT_ERR: Counter =
+        register_counter!(opts!("ts_input_errors", "Errors from input.")).unwrap();
+    /*
+     * Number of successes read received from the input
+     */
+    static ref INPUT_OK: Counter =
+        register_counter!(opts!("ts_input_successes", "Successes from input.")).unwrap();
+}
+
 pub trait Input {
     fn enter_loop(&self, pipeline: Pipeline);
 }
@@ -54,10 +69,11 @@ impl Input for StdinInput {
             debug!("Line: {:?}", line);
             match line {
                 Ok(line) => {
+                    INPUT_OK.inc();
                     let msg = Msg::new(None, line);
                     let _ = pipeline.run(msg);
                 }
-                Err(_) => (),
+                Err(_) => INPUT_ERR.inc(),
             }
         }
     }
@@ -148,7 +164,10 @@ impl Input for KafkaInput {
                     // Now that the message is completely processed, add it's position to the offset
                     // store. The actual offset will be committed every 5 seconds.
                     if let Err(e) = self.consumer.store_offset(&m) {
+                        INPUT_ERR.inc();
                         warn!("Error while storing offset: {}", e);
+                    } else {
+                        INPUT_OK.inc();
                     }
                 }
             }
