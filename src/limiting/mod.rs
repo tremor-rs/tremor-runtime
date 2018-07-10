@@ -22,7 +22,7 @@ pub enum Limiters {
 }
 
 impl Limitier for Limiters {
-    fn apply(&self, msg: MaybeMessage) -> Result<MaybeMessage, TSError> {
+    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
         match self {
             Limiters::Percentile(b) => b.apply(msg),
         }
@@ -30,7 +30,7 @@ impl Limitier for Limiters {
 }
 /// The grouper trait, defining the required functions for a grouper.
 pub trait Limitier {
-    fn apply(&self, msg: MaybeMessage) -> Result<MaybeMessage, TSError>;
+    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError>;
 }
 
 /// A Limitier algorith that just lets trough a percentage of messages
@@ -47,7 +47,7 @@ impl PercentileLimit {
 }
 
 impl Limitier for PercentileLimit {
-    fn apply(&self, msg: MaybeMessage) -> Result<MaybeMessage, TSError> {
+    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
         if msg.drop {
             Ok(msg)
         } else {
@@ -73,14 +73,14 @@ mod tests {
     use parser::Parser;
     #[test]
     fn keep_all() {
-        let s = String::from("Example");
+        let s = "Example";
 
         let p = parser::new("raw", "");
         let c = classifier::new("static", "Classification");
         let g = grouping::new("pass", "");
         let b = limiting::new("percentile", "1.0");
 
-        let msg = p.parse(s.clone())
+        let msg = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
             .and_then(|classified| g.group(classified))
             .and_then(|msg| b.apply(msg))
@@ -90,14 +90,14 @@ mod tests {
 
     #[test]
     fn keep_non() {
-        let s = String::from("Example");
+        let s = "Example";
 
         let p = parser::new("raw", "");
         let c = classifier::new("static", "Classification");
         let g = grouping::new("pass", "");
         let b = limiting::new("percentile", "0");
 
-        let msg = p.parse(s.clone())
+        let msg = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
             .and_then(|classified| g.group(classified))
             .and_then(|msg| b.apply(msg))

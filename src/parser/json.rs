@@ -11,8 +11,8 @@ impl Parser {
     }
 }
 impl ParserT for Parser {
-    fn parse(&self, msg: String) -> Result<Parsed, TSError> {
-        match serde_json::from_str::<Value>(msg.as_str()) {
+    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
+        match serde_json::from_str::<Value>(msg) {
             Ok(_) => Ok(Parsed::new(msg)),
             Err(e) => {
                 warn!("Bad JSON: {}", e);

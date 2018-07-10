@@ -3,20 +3,20 @@ use error::TSError;
 /// The parser trait defines the functiuonality each parser needs
 /// to provde.
 pub trait Parser {
-    fn parse(&self, msg: String) -> Result<Parsed, TSError>;
+    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError>;
 }
 
 /// The Parsed struct contains the raw data we received along with
 /// the parsed output based on the parser
-pub struct Parsed {
-    raw: String,
+pub struct Parsed<'a> {
+    raw: &'a str,
 }
 
-impl Parsed {
-    pub fn new(raw: String) -> Self {
+impl<'a> Parsed<'a> {
+    pub fn new(raw: &'a str) -> Parsed<'a> {
         Self { raw: raw }
     }
-    pub fn raw(&self) -> String {
-        self.raw.clone()
+    pub fn raw(&self) -> &str {
+        self.raw
     }
 }

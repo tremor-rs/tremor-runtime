@@ -70,7 +70,7 @@ impl Input for StdinInput {
             match line {
                 Ok(line) => {
                     INPUT_OK.inc();
-                    let msg = Msg::new(None, line);
+                    let msg = Msg::new(None, line.as_str());
                     let _ = pipeline.run(msg);
                 }
                 Err(_) => INPUT_ERR.inc(),
@@ -152,11 +152,11 @@ impl Input for KafkaInput {
                     match m.payload_view::<str>() {
                         Some(Ok(p)) => {
                             let key = match m.key_view::<str>() {
-                                Some(key) => Some(String::from(key.unwrap())),
+                                Some(key) => Some(key.unwrap()),
                                 None => None,
                             };
                             pipeline
-                                .run(Msg::new(key, String::from(p)))
+                                .run(Msg::new(key, p))
                                 .expect("Error during handling message")
                         }
                         _ => (),

@@ -24,7 +24,7 @@ pub enum Parsers {
 }
 
 impl Parser for Parsers {
-    fn parse(&self, msg: String) -> Result<Parsed, TSError> {
+    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
         match self {
             Parsers::Raw(p) => p.parse(msg),
             Parsers::JSON(p) => p.parse(msg),
@@ -38,25 +38,25 @@ mod tests {
     use parser::Parser;
     #[test]
     fn raw_parser() {
-        let s = String::from("Example");
+        let s = "Example";
         let p = parser::new("raw", "");
-        let parsed = p.parse(s.clone()).expect("parsing failed!");
+        let parsed = p.parse(s).expect("parsing failed!");
         assert_eq!(s, parsed.raw());
     }
 
     #[test]
     fn json_parser() {
-        let s = String::from("[1]");
+        let s = "[1]";
         let p = parser::new("json", "");
-        let parsed = p.parse(s.clone()).expect("parsing failed!");
+        let parsed = p.parse(s).expect("parsing failed!");
         assert_eq!(s, parsed.raw());
     }
 
     #[test]
     fn json_parser_error() {
-        let s = String::from("[1");
+        let s = "[1";
         let p = parser::new("json", "");
-        let parsed = p.parse(s.clone());
+        let parsed = p.parse(s);
         assert!(parsed.is_err());
     }
 }

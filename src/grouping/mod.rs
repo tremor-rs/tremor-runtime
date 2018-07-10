@@ -20,20 +20,20 @@ pub enum Groupers {
     Boolean(BooleanGrouper),
 }
 impl Grouper for Groupers {
-    fn group(&self, msg: Classified) -> Result<MaybeMessage, TSError> {
+    fn group<'c, 'p>(&self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError> {
         match self {
             Groupers::Boolean(g) => g.group(msg),
         }
     }
 }
-pub struct MaybeMessage {
+pub struct MaybeMessage<'p> {
     pub drop: bool,
-    pub msg: Parsed,
+    pub msg: Parsed<'p>,
 }
 
 /// The grouper trait, defining the required functions for a grouper.
 pub trait Grouper {
-    fn group(&self, msg: Classified) -> Result<MaybeMessage, TSError>;
+    fn group<'c, 'p>(&self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError>;
 }
 
 /// A grouper either drops or keeps all messages.
@@ -50,7 +50,7 @@ impl BooleanGrouper {
     }
 }
 impl Grouper for BooleanGrouper {
-    fn group(&self, msg: Classified) -> Result<MaybeMessage, TSError> {
+    fn group<'c, 'p>(&self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError> {
         Ok(MaybeMessage {
             drop: self.drop,
             msg: msg.msg,
@@ -68,19 +68,19 @@ mod tests {
     use parser::Parser;
     #[test]
     fn boolean_grouper() {
-        let s = String::from("Example");
+        let s = "Example";
         let p = parser::new("raw", "");
         let c = classifier::new("static", "Classification");
         let g_d = grouping::new("drop", "");
         let g_k = grouping::new("pass", "");
 
-        let r = p.parse(s.clone())
+        let r = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
             .and_then(|classified| g_d.group(classified))
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
-        let r = p.parse(s.clone())
+        let r = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
             .and_then(|classified| g_k.group(classified))
             .expect("grouping failed");

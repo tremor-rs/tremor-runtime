@@ -10,7 +10,7 @@ impl Parser {
     }
 }
 impl ParserT for Parser {
-    fn parse(&self, msg: String) -> Result<Parsed, TSError> {
+    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
         Ok(Parsed::new(msg))
     }
 }
