@@ -8,9 +8,9 @@
 # @copyright 2018 Wayfair, LLC. -- All rights reserved.
 
 ---
-#process:
-#  traffic-shaping-tool:
-#    running: true
+process:
+  traffic-shaping-tool:
+    running: true
 file:
   /root/traffic-shaping-tool:
     exists: true
