@@ -64,3 +64,7 @@ The `kafka` output writes messages to a kafka topic, this is configured in the f
 The docker container build takes environment variables for each plugin. The `input` plugin is provided as `INPUT=...` and it's configuration as `INPUT_CONFIG=...`. Plugins and configs may be omitted and will then be replaced with a default, for configurations the default is an empty configuration.
 
 In addition the `RUST_LOG` environment variable can be passed to define the log level of the application.
+
+## Tests
+
+Tests can be found in `docker/goss.yaml`

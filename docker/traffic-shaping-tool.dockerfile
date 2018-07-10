@@ -84,11 +84,11 @@ LABEL \
 #
 WORKDIR /root/
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/traffic-shaping-tool .
-COPY traffic-shaping-tool.sh .
+COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/traffic-shaping-tool tst
+COPY tst.sh .
 
 # This image runs SimpleHTTPServer when the container starts.
 #
 # 9.  Change this to a command which starts your application.
 #
-CMD ["./traffic-shaping-tool.sh"]
+CMD ["./tst.sh"]

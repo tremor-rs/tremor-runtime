@@ -9,16 +9,16 @@
 
 ---
 process:
-  traffic-shaping-tool:
+  tst:
     running: true
 file:
-  /root/traffic-shaping-tool:
+  /root/tst:
     exists: true
     mode: "0755"
     owner: root
     group: root
     filetype: file
-  /root/traffic-shaping-tool.sh:
+  /root/tst.sh:
     exists: true
     mode: "0755"
     owner: root

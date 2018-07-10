@@ -18,5 +18,4 @@ lint:
 		dockerfile_lint -p -f docker/$(APP).dockerfile -r default_rules.yaml
 
 goss: build
-	GOSS_FILES_PATH=docker/ dgoss run --name "example-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
-
+	GOSS_FILES_PATH=docker/ dgoss run --name "$(APP)-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
