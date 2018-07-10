@@ -7,6 +7,7 @@ extern crate futures;
 extern crate rand;
 extern crate rdkafka;
 extern crate rdkafka_sys;
+extern crate serde_json;
 
 mod classifier;
 mod error;
@@ -63,7 +64,7 @@ fn main() {
             Arg::with_name("parser")
                 .short("p")
                 .long("parser")
-                .help("parser to use. Valid options are 'raw'")
+                .help("parser to use. Valid options are 'raw', and 'json'")
                 .takes_value(true)
                 .default_value("raw"),
         )

@@ -20,6 +20,9 @@ Parsers handle converting the message from the raw binary to a representation fo
 ### raw
 The `raw` parser performs no additional steps and just passes the message on untouched.
 
+### json
+The `json` parser parses the input as a json and fails if the data is invlaid.
+
 ## Classifier
 Classifiers handle message classification based on rules.
 
