@@ -14,15 +14,16 @@ extern crate prometheus;
 extern crate lazy_static;
 extern crate hyper;
 
-mod classifier;
-mod error;
-mod grouping;
-mod input;
-mod limiting;
-mod metrics;
-mod output;
-mod parser;
-mod pipeline;
+pub mod classifier;
+pub mod error;
+pub mod grouping;
+pub mod input;
+pub mod limiting;
+pub mod metrics;
+pub mod output;
+pub mod parser;
+pub mod pipeline;
+pub mod window;
 
 use clap::{App, Arg};
 use input::Input;
