@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 pub trait Input {
-    fn enter_loop(&self, pipeline: Pipeline);
+    fn enter_loop(&self, pipeline: &mut Pipeline);
 }
 
 pub fn new(name: &str, opts: &str) -> Inputs {
@@ -46,7 +46,7 @@ pub enum Inputs {
 }
 
 impl Input for Inputs {
-    fn enter_loop(&self, pipeline: Pipeline) {
+    fn enter_loop(&self, pipeline: &mut Pipeline) {
         match self {
             Inputs::Kafka(i) => i.enter_loop(pipeline),
             Inputs::Stdin(i) => i.enter_loop(pipeline),
@@ -62,7 +62,7 @@ impl StdinInput {
     }
 }
 impl Input for StdinInput {
-    fn enter_loop(&self, pipeline: Pipeline) {
+    fn enter_loop(&self, pipeline: &mut Pipeline) {
         let stdin = io::stdin();
         let stdin = BufReader::new(stdin);
         for line in stdin.lines() {
@@ -137,7 +137,7 @@ impl KafkaInput {
 }
 
 impl Input for KafkaInput {
-    fn enter_loop(&self, pipeline: Pipeline) {
+    fn enter_loop(&self, pipeline: &mut Pipeline) {
         for message in self.consumer.start().wait() {
             match message {
                 Err(_e) => {

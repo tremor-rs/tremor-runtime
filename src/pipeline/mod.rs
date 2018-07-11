@@ -24,7 +24,7 @@ lazy_static! {
 pub struct Pipeline<'p> {
     parser: Parsers,
     classifier: Classifiers<'p>,
-    grouper: Groupers,
+    grouper: Groupers<'p>,
     limiting: Limiters,
     output: Outputs,
 }
@@ -34,7 +34,7 @@ impl<'p> Pipeline<'p> {
     pub fn new(
         parser: Parsers,
         classifier: Classifiers<'p>,
-        grouper: Groupers,
+        grouper: Groupers<'p>,
         limiting: Limiters,
         output: Outputs,
     ) -> Self {
@@ -47,19 +47,24 @@ impl<'p> Pipeline<'p> {
         }
     }
     /// Runs each step of the pipeline and returns either a OK or a error result
-    pub fn run(&self, msg: Msg) -> Result<(), TSError> {
-        self.parser
+    pub fn run(&mut self, msg: Msg) -> Result<(), TSError> {
+        let parser = &self.parser;
+        let classifier = &self.classifier;
+        let grouper = &mut self.grouper;
+        let limiting = &self.limiting;
+        let output = &self.output;
+        parser
             .parse(msg.payload)
-            .and_then(|parsed| self.classifier.classify(parsed))
-            .and_then(|classified| self.grouper.group(classified))
-            .and_then(|grouped| self.limiting.apply(grouped))
+            .and_then(|parsed| classifier.classify(parsed))
+            .and_then(|classified| grouper.group(classified))
+            .and_then(|grouped| limiting.apply(grouped))
             .and_then(|r| {
                 if !r.drop {
                     OUTPUT_DELIVERED.inc();
                     if let Some(key) = msg.key {
-                        self.output.send(Some(key), msg.payload)
+                        output.send(Some(key), msg.payload)
                     } else {
-                        self.output.send(None, msg.payload)
+                        output.send(None, msg.payload)
                     }
                 } else {
                     OPTOUT_DROPED.inc();

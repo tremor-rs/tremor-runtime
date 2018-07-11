@@ -98,7 +98,7 @@ impl TimeWindow {
 
     /// Tries to increment the counter by 1. See `SlidingWindow::inc` for details.
     pub fn inc(&mut self) -> Result<u64, u64> {
-        self.window.add(1)
+        self.add(1)
     }
     /// Tries to increment the counter by n. See `SlidingWindow::add` for details.
     pub fn add(&mut self, n: u64) -> Result<u64, u64> {
@@ -168,7 +168,7 @@ mod tests {
     //
     // Perhaps some time in the future there is time to
     // investigate a if there is a way to shift time forcefully.
-    /*
+
     // We take this out since it's not reliable at the moment
     #[test]
     fn timer() {
@@ -185,5 +185,5 @@ mod tests {
         println!("{:?}", tw);
         assert!(r.is_ok());
     }
-    */
+
 }

@@ -107,7 +107,7 @@ fn main() {
             Arg::with_name("grouping")
                 .short("g")
                 .long("grouping")
-                .help("grouping logic to use. Valid options are 'drop' and 'pass'")
+                .help("grouping logic to use. Valid options are 'bucket', drop' and 'pass'")
                 .takes_value(true)
                 .default_value("pass"),
         )
@@ -159,7 +159,7 @@ fn main() {
     let limiting_config = matches.value_of("limiting-config").unwrap();
     let limiting = limiting::new(limiting, limiting_config);
 
-    let pipeline = Pipeline::new(parser, classifier, grouping, limiting, output);
+    let mut pipeline = Pipeline::new(parser, classifier, grouping, limiting, output);
 
     // We spawn the HTTP endpoint in an own thread so it doens't block the main loop.
     thread::spawn(move || {
@@ -171,5 +171,5 @@ fn main() {
         hyper::rt::run(server);
     });
 
-    let _ = input.enter_loop(pipeline);
+    let _ = input.enter_loop(&mut pipeline);
 }

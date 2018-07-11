@@ -23,6 +23,7 @@ impl<'c> Classifier<'c> for Classifiers<'c> {
 }
 
 /// The result of the classification
+#[derive(Debug)]
 pub struct Classified<'c, 'p> {
     pub msg: Parsed<'p>,
     pub classification: &'c str,

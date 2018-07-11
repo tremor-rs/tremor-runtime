@@ -38,6 +38,9 @@ The `pass` grouping will pass all messages.
 ### drop
 The `drop` grouping will drop all messages.
 
+### bucket
+The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in messages per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `<name>:<rate / s>|<name>:<rate / s>|...`.
+
 ## Limiting
 The limiting plugin is responsible for limiting the entierty of the message stream after grouping has been performed.
 

@@ -8,6 +8,7 @@ pub trait Parser {
 
 /// The Parsed struct contains the raw data we received along with
 /// the parsed output based on the parser
+#[derive(Debug)]
 pub struct Parsed<'a> {
     raw: &'a str,
 }
