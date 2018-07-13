@@ -155,9 +155,10 @@ impl Input for KafkaInput {
                                 Some(key) => Some(key.unwrap()),
                                 None => None,
                             };
-                            pipeline
-                                .run(Msg::new(key, p))
-                                .expect("Error during handling message")
+                            match pipeline.run(Msg::new(key, p)) {
+                                Ok(_) => (),
+                                Err(e) => error!("Error during handling message: {:?}", e),
+                            }
                         }
                         _ => (),
                     };
