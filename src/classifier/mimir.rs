@@ -34,7 +34,6 @@ impl Classifier {
                             } else {
                                 panic!("Bad format argument needs to be an array of objects with one key value pair.")
                             }
-                            
                         },
                         _ => panic!("Bad format argument needs to be an array of objects with one key value pair.")
 
