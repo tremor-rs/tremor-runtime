@@ -13,7 +13,7 @@ impl Parser {
 impl ParserT for Parser {
     fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
         match serde_json::from_str::<Value>(msg) {
-            Ok(_) => Ok(Parsed::new(msg)),
+            Ok(parsed) => Ok(Parsed::new(msg, parsed)),
             Err(e) => {
                 warn!("Bad JSON: {}", e);
                 Err(TSError::new(format!("Serade error: {}", e).as_str()))

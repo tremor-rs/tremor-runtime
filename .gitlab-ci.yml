@@ -8,4 +8,6 @@ test:
   tags:
     - docker
   script:
+    - apt update 
+    - apt install -y bison flex
     - cargo test

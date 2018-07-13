@@ -19,7 +19,8 @@
 # @author Matthew Coleman <mcoleman@wayfair.com>
 # @copyright 2018 Wayfair, LLC. -- All rights reserved.
 
-FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.26.0 as builder
+FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.27.0 as builder
+RUN sudo apt update && sudo apt install -y bison flex
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
@@ -41,7 +42,7 @@ FROM artifactory.service.bo1.csnzoo.com/external/alpine:3.6
 #
 # 2. Start at a version semantic version you prefer to use.
 #
-ARG tag=0.1.3
+ARG tag=0.1.4
 ENV wf_version=$tag
 
 # This ENV declaration uses a base image build hook defined in `centos74-base`.

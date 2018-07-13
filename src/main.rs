@@ -13,6 +13,8 @@ extern crate prometheus;
 #[macro_use]
 extern crate lazy_static;
 extern crate hyper;
+extern crate mimir_rs;
+extern crate regex;
 
 pub mod classifier;
 pub mod error;
@@ -24,7 +26,6 @@ pub mod output;
 pub mod parser;
 pub mod pipeline;
 pub mod window;
-
 use clap::{App, Arg};
 use input::Input;
 use pipeline::Pipeline;
@@ -33,12 +34,18 @@ use hyper::rt::Future;
 use hyper::service::service_fn;
 use hyper::Server;
 
+use rdkafka::util::get_rdkafka_version;
+
 use std::thread;
 
 // consumer example: https://github.com/fede1024/rust-rdkafka/blob/db7cf0883b6086300b7f61998e9fbcfe67cc8e73/examples/at_least_once.rs
 
 fn main() {
     env_logger::init();
+
+    println!("mimir version: {}", mimir_rs::mimir::version());
+    let (version_n, version_s) = get_rdkafka_version();
+    println!("rd_kafka_version: 0x{:08x}, {}", version_n, version_s);
 
     let matches = App::new("traffic shaping utility")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
@@ -92,8 +99,8 @@ fn main() {
             Arg::with_name("classifier")
                 .short("c")
                 .long("classifier")
-                .help("classifier to use. Valid options are 'static'")
-                .default_value("static")
+                .help("classifier to use. Valid options are 'constant'")
+                .default_value("constant")
                 .takes_value(true),
         )
         .arg(

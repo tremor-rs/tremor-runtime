@@ -1,7 +1,5 @@
 This tool allows to configure a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 
-
-
 # Plugins
 Some plugins require additional configuration to be passed others do not.
 
@@ -26,8 +24,13 @@ The `json` parser parses the input as a json and fails if the data is invlaid.
 ## Classifier
 Classifiers handle message classification based on rules.
 
-### static
-The `static` classifier classifies all messages with the type passed as it's config.
+### constant
+The `constant` classifier classifies all messages with the type passed as it's config.
+
+### mimir
+The `mimir` classifier uses the mimir matching language to match rules against given classifications.
+
+The configuration is provided as a json in the form: `[{"rule1": "classification1"}, {"rule2": "classification2"}, ...]`. If no rule matches the classificatin is set to `"default"`.
 
 ## Grouping
 The grouping defines the algorithm used to group classified messages.

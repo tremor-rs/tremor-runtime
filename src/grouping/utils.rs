@@ -9,5 +9,5 @@ pub struct MaybeMessage<'p> {
 
 /// The grouper trait, defining the required functions for a grouper.
 pub trait Grouper {
-    fn group<'c, 'p>(&mut self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError>;
+    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError>;
 }

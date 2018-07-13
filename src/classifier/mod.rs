@@ -4,57 +4,38 @@
 use error::TSError;
 use parser::Parsed;
 
+mod constant;
+mod matcher;
+mod mimir;
+mod utils;
+
+pub use self::utils::{Classified, Classifier};
+
 pub fn new<'c>(name: &str, opts: &'c str) -> Classifiers<'c> {
     match name {
-        "static" => Classifiers::Static(StaticClassifier::new(opts)),
-        _ => panic!("Unknown classifier: {} valid options are 'static'", name),
+        "mimir" => Classifiers::Mimir(mimir::Classifier::new(opts)),
+        "matcher" => Classifiers::Matcher(matcher::Classifier::new(opts)),
+        "constant" => Classifiers::Constant(constant::Classifier::new(opts)),
+        _ => panic!(
+            "Unknown classifier: {} valid options are 'constant', and 'mimir'",
+            name
+        ),
     }
 }
 
-pub enum Classifiers<'c> {
-    Static(StaticClassifier<'c>),
-}
-impl<'c> Classifier<'c> for Classifiers<'c> {
-    fn classify<'p: 'c>(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
-        match self {
-            Classifiers::Static(c) => c.classify(msg),
-        }
-    }
-}
-
-/// The result of the classification
 #[derive(Debug)]
-pub struct Classified<'c, 'p> {
-    pub msg: Parsed<'p>,
-    pub classification: &'c str,
+pub enum Classifiers<'c> {
+    Constant(constant::Classifier<'c>),
+    Mimir(mimir::Classifier),
+    Matcher(matcher::Classifier),
 }
-
-/// The trait defining how classifiers works
-pub trait Classifier<'c> {
-    /// This function is called with a parsed message
-    /// and returns
-    fn classify<'p: 'c>(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError>;
-}
-
-/// A static classifier, it will classify all mesages the same way.
-pub struct StaticClassifier<'c> {
-    classification: &'c str,
-}
-
-impl<'c> StaticClassifier<'c> {
-    fn new(opts: &'c str) -> Self {
-        StaticClassifier {
-            classification: opts,
+impl<'p, 'c: 'p> Classifier<'p, 'c> for Classifiers<'c> {
+    fn classify(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
+        match self {
+            Classifiers::Constant(c) => c.classify(msg),
+            Classifiers::Mimir(c) => c.classify(msg),
+            Classifiers::Matcher(c) => c.classify(msg),
         }
-    }
-}
-
-impl<'c> Classifier<'c> for StaticClassifier<'c> {
-    fn classify<'p: 'c>(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
-        Ok(Classified {
-            msg: msg,
-            classification: self.classification,
-        })
     }
 }
 
@@ -65,14 +46,15 @@ mod tests {
     use parser;
     use parser::Parser;
     #[test]
-    fn static_classifier() {
+    fn constant_classifier() {
         let s = "Example";
         let t = String::from("Classification");
         let p = parser::new("raw", "");
-        let c = classifier::new("static", t.as_str());
+        let c = classifier::new("constant", t.as_str());
         let classified = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
             .expect("classification failed!");
         assert_eq!(t, classified.classification);
     }
+
 }

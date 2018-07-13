@@ -8,6 +8,7 @@ use grouping::utils::{Grouper as GrouperT, MaybeMessage};
 pub struct Grouper {
     drop: bool,
 }
+
 impl Grouper {
     /// Creates a new boolean grouper with either drop set to either `"true"` or `"false"`
     pub fn new(opts: &str) -> Self {
@@ -18,8 +19,9 @@ impl Grouper {
         }
     }
 }
+
 impl GrouperT for Grouper {
-    fn group<'c, 'p>(&mut self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError> {
+    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
         Ok(MaybeMessage {
             drop: self.drop,
             msg: msg.msg,

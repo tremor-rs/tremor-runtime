@@ -1,4 +1,5 @@
 use error::TSError;
+use serde_json::Value;
 
 /// The parser trait defines the functiuonality each parser needs
 /// to provde.
@@ -11,11 +12,12 @@ pub trait Parser {
 #[derive(Debug)]
 pub struct Parsed<'a> {
     raw: &'a str,
+    pub parsed: Value,
 }
 
 impl<'a> Parsed<'a> {
-    pub fn new(raw: &'a str) -> Parsed<'a> {
-        Self { raw: raw }
+    pub fn new(raw: &'a str, parsed: Value) -> Parsed<'a> {
+        Self { raw, parsed }
     }
     pub fn raw(&self) -> &str {
         self.raw

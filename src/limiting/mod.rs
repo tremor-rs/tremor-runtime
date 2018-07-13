@@ -76,7 +76,7 @@ mod tests {
         let s = "Example";
 
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "Classification");
+        let c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let b = limiting::new("percentile", "1.0");
 
@@ -93,7 +93,7 @@ mod tests {
         let s = "Example";
 
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "Classification");
+        let c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let b = limiting::new("percentile", "0");
 

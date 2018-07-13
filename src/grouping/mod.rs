@@ -47,7 +47,7 @@ pub enum Groupers<'a> {
     Bucket(bucket::Grouper<'a>),
 }
 impl<'a> Grouper for Groupers<'a> {
-    fn group<'c, 'p>(&mut self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError> {
+    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
         let r = match self {
             Groupers::Boolean(g) => g.group(msg),
             Groupers::Bucket(g) => g.group(msg),
@@ -75,7 +75,7 @@ mod tests {
     fn boolean_grouper() {
         let s = "Example";
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "Classification");
+        let c = classifier::new("constant", "Classification");
         let mut g_d = grouping::new("drop", "");
         let mut g_k = grouping::new("pass", "");
 
@@ -96,7 +96,7 @@ mod tests {
     fn grouping_test_pass() {
         let s = "Example";
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "c");
+        let c = classifier::new("constant", "c");
         let mut g = grouping::new("bucket", "c:1000");
         let r = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
@@ -109,7 +109,7 @@ mod tests {
     fn grouping_test_fail() {
         let s = "Example";
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "c");
+        let c = classifier::new("constant", "c");
         let mut g = grouping::new("bucket", "a:1000");
         let r = p.parse(s)
             .and_then(|parsed| c.classify(parsed))
@@ -122,7 +122,7 @@ mod tests {
     fn grouping_time_refresh() {
         let s = "Example";
         let p = parser::new("raw", "");
-        let c = classifier::new("static", "c");
+        let c = classifier::new("constant", "c");
         let mut g = grouping::new("bucket", "c:1");
         let r1 = p.parse(s)
             .and_then(|parsed| c.classify(parsed))

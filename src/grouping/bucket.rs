@@ -84,7 +84,7 @@ impl<'a> Grouper<'a> {
     }
 }
 impl<'a> GrouperT for Grouper<'a> {
-    fn group<'c, 'p>(&mut self, msg: Classified<'c, 'p>) -> Result<MaybeMessage<'p>, TSError> {
+    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
         match self.buckets.get_mut(msg.classification) {
             Some(Bucket { window, name, .. }) => {
                 let drop = match window.inc() {

@@ -1,5 +1,6 @@
 use error::TSError;
 use parser::utils::{Parsed, Parser as ParserT};
+use serde_json::Value;
 
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`
@@ -11,6 +12,6 @@ impl Parser {
 }
 impl ParserT for Parser {
     fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
-        Ok(Parsed::new(msg))
+        Ok(Parsed::new(msg, Value::Null))
     }
 }

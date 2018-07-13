@@ -13,7 +13,7 @@ PARSER=${PARSER:-"raw"}
 PARSER_CONFIG=${PARSER_CONFIG:-""}
 
 # Classifier Configuration
-CLASSIFIER=${CLASSIFIER:-"static"}
+CLASSIFIER=${CLASSIFIER:-"constant"}
 CLASSIFIER_CONFIG=${CLASSIFIER_CONFIG:-""}
 
 # Grouping Configuration
