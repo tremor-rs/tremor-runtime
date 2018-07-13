@@ -69,8 +69,6 @@ mod tests {
     use grouping::Grouper;
     use parser;
     use parser::Parser;
-    use std::thread::sleep;
-    use std::time::Duration;
     #[test]
     fn boolean_grouper() {
         let s = "Example";
@@ -92,54 +90,4 @@ mod tests {
         assert_eq!(r.drop, false);
     }
 
-    #[test]
-    fn grouping_test_pass() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "c:1000");
-        let r = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .expect("grouping failed");
-        assert_eq!(r.drop, false);
-    }
-
-    #[test]
-    fn grouping_test_fail() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "a:1000");
-        let r = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .expect("grouping failed");
-        assert_eq!(r.drop, true);
-    }
-
-    #[test]
-    fn grouping_time_refresh() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "c:1");
-        let r1 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .expect("grouping failed");
-        let r2 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .expect("grouping failed");
-        // we sleep for 1.1s as this should refresh our bucket
-        sleep(Duration::new(1, 200_000_000));
-        let r3 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .expect("grouping failed");
-        assert_eq!(r1.drop, false);
-        assert_eq!(r2.drop, true);
-        assert_eq!(r3.drop, false);
-    }
 }

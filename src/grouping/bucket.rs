@@ -16,8 +16,6 @@ use std::collections::HashMap;
 use std::iter::Iterator;
 use window::TimeWindow;
 
-static SUB_WINDOWS: usize = 100;
-
 use prometheus::{Counter, CounterVec};
 
 lazy_static! {
@@ -52,7 +50,7 @@ impl<'a> Grouper<'a> {
     /// The grouper is configured with the following syntax:
     ///
     /// * rule: `<name>:<throughput per second>``
-    /// * config: `<rule>|<rule>|...`
+    /// * config: `<time range in ms>;<number of windows>;<rule>|<rule>|...`
     ///
     /// So the config `important:10000|unimportant:100|default:10`
     /// would create 3 buckets:
@@ -60,27 +58,35 @@ impl<'a> Grouper<'a> {
     /// * `unimportant` that gets 100 msgs/s
     /// * `default` thet gets 10 msgs/s
     pub fn new(opts: &'a str) -> Self {
-        let buckets: Vec<&str> = opts.split('|').collect();
-        let mut bkt_map = HashMap::new();
-
-        for bucket in buckets {
-            let split: Vec<&str> = bucket.split(':').collect();
-            match split.as_slice() {
-                [name, rate] => {
-                    let rate = rate.parse::<u64>().unwrap();
-                    let bkt = Bucket {
-                        name: name,
-                        window: TimeWindow::new(SUB_WINDOWS, 1000 / (SUB_WINDOWS as u64), rate),
+        let opts: Vec<&str> = opts.split(';').collect();
+        match opts.as_slice() {
+            &[time_range, windows, buckets] => {
+                let buckets: Vec<&str> = buckets.split('|').collect();
+                let mut bkt_map = HashMap::new();
+                let time_range = time_range.parse::<u64>().unwrap();
+                let windows = windows.parse::<usize>().unwrap();
+                for bucket in buckets {
+                    let split: Vec<&str> = bucket.split(':').collect();
+                    match split.as_slice() {
+                        [name, rate] => {
+                            let rate = rate.parse::<u64>().unwrap();
+                            let bkt = Bucket {
+                                name: name,
+                                window: TimeWindow::new(windows, time_range / (windows as u64), rate),
+                            };
+                            bkt_map.insert(*name, bkt)
+                        }
+                        _ => panic!(
+                            "Bad bucket format '{}', please use the syntax '<name>:<rate in msgs/s>'.",
+                            bucket
+                        ),
                     };
-                    bkt_map.insert(*name, bkt)
                 }
-                _ => panic!(
-                    "Bad bucket format '{}', please use the syntax '<name>:<rate in msgs/s>'.",
-                    bucket
-                ),
-            };
+                Grouper { buckets: bkt_map }
+            }
+            _ => panic!("Invalid options for bucketing, use <time range in ms>;<number of windows>;<rule>|<rule>"),
+
         }
-        Grouper { buckets: bkt_map }
     }
 }
 impl<'a> GrouperT for Grouper<'a> {
@@ -110,5 +116,68 @@ impl<'a> GrouperT for Grouper<'a> {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use classifier;
+    use classifier::Classifier;
+    use grouping;
+    use grouping::Grouper;
+    use parser;
+    use parser::Parser;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    #[test]
+    fn grouping_test_pass() {
+        let s = "Example";
+        let p = parser::new("raw", "");
+        let c = classifier::new("constant", "c");
+        let mut g = grouping::new("bucket", "1000;100;c:1000");
+        let r = p.parse(s)
+            .and_then(|parsed| c.classify(parsed))
+            .and_then(|classified| g.group(classified))
+            .expect("grouping failed");
+        assert_eq!(r.drop, false);
+    }
+
+    #[test]
+    fn grouping_test_fail() {
+        let s = "Example";
+        let p = parser::new("raw", "");
+        let c = classifier::new("constant", "c");
+        let mut g = grouping::new("bucket", "1000;100;a:1000");
+        let r = p.parse(s)
+            .and_then(|parsed| c.classify(parsed))
+            .and_then(|classified| g.group(classified))
+            .expect("grouping failed");
+        assert_eq!(r.drop, true);
+    }
+
+    #[test]
+    fn grouping_time_refresh() {
+        let s = "Example";
+        let p = parser::new("raw", "");
+        let c = classifier::new("constant", "c");
+        let mut g = grouping::new("bucket", "1000;100;c:1");
+        let r1 = p.parse(s)
+            .and_then(|parsed| c.classify(parsed))
+            .and_then(|classified| g.group(classified))
+            .expect("grouping failed");
+        let r2 = p.parse(s)
+            .and_then(|parsed| c.classify(parsed))
+            .and_then(|classified| g.group(classified))
+            .expect("grouping failed");
+        // we sleep for 1.1s as this should refresh our bucket
+        sleep(Duration::new(1, 200_000_000));
+        let r3 = p.parse(s)
+            .and_then(|parsed| c.classify(parsed))
+            .and_then(|classified| g.group(classified))
+            .expect("grouping failed");
+        assert_eq!(r1.drop, false);
+        assert_eq!(r2.drop, true);
+        assert_eq!(r3.drop, false);
     }
 }
