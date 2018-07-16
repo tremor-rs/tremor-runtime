@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tremor-runtime
+    topic: applog
+  name: tremor-runtime-applog-service
+  namespace: default
+spec:
+  clusterIP: 10.107.24.163
+  ports:
+  - port: 9898
+    protocol: TCP
+    targetPort: 9898
+  selector:
+    app: tremor-runtime
+    topic: applog
+  type: ClusterIP
+status:
+  loadBalancer: {}
