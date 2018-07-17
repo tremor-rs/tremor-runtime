@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_partial_match() {
-        let s = "{\"key\": \"not the value\"}";
+        let s = "{\"key\": \"contains the value\"}";
         let p = parser::new("json", "");
         let c = classifier::new("matcher", "[{\"key:value\": \"test-class\"}]");
         let r = p.parse(s).and_then(|parsed| c.classify(parsed));
