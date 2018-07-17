@@ -8,6 +8,9 @@ use classifier::utils::{Classified, Classifier as ClassifierT};
 /// A constant classifier, it will classify all mesages the same way.
 #[derive(Debug)]
 pub struct Classifier {
+    // by keeping the RuleBuilder in scope we prevent it and by that
+    // the mimir reference to be freed.
+    builder: RuleBuilder,
     rules: HashMap<usize, String>,
     mimir_rules: RuleSet,
 }
@@ -28,7 +31,7 @@ impl Classifier {
                                     match (rule, name) {
                                         (_rule, Value::String(name)) => {
                                             rules.insert(i, name.clone());
-                                            builder.add_rule(name);
+                                            builder.add_rule(rule);
                                             i += 1;
                                         },
                                         _ => panic!("Bad format argument needs to be an array of objects with one key value pair.")
@@ -43,6 +46,7 @@ impl Classifier {
                     }
                 }
                 Classifier {
+                    builder: builder,
                     rules: rules,
                     mimir_rules: builder.done(),
                 }
@@ -85,7 +89,6 @@ impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
                         _ => warn!("Unsupported value tyoe"),
                     }
                 }
-
                 let rs = doc.test();
                 for x in 0usize..self.mimir_rules.num_rules() as usize {
                     if rs.at(x) {
