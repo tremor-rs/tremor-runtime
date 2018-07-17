@@ -319,7 +319,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "mimir-rs"
 version = "0.1.0"
-source = "git+https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git#99c81219414febc53f3861bc462265f222083120"
+source = "git+https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git#fb3572dadcb7bf2ae0e15677ca53bb5caa9c23aa"
 dependencies = [
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
