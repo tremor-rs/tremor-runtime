@@ -17,6 +17,6 @@ prometheus = "0.4"
 lazy_static = "0.2.11"
 
 hyper = "0.12"
-mimir-rs = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "de-de-initial-rust-mimir-binding" }
+mimir-rs = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "master" }
 
 regex = "1"
