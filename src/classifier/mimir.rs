@@ -45,10 +45,11 @@ impl Classifier {
 
                     }
                 }
+                let mimir_rules = builder.done();
                 Classifier {
                     builder: builder,
                     rules: rules,
-                    mimir_rules: builder.done(),
+                    mimir_rules: mimir_rules,
                 }
             }
             Ok(_) => panic!("Bad format argument needs to be an array of objects."),
@@ -118,76 +119,7 @@ impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
 }
 
 #[cfg(test)]
-mod tests {
-    use classifier;
-    use classifier::Classifier;
-    use parser;
-    use parser::Parser;
-
-    #[test]
-    #[should_panic]
-    fn load_no_config() {
-        classifier::new("mimir", "");
-    }
-
-    #[test]
-    #[should_panic]
-    fn load_bad_json_top() {
-        classifier::new("mimir", "{}");
-    }
-
-    #[test]
-    #[should_panic]
-    fn load_bad_array_element() {
-        classifier::new("mimir", "[{}]");
-    }
-
-    #[test]
-    #[should_panic]
-    fn load_bad_map_key() {
-        classifier::new("mimir", "[{\"test\": 7}]");
-    }
-
-    #[test]
-    #[should_panic]
-    fn load_too_many_keys() {
-        classifier::new("mimir", "[{\"test\": \"test\", \"test2\":\"test2\"}]");
-    }
-
-    #[test]
-    fn load_empty_array() {
-        classifier::new("mimir", "[]");
-        assert!(true)
-    }
-
-    #[test]
-    fn load_good_rule() {
-        classifier::new("mimir", "[{\"test-rule\": \"test-class\"}]");
-        assert!(true)
-    }
-
-    #[test]
-    fn test_basd_json() {
-        let s = "[]";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[{\"test-rule\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
-        assert!(r.is_err())
-    }
-
-    #[test]
-    fn test_classification_default() {
-        let s = "{}";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
-        assert!(r.is_ok());
-        assert_eq!(r.unwrap().classification, "default")
-    }
-}
-
-#[cfg(test)]
-mod tests2 {
+mod tests1 {
     use classifier;
     use classifier::Classifier;
     use parser;
