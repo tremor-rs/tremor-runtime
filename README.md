@@ -1,5 +1,12 @@
 This tool allows to configure a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 
+
+# Externals
+
+[Jenkins](https://jenkinsmasterc15n1.host.bo1.csnzoo.com/blue/organizations/jenkins/build-docker-traffic-shaping-tool/activity)
+
+[Artifactory](https://artifactory.service.bo1.csnzoo.com/artifactory/webapp/#/artifacts/browse/tree/General/docker-wayfair/wayfair/data-engineering/traffic-shaping-tool)
+
 # Plugins
 Some plugins require additional configuration to be passed others do not.
 
