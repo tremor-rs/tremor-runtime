@@ -85,3 +85,24 @@ Docker needs to have at least 4GB of meomry.
 You need to be connected to the VPN.
 
 To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
+
+
+## Configuraiton
+
+### Test data
+
+The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 valid json document per line and be compressed with `xz`. Changing this document requires re-running `make demo-containers`!
+
+The rate at which data is generated can be configured in the `demo/demo.yaml` file in the `loadgen` section under the `MPS` (metrics per second) variable. How high this can be set depends on the system running the demo.
+
+### Tremor
+
+The normal tremor container is used for testing, while all the variables described above can be configured most of them **should not be changed**. The variables that can safely be changed will be listed below with a short explenation.
+
+#### `CLASSIFIER_CONFIG`
+
+The mimir classifier config, two demo rules are included but further rules to match the `demo/data.json.xz` test data can be added.
+
+#### `GROUPING_CONFIG`
+
+The configured classification / bucketing rules, they should match the classifications defined in `CLASSIFIER_CONFIG`. By default the grouping limiter is configured to use a sldiging window of `100` sub windows over a `1000` ms (`1s`) interval.
