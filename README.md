@@ -87,11 +87,37 @@ You need to be connected to the VPN.
 To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
 
 
+## Design
+
+The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on kafka and from there reads it into the tremor container to apply classification and bucketing. Finally it outputs statistics of the data based on those steps. 
+
+![flow](docs/demo-flow.png)
+
 ## Configuraiton
 
-### Test data
+### Config file
 
-The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 valid json document per line and be compressed with `xz`. Changing this document requires re-running `make demo-containers`!
+The demo con be configured in the `demo/demo.yaml` file. A abbriviated version (with the critical elements) can be seen below. In the following sections we'll quickly discuss each of the configuraiton options available to customize the demo.
+```
+version: '3.3'
+services:
+  # ...
+  loadgen:
+    # ...
+    environment:
+      - MPS=100
+      # ...
+  tremor:
+    # ...
+    environment:
+      - CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]
+      - GROUPING_CONFIG=1000;100;default:90|info:10|error:100
+      # ...
+```
+
+### Load Generator
+
+#### MPS
 
 The rate at which data is generated can be configured in the `demo/demo.yaml` file in the `loadgen` section under the `MPS` (metrics per second) variable. How high this can be set depends on the system running the demo.
 
@@ -106,3 +132,7 @@ The mimir classifier config, two demo rules are included but further rules to ma
 #### `GROUPING_CONFIG`
 
 The configured classification / bucketing rules, they should match the classifications defined in `CLASSIFIER_CONFIG`. By default the grouping limiter is configured to use a sldiging window of `100` sub windows over a `1000` ms (`1s`) interval.
+
+### Test data
+
+The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 event (in this case a valid json object) per line and be compressed with `xz`. Changing this document requires re-running `make demo-containers`!
