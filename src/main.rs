@@ -69,7 +69,7 @@ fn main() {
             Arg::with_name("output")
                 .short("o")
                 .long("output")
-                .help("output to send to. Valid options are 'stdout', 'kafka'")
+                .help("output to send to. Valid options are 'stdout', 'kafka' and 'debug'")
                 .takes_value(true)
                 .required(true),
         )
@@ -99,7 +99,7 @@ fn main() {
             Arg::with_name("classifier")
                 .short("c")
                 .long("classifier")
-                .help("classifier to use. Valid options are 'constant'")
+                .help("classifier to use. Valid options are 'constant' or 'mimir'")
                 .default_value("constant")
                 .takes_value(true),
         )

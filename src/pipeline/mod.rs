@@ -1,24 +1,10 @@
 use classifier::{Classifier, Classifiers};
 use error::TSError;
+use grouping::MaybeMessage;
 use grouping::{Grouper, Groupers};
 use limiting::{Limiters, Limitier};
 use output::{Output, Outputs};
 use parser::{Parser, Parsers};
-
-use prometheus::Counter;
-
-lazy_static! {
-    /*
-     * Number of errors read received from the input
-     */
-    static ref OPTOUT_DROPED: Counter =
-        register_counter!(opts!("ts_output_droped", "Messages dropped.")).unwrap();
-    /*
-     * Number of successes read received from the input
-     */
-    static ref OUTPUT_DELIVERED: Counter =
-        register_counter!(opts!("ts_output_delivered", "Messages delivered.")).unwrap();
-}
 
 /// Pipeline struct, collecting all the steps of our internal pipeline
 pub struct Pipeline<'p> {
@@ -52,24 +38,19 @@ impl<'p> Pipeline<'p> {
         let classifier = &self.classifier;
         let grouper = &mut self.grouper;
         let limiting = &self.limiting;
-        let output = &self.output;
+        let output = &mut self.output;
         parser
             .parse(msg.payload)
             .and_then(|parsed| classifier.classify(parsed))
             .and_then(|classified| grouper.group(classified))
             .and_then(|grouped| limiting.apply(grouped))
             .and_then(|r| {
-                if !r.drop {
-                    OUTPUT_DELIVERED.inc();
-                    if let Some(key) = msg.key {
-                        output.send(Some(key), msg.payload)
-                    } else {
-                        output.send(None, msg.payload)
-                    }
-                } else {
-                    OPTOUT_DROPED.inc();
-                    Ok(())
-                }
+                output.send(MaybeMessage {
+                    drop: r.drop,
+                    key: msg.key,
+                    msg: r.msg,
+                    classification: r.classification,
+                })
             })
     }
 }

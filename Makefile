@@ -19,3 +19,12 @@ lint:
 
 goss: build
 	GOSS_FILES_PATH=docker/ dgoss run --name "$(APP)-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
+
+demo-containers:
+	docker build -f demo/loadgen.dockerfile . -t loadgen
+	docker build -f docker/traffic-shaping-tool.dockerfile . -t tremor-runtime
+
+demo-run:
+	-docker-compose -f demo/demo.yaml rm -fsv
+	-docker-compose -f demo/demo.yaml up
+	-docker-compose -f demo/demo.yaml rm -fsv

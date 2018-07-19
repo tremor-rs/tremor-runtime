@@ -54,6 +54,8 @@ impl Limitier for PercentileLimit {
             let mut rng = thread_rng();
             let drop = rng.gen::<f64>() > self.percentile;
             Ok(MaybeMessage {
+                key: None,
+                classification: msg.classification,
                 drop: drop,
                 msg: msg.msg,
             })

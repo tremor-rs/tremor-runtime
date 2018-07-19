@@ -49,7 +49,7 @@ struct Bucket<'a> {
 impl<'a> Grouper<'a> {
     /// The grouper is configured with the following syntax:
     ///
-    /// * rule: `<name>:<throughput per second>``
+    /// * rule: `<name>:<throughput per second>`
     /// * config: `<time range in ms>;<number of windows>;<rule>|<rule>|...`
     ///
     /// So the config `important:10000|unimportant:100|default:10`
@@ -84,7 +84,7 @@ impl<'a> Grouper<'a> {
                 }
                 Grouper { buckets: bkt_map }
             }
-            _ => panic!("Invalid options for bucketing, use <time range in ms>;<number of windows>;<rule>|<rule>"),
+            _ => panic!("Invalid options for bucketing, use <time range in ms>;<number of windows>;<rule 1>|<rule 2>|...|<rule n>"),
 
         }
     }
@@ -104,6 +104,8 @@ impl<'a> GrouperT for Grouper<'a> {
                     }
                 };
                 Ok(MaybeMessage {
+                    key: None,
+                    classification: msg.classification,
                     drop: drop,
                     msg: msg.msg,
                 })
@@ -111,6 +113,8 @@ impl<'a> GrouperT for Grouper<'a> {
             None => {
                 BKT_NOMATCH.inc();
                 Ok(MaybeMessage {
+                    key: None,
+                    classification: msg.classification,
                     drop: true,
                     msg: msg.msg,
                 })

@@ -11,7 +11,7 @@ pub trait Parser {
 /// the parsed output based on the parser
 #[derive(Debug)]
 pub struct Parsed<'a> {
-    raw: &'a str,
+    pub raw: &'a str,
     pub parsed: Value,
 }
 

@@ -65,6 +65,9 @@ The `stdout` output writes messages to stdout, one message per line.
 ### kafka
 The `kafka` output writes messages to a kafka topic, this is configured in the format `<topic>|<broker list>`.
 
+### debug
+The `debug` output prints a list of classifications and pass and drop statisticins for them every second.
+
 # Docker
 
 The docker container build takes environment variables for each plugin. The `input` plugin is provided as `INPUT=...` and it's configuration as `INPUT_CONFIG=...`. Plugins and configs may be omitted and will then be replaced with a default, for configurations the default is an empty configuration.
@@ -74,3 +77,11 @@ In addition the `RUST_LOG` environment variable can be passed to define the log 
 ## Tests
 
 Tests can be found in `docker/goss.yaml`
+
+# Local demo mode
+
+Docker needs to have at least 4GB of meomry.
+
+You need to be connected to the VPN.
+
+To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.

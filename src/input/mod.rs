@@ -131,7 +131,7 @@ impl KafkaInput {
                     .expect("Can't subscribe to specified topic");
                 KafkaInput { consumer: consumer }
             }
-            _ => panic!("Invalid options for Kafka input, use <groupid>|<topioc>|<producers>"),
+            _ => panic!("Invalid options for Kafka input, use <groupid>|<topic>|<producers>"),
         }
     }
 }

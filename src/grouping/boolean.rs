@@ -23,6 +23,8 @@ impl Grouper {
 impl GrouperT for Grouper {
     fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
         Ok(MaybeMessage {
+            key: None,
+            classification: msg.classification,
             drop: self.drop,
             msg: msg.msg,
         })

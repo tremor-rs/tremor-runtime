@@ -1,6 +1,6 @@
 
 CLASSES="\
-default:1\
+1000;100;default:1\
 |applog_recsvc:5000\
 |applog_sayl:10000\
 |applog_purest:75000\
@@ -31,6 +31,7 @@ RULES="[\
 ,{\"wf_index_type=syslog_hypernova\": \"syslog_hypernova\"}\
 ,{\"wf_index_type=edilog\": \"edilog\"}\
 ,{\"wf_index_type=sqlserverlog\": \"sqlserverlog\"}\
+,{\"tags:cisco && ! tags=/cisco/\": \"sqlserverlog\"}\
 ]"
 
 
@@ -39,7 +40,10 @@ echo '{"a": 1}'
 echo '{"b": 2}'
 echo '{"c": 3}'
 
+K_HOST=kafkac4n1.dev.bo1.csnzoo.com
+K_TOPIC=applogIngest
+# echo "Forwarding port 9092 from kafkac4n1.dev.bo1.csnzoo.com"
 
-cargo run -- --input stdin --output stdout --parser json --classifier matcher --classifier-config "${RULES}" --grouping bucket  --grouping-config "${CLASSES}"
+cargo run -- --input kafka --input-config "demo2|$K_TOPIC|127.0.0.1:9092" --output stdout --parser json --classifier mimir --classifier-config "${RULES}" --grouping bucket  --grouping-config "${CLASSES}"
 
 

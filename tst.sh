@@ -24,6 +24,10 @@ GROUPING_CONFIG=${GROUPING_CONFIG:-""}
 LIMITING=${LIMITING:-"pass"}
 LIMITING_CONFIG=${LIMITING_CONFIG:-""}
 
+SLEEP=${SLEEP:-"0"}
+
+sleep $SLEEP
+
 export RUST_BACKTRACE=1
 ./tst --input "${INPUT}" --input-config "${INPUT_CONFIG}" \
       --output "${OUTPUT}" --output-config "${OUTPUT_CONFIG}" \

@@ -15,7 +15,7 @@ dockerBuildPipeline {
   // need to change.
 
   // buildsToKeep = 25     // Number of builds to store in job history, must be an integer.
-  // imagesToSkip = []     // Images that should be skipped for CI builds.
+  imagesToSkip = ['loadgen']     // Images that should be skipped for CI builds.
   // rebuildAll   = false  // Whether to rebuild all images every time a commit is pushed.
   // runGossTests = true   // Whether Goss tests should be run.
   // skipPublish  = false  // Whether the publishing of images should be skipped. Useful for testing.
