@@ -17,8 +17,8 @@ version: '3.4'
 services:
 
   # Defines the example service, which uses the example Docker image.
-  traffic-shaping-tool:
-    image: wayfair/data-engineering/traffic-shaping-tool
+  tremor-runtime:
+    image: wayfair/data-engineering/tremor-runtime
     build:
-      dockerfile: docker/traffic-shaping-tool.dockerfile
+      dockerfile: docker/tremor-runtime.dockerfile
       context: .

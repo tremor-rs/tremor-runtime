@@ -1,5 +1,5 @@
 [package]
-name = "traffic-shaping-tool"
+name = "tremor-runtime"
 version = "0.1.0"
 authors = ["Heinz Gies <hgies@wayfair.com>"]
 

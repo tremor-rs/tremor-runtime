@@ -29,10 +29,10 @@ SLEEP=${SLEEP:-"0"}
 sleep $SLEEP
 
 export RUST_BACKTRACE=1
-./tst --input "${INPUT}" --input-config "${INPUT_CONFIG}" \
-      --output "${OUTPUT}" --output-config "${OUTPUT_CONFIG}" \
-      --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
-      --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
-      --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
-      --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}"
+./tremor-runtime --input "${INPUT}" --input-config "${INPUT_CONFIG}" \
+                 --output "${OUTPUT}" --output-config "${OUTPUT_CONFIG}" \
+                 --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
+                 --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
+                 --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
+                 --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}"
 

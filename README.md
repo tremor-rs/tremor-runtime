@@ -3,9 +3,9 @@ This tool allows to configure a pipeline that moves data from a source to a dest
 
 # Externals
 
-[Jenkins](https://jenkinsmasterc15n1.host.bo1.csnzoo.com/blue/organizations/jenkins/build-docker-traffic-shaping-tool/activity)
+[Jenkins](https://jenkinsmasterc15n1.host.bo1.csnzoo.com/blue/organizations/jenkins/build-docker-tremor-runtime/activity)
 
-[Artifactory](https://artifactory.service.bo1.csnzoo.com/artifactory/webapp/#/artifacts/browse/tree/General/docker-wayfair/wayfair/data-engineering/traffic-shaping-tool)
+[Artifactory](https://artifactory.service.bo1.csnzoo.com/artifactory/webapp/#/artifacts/browse/tree/General/docker-wayfair/wayfair/data-engineering/tremor-runtime)
 
 # Plugins
 Some plugins require additional configuration to be passed others do not.

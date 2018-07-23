@@ -1,6 +1,6 @@
 
 FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.27.0 as builder
-RUN sudo apt update && sudo apt install -y bison flex
+RUN sudo apt update && sudo apt install -y bison flex automake
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
@@ -14,7 +14,7 @@ WORKDIR /root/
 RUN apk --no-cache add ca-certificates
 COPY demo/loadgen.sh .
 COPY demo/data.json.xz .
-COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/traffic-shaping-tool tst
+COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/tremor-runtime tremor-runtime
 
 # This image runs SimpleHTTPServer when the container starts.
 #

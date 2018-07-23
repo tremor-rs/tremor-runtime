@@ -1,5 +1,5 @@
 FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.27.0 as builder
-RUN sudo apt update && sudo apt install -y bison flex vim
+RUN sudo apt update && sudo apt install -y bison flex vim automake
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src

@@ -16,8 +16,8 @@ while true
 do
 	xzcat $LOAD_FILE
 done | \
-./tst --input "stdin" \
-      --output "kafka" --output-config "${OUTPUT_CONFIG}" \
-      --parser "json" \
-      --classifier "constant" --classifier-config "default" \
-      --grouping "bucket" --grouping-config "1000;100;default:$MPS"
+./tremor-runtime --input "stdin" \
+                 --output "kafka" --output-config "${OUTPUT_CONFIG}" \
+                 --parser "json" \
+                 --classifier "constant" --classifier-config "default" \
+                 --grouping "bucket" --grouping-config "1000;100;default:$MPS"

@@ -20,7 +20,7 @@
 # @copyright 2018 Wayfair, LLC. -- All rights reserved.
 
 FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.27.0 as builder
-RUN sudo apt update && sudo apt install -y bison flex
+RUN sudo apt update && sudo apt install -y bison flex automake
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
@@ -62,7 +62,7 @@ LABEL \
     #
     # 4.  Change this to same name as your image.
     #
-    com.wayfair.app="wayfair/data-engineering/traffic-shaping-tool" \
+    com.wayfair.app="wayfair/data-engineering/tremor-runtime" \
     com.wayfair.description=${wf_label} \
     # This should define the team that owns the application running in the
     # container.
@@ -85,11 +85,11 @@ LABEL \
 #
 WORKDIR /root/
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/traffic-shaping-tool tst
-COPY tst.sh .
+COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/tremor-runtime tremor-runtime
+COPY tremor-runtime.sh .
 
 # This image runs SimpleHTTPServer when the container starts.
 #
 # 9.  Change this to a command which starts your application.
 #
-CMD ["./tst.sh"]
+CMD ["./tremor-runtime.sh"]

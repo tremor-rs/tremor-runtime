@@ -9,16 +9,16 @@
 
 ---
 process:
-  tst:
+  'tremor-runtime':
     running: true
 file:
-  /root/tst:
+  /root/tremor-runtime:
     exists: true
     mode: "0755"
     owner: root
     group: root
     filetype: file
-  /root/tst.sh:
+  /root/tremor-runtime.sh:
     exists: true
     mode: "0755"
     owner: root

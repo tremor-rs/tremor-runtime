@@ -1,4 +1,4 @@
-APP=traffic-shaping-tool
+APP=tremor-runtime
 
 help:
 	@echo "This docker files wraps the tasks:"
@@ -22,7 +22,7 @@ goss: build
 
 demo-containers:
 	docker build -f demo/loadgen.dockerfile . -t loadgen
-	docker build -f docker/traffic-shaping-tool.dockerfile . -t tremor-runtime
+	docker build -f docker/tremor-runtime.dockerfile . -t tremor-runtime
 
 demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv

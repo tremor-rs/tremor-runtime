@@ -42,7 +42,7 @@ spec:
           value: bucket
         - name: GROUPING_CONFIG
           value: '1000;100;default:1|applog_recsvc:5000|applog_sayl:10000|applog_purest:75000|applog_admin:3000|applog_supply_chain_services:75000|applog_logs:18000|syslog_haproxy:10000|syslog_cisco:500|syslog_logs:7000|syslog_influxdb:7000|syslog_ftpd:30000|syslog_hypernova:500|edilog:15000|sqlserverlog:500'
-        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/traffic-shaping-tool:0.1.6-501dbce-mimir-pt2
+        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.1.6-501dbce-mimir-pt2
         name: tremor-runtime-applog
         ports:
         - containerPort: 9898
