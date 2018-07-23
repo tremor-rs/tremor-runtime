@@ -3,8 +3,7 @@ kind: Service
 metadata:
   labels:
     app: tremor-runtime
-    topic: applog
-  name: tremor-runtime-applog-service
+  name: tremor-runtime-service
   namespace: default
 spec:
   clusterIP: 10.107.24.163
@@ -14,7 +13,6 @@ spec:
     targetPort: 9898
   selector:
     app: tremor-runtime
-    topic: applog
   type: ClusterIP
 status:
   loadBalancer: {}

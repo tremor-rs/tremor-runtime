@@ -1,49 +1,49 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: tremor-runtime-applog
   labels:
     app: tremor-runtime
-    topic: applog
+  name: tremor-runtime
+  namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: tremor-runtime
-      topic: applog
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
-    type: RollingUpdate
   template:
     metadata:
+      creationTimestamp: null
       labels:
         app: tremor-runtime
-        topic: applog
     spec:
       containers:
       - env:
         - name: INPUT
           value: kafka
         - name: INPUT_CONFIG
-          value: applog|kafkac4n1.dev.bo1.csnzoo.com:9092
+          value: t|testTraffic|kafkac4n1.dev.bo1.csnzoo.com:9092
         - name: OUTPUT
           value: kafka
         - name: OUTPUT_CONFIG
-          value: tremor-applog|kafkac4n1.dev.bo1.csnzoo.com:9092
+          value: tremor-runtime|kafkac4n1.dev.bo1.csnzoo.com:9092
         - name: PARSER
           value: json
         - name: CLASSIFIER
-          value: matcher
+          value: mimir
         - name: CLASSIFIER_CONFIG
-          value: '[{"application=recsvc":"applog_recsvc"},{"application=sayl": "applog_sayl"},{"wf_index_type=applog_purest": "applog_purest"},{"wf_index_type=applog_admin": "applog_admin"},{"wf_index_type=applog_supply_chain_services": "applog_supply_chain_services"},{"wf_index_type=applog_logs": "applog_logs"},{"wf_index_type=syslog_haproxy": "syslog_haproxy"},{"wf_index_type=syslog_logs": "syslog_logs"},{"wf_index_type=syslog_influxdb": "syslog_influxdb"},{"wf_index_type=syslog_ftpd": "syslog_ftpd"},{"wf_index_type=syslog_hypernova": "syslog_hypernova"},{"wf_index_type=edilog": "edilog"},{"wf_index_type=sqlserverlog": "sqlserverlog"}]'
+          value: '[{"application=recsvc":"applog_recsvc"},{"application=sayl": "applog_sayl"},{"wf_index_type=applog_purest":
+            "applog_purest"},{"wf_index_type=applog_admin": "applog_admin"},{"wf_index_type=applog_supply_chain_services":
+            "applog_supply_chain_services"},{"wf_index_type=applog_logs": "applog_logs"},{"wf_index_type=syslog_haproxy":
+            "syslog_haproxy"},{"wf_index_type=syslog_logs": "syslog_logs"},{"wf_index_type=syslog_influxdb":
+            "syslog_influxdb"},{"wf_index_type=syslog_ftpd": "syslog_ftpd"},{"wf_index_type=syslog_hypernova":
+            "syslog_hypernova"},{"wf_index_type=edilog": "edilog"},{"wf_index_type=sqlserverlog":
+            "sqlserverlog"},{"type=applog":"applog"}]'
         - name: GROUPING
           value: bucket
         - name: GROUPING_CONFIG
-          value: '1000;100;default:1|applog_recsvc:5000|applog_sayl:10000|applog_purest:75000|applog_admin:3000|applog_supply_chain_services:75000|applog_logs:18000|syslog_haproxy:10000|syslog_cisco:500|syslog_logs:7000|syslog_influxdb:7000|syslog_ftpd:30000|syslog_hypernova:500|edilog:15000|sqlserverlog:500'
-        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.1.6-501dbce-mimir-pt2
-        name: tremor-runtime-applog
+          value: 1000;100;default:500|applog_recsvc:5000|applog_sayl:10000|applog_purest:75000|applog_admin:3000|applog_supply_chain_services:75000|applog_logs:18000|syslog_haproxy:10000|syslog_cisco:500|syslog_logs:7000|syslog_influxdb:7000|syslog_ftpd:30000|syslog_hypernova:500|edilog:15000|sqlserverlog:500|applog:300
+        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.1.7
+        name: tremor-runtime
         ports:
         - containerPort: 9898
           protocol: TCP
