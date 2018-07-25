@@ -1,19 +1,28 @@
 //! This module handles outputs
 
+use elastic;
+use elastic::client::requests::BulkRequest;
+use elastic::client::responses::BulkResponse;
+use elastic::client::{AsyncSender, Client};
+use elastic::prelude::AsyncClientBuilder;
 use error::TSError;
 use futures::Future;
 use grouping::MaybeMessage;
 use prometheus::Counter;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use std;
 use std::collections::HashMap;
+use std::mem;
 use std::time::{Duration, Instant};
+use std::vec::Vec;
+use tokio_core::reactor::Core;
 
 lazy_static! {
     /*
      * Number of errors read received from the input
      */
-    static ref OPTOUT_DROPED: Counter =
+    static ref OUTPUT_DROPPED: Counter =
         register_counter!(opts!("ts_output_droped", "Messages dropped.")).unwrap();
     /*
      * Number of successes read received from the input
@@ -38,6 +47,7 @@ pub fn new(name: &str, opts: &str) -> Outputs {
 /// New connectors need to be added here.
 pub enum Outputs {
     Kafka(KafkaOutput),
+    Elastic(ElasticOutput),
     Stdout(StdoutOutput),
     Debug(DebugOutput),
 }
@@ -45,9 +55,10 @@ pub enum Outputs {
 /// Implements the Output trait for the enum.
 /// this needs to ba adopted for each implementation.
 impl Output for Outputs {
-    fn send<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<(), TSError> {
+    fn send(&mut self, msg: MaybeMessage) -> Result<(), TSError> {
         match self {
             Outputs::Kafka(o) => o.send(msg),
+            Outputs::Elastic(o) => o.send(msg),
             Outputs::Stdout(o) => o.send(msg),
             Outputs::Debug(o) => o.send(msg),
         }
@@ -61,17 +72,12 @@ pub trait Output {
     fn send<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<(), TSError>;
 }
 
-/// The output trait, it defines the required functions for any output.
-pub trait OutputImpl {
-    fn new(opts: &str) -> Self;
-}
-
 /// An output that write to stdout
 pub struct StdoutOutput {
     pfx: String,
 }
 
-impl OutputImpl for StdoutOutput {
+impl StdoutOutput {
     fn new(opts: &str) -> Self {
         StdoutOutput {
             pfx: String::from(opts),
@@ -97,7 +103,7 @@ pub struct KafkaOutput {
     topic: String,
 }
 
-impl OutputImpl for KafkaOutput {
+impl KafkaOutput {
     /// Creates a new output connector, `brokers` is a coma seperated list of
     /// brokers to connect to. `topic` is the topic to send to.
 
@@ -119,6 +125,7 @@ impl OutputImpl for KafkaOutput {
         }
     }
 }
+
 impl Output for KafkaOutput {
     fn send<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<(), TSError> {
         if !msg.drop {
@@ -137,9 +144,168 @@ impl Output for KafkaOutput {
                 Err(TSError::new("Send failed"))
             }
         } else {
-            OPTOUT_DROPED.inc();
+            OUTPUT_DROPPED.inc();
             Ok(())
         }
+    }
+}
+
+pub struct ElasticOutput {
+    core: Core,
+    client: Client<AsyncSender>,
+    index: String,
+    flushTxTimeoutMillis: u32,
+    // queue: Vec<&'a MaybeMessage<'a>>,
+    qidx: usize,
+    qlimit: usize,
+    payload: String,
+}
+
+impl ElasticOutput {
+    /// Creates a new output connector, `brokers` is a coma seperated list of
+    /// brokers to connect to. `topic` is the topic to send to.
+    fn new(opts: &str) -> Self {
+        let opts: Vec<&str> = opts.split('|').collect();
+        match opts.as_slice() {
+            [_endpoint,index,batchSize,batchTimeout] => {
+                let mut core = Core::new().unwrap();
+                
+                let client= AsyncClientBuilder::new().build(&core.handle()).unwrap();
+                let index = index.clone();
+                let flushBatchSize: usize = batchSize.parse::<u16>().unwrap() as usize;
+                let flushTxTimeoutMillis: u32 = batchTimeout.parse::<u32>().unwrap();
+                ElasticOutput {
+                    core: core,
+                    client: client,
+                    index: index.to_string(),
+                    flushTxTimeoutMillis: flushTxTimeoutMillis,
+                    qidx: 0,
+                    qlimit: flushBatchSize-1,
+                    payload: String::new(),
+                }
+            }
+            _ => panic!("Invalid options for Elastic output, use <endpoint>|<index>|<batchSize>|<batchTimeout>"),
+        }
+    }
+
+    /*
+    fn push(self: &mut Self, msg: MaybeMessage<'msg>) {
+    }
+
+
+    fn pop(self: &mut Self) -> Option<MaybeMessage<'msg>> {
+        if self.qidx > 0 {
+            self.qidx -= 1;
+            self.queue.pop()
+        } else {
+            None
+        }
+    }
+
+    fn bulk_body(self: &mut Self) -> String {
+        let mut payload = String::new();
+        let mut idx: u32 = 0;
+
+        loop {
+            match self.pop() {
+                Some(item) => {
+                    payload.push_str(format!(&header, self.index, idx));
+                    payload.push('\n');
+                    payload.push_str(item.msg.raw);
+                    payload.push('\n');
+                }
+                None => {
+                    break;
+                }
+            }
+            idx += 1
+        }
+
+        payload
+    }
+
+    */
+
+    fn flush(self: &mut Self, payload: &'static str) -> Result<(), TSError> {
+        let res_future = self.client
+            .request(BulkRequest::new(payload.clone()))
+            .send()
+            .and_then(|res| res.into_response::<BulkResponse>());
+
+        let bulk_future = res_future.and_then(|bulk| {
+            for op in bulk {
+                match op {
+                    Ok(op) => println!("ok: {:?}", op),
+                    Err(op) => println!("err: {:?}", op),
+                }
+            }
+
+            Ok(())
+        });
+
+        self.core.run(bulk_future)?;
+
+        Ok(())
+    }
+}
+
+impl std::convert::From<elastic::Error> for TSError {
+    fn from(_from: elastic::Error) -> TSError {
+        TSError::new("Elastic spastic is not fantastic")
+    }
+}
+
+impl Output for ElasticOutput {
+    fn send(&mut self, msg: MaybeMessage) -> Result<(), TSError> {
+        if !msg.drop {
+            if self.qidx < self.qlimit {
+                self.payload.push_str(
+                    format!(
+                        "{{\"index\": \"{}\",\"type\": \"{}\",\"_id\": {}}}",
+                        self.index.as_str(),
+                        "_doc",
+                        self.qidx
+                    ).as_str(),
+                );
+                self.payload.push('\n');
+                self.payload.push_str(msg.msg.raw);
+                self.payload.push('\n');
+                self.qidx += 1;
+            } else {
+                // TODO technically this waits until a message event occurs which
+                // would overflow the bounded queue. This is not ideal as it biases
+                // in favour of frequently delivered messages not infrequent or
+                // aperiodic sources where arbitrary ( until the next batch limit is
+                // reached ) delays may result in queued data not being delivered in
+                // a timely and responsive manner.
+                //
+                // We let this hang wet ( unresolved ) in the POC for expedience and simplicity
+                //
+                // At this point the queue is at capacity, so we drain the queue to elastic
+                // search via its bulk index API
+                let payload = self.payload.clone();
+                let payload_str = unsafe { mem::transmute(payload.as_str()) };
+                self.flush(payload_str);
+                self.payload.clear();
+                self.payload.push_str(
+                    format!(
+                        "{{\"index\": \"{}\",\"type\": \"{}\",\"_id\": {}}}",
+                        self.index.as_str(),
+                        "_doc",
+                        self.qidx
+                    ).as_str(),
+                );
+                self.payload.push('\n');
+                self.payload.push_str(msg.msg.raw);
+                self.payload.push('\n');
+                self.qidx = 1;
+            }
+
+            OUTPUT_DELIVERED.inc();
+        } else {
+            OUTPUT_DROPPED.inc();
+        }
+        Ok(())
     }
 }
 

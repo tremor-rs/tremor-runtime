@@ -12,9 +12,11 @@ extern crate serde_json;
 extern crate prometheus;
 #[macro_use]
 extern crate lazy_static;
+extern crate elastic;
 extern crate hyper;
 extern crate mimir_rs;
 extern crate regex;
+extern crate tokio_core;
 
 pub mod classifier;
 pub mod error;

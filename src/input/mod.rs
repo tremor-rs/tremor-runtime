@@ -61,6 +61,7 @@ impl StdinInput {
         Self {}
     }
 }
+
 impl Input for StdinInput {
     fn enter_loop(&self, pipeline: &mut Pipeline) {
         let stdin = io::stdin();
