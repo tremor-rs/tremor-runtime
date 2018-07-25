@@ -188,44 +188,6 @@ impl ElasticOutput {
         }
     }
 
-    /*
-    fn push(self: &mut Self, msg: MaybeMessage<'msg>) {
-    }
-
-
-    fn pop(self: &mut Self) -> Option<MaybeMessage<'msg>> {
-        if self.qidx > 0 {
-            self.qidx -= 1;
-            self.queue.pop()
-        } else {
-            None
-        }
-    }
-
-    fn bulk_body(self: &mut Self) -> String {
-        let mut payload = String::new();
-        let mut idx: u32 = 0;
-
-        loop {
-            match self.pop() {
-                Some(item) => {
-                    payload.push_str(format!(&header, self.index, idx));
-                    payload.push('\n');
-                    payload.push_str(item.msg.raw);
-                    payload.push('\n');
-                }
-                None => {
-                    break;
-                }
-            }
-            idx += 1
-        }
-
-        payload
-    }
-
-    */
-
     fn flush(self: &mut Self, payload: &'static str) -> Result<(), TSError> {
         let res_future = self.client
             .request(BulkRequest::new(payload.clone()))
