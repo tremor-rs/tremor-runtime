@@ -49,8 +49,7 @@ fn main() {
     println!("mimir version: {}", mimir_rs::mimir::version());
     let (version_n, version_s) = get_rdkafka_version();
     println!("rd_kafka_version: 0x{:08x}, {}", version_n, version_s);
-
-    let matches = App::new("traffic shaping utility")
+    let matches = App::new("tremor-runtime")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Simple command line consumer")
         .arg(

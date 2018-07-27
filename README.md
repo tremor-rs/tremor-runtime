@@ -104,7 +104,7 @@ You need to be connected to the VPN.
 
 To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
 
-To demo with elasticsearch and kibana 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana.
+To [demo with elasticsearch and kibana](#elastic-demo) 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana. In addition a full [kitchen sink demo](#kitchen-sink-demo) that also outputs data to influx and provides a  .
 
 
 ## Design
@@ -159,13 +159,13 @@ The test data is read from the `demo/data.json.xz` file. This file needs to cont
 
 ### Elastic demo
 
-The base tremor demo can be extended to include elasticsearch + kibana via:
+The base tremor demo can be extended to include elasticsearch + [kibana](#kibana) via:
 
 ```
 make demo-elastic-run
 ```
 
-This exposes elasticsearch on localhost port 9200 and kibana on port 5601.
+This exposes elasticsearch on localhost port 9200 and [kibana](#kibana) as documented in it's section.
 
 ### Kitchen Sink demo
 
@@ -176,11 +176,19 @@ make demo-all-run
 ```
 
 To inject grafana dashboards and configure influxdb for monitoring bootstrap grafana and influx
-once the system stabilizes
+once the system stabilizes. Make sure to install the [Demo Tools](#demo-tools)  first!
 
 ```
 make demo-all-bootstrap
 ```
+
+#### Grafana
+You can access [Grafana](http://localhost:3000/login) with the credentials `admin`/`tremor`. Navigate to the `Tremor Demo` dashboard.
+
+
+#### Kibana
+You can access [Kibana](http://localhost:5601/app/kibana). To use it first set up a new index under *Manage* -> *Index Patterns*. The pattern should be `demo` and the time filter should be set to `I don't want to use the Time Filter`. After saving navigate to *Discover*.
+
 
 ### Demo tools
 
