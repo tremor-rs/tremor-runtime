@@ -30,6 +30,13 @@ impl SlidingWindow {
         }
     }
 
+    pub fn max(&self) -> u64 {
+        self.max
+    }
+    pub fn set_max(&mut self, max: u64) -> &Self {
+        self.max = max;
+        self
+    }
     /// Returns the current count of the window.
     pub fn count(&self) -> u64 {
         self.sum + self.buffer[self.pos]
@@ -94,6 +101,13 @@ impl TimeWindow {
             slot_time: slot_time,
             last_tick: Instant::now(),
         }
+    }
+    pub fn max(&self) -> u64 {
+        self.window.max()
+    }
+    pub fn set_max(&mut self, max: u64) -> &Self {
+        self.window.set_max(max);
+        self
     }
 
     /// Tries to increment the counter by 1. See `SlidingWindow::inc` for details.

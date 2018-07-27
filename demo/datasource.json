@@ -1,0 +1,19 @@
+{
+  "id": 1,
+  "orgId": 2,
+  "name": "Traffic Shaping Lab OOB Monitor",
+  "type": "influxdb",
+  "typeLogoUrl": "public/app/plugins/datasource/influxdb/img/influxdb_logo.svg",
+  "access": "direct",
+  "url": "http://localhost:8086",
+  "password": "",
+  "user": "",
+  "database": "demo",
+  "basicAuth": false,
+  "isDefault": false,
+  "jsonData": {
+    "keepCookies": [],
+    "tlsSkipVerify": true
+  },
+  "readOnly": false
+}

@@ -63,6 +63,13 @@ The `drop` limiter will drop all messages.
 ### percentile
 The `percentile` limiter will keep a percentage of messages. The percentage is provided as a fraction passed to it's config. `0` equals the `drop` limiter, `1` equals the `pass` limiter and `0.9` would mean 90% of the messages pass.
 
+It is possible to also provide 3 more values, `low limit`, `high limit` and `adjust`. If those are provided the percentile will adjust to keep the the feedback between low and high limits, where lower is better and higher is worse. Every time the feedback is either `lower limit` then `adjust` will be added to the `percentile` untill it reaches `1` (`100%`). If the feedback exceeds `high limit` then `adjust` will be substracted from `percentile` until it reaches a `adjust` as a lowst value.
+
+### windowed
+The `windowed` limiter limits the total message flow within a given timne window based on a sliding window algorithm. It can be confifgured with `<time range>:<sub windows>:<rate>`. `1000:100:500` Would mean we have a window of `1000ms` (`1s`) split into `100` buckets and allow `500` messages during this timeframe.
+
+It is possible to also provide 3 more values, `low limit`, `high limit` and `adjust`. If those are provided the rate will adjust to keep the the feedback between low and high limits, where lower is better and higher is worse. Every time the feedback is either `lower limit` then `adjust` will be added to the `rate`. If the feedback exceeds `high limit` then `adjust` will be substracted from `rate` until it reaches a `adjust` as a lowst value.
+
 ## Output
 The output plugin defines the destination the data is forwarded to.
 
@@ -74,6 +81,10 @@ The `kafka` output writes messages to a kafka topic, this is configured in the f
 
 ### debug
 The `debug` output prints a list of classifications and pass and drop statisticins for them every second.
+
+## es
+
+The `es` output sends data to Elastic search using batch insers, it is configured wiht  `<endpoint>|<index>|<batchSize>|<batchTimeout>`. This output provides feedback based on the batch insert times.
 
 # Docker
 
@@ -92,6 +103,8 @@ Docker needs to have at least 4GB of meomry.
 You need to be connected to the VPN.
 
 To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
+
+To demo with elasticsearch and kibana 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana.
 
 
 ## Design
@@ -143,3 +156,39 @@ The configured classification / bucketing rules, they should match the classific
 ### Test data
 
 The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 event (in this case a valid json object) per line and be compressed with `xz`. Changing this document requires re-running `make demo-containers`!
+
+### Elastic demo
+
+The base tremor demo can be extended to include elasticsearch + kibana via:
+
+```
+make demo-elastic-run
+```
+
+This exposes elasticsearch on localhost port 9200 and kibana on port 5601.
+
+### Kitchen Sink demo
+
+The kitchen sink adds InfluxDb, Telegraf and Grafana to the base tremor demo with ElasticSearch and Kibana
+
+```
+make demo-all-run
+```
+
+To inject grafana dashboards and configure influxdb for monitoring bootstrap grafana and influx
+once the system stabilizes
+
+```
+make demo-all-bootstrap
+```
+
+### Demo tools
+
+The influx client and telegraf can be installed locally for dev insights into the demo experience as follows:
+
+```
+brew install influxdb
+brew install telegraf
+```
+
+Only telegraf is required to run the demos, the influx cli is optional ( and ships with influxdb on OS X in homebrew )

@@ -1,7 +1,7 @@
 use error::TSError;
 use parser::utils::{Parsed, Parser as ParserT};
 use serde_json::{self, Value};
-
+use std::convert::From;
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`
 pub struct Parser {}
@@ -10,14 +10,16 @@ impl Parser {
         Parser {}
     }
 }
+
 impl ParserT for Parser {
     fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
-        match serde_json::from_str::<Value>(msg) {
-            Ok(parsed) => Ok(Parsed::new(msg, parsed)),
-            Err(e) => {
-                warn!("Bad JSON: {}", e);
-                Err(TSError::new(format!("Serade error: {}", e).as_str()))
-            }
-        }
+        let parsed = serde_json::from_str::<Value>(msg)?;
+        Ok(Parsed::new(msg, parsed))
+    }
+}
+
+impl From<serde_json::Error> for TSError {
+    fn from(e: serde_json::Error) -> TSError {
+        TSError::new(format!("Serade error: {}", e).as_str())
     }
 }

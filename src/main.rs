@@ -7,6 +7,7 @@ extern crate futures;
 extern crate rand;
 extern crate rdkafka;
 extern crate rdkafka_sys;
+#[macro_use]
 extern crate serde_json;
 #[macro_use]
 extern crate prometheus;
@@ -71,7 +72,7 @@ fn main() {
             Arg::with_name("output")
                 .short("o")
                 .long("output")
-                .help("output to send to. Valid options are 'stdout', 'kafka' and 'debug'")
+                .help("output to send to. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
                 .takes_value(true)
                 .required(true),
         )

@@ -28,3 +28,18 @@ demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
+
+demo-elastic-run:
+	-docker-compose -f demo/elastic.yaml rm -fsv
+	-docker-compose -f demo/elastic.yaml up
+	-docker-compose -f demo/elastic.yaml rm -fsv
+
+demo-all-run:
+	-docker-compose -f demo/all.yaml rm -fsv
+	-docker-compose -f demo/all.yaml up
+	-docker-compose -f demo/all.yaml rm -fsv
+
+demo-all-bootstrap:
+	cd demo && ./grafana-bootstrap.sh
+	telegraf -config demo/telegraf.conf
+

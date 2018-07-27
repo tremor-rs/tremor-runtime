@@ -1,5 +1,5 @@
 /// Generic error
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TSError {
     message: String,
 }

@@ -714,7 +714,7 @@ dependencies = [
 [[package]]
 name = "mimir-rs"
 version = "0.1.0"
-source = "git+https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git#404238c612e03f85f43ee369701d3ae246f0129f"
+source = "git+https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git#265b563cdb9c1e25c11f9df2c0ea8b6ea62f7857"
 dependencies = [
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1571,7 +1571,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "elastic 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",

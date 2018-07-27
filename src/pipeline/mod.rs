@@ -2,7 +2,7 @@ use classifier::{Classifier, Classifiers};
 use error::TSError;
 use grouping::MaybeMessage;
 use grouping::{Grouper, Groupers};
-use limiting::{Limiters, Limitier};
+use limiting::{Limiter, Limiters};
 use output::{Output, Outputs};
 use parser::{Parser, Parsers};
 
@@ -37,9 +37,9 @@ impl<'p> Pipeline<'p> {
         let parser = &self.parser;
         let classifier = &self.classifier;
         let grouper = &mut self.grouper;
-        let limiting = &self.limiting;
+        let limiting = &mut self.limiting;
         let output = &mut self.output;
-        parser
+        let feedback = parser
             .parse(msg.payload)
             .and_then(|parsed| classifier.classify(parsed))
             .and_then(|classified| grouper.group(classified))
@@ -51,7 +51,15 @@ impl<'p> Pipeline<'p> {
                     msg: r.msg,
                     classification: r.classification,
                 })
-            })
+            });
+        match feedback {
+            Ok(Some(feedback)) => {
+                limiting.feedback(feedback);
+                Ok(())
+            }
+            Ok(None) => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 }
 

@@ -1,15 +1,42 @@
 //! This model handles grouping messages given on ther classification and
 //! the first level of traffic shaping.
 
+pub use self::utils::Limiter;
 use error::TSError;
 use grouping::MaybeMessage;
-use rand::prelude::*;
+use prometheus::Counter;
+mod percentile;
+mod utils;
+mod windowed;
 
+lazy_static! {
+    /*
+     * Number of messages that pass the limiting stage.
+     */
+    static ref LIMITING_PASS: Counter =
+        register_counter!(opts!("ts_limiting_pass", "Passes during the limiting stage.")).unwrap();
+    /*
+     * Number of messages marked to drop the limiting stage.
+     */
+    static ref LIMITING_DROP: Counter =
+        register_counter!(opts!("ts_limiting_drop", "Drops during the limiting stage.")).unwrap();
+    /*
+     * Number of messages skipped due to previous drop request
+     */
+    static ref LIMITING_SKIP: Counter =
+        register_counter!(opts!("ts_limiting_skip", "Skipped during the limiting stage due to earlier drop request.")).unwrap();
+    /*
+     * Errors during the limiting stage
+     */
+    static ref LIMITING_ERR: Counter =
+        register_counter!(opts!("ts_limiting_error", "Errors during the limiting stage.")).unwrap();
+}
 pub fn new(name: &str, opts: &str) -> Limiters {
     match name {
-        "percentile" => Limiters::Percentile(PercentileLimit::new(opts)),
-        "drop" => Limiters::Percentile(PercentileLimit::new("0")),
-        "pass" => Limiters::Percentile(PercentileLimit::new("1")),
+        "windowed" => Limiters::Windowed(windowed::Limiter::new(opts)),
+        "percentile" => Limiters::Percentile(percentile::Limiter::new(opts)),
+        "drop" => Limiters::Percentile(percentile::Limiter::new("0")),
+        "pass" => Limiters::Percentile(percentile::Limiter::new("1")),
         _ => panic!(
             "Unknown limiting plugin: {} valid options are 'percentile', 'pass' (all messages), 'drop' (no messages)",
             name
@@ -18,93 +45,32 @@ pub fn new(name: &str, opts: &str) -> Limiters {
 }
 
 pub enum Limiters {
-    Percentile(PercentileLimit),
+    Percentile(percentile::Limiter),
+    Windowed(windowed::Limiter),
 }
 
-impl Limitier for Limiters {
-    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
-        match self {
-            Limiters::Percentile(b) => b.apply(msg),
-        }
-    }
-}
-/// The grouper trait, defining the required functions for a grouper.
-pub trait Limitier {
-    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError>;
-}
-
-/// A Limitier algorith that just lets trough a percentage of messages
-pub struct PercentileLimit {
-    percentile: f64,
-}
-
-impl PercentileLimit {
-    fn new(opts: &str) -> Self {
-        PercentileLimit {
-            percentile: opts.parse().unwrap(),
-        }
-    }
-}
-
-impl Limitier for PercentileLimit {
-    fn apply<'a>(&self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
+impl Limiter for Limiters {
+    fn apply<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
         if msg.drop {
+            LIMITING_SKIP.inc();
             Ok(msg)
         } else {
-            let mut rng = thread_rng();
-            let drop = rng.gen::<f64>() > self.percentile;
-            Ok(MaybeMessage {
-                key: None,
-                classification: msg.classification,
-                drop: drop,
-                msg: msg.msg,
-            })
+            let r = match self {
+                Limiters::Percentile(b) => b.apply(msg),
+                Limiters::Windowed(b) => b.apply(msg),
+            };
+            match r {
+                Err(_) => LIMITING_ERR.inc(),
+                Ok(MaybeMessage { drop: true, .. }) => LIMITING_DROP.inc(),
+                Ok(MaybeMessage { drop: false, .. }) => LIMITING_PASS.inc(),
+            };
+            r
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use classifier;
-    use classifier::Classifier;
-    use grouping;
-    use grouping::Grouper;
-    use limiting;
-    use limiting::Limitier;
-    use parser;
-    use parser::Parser;
-    #[test]
-    fn keep_all() {
-        let s = "Example";
-
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "Classification");
-        let mut g = grouping::new("pass", "");
-        let b = limiting::new("percentile", "1.0");
-
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .and_then(|msg| b.apply(msg))
-            .expect("handling failed!");
-        assert_eq!(msg.drop, false);
+    fn feedback(&mut self, feedback: f64) {
+        match self {
+            Limiters::Percentile(b) => b.feedback(feedback),
+            Limiters::Windowed(b) => b.feedback(feedback),
+        }
     }
-
-    #[test]
-    fn keep_non() {
-        let s = "Example";
-
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "Classification");
-        let mut g = grouping::new("pass", "");
-        let b = limiting::new("percentile", "0");
-
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
-            .and_then(|msg| b.apply(msg))
-            .expect("handling failed!");
-        assert_eq!(msg.drop, true);
-    }
-
 }
