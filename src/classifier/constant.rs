@@ -1,26 +1,24 @@
 use error::TSError;
-use parser::Parsed;
+use pipeline::{Event, Step};
 
-use classifier::utils::{Classified, Classifier as ClassifierT};
 /// A constant classifier, it will classify all mesages the same way.
 #[derive(Debug)]
-pub struct Classifier<'c> {
-    classification: &'c str,
+pub struct Classifier {
+    classification: String,
 }
 
-impl<'c> Classifier<'c> {
-    pub fn new(opts: &'c str) -> Self {
+impl Classifier {
+    pub fn new(opts: &str) -> Self {
         Classifier {
-            classification: opts,
+            classification: String::from(opts),
         }
     }
 }
 
-impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier<'c> {
-    fn classify(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
-        Ok(Classified {
-            msg: msg,
-            classification: self.classification,
-        })
+impl Step for Classifier {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        let mut event = Event::from(event);
+        event.classification = self.classification.clone();
+        Ok(event)
     }
 }

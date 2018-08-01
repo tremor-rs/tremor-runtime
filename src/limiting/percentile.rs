@@ -1,6 +1,6 @@
 use error::TSError;
-use grouping::MaybeMessage;
-use limiting::utils::Limiter as LimiterT;
+use limiting::Feedback;
+use pipeline::{Event, Step};
 use prometheus::Gauge;
 use rand::prelude::*;
 use std::f64;
@@ -68,21 +68,15 @@ fn min(f1: f64, f2: f64) -> f64 {
     }
 }
 
-impl LimiterT for Limiter {
-    fn apply<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
-        if msg.drop {
-            Ok(msg)
-        } else {
-            let mut rng = thread_rng();
-            let drop = rng.gen::<f64>() > self.percentile;
-            Ok(MaybeMessage {
-                key: None,
-                classification: msg.classification,
-                drop: drop,
-                msg: msg.msg,
-            })
-        }
+impl Step for Limiter {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        let mut event = Event::from(event);
+        let mut rng = thread_rng();
+        event.drop = rng.gen::<f64>() > self.percentile;
+        Ok(event)
     }
+}
+impl Feedback for Limiter {
     fn feedback(&mut self, feedback: f64) {
         match feedback {
             f if f > self.upper_limit => {
@@ -106,25 +100,22 @@ impl LimiterT for Limiter {
 #[cfg(test)]
 mod tests {
     use classifier;
-    use classifier::Classifier;
     use grouping;
-    use grouping::Grouper;
     use limiting;
-    use limiting::Limiter;
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
     #[test]
     fn keep_all() {
-        let s = "Example";
+        let s = Event::new("Example");
 
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "Classification");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("percentile", "1:0:1:0.1");
 
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let msg = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("handling failed!");
         assert_eq!(msg.drop, false);
@@ -132,16 +123,16 @@ mod tests {
 
     #[test]
     fn keep_non() {
-        let s = "Example";
+        let s = Event::new("Example");
 
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "Classification");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("percentile", "0:0:1:0.1");
 
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let msg = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("handling failed!");
         assert_eq!(msg.drop, true);

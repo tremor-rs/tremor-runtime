@@ -1,6 +1,5 @@
 use error::TSError;
-use parser::utils::{Parsed, Parser as ParserT};
-use serde_json::Value;
+use pipeline::{Event, Step};
 
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`
@@ -10,8 +9,8 @@ impl Parser {
         Self {}
     }
 }
-impl ParserT for Parser {
-    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
-        Ok(Parsed::new(msg, Value::Null))
+impl Step for Parser {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        Ok(event)
     }
 }

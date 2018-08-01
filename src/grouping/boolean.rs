@@ -1,8 +1,7 @@
 //! A simple grouper that ignores the classification and either passes or drops a message.
 
-use classifier::Classified;
 use error::TSError;
-use grouping::utils::{Grouper as GrouperT, MaybeMessage};
+use pipeline::{Event, Step};
 
 /// A grouper either drops or keeps all messages.
 pub struct Grouper {
@@ -20,13 +19,10 @@ impl Grouper {
     }
 }
 
-impl GrouperT for Grouper {
-    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
-        Ok(MaybeMessage {
-            key: None,
-            classification: msg.classification,
-            drop: self.drop,
-            msg: msg.msg,
-        })
+impl Step for Grouper {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        let mut event = Event::from(event);
+        event.drop = self.drop;
+        Ok(event)
     }
 }

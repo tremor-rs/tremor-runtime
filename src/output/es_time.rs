@@ -42,7 +42,7 @@ pub struct Output {
     flush_tx_timeout_millis: u64,
     // queue: Vec<&'a MaybeMessage<'a>>,
     qidx: usize,
-    qlimit: usize,
+    _qlimit: usize,
     payload: String,
     last_flush: Instant,
 }
@@ -63,7 +63,7 @@ impl Output {
                     index: index.to_string(),
                     flush_tx_timeout_millis: flush_tx_timeout_millis,
                     qidx: 0,
-                    qlimit: flush_batch_size - 1,
+                    _qlimit: flush_batch_size - 1,
                     payload: String::new(),
                     last_flush: Instant::now()
                 }

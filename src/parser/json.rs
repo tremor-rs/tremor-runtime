@@ -1,5 +1,5 @@
 use error::TSError;
-use parser::utils::{Parsed, Parser as ParserT};
+use pipeline::{Event, Step};
 use serde_json::{self, Value};
 use std::convert::From;
 /// The Raw Parser is a simple parser that performs no action on the
@@ -11,10 +11,11 @@ impl Parser {
     }
 }
 
-impl ParserT for Parser {
-    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
-        let parsed = serde_json::from_str::<Value>(msg)?;
-        Ok(Parsed::new(msg, parsed))
+impl Step for Parser {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        let mut event = Event::from(event);
+        event.parsed = serde_json::from_str::<Value>(event.raw.as_str())?;
+        Ok(event)
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.1.9"
+version = "0.1.10"
 authors = ["Heinz Gies <hgies@wayfair.com>"]
 
 [dependencies]
@@ -12,12 +12,13 @@ rdkafka-sys = "0.11.4-0"
 log = "0.4"
 env_logger = "0.5"
 serde_json = "1.0"
+serde = "1.0"
+serde_derive = "1.0"
 prometheus = "0.4"
-lazy_static = "0.2.11"
-elastic = "0.20.10"
-elastic_derive = "~0.20.0"
-tokio-core = "~0.1.9"
-
+lazy_static = "0.2"
+elastic = "0.20"
+elastic_derive = "0.20"
+threadpool = "1.7.1"
 hyper = "0.12"
 mimir-rs = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "master" }
 

@@ -2,15 +2,14 @@
 
 mod json;
 mod raw;
-mod utils;
 
-pub use self::utils::{Parsed, Parser};
 use error::TSError;
+use pipeline::{Event, Step};
 
-pub fn new(name: &str, opts: &str) -> Parsers {
+pub fn new(name: &str, opts: &str) -> Parser {
     match name {
-        "raw" => Parsers::Raw(raw::Parser::new(opts)),
-        "json" => Parsers::JSON(json::Parser::new(opts)),
+        "raw" => Parser::Raw(raw::Parser::new(opts)),
+        "json" => Parser::JSON(json::Parser::new(opts)),
         _ => panic!(
             "Unknown parser: '{}' valid options are 'raw', and 'json'",
             name
@@ -18,16 +17,16 @@ pub fn new(name: &str, opts: &str) -> Parsers {
     }
 }
 
-pub enum Parsers {
+pub enum Parser {
     Raw(raw::Parser),
     JSON(json::Parser),
 }
 
-impl Parser for Parsers {
-    fn parse<'a>(&self, msg: &'a str) -> Result<Parsed<'a>, TSError> {
+impl Step for Parser {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         match self {
-            Parsers::Raw(p) => p.parse(msg),
-            Parsers::JSON(p) => p.parse(msg),
+            Parser::Raw(p) => p.apply(event),
+            Parser::JSON(p) => p.apply(event),
         }
     }
 }
@@ -35,28 +34,28 @@ impl Parser for Parsers {
 #[cfg(test)]
 mod tests {
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
     #[test]
     fn raw_parser() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let parsed = p.parse(s).expect("parsing failed!");
-        assert_eq!(s, parsed.raw());
+        let s = Event::new("Example");
+        let mut p = parser::new("raw", "");
+        let event = p.apply(s).expect("parsing failed!");
+        assert_eq!("Example", event.raw);
     }
 
     #[test]
     fn json_parser() {
-        let s = "[1]";
-        let p = parser::new("json", "");
-        let parsed = p.parse(s).expect("parsing failed!");
-        assert_eq!(s, parsed.raw());
+        let s = Event::new("[1]");
+        let mut p = parser::new("json", "");
+        let parsed = p.apply(s).expect("parsing failed!");
+        assert_eq!("[1]", parsed.raw);
     }
 
     #[test]
     fn json_parser_error() {
-        let s = "[1";
-        let p = parser::new("json", "");
-        let parsed = p.parse(s);
+        let s = Event::new("[1");
+        let mut p = parser::new("json", "");
+        let parsed = p.apply(s);
         assert!(parsed.is_err());
     }
 }

@@ -1,3 +1,4 @@
+use elastic;
 /// Generic error
 #[derive(Debug, Clone)]
 pub struct TSError {
@@ -9,5 +10,11 @@ impl TSError {
         TSError {
             message: String::from(msg),
         }
+    }
+}
+
+impl From<elastic::Error> for TSError {
+    fn from(from: elastic::Error) -> TSError {
+        TSError::new(format!("{}", from).as_str())
     }
 }

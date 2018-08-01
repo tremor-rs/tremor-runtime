@@ -1,10 +1,9 @@
 use error::TSError;
 use mimir_rs::mimir::{RuleBuilder, RuleSet};
-use parser::Parsed;
+use pipeline::{Event, Step};
 use serde_json::{self, Value};
 use std::collections::HashMap;
 
-use classifier::utils::{Classified, Classifier as ClassifierT};
 /// A constant classifier, it will classify all mesages the same way.
 #[derive(Debug)]
 pub struct Classifier {
@@ -61,11 +60,11 @@ impl Classifier {
     }
 }
 
-impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
-    fn classify(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
+impl Step for Classifier {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
         let mut doc = self.mimir_rules.document();
-        match msg.parsed.clone() {
+        match event.parsed.clone() {
             Value::Object(obj) => {
                 for (key, value) in obj.iter() {
                     match value {
@@ -91,25 +90,23 @@ impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
                     }
                 }
                 let rs = doc.test();
+                let mut event = Event::from(event);
                 for x in 0usize..self.mimir_rules.num_rules() as usize {
                     if rs.at(x) {
                         return match self.rules.get(&x) {
-                            Some(class) => Ok(Classified {
-                                msg: msg,
-                                classification: class.as_str(),
-                            }),
-                            None => Ok(Classified {
-                                msg: msg,
-                                classification: "default",
-                            }),
+                            Some(class) => {
+                                event.classification = class.clone();
+                                Ok(event)
+                            }
+                            None => {
+                                event.classification = String::from("default");
+                                Ok(event)
+                            }
                         };
                     }
                 }
-
-                Ok(Classified {
-                    msg: msg,
-                    classification: "default",
-                })
+                event.classification = String::from("default");
+                Ok(event)
             }
             _ => Err(TSError::new(
                 "Can't classifiy message, needs to be an object",
@@ -121,9 +118,8 @@ impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
 #[cfg(test)]
 mod tests1 {
     use classifier;
-    use classifier::Classifier;
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
 
     #[test]
     #[should_panic]
@@ -169,48 +165,48 @@ mod tests1 {
 
     #[test]
     fn test_basd_json() {
-        let s = "[]";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[{\"test:rule\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("[]");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("mimir", "[{\"test:rule\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_err())
     }
 
     #[test]
     fn test_classification_default() {
-        let s = "{}";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("mimir", "[]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
     }
 
     #[test]
     fn test_match() {
-        let s = "{\"key\": \"value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
     }
     #[test]
     fn test_no_match() {
-        let s = "{\"key\": \"not the value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"not the value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
     }
 
     #[test]
     fn test_partial_match() {
-        let s = "{\"key\": \"contains the value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("mimir", "[{\"key:value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"contains the value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("mimir", "[{\"key:value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
     }

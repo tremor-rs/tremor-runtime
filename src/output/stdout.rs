@@ -1,6 +1,6 @@
 use error::TSError;
-use grouping::MaybeMessage;
-use output::utils::{Output as OutputT, OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use pipeline::{Event, Step};
 
 /// An output that write to stdout
 pub struct Output {
@@ -14,18 +14,19 @@ impl Output {
         }
     }
 }
-impl OutputT for Output {
-    fn send<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<Option<f64>, TSError> {
-        if !msg.drop {
+impl Step for Output {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        if !event.drop {
+            let out_event = event.clone();
             OUTPUT_DELIVERED.inc();
-            match msg.key {
-                None => println!("{}{}", self.pfx, msg.msg.raw),
-                Some(key) => println!("{}{} {}", self.pfx, key, msg.msg.raw),
+            match event.key {
+                None => println!("{}{}", self.pfx, event.raw),
+                Some(key) => println!("{}{} {}", self.pfx, key, event.raw),
             }
+            Ok(out_event)
         } else {
-            OUTPUT_DROPPED.inc()
+            OUTPUT_DROPPED.inc();
+            Ok(event)
         }
-
-        Ok(None)
     }
 }

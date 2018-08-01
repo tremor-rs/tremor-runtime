@@ -59,7 +59,7 @@ services:
     environment:
       - PRODUCERS=kafka:9092
       - TOPIC=demo
-      - MPS=100
+      - MPS=250
       - SLEEP=30
   tremor:
     image: tremor-runtime
@@ -78,5 +78,5 @@ services:
       - GROUPING=bucket
       - GROUPING_CONFIG=1000;100;default:90|info:10|error:100
       - OUTPUT=es
-      - OUTPUT_CONFIG=http://elastic:9200|demo|10|1000
+      - OUTPUT_CONFIG={"endpoint":"http://elastic:9200", "index":"demo","batch_size":10,"batch_timeout":5000}
       - SLEEP=40

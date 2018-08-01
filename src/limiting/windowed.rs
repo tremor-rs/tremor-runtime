@@ -1,6 +1,6 @@
 use error::TSError;
-use grouping::MaybeMessage;
-use limiting::utils::Limiter as LimiterT;
+use limiting::Feedback;
+use pipeline::{Event, Step};
 use prometheus::IntGauge;
 use std::cmp::max;
 use std::f64;
@@ -57,23 +57,18 @@ impl Limiter {
     }
 }
 
-impl LimiterT for Limiter {
-    fn apply<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
-        if msg.drop {
-            Ok(msg)
-        } else {
-            let drop = match self.window.inc() {
-                Ok(_) => false,
-                Err(_) => true,
-            };
-            Ok(MaybeMessage {
-                key: None,
-                classification: msg.classification,
-                drop: drop,
-                msg: msg.msg,
-            })
-        }
+impl Step for Limiter {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        let drop = match self.window.inc() {
+            Ok(_) => false,
+            Err(_) => true,
+        };
+        let mut event = Event::from(event);
+        event.drop = drop;
+        Ok(event)
     }
+}
+impl Feedback for Limiter {
     fn feedback(&mut self, feedback: f64) {
         match feedback {
             f if f > self.upper_limit => {
@@ -105,26 +100,23 @@ impl LimiterT for Limiter {
 #[cfg(test)]
 mod tests {
     use classifier;
-    use classifier::Classifier;
     use grouping;
-    use grouping::Grouper;
     use limiting;
-    use limiting::Limiter;
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
     use std::thread::sleep;
     use std::time::Duration;
 
     #[test]
     fn no_capacity() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
+        let s = Event::new("Example");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:0");
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let msg = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("handling failed!");
         assert_eq!(msg.drop, true);
@@ -132,14 +124,14 @@ mod tests {
 
     #[test]
     fn grouping_test_fail() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
+        let s = Event::new("Example");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:1");
-        let msg = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let msg = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("handling failed!");
         assert_eq!(msg.drop, false);
@@ -147,26 +139,28 @@ mod tests {
 
     #[test]
     fn grouping_time_refresh() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "c");
+        let s = Event::new("Example");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:1");
-        let r1 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let r1 = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("grouping failed");
-        let r2 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let s = Event::new("Example");
+        let r2 = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("grouping failed");
         // we sleep for 1.1s as this should refresh our bucket
         sleep(Duration::new(1, 200_000_000));
-        let r3 = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g.group(classified))
+        let s = Event::new("Example");
+        let r3 = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("grouping failed");
         assert_eq!(r1.drop, false);

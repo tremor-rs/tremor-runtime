@@ -1,7 +1,7 @@
 use error::TSError;
 use futures::Future;
-use grouping::MaybeMessage;
-use output::utils::{Output as OutputT, OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use pipeline::{Event, Step};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 
@@ -34,25 +34,27 @@ impl Output {
     }
 }
 
-impl OutputT for Output {
-    fn send<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<Option<f64>, TSError> {
-        if !msg.drop {
+impl Step for Output {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
+        if !event.drop {
             OUTPUT_DELIVERED.inc();
+            let out_event = event.clone();
             let mut record = FutureRecord::to(self.topic.as_str());
-            record = record.payload(msg.msg.raw);
-            if let Some(k) = msg.key {
-                record = record.key(k);
+            record = record.payload(event.raw.as_str());
+            let r = if let Some(k) = event.key {
+                self.producer.send(record.key(k.as_str()), 1000).wait()
+            } else {
+                self.producer.send(record, 1000).wait()
             };
-            let r = self.producer.send(record, 1000).wait();
 
             if r.is_ok() {
-                Ok(None)
+                Ok(out_event)
             } else {
                 Err(TSError::new("Send failed"))
             }
         } else {
             OUTPUT_DROPPED.inc();
-            Ok(None)
+            Ok(event)
         }
     }
 }

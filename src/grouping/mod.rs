@@ -1,14 +1,11 @@
 //! This model handles grouping messages given on ther classification and
 //! the first level of traffic shaping.
 
-pub mod boolean;
-pub mod bucket;
-mod utils;
+mod boolean;
+mod bucket;
 
-pub use self::utils::{Grouper, MaybeMessage};
-use classifier::Classified;
 use error::TSError;
-
+use pipeline::{Event, Step};
 use prometheus::Counter;
 
 lazy_static! {
@@ -29,11 +26,11 @@ lazy_static! {
         register_counter!(opts!("ts_grouping_error", "Errors during the grouping stage.")).unwrap();
 }
 
-pub fn new<'a>(name: &'a str, opts: &'a str) -> Groupers<'a> {
+pub fn new(name: &str, opts: &str) -> Grouper {
     match name {
-        "drop" => Groupers::Boolean(boolean::Grouper::new("true")),
-        "pass" => Groupers::Boolean(boolean::Grouper::new("false")),
-        "bucket" => Groupers::Bucket(bucket::Grouper::new(opts)),
+        "drop" => Grouper::Boolean(boolean::Grouper::new("true")),
+        "pass" => Grouper::Boolean(boolean::Grouper::new("false")),
+        "bucket" => Grouper::Bucket(bucket::Grouper::new(opts)),
 
         _ => panic!(
             "Unknown grouper: {} valid options are 'bucket', 'drop' and 'pass'",
@@ -42,20 +39,20 @@ pub fn new<'a>(name: &'a str, opts: &'a str) -> Groupers<'a> {
     }
 }
 
-pub enum Groupers<'a> {
+pub enum Grouper {
     Boolean(boolean::Grouper),
-    Bucket(bucket::Grouper<'a>),
+    Bucket(bucket::Grouper),
 }
-impl<'a> Grouper for Groupers<'a> {
-    fn group<'p, 'c: 'p>(&mut self, msg: Classified<'p, 'c>) -> Result<MaybeMessage<'p>, TSError> {
+impl Step for Grouper {
+    fn apply(&mut self, msg: Event) -> Result<Event, TSError> {
         let r = match self {
-            Groupers::Boolean(g) => g.group(msg),
-            Groupers::Bucket(g) => g.group(msg),
+            Grouper::Boolean(g) => g.apply(msg),
+            Grouper::Bucket(g) => g.apply(msg),
         };
         match r {
             Err(_) => GROUPING_ERR.inc(),
-            Ok(MaybeMessage { drop: false, .. }) => GROUPING_PASS.inc(),
-            Ok(MaybeMessage { drop: true, .. }) => GROUPING_DROP.inc(),
+            Ok(Event { drop: false, .. }) => GROUPING_PASS.inc(),
+            Ok(Event { drop: true, .. }) => GROUPING_DROP.inc(),
         };
         r
     }
@@ -64,28 +61,27 @@ impl<'a> Grouper for Groupers<'a> {
 #[cfg(test)]
 mod tests {
     use classifier;
-    use classifier::Classifier;
     use grouping;
-    use grouping::Grouper;
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
     #[test]
     fn boolean_grouper() {
-        let s = "Example";
-        let p = parser::new("raw", "");
-        let c = classifier::new("constant", "Classification");
+        let s = Event::new("Example");
+        let mut p = parser::new("raw", "");
+        let mut c = classifier::new("constant", "Classification");
         let mut g_d = grouping::new("drop", "");
         let mut g_k = grouping::new("pass", "");
 
-        let r = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g_d.group(classified))
+        let r = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g_d.apply(classified))
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
-        let r = p.parse(s)
-            .and_then(|parsed| c.classify(parsed))
-            .and_then(|classified| g_k.group(classified))
+        let s = Event::new("Example");
+        let r = p.apply(s)
+            .and_then(|parsed| c.apply(parsed))
+            .and_then(|classified| g_k.apply(classified))
             .expect("grouping failed");
         assert_eq!(r.drop, false);
     }

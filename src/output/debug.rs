@@ -1,6 +1,6 @@
 use error::TSError;
-use grouping::MaybeMessage;
-use output::utils::{Output as OutputT, OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use pipeline::{Event, Step};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -27,8 +27,8 @@ impl Output {
         }
     }
 }
-impl OutputT for Output {
-    fn send<'m>(&mut self, msg: MaybeMessage<'m>) -> Result<Option<f64>, TSError> {
+impl Step for Output {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if self.last.elapsed() > self.update_time {
             self.last = Instant::now();
             println!("");
@@ -58,9 +58,9 @@ impl OutputT for Output {
             self.buckets.clear();
         }
         let entry = self.buckets
-            .entry(String::from(msg.classification))
+            .entry(event.classification.clone())
             .or_insert(DebugBucket { pass: 0, drop: 0 });
-        if msg.drop {
+        if event.drop {
             OUTPUT_DROPPED.inc();
             entry.drop += 1;
             self.drop += 1;
@@ -69,6 +69,6 @@ impl OutputT for Output {
             entry.pass += 1;
             self.pass += 1;
         };
-        Ok(None)
+        Ok(event)
     }
 }

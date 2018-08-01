@@ -1,9 +1,7 @@
 use error::TSError;
-use parser::Parsed;
+use pipeline::{Event, Step};
 use regex::Regex;
 use serde_json::{self, Map, Value};
-
-use classifier::utils::{Classified, Classifier as ClassifierT};
 
 lazy_static! {
     static ref EQ_RE: Regex = Regex::new(r"^(.*?)\s*=\s*(.*)$").unwrap();
@@ -94,24 +92,20 @@ impl Classifier {
     }
 }
 
-impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
-    fn classify(&'c self, msg: Parsed<'p>) -> Result<Classified<'c, 'p>, TSError> {
+impl Step for Classifier {
+    fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
-
-        match msg.parsed.clone() {
+        let mut event = Event::from(event);
+        match event.parsed.clone() {
             Value::Object(obj) => {
                 for m in self.rules.iter() {
                     if m.test(obj.clone()) {
-                        return Ok(Classified {
-                            msg: msg,
-                            classification: m.class.as_str(),
-                        });
+                        event.classification = m.class.clone();
+                        return Ok(event);
                     }
                 }
-                Ok(Classified {
-                    msg: msg,
-                    classification: "default",
-                })
+                event.classification = String::from("default");
+                Ok(event)
             }
             _ => Err(TSError::new(
                 "Can't classifiy message, needs to be an object",
@@ -123,9 +117,8 @@ impl<'p, 'c: 'p> ClassifierT<'p, 'c> for Classifier {
 #[cfg(test)]
 mod tests {
     use classifier;
-    use classifier::Classifier;
     use parser;
-    use parser::Parser;
+    use pipeline::{Event, Step};
 
     #[test]
     #[should_panic]
@@ -171,48 +164,48 @@ mod tests {
 
     #[test]
     fn test_basd_json() {
-        let s = "[]";
-        let p = parser::new("json", "");
-        let c = classifier::new("matcher", "[{\"test:rule\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("[]");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("matcher", "[{\"test:rule\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_err())
     }
 
     #[test]
     fn test_classification_default() {
-        let s = "{}";
-        let p = parser::new("json", "");
-        let c = classifier::new("matcher", "[]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("matcher", "[]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
     }
 
     #[test]
     fn test_match() {
-        let s = "{\"key\": \"value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("matcher", "[{\"key=value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("matcher", "[{\"key=value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
     }
     #[test]
     fn test_no_match() {
-        let s = "{\"key\": \"not the value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("matcher", "[{\"key=value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"not the value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("matcher", "[{\"key=value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
     }
 
     #[test]
     fn test_partial_match() {
-        let s = "{\"key\": \"contains the value\"}";
-        let p = parser::new("json", "");
-        let c = classifier::new("matcher", "[{\"key:value\": \"test-class\"}]");
-        let r = p.parse(s).and_then(|parsed| c.classify(parsed));
+        let s = Event::new("{\"key\": \"contains the value\"}");
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new("matcher", "[{\"key:value\": \"test-class\"}]");
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
     }

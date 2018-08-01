@@ -1,13 +1,14 @@
 //! This model handles grouping messages given on ther classification and
 //! the first level of traffic shaping.
 
-pub use self::utils::Limiter;
-use error::TSError;
-use grouping::MaybeMessage;
-use prometheus::Counter;
+mod feedback;
 mod percentile;
-mod utils;
 mod windowed;
+
+pub use self::feedback::Feedback;
+use error::TSError;
+use pipeline::{Event, Step};
+use prometheus::Counter;
 
 lazy_static! {
     /*
@@ -31,12 +32,12 @@ lazy_static! {
     static ref LIMITING_ERR: Counter =
         register_counter!(opts!("ts_limiting_error", "Errors during the limiting stage.")).unwrap();
 }
-pub fn new(name: &str, opts: &str) -> Limiters {
+pub fn new(name: &str, opts: &str) -> Limiter {
     match name {
-        "windowed" => Limiters::Windowed(windowed::Limiter::new(opts)),
-        "percentile" => Limiters::Percentile(percentile::Limiter::new(opts)),
-        "drop" => Limiters::Percentile(percentile::Limiter::new("0")),
-        "pass" => Limiters::Percentile(percentile::Limiter::new("1")),
+        "windowed" => Limiter::Windowed(windowed::Limiter::new(opts)),
+        "percentile" => Limiter::Percentile(percentile::Limiter::new(opts)),
+        "drop" => Limiter::Percentile(percentile::Limiter::new("0")),
+        "pass" => Limiter::Percentile(percentile::Limiter::new("1")),
         _ => panic!(
             "Unknown limiting plugin: {} valid options are 'percentile', 'pass' (all messages), 'drop' (no messages)",
             name
@@ -44,33 +45,35 @@ pub fn new(name: &str, opts: &str) -> Limiters {
     }
 }
 
-pub enum Limiters {
+pub enum Limiter {
     Percentile(percentile::Limiter),
     Windowed(windowed::Limiter),
 }
 
-impl Limiter for Limiters {
-    fn apply<'a>(&mut self, msg: MaybeMessage<'a>) -> Result<MaybeMessage<'a>, TSError> {
+impl Step for Limiter {
+    fn apply(&mut self, msg: Event) -> Result<Event, TSError> {
         if msg.drop {
             LIMITING_SKIP.inc();
             Ok(msg)
         } else {
             let r = match self {
-                Limiters::Percentile(b) => b.apply(msg),
-                Limiters::Windowed(b) => b.apply(msg),
+                Limiter::Percentile(b) => b.apply(msg),
+                Limiter::Windowed(b) => b.apply(msg),
             };
             match r {
                 Err(_) => LIMITING_ERR.inc(),
-                Ok(MaybeMessage { drop: true, .. }) => LIMITING_DROP.inc(),
-                Ok(MaybeMessage { drop: false, .. }) => LIMITING_PASS.inc(),
+                Ok(Event { drop: true, .. }) => LIMITING_DROP.inc(),
+                Ok(Event { drop: false, .. }) => LIMITING_PASS.inc(),
             };
             r
         }
     }
+}
+impl Feedback for Limiter {
     fn feedback(&mut self, feedback: f64) {
         match self {
-            Limiters::Percentile(b) => b.feedback(feedback),
-            Limiters::Windowed(b) => b.feedback(feedback),
+            Limiter::Percentile(b) => b.feedback(feedback),
+            Limiter::Windowed(b) => b.feedback(feedback),
         }
     }
 }
