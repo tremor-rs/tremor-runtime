@@ -72,7 +72,7 @@ impl Input for StdinInput {
                 Ok(line) => {
                     INPUT_OK.inc();
                     let msg = Msg::new(None, line.as_str());
-                    let _ = pipeline.run(msg);
+                    let _ = pipeline.run(&msg);
                 }
                 Err(_) => INPUT_ERR.inc(),
             }
@@ -130,7 +130,7 @@ impl KafkaInput {
                 consumer
                     .subscribe(&[topic])
                     .expect("Can't subscribe to specified topic");
-                KafkaInput { consumer: consumer }
+                KafkaInput { consumer }
             }
             _ => panic!("Invalid options for Kafka input, use <groupid>|<topic>|<producers>"),
         }
@@ -150,19 +150,15 @@ impl Input for KafkaInput {
                 Ok(Ok(m)) => {
                     // Send a copy to the message to every output topic in parallel, and wait for the
                     // delivery report to be received.
-                    match m.payload_view::<str>() {
-                        Some(Ok(p)) => {
-                            let key = match m.key_view::<str>() {
-                                Some(key) => Some(key.unwrap()),
-                                None => None,
-                            };
-                            match pipeline.run(Msg::new(key, p)) {
-                                Ok(_) => (),
-                                Err(e) => error!("Error during handling message: {:?}", e),
-                            }
-                        }
-                        _ => (),
-                    };
+                    if let Some(Ok(p)) = m.payload_view::<str>() {
+                        let key = match m.key_view::<str>() {
+                            Some(key) => Some(key.unwrap()),
+                            None => None,
+                        };
+                        if let Err(e) = pipeline.run(&Msg::new(key, p)) {
+                            error!("Error during handling message: {:?}", e)
+                        };
+                    }
                     // Now that the message is completely processed, add it's position to the offset
                     // store. The actual offset will be committed every 5 seconds.
                     if let Err(e) = self.consumer.store_offset(&m) {

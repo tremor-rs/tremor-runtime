@@ -38,7 +38,7 @@ impl Pipeline {
         }
     }
     /// Runs each step of the pipeline and returns either a OK or a error result
-    pub fn run(&mut self, msg: Msg) -> Result<(), TSError> {
+    pub fn run(&mut self, msg: &Msg) -> Result<(), TSError> {
         let parser = &mut self.parser;
         let classifier = &mut self.classifier;
         let grouper = &mut self.grouper;
@@ -73,9 +73,6 @@ pub struct Msg<'a> {
 
 impl<'a> Msg<'a> {
     pub fn new(key: Option<&'a str>, payload: &'a str) -> Self {
-        Msg {
-            key: key,
-            payload: payload,
-        }
+        Msg { key, payload }
     }
 }

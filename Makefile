@@ -43,3 +43,11 @@ demo-all-bootstrap:
 	cd demo && ./grafana-bootstrap.sh
 	telegraf -config demo/telegraf.conf
 
+
+clippy-install:
+	rustup update
+	rustup install nightly
+	rustup component add clippy-preview --toolchain=nightly
+
+clippy:
+	CARGO_TARGET_DIR=target.clippy cargo +nightly clippy

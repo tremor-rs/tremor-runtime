@@ -31,7 +31,7 @@ impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if self.last.elapsed() > self.update_time {
             self.last = Instant::now();
-            println!("");
+            println!();
             println!(
                 "|{:20}| {:7}| {:7}| {:7}|",
                 "classification", "total", "pass", "drop"
@@ -45,7 +45,7 @@ impl Step for Output {
             );
             self.pass = 0;
             self.drop = 0;
-            for (class, data) in self.buckets.iter() {
+            for (class, data) in &self.buckets {
                 println!(
                     "|{:20}| {:7}| {:7}| {:7}|",
                     class,
@@ -54,7 +54,7 @@ impl Step for Output {
                     data.drop
                 );
             }
-            println!("");
+            println!();
             self.buckets.clear();
         }
         let entry = self.buckets

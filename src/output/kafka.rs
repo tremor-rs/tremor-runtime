@@ -25,7 +25,7 @@ impl Output {
                     .create()
                     .expect("Producer creation failed");
                 Output {
-                    producer: producer,
+                    producer,
                     topic: String::from(*topic),
                 }
             }

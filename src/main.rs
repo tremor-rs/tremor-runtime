@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "cargo-clippy", deny(clippy))]
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -183,5 +184,5 @@ fn main() {
         hyper::rt::run(server);
     });
 
-    let _ = input.enter_loop(&mut pipeline);
+    input.enter_loop(&mut pipeline);
 }

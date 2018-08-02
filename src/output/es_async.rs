@@ -96,7 +96,7 @@ fn default_concurrency() -> usize {
 }
 
 fn default_backoff() -> Vec<u64> {
-    vec![50, 100, 250, 500, 1000, 5000, 100000, 500000]
+    vec![50, 100, 250, 500, 1000, 5000, 10000]
 }
 
 //[endpoint, index, batch_size, batch_timeout]
@@ -116,7 +116,7 @@ struct Config {
 
 impl Config {
     pub fn next_backoff(&self, last_backoff: u64) -> u64 {
-        for backoff in self.backoff_rules.iter() {
+        for backoff in &self.backoff_rules {
             if *backoff > last_backoff {
                 return *backoff;
             }
@@ -144,7 +144,7 @@ impl<T> AsyncSink<T> {
     pub fn new(capacity: usize) -> Self {
         AsyncSink {
             queue: VecDeque::with_capacity(capacity),
-            capacity: capacity,
+            capacity,
             size: 0,
         }
     }
@@ -154,7 +154,8 @@ impl<T> AsyncSink<T> {
             Err(SinkEnqueueError::AtCapacity)
         } else {
             self.size += 1;
-            Ok(self.queue.push_back(value))
+            self.queue.push_back(value);
+            Ok(())
         }
     }
     pub fn dequeue(&mut self) -> Result<Result<T, TSError>, SinkDequeueError> {
@@ -200,22 +201,22 @@ impl Output {
     /// brokers to connect to. `topic` is the topic to send to.
     pub fn new(opts: &str) -> Self {
         match serde_json::from_str(opts) {
-            Ok(conf @ Config{..}) => {
-                let client = SyncClientBuilder::new().base_url(conf.endpoint.clone()).build().unwrap();
-                let pool = ThreadPool::new(conf.threads);
-                let queue = AsyncSink::new(conf.concurrency);
+            Ok(config @ Config{..}) => {
+                let client = SyncClientBuilder::new().base_url(config.endpoint.clone()).build().unwrap();
+                let pool = ThreadPool::new(config.threads);
+                let queue = AsyncSink::new(config.concurrency);
                 Output {
-                    config: conf,
+                    config,
                     backoff: 0,
-                    pool: pool,
-                    client: client,
+                    pool,
+                    client,
                     qidx: 0,
                     payload: String::new(),
                     last_flush: Instant::now(),
-                    queue: queue
+                    queue
                 }
             }
-            _ => panic!("Invalid options for Elastic output, use <endpoint>|<index>|<batchSize>|<batchTimeout>"),
+            _ => panic!("Invalid options for Elastic output, use `{\"endpoint\":\"<url>\", \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...]]}`"),
         }
     }
 
@@ -226,7 +227,7 @@ impl Output {
         let c = self.qidx;
         let (tx, rx) = channel();
         self.pool.execute(move || {
-            let r = flush(client, index, payload.as_str());
+            let r = flush(&client, index.as_str(), payload.as_str());
             match r.clone() {
                 Ok(_) => OUTPUT_DELIVERED.inc_by(c as i64),
                 Err(e) => {
@@ -249,7 +250,7 @@ impl Output {
     }
 }
 
-fn flush(client: Client<SyncSender>, index: String, payload: &str) -> Result<f64, TSError> {
+fn flush(client: &Client<SyncSender>, index: &str, payload: &str) -> Result<f64, TSError> {
     let start = Instant::now();
     let timer = SEND_HISTOGRAM.start_timer();
     let req = BulkRequest::for_index_ty(index.to_owned(), "_doc", payload.to_owned());
@@ -264,7 +265,7 @@ fn flush(client: Client<SyncSender>, index: String, payload: &str) -> Result<f64
 }
 
 fn duration_to_millis(at: Duration) -> u64 {
-    (at.as_secs() as u64 * 1_000) + (at.subsec_nanos() as u64 / 1_000_000)
+    (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
 }
 
 fn update_send_time(event: Event) -> Result<String, serde_json::Error> {
@@ -300,7 +301,13 @@ impl Step for Output {
         let d = duration_to_millis(self.last_flush.elapsed());
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
-        if !event.drop && d >= self.backoff {
+        if event.drop {
+            OUTPUT_SKIPED.inc();
+            Ok(event)
+        } else if d <= self.backoff {
+            OUTPUT_DROPPED.inc();
+            Ok(event)
+        } else {
             self.payload.push_str(
                 json!({
                     "index":
@@ -362,9 +369,6 @@ impl Step for Output {
                 self.qidx = 0;
                 r
             }
-        } else {
-            OUTPUT_SKIPED.inc();
-            Ok(event)
         }
     }
 }

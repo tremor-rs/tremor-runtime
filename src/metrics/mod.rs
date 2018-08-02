@@ -1,12 +1,13 @@
 use futures::future;
+use hyper::header;
 use hyper::rt::Future;
 use hyper::{self, Body, Method, Request, Response, StatusCode};
-use hyper::header;
 
 use prometheus::{self, Encoder, TextEncoder};
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 pub fn dispatch(req: Request<Body>) -> BoxFut {
     let mut res = Response::new(Body::empty());
 
@@ -17,7 +18,10 @@ pub fn dispatch(req: Request<Body>) -> BoxFut {
             let metric_familys = prometheus::gather();
             let mut buffer = vec![];
             encoder.encode(&metric_familys, &mut buffer).unwrap();
-            res.headers_mut().insert("Access-Control-Allow-Origin", header::HeaderValue::from_static("*"));
+            res.headers_mut().insert(
+                "Access-Control-Allow-Origin",
+                header::HeaderValue::from_static("*"),
+            );
             *res.body_mut() = Body::from(buffer);
         }
         _ => {

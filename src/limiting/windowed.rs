@@ -22,12 +22,12 @@ pub struct Limiter {
 impl Limiter {
     pub fn new(opts: &str) -> Self {
         let opts: Vec<&str> = opts.split(':').collect();
-        match opts.as_slice() {
-            &[time_range, windows, rate] => {
+        match *opts.as_slice() {
+            [time_range, windows, rate] => {
                 let time_range = time_range.parse::<u64>().unwrap();
                 let windows = windows.parse::<usize>().unwrap();
                 let rate = rate.parse::<u64>().unwrap();
-
+                RATE_GAUGE.set(rate as i64);
                 Limiter {
                     window: TimeWindow::new(windows, time_range / (windows as u64), rate),
                     lower_limit: 0.0,
@@ -35,14 +35,14 @@ impl Limiter {
                     adjustment: 0,
                 }
             }
-            &[time_range, windows, rate, lower, upper, adjust] => {
+            [time_range, windows, rate, lower, upper, adjust] => {
                 let time_range = time_range.parse::<u64>().unwrap();
                 let windows = windows.parse::<usize>().unwrap();
                 let rate = rate.parse::<u64>().unwrap();
                 let lower_limit = lower.parse().unwrap();
                 let upper_limit = upper.parse().unwrap();
                 let adjustment = adjust.parse().unwrap();
-
+                RATE_GAUGE.set(rate as i64);
                 Limiter {
                     window: TimeWindow::new(windows, time_range / (windows as u64), rate),
                     lower_limit,
@@ -85,7 +85,9 @@ impl Feedback for Limiter {
             f if f < self.lower_limit => {
                 let m = self.window.max();
                 let c = self.window.count();
-                if m < (c as f64 * 0.8) as u64 {
+                // Only allow max 20% buffer on growth so we do not increase
+                // the maximum indefinetly
+                if m < (c as f64 * 1.2) as u64 {
                     self.window.set_max(m + self.adjustment);
                     let m = self.window.max();
                     RATE_GAUGE.set(m as i64);

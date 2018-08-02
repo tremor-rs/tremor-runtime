@@ -22,8 +22,8 @@ pub struct Limiter {
 impl Limiter {
     pub fn new(opts: &str) -> Self {
         let opts: Vec<&str> = opts.split(':').collect();
-        match opts.as_slice() {
-            &[percentile] => {
+        match *opts.as_slice() {
+            [percentile] => {
                 let percentile = percentile.parse().unwrap();
                 PERCENTILE_GAUGE.set(percentile);
                 Limiter {
@@ -33,7 +33,7 @@ impl Limiter {
                     adjustment: 0.0,
                 }
             }
-            &[percentile, lower, upper, adjust] => {
+            [percentile, lower, upper, adjust] => {
                 let percentile = percentile.parse().unwrap();
                 let lower_limit = lower.parse().unwrap();
                 let upper_limit = upper.parse().unwrap();

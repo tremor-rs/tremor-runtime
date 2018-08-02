@@ -21,7 +21,7 @@ impl Classifier {
             Ok(Value::Array(parsed)) => {
                 let mut rules: HashMap<usize, String> = HashMap::new();
                 let mut i = 0;
-                for obj in parsed.iter() {
+                for obj in &parsed {
                     match obj {
                         Value::Object(m) => {
                             if m.len() == 1 {
@@ -46,9 +46,9 @@ impl Classifier {
                 }
                 let mimir_rules = builder.done();
                 Classifier {
-                    builder: builder,
-                    rules: rules,
-                    mimir_rules: mimir_rules,
+                    builder,
+                    rules,
+                    mimir_rules,
                 }
             }
             Ok(_) => panic!("Bad format argument needs to be an array of objects."),
@@ -66,7 +66,7 @@ impl Step for Classifier {
         let mut doc = self.mimir_rules.document();
         match event.parsed.clone() {
             Value::Object(obj) => {
-                for (key, value) in obj.iter() {
+                for (key, value) in &obj {
                     match value {
                         Value::String(s) => {
                             doc.add_string(key, s);

@@ -9,6 +9,7 @@ mod utils;
 use error::TSError;
 use pipeline::{Event, Step};
 use prometheus::IntCounter;
+use std::boxed::Box;
 
 lazy_static! {
     /*
@@ -35,7 +36,7 @@ pub fn new(name: &str, opts: &str) -> Output {
         "kafka" => Output::Kafka(kafka::Output::new(opts)),
         "stdout" => Output::Stdout(stdout::Output::new(opts)),
         "debug" => Output::Debug(debug::Output::new(opts)),
-        "es" => Output::Elastic(es_async::Output::new(opts)),
+        "es" => Output::Elastic(Box::new(es_async::Output::new(opts))),
 
         _ => panic!("Unknown output: {} use kafka, stdout, es or debug", name),
     }
@@ -45,7 +46,7 @@ pub fn new(name: &str, opts: &str) -> Output {
 /// New connectors need to be added here.
 pub enum Output {
     Kafka(kafka::Output),
-    Elastic(es_async::Output),
+    Elastic(Box<es_async::Output>),
     Stdout(stdout::Output),
     Debug(debug::Output),
 }

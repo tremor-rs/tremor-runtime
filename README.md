@@ -22,7 +22,7 @@ The `kafka` plugin reads from a given Kafka topic. The configuration passed is: 
 ## Parser
 Parsers handle converting the message from the raw binary to a representation format.
 
-### raw
+### raw (default)
 The `raw` parser performs no additional steps and just passes the message on untouched.
 
 ### json
@@ -31,7 +31,7 @@ The `json` parser parses the input as a JSON and fails if the data is invalid.
 ## Classifier
 Classifiers handle message classification based on rules.
 
-### constant
+### constant (default)
 The `constant` classifier classifies all messages with the type passed as it's config.
 
 ### mimir
@@ -42,19 +42,19 @@ The configuration is provided as a JSON in the form: `[{"rule1": "classification
 ## Grouping
 The grouping defines the algorithm used to group classified messages.
 
-### pass
+### pass (default)
 The `pass` grouping will pass all messages.
 
 ### drop
 The `drop` grouping will drop all messages.
 
 ### bucket
-The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in messages per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `<window size in ms>;<sub windows>;<name>:<rate / window size>|<name>:<rate / window size>|...`.
+The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in messages per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `[{{"name": "<name>", "rate": <rate>[, "time_range": <time range in ms>, "windows": <windows per range>, "keys": ["<dimension1>", ...]]}}]`
 
 ## Limiting
 The limiting plugin is responsible for limiting the entirety of the message stream after grouping has been performed.
 
-### pass
+### pass (default)
 The `pass` limiter will pass all messages.
 
 ### drop
@@ -82,9 +82,23 @@ The `kafka` output writes messages to a Kafka topic, this is configured in the f
 ### debug
 The `debug` output prints a list of classifications and pass and drop statistics for them every second.
 
-## es
+### es
 
-The `es` output sends data to Elastic search using batch inserts, it is configured with  `<endpoint>|<index>|<batchSize>|<batchTimeout>`. This output provides feedback based on the batch insert times.
+The `es` output stores messages to elastic search. It takes an `endpoint` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts.
+
+```
+{
+  "endpoint": "<url>",
+  "index": "<index>",
+  "batch_size": <size of each batch>, 
+  "batch_timeout": <maximum allowed timeout per batch>,
+  ["threads": <number of threads used to serve asyncornous writes>,]
+  ["concurrency": <maximum number of batches in flight at any time>,]
+  ["backoff_rules": [<1st timeout in ms>, <second timeout in ms>, ...]]
+}
+```
+
+Note, requests are *NOT* canceled after the timeout as there is no way to recall a bulk write from elastic search.
 
 # Docker
 

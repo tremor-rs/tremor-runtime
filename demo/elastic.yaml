@@ -55,7 +55,7 @@ services:
       - CLASSIFIER=mimir
       - CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]
       - GROUPING=bucket
-      - GROUPING_CONFIG=1000;100;default:90|info:10|error:100
+      - GROUPING_CONFIG='[{"name":"default", "rate":90}, {"name": "info", "rate":10, keys: ["application"]}, {"name": "error", "rate":100}]'
       - OUTPUT=es
       - OUTPUT_CONFIG=http://elastic:9200|demo|10|1000
       - SLEEP=40
