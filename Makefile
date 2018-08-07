@@ -17,7 +17,7 @@ lint:
 		artifactory.service.bo1.csnzoo.com/external/projectatomic/dockerfile-lint \
 		dockerfile_lint -p -f docker/$(APP).dockerfile -r default_rules.yaml
 
-goss: build
+goss:
 	GOSS_FILES_PATH=docker/ dgoss run --name "$(APP)-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
 
 demo-containers:
@@ -28,11 +28,6 @@ demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
-
-demo-elastic-run:
-	-docker-compose -f demo/elastic.yaml rm -fsv
-	-docker-compose -f demo/elastic.yaml up
-	-docker-compose -f demo/elastic.yaml rm -fsv
 
 demo-all-run:
 	-docker-compose -f demo/all.yaml rm -fsv

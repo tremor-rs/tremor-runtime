@@ -20,4 +20,4 @@ done | \
                  --output "kafka" --output-config "${OUTPUT_CONFIG}" \
                  --parser "json" \
                  --classifier "constant" --classifier-config "default" \
-                 --grouping "bucket" --grouping-config "1000;100;default:$MPS"
+                 --grouping "bucket" --grouping-config "[{\"name\":\"default\",\"rate\":$MPS}]"

@@ -1,10 +1,10 @@
 //! This module handles outputs
 
 mod debug;
-mod es_async;
+mod elastic;
 mod kafka;
+mod null;
 mod stdout;
-mod utils;
 
 use error::TSError;
 use pipeline::{Event, Step};
@@ -36,7 +36,8 @@ pub fn new(name: &str, opts: &str) -> Output {
         "kafka" => Output::Kafka(kafka::Output::new(opts)),
         "stdout" => Output::Stdout(stdout::Output::new(opts)),
         "debug" => Output::Debug(debug::Output::new(opts)),
-        "es" => Output::Elastic(Box::new(es_async::Output::new(opts))),
+        "es" => Output::Elastic(Box::new(elastic::Output::new(opts))),
+        "null" => Output::Null(null::Output::new(opts)),
 
         _ => panic!("Unknown output: {} use kafka, stdout, es or debug", name),
     }
@@ -46,9 +47,10 @@ pub fn new(name: &str, opts: &str) -> Output {
 /// New connectors need to be added here.
 pub enum Output {
     Kafka(kafka::Output),
-    Elastic(Box<es_async::Output>),
+    Elastic(Box<elastic::Output>),
     Stdout(stdout::Output),
     Debug(debug::Output),
+    Null(null::Output),
 }
 
 /// Implements the Output trait for the enum.
@@ -60,6 +62,7 @@ impl Step for Output {
             Output::Elastic(o) => o.apply(msg),
             Output::Stdout(o) => o.apply(msg),
             Output::Debug(o) => o.apply(msg),
+            Output::Null(o) => o.apply(msg),
         }
     }
 }

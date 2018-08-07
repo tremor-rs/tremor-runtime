@@ -1,5 +1,5 @@
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_SKIPED};
 use pipeline::{Event, Step};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -61,7 +61,7 @@ impl Step for Output {
             .entry(event.classification.clone())
             .or_insert(DebugBucket { pass: 0, drop: 0 });
         if event.drop {
-            OUTPUT_DROPPED.inc();
+            OUTPUT_SKIPED.inc();
             entry.drop += 1;
             self.drop += 1;
         } else {

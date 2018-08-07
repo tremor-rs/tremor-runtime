@@ -9,5 +9,5 @@ test:
     - docker
   script:
     - apt update 
-    - apt install -y bison flex
+    - apt install -y bison flex cmake automake
     - cargo test

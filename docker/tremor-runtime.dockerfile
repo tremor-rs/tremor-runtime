@@ -19,13 +19,17 @@
 # @author Matthew Coleman <mcoleman@wayfair.com>
 # @copyright 2018 Wayfair, LLC. -- All rights reserved.
 
-FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.27.0 as builder
+FROM artifactory.service.bo1.csnzoo.com/external-staging/ekidd/rust-musl-builder:1.28.0 as builder
 RUN sudo apt update && sudo apt install -y bison flex automake
+RUN sudo cp /usr/bin/musl-gcc /usr/bin/musl-g++
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
-RUN find
-RUN LIB_LDFLAGS=-L/usr/lib/x86_64-linux-gnu CFLAGS=-I/usr/local/musl/include CC=musl-gcc PREFIX=/usr/local/musl cargo build --release
+ENV CC=musl-gcc
+ENV CFLAGS=-I/usr/local/musl/include
+ENV LIB_LDFLAGS=-L/usr/lib/x86_64-linux-gnu
+ENV PREFIX=/usr/local/musl
+RUN cargo build --release
 
 
 # The `centos74-base` image is a basic CentOS Docker image that can act as a
@@ -42,14 +46,14 @@ FROM artifactory.service.bo1.csnzoo.com/external/alpine:3.6
 #
 # 2. Start at a version semantic version you prefer to use.
 #
-ARG tag=0.1.11
+ARG tag=0.1.12
 ENV wf_version=$tag
 
 # This ENV declaration uses a base image build hook defined in `centos74-base`.
 #
 # 3.  Change this to a description of your application.
 #
-ENV wf_label="Data Engineering kafka to kafka copyer"
+ENV wf_label="Data Engineering Tremor runtime"
 
 # Label metadata can be used by automation to gather information about Docker
 # images deploying to production, or be directly observable using something

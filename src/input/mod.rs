@@ -2,15 +2,8 @@
 //! Input connectors are used to get data into the system
 //! to then be processed.
 
-use futures::prelude::*;
+mod kafka;
 use pipeline::{Msg, Pipeline};
-use rdkafka::client::ClientContext;
-use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
-use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::consumer::{Consumer, ConsumerContext};
-use rdkafka::error::KafkaResult;
-use rdkafka::Message;
-use rdkafka_sys;
 use std::io::{self, BufRead, BufReader};
 
 use prometheus::Counter;
@@ -34,14 +27,14 @@ pub trait Input {
 
 pub fn new(name: &str, opts: &str) -> Inputs {
     match name {
-        "kafka" => Inputs::Kafka(KafkaInput::new(opts)),
+        "kafka" => Inputs::Kafka(kafka::Input::new(opts)),
         "stdin" => Inputs::Stdin(StdinInput::new(opts)),
         _ => panic!("Unknown classifier: {}", name),
     }
 }
 
 pub enum Inputs {
-    Kafka(KafkaInput),
+    Kafka(kafka::Input),
     Stdin(StdinInput),
 }
 
@@ -75,99 +68,6 @@ impl Input for StdinInput {
                     let _ = pipeline.run(&msg);
                 }
                 Err(_) => INPUT_ERR.inc(),
-            }
-        }
-    }
-}
-
-pub struct KafkaInput {
-    pub consumer: LoggingConsumer,
-}
-// A simple context to customize the consumer behavior and print a log line every time
-// offsets are committed
-pub struct LoggingConsumerContext;
-
-impl ClientContext for LoggingConsumerContext {}
-
-impl ConsumerContext for LoggingConsumerContext {
-    fn commit_callback(
-        &self,
-        result: KafkaResult<()>,
-        _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList,
-    ) {
-        match result {
-            Ok(_) => info!("Offsets committed successfully"),
-            Err(e) => warn!("Error while committing offsets: {}", e),
-        };
-    }
-}
-
-// Define a new type for convenience
-pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
-impl KafkaInput {
-    fn new(opts: &str) -> Self {
-        let opts: Vec<&str> = opts.split('|').collect();
-        match opts.as_slice() {
-            [group_id, topic, brokers] => {
-                debug!(
-                    "Starting Kafka input: GroupID: {}, Topic: {}, Brokers: {}",
-                    group_id, topic, brokers
-                );
-                let context = LoggingConsumerContext;
-                let consumer: LoggingConsumer = ClientConfig::new()
-                    .set("group.id", group_id)
-                    .set("bootstrap.servers", brokers)
-                    .set("enable.partition.eof", "false")
-                    .set("session.timeout.ms", "6000")
-                // Commit automatically every 5 seconds.
-                    .set("enable.auto.commit", "true")
-                    .set("auto.commit.interval.ms", "5000")
-                // but only commit the offsets explicitly stored via `consumer.store_offset`.
-                    .set("enable.auto.offset.store", "false")
-                    .set_log_level(RDKafkaLogLevel::Debug)
-                    .create_with_context(context)
-                    .expect("Consumer creation failed");
-                consumer
-                    .subscribe(&[topic])
-                    .expect("Can't subscribe to specified topic");
-                KafkaInput { consumer }
-            }
-            _ => panic!("Invalid options for Kafka input, use <groupid>|<topic>|<producers>"),
-        }
-    }
-}
-
-impl Input for KafkaInput {
-    fn enter_loop(&self, pipeline: &mut Pipeline) {
-        for message in self.consumer.start().wait() {
-            match message {
-                Err(_e) => {
-                    warn!("Input error");
-                }
-                Ok(Err(_m)) => {
-                    warn!("Input error");
-                }
-                Ok(Ok(m)) => {
-                    // Send a copy to the message to every output topic in parallel, and wait for the
-                    // delivery report to be received.
-                    if let Some(Ok(p)) = m.payload_view::<str>() {
-                        let key = match m.key_view::<str>() {
-                            Some(key) => Some(key.unwrap()),
-                            None => None,
-                        };
-                        if let Err(e) = pipeline.run(&Msg::new(key, p)) {
-                            error!("Error during handling message: {:?}", e)
-                        };
-                    }
-                    // Now that the message is completely processed, add it's position to the offset
-                    // store. The actual offset will be committed every 5 seconds.
-                    if let Err(e) = self.consumer.store_offset(&m) {
-                        INPUT_ERR.inc();
-                        warn!("Error while storing offset: {}", e);
-                    } else {
-                        INPUT_OK.inc();
-                    }
-                }
             }
         }
     }

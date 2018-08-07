@@ -1,6 +1,6 @@
 use error::TSError;
 use futures::Future;
-use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_SKIPED};
 use pipeline::{Event, Step};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -53,7 +53,7 @@ impl Step for Output {
                 Err(TSError::new("Send failed"))
             }
         } else {
-            OUTPUT_DROPPED.inc();
+            OUTPUT_SKIPED.inc();
             Ok(event)
         }
     }

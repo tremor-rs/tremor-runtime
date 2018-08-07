@@ -71,12 +71,12 @@ services:
       - 9898:9898
     environment:
       - INPUT=kafka
-      - INPUT_CONFIG=demo|demo|kafka:9092
+      - 'INPUT_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - PARSER=json
       - CLASSIFIER=mimir
-      - CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]
+      - 'CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]'
       - GROUPING=bucket
-      - GROUPING_CONFIG='[{"name":"default", "rate":90}, {"name": "info", "rate":10, keys: ["application"]}, {"name": "error", "rate":100}]'
+      - 'GROUPING_CONFIG=[{"name":"default", "rate":90}, {"name": "info", "rate":10, "keys": ["application"]}, {"name": "error", "rate":100}]'
       - OUTPUT=es
-      - OUTPUT_CONFIG={"endpoint":"http://elastic:9200", "index":"demo","batch_size":10,"batch_timeout":5000}
+      - 'OUTPUT_CONFIG={"endpoint":"http://elastic:9200", "index":"demo","batch_size":100,"batch_timeout":500}'
       - SLEEP=40

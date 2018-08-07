@@ -17,7 +17,7 @@ The input step defines the source of the data.
 The `stdin` plugin reads from STDIN each line is treated as one message.
 
 ### kafka
-The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `<group-id>|<topic>|<broker list>`. Messages are only committed as processed when the pipeline finished.
+The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`. Messages are only committed as processed when the pipeline finished.
 
 ## Parser
 Parsers handle converting the message from the raw binary to a representation format.

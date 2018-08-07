@@ -21,11 +21,11 @@ spec:
         - name: INPUT
           value: kafka
         - name: INPUT_CONFIG
-          value: t|testTraffic|kafkac4n1.dev.bo1.csnzoo.com:9092
+          value: '{"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
         - name: OUTPUT
-          value: kafka
+          value: es
         - name: OUTPUT_CONFIG
-          value: tremor-runtime|kafkac4n1.dev.bo1.csnzoo.com:9092
+          value: '{"endpoint":"http://elastichotc3n1.dev.bo1.csnzoo.com:9200", "index":"demo","batch_size":300,"batch_timeout":100,"threads":5, "concurrency": 5, "backoff_rules": [50, 100, 250, 500, 1000, 5000, 10000]}'
         - name: PARSER
           value: json
         - name: CLASSIFIER
@@ -41,8 +41,8 @@ spec:
         - name: GROUPING
           value: bucket
         - name: GROUPING_CONFIG
-          value: 1000;100;default:500|applog_recsvc:5000|applog_sayl:10000|applog_purest:75000|applog_admin:3000|applog_supply_chain_services:75000|applog_logs:18000|syslog_haproxy:10000|syslog_cisco:500|syslog_logs:7000|syslog_influxdb:7000|syslog_ftpd:30000|syslog_hypernova:500|edilog:15000|sqlserverlog:500|applog:300
-        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.1.7
+          value: '[{"name":"default","rate":1000},{"name":"applog_recsvc","rate":5000,"keys":["application"]},{"name":"applog_sayl","rate":10000,"keys":["application"]},{"name":"applog_purest","rate":75000,"keys":["logger_name"]},{"name":"applog_admin","rate":3000,"keys":["logger_name"]},{"name":"applog_supply_chain_services","rate":75000},{"name":"applog_logs","rate":18000,"keys":["application"]},{"name":"syslog_haproxy","rate":10000,"keys":["syslog_hostname"]},{"name":"syslog_cisco","rate":500,"keys":["src_ip","dst_ip"]},{"name":"syslog_logs","rate":7000,"keys":["syslog_hostname"]},{"name":"syslog_influxdb","rate":7000},{"name":"syslog_ftpd","rate":30000,"keys":["syslog_hostname"]},{"name":"syslog_hypernova","rate":500,"keys":["syslog_hostname"]},{"name":"edilog","rate":15000},{"name":"sqlserverlog","rate":500},{"name":"applog","rate":300,"keys":["application"]}]'
+        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.1.12
         name: tremor-runtime
         ports:
         - containerPort: 9898

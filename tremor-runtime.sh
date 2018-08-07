@@ -2,7 +2,7 @@
 set -x
 # Input configuration
 INPUT=${INPUT:-"kafka"}
-INPUT_CONFIG=${INPUT_CONFIG:-"tc|src|127.0.0.1:9092"}
+INPUT_CONFIG=${INPUT_CONFIG:-'{"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'}
 
 # Output configuration
 OUTPUT=${OUTPUT:-"stdout"}
