@@ -230,12 +230,11 @@ impl Output {
 
     fn send_future(&self) -> Receiver<Result<f64, TSError>> {
         let payload = self.payload.clone();
-        let index = self.config.index.clone();
         let client = self.client.clone();
         let c = self.qidx;
         let (tx, rx) = channel();
         self.pool.execute(move || {
-            let r = flush(&client, index.as_str(), payload.as_str());
+            let r = flush(&client, payload.as_str());
             match r.clone() {
                 Ok(_) => OUTPUT_DELIVERED.inc_by(c as i64),
                 Err(e) => {
@@ -256,11 +255,11 @@ impl Output {
         self.backoff = 0;
         BACKOFF_GAUGE.set(self.backoff as f64);
     }
-    fn index(&self, event: Event) -> String {
+    fn index(&self, event: &Event) -> String {
         let mut index = match self.config.prefix_key {
             None => self.config.index.clone(),
             Some(ref pfx) => match event.parsed {
-                Value::Object(m) => match m.get(pfx) {
+                Value::Object(ref m) => match m.get(pfx) {
                     Some(Value::String(v)) => {
                         let mut index = v.clone();
                         index.push_str(self.config.index.as_str());
@@ -281,10 +280,10 @@ impl Output {
     }
 }
 
-fn flush(client: &Client<SyncSender>, index: &str, payload: &str) -> Result<f64, TSError> {
+fn flush(client: &Client<SyncSender>, payload: &str) -> Result<f64, TSError> {
     let start = Instant::now();
     let timer = SEND_HISTOGRAM.start_timer();
-    let req = BulkRequest::for_index_ty(index.to_owned(), "_doc", payload.to_owned());
+    let req = BulkRequest::new(payload.to_owned());
     client
         .request(req)
         .send()?
@@ -339,17 +338,18 @@ impl Step for Output {
             OUTPUT_DROPPED.inc();
             Ok(event)
         } else {
+            let out_event = event.clone();
+            let index = self.index(&event);
             self.payload.push_str(
                 json!({
                     "index":
                     {
-                        "_index": self.config.index,
+                        "_index": index,
                         "_type": "_doc"
                     }}).to_string()
                     .as_str(),
             );
             self.payload.push('\n');
-            let out_event = event.clone();
             self.payload
                 .push_str(update_send_time(event).unwrap().as_str());
             self.payload.push('\n');
@@ -430,7 +430,7 @@ fn index_test() {
     let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
     let r = p.apply(s).expect("couldn't parse data");
-    let idx = o.index(r);
+    let idx = o.index(&r);
     assert_eq!(idx, "demo");
 }
 
@@ -441,7 +441,7 @@ fn index_prefix_test() {
     let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
-    let idx = o.index(r);
+    let idx = o.index(&r);
     assert_eq!(idx, "value_demo");
 }
 
@@ -453,7 +453,7 @@ fn index_suffix_test() {
     let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let r = p.apply(s).expect("couldn't parse data");
-    let idx = o.index(r);
+    let idx = o.index(&r);
     let utc: DateTime<Utc> = Utc::now();
     assert_eq!(
         idx,
@@ -469,7 +469,7 @@ fn index_prefix_suffix_test() {
     let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
-    let idx = o.index(r);
+    let idx = o.index(&r);
     let utc: DateTime<Utc> = Utc::now();
     assert_eq!(
         idx,
