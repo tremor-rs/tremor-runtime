@@ -17,6 +17,7 @@ extern crate serde;
 extern crate prometheus;
 #[macro_use]
 extern crate lazy_static;
+extern crate chrono;
 extern crate elastic;
 extern crate hyper;
 extern crate mimir_rs;

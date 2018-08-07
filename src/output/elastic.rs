@@ -53,6 +53,7 @@ use pipeline::{Event, Step};
 use prometheus::{Gauge, Histogram};
 use serde_json::{self, Value};
 //use std::collections::HashMap;
+use chrono::prelude::*;
 use std::collections::VecDeque;
 use std::convert::From;
 use std::f64;
@@ -97,6 +98,10 @@ fn default_backoff() -> Vec<u64> {
     vec![50, 100, 250, 500, 1000, 5000, 10000]
 }
 
+fn default_append_date() -> bool {
+    false
+}
+
 //[endpoint, index, batch_size, batch_timeout]
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -110,6 +115,9 @@ struct Config {
     threads: usize,
     #[serde(default = "default_concurrency")]
     concurrency: usize,
+    prefix_key: Option<String>,
+    #[serde(default = "default_append_date")]
+    append_date: bool,
 }
 
 impl Config {
@@ -216,7 +224,7 @@ impl Output {
                     queue
                 }
             }
-            _ => panic!("Invalid options for Elastic output, use `{{\"endpoint\":\"<url>\", \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...]]}}`"),
+            _ => panic!("Invalid options for Elastic output, use `{{\"endpoint\":\"<url>\", \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"prefix_key\": \"<key to use as prefix>\", \"append_date\": <bool>]}}`"),
         }
     }
 
@@ -247,6 +255,29 @@ impl Output {
     fn reset_backoff(&mut self) {
         self.backoff = 0;
         BACKOFF_GAUGE.set(self.backoff as f64);
+    }
+    fn index(&self, event: Event) -> String {
+        let mut index = match self.config.prefix_key {
+            None => self.config.index.clone(),
+            Some(ref pfx) => match event.parsed {
+                Value::Object(m) => match m.get(pfx) {
+                    Some(Value::String(v)) => {
+                        let mut index = v.clone();
+                        index.push_str(self.config.index.as_str());
+                        index
+                    }
+                    _ => self.config.index.clone(),
+                },
+                _ => self.config.index.clone(),
+            },
+        };
+        if self.config.append_date {
+            let utc: DateTime<Utc> = Utc::now();
+            index.push_str(utc.format("%Y.%m.%d").to_string().as_str());
+            index
+        } else {
+            index
+        }
     }
 }
 
@@ -384,8 +415,64 @@ fn backoff_test() {
         backoff_rules: vec![10, 20, 30, 40],
         threads: 5,
         concurrency: 5,
+        append_date: false,
+        prefix_key: None,
     };
     assert_eq!(c.next_backoff(0), 10);
     assert_eq!(c.next_backoff(5), 10);
     assert_eq!(c.next_backoff(10), 20);
+}
+
+#[test]
+fn index_test() {
+    let s = Event::new("{\"key\":\"value\"}");
+    let mut p = ::parser::new("json", "");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
+
+    let r = p.apply(s).expect("couldn't parse data");
+    let idx = o.index(r);
+    assert_eq!(idx, "demo");
+}
+
+#[test]
+fn index_prefix_test() {
+    let s = Event::new("{\"key\":\"value\"}");
+    let mut p = ::parser::new("json", "");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
+
+    let r = p.apply(s).expect("couldn't parse data");
+    let idx = o.index(r);
+    assert_eq!(idx, "value_demo");
+}
+
+#[test]
+fn index_suffix_test() {
+    println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
+    let s = Event::new("{\"key\":\"value\"}");
+    let mut p = ::parser::new("json", "");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
+
+    let r = p.apply(s).expect("couldn't parse data");
+    let idx = o.index(r);
+    let utc: DateTime<Utc> = Utc::now();
+    assert_eq!(
+        idx,
+        format!("demo_{}", utc.format("%Y.%m.%d").to_string().as_str())
+    );
+}
+
+#[test]
+fn index_prefix_suffix_test() {
+    println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
+    let s = Event::new("{\"key\":\"value\"}");
+    let mut p = ::parser::new("json", "");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
+
+    let r = p.apply(s).expect("couldn't parse data");
+    let idx = o.index(r);
+    let utc: DateTime<Utc> = Utc::now();
+    assert_eq!(
+        idx,
+        format!("value_demo_{}", utc.format("%Y.%m.%d").to_string().as_str())
+    );
 }

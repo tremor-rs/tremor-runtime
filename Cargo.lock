@@ -1550,6 +1550,7 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.1.12"
 dependencies = [
+ "chrono 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "elastic 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "elastic_derive 0.20.10 (registry+https://github.com/rust-lang/crates.io-index)",

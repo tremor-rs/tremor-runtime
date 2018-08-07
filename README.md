@@ -84,8 +84,7 @@ The `debug` output prints a list of classifications and pass and drop statistics
 
 ### es
 
-The `es` output stores messages to elastic search. It takes an `endpoint` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts.
-
+The `es` output stores messages to elastic search. It takes an `endpoint` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts. If `prexif_key` is defined the value of the key will be prepended (without additional separators!). If `append_date` is set to true the current date in the format `%Y.%m.%d` is added (without additional separators!).
 ```
 {
   "endpoint": "<url>",
@@ -94,7 +93,9 @@ The `es` output stores messages to elastic search. It takes an `endpoint` and `i
   "batch_timeout": <maximum allowed timeout per batch>,
   ["threads": <number of threads used to serve asyncornous writes>,]
   ["concurrency": <maximum number of batches in flight at any time>,]
-  ["backoff_rules": [<1st timeout in ms>, <second timeout in ms>, ...]]
+  ["backoff_rules": [<1st timeout in ms>, <second timeout in ms>, ...],]
+  ["prefix_key": "<key to use as prefix>",]
+  ["append_date": <bool>,]
 }
 ```
 
