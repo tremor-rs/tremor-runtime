@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.1.12"
+version = "0.1.13"
 authors = ["Heinz Gies <hgies@wayfair.com>"]
 
 [dependencies]
