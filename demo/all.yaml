@@ -78,5 +78,5 @@ services:
       - GROUPING=bucket
       - 'GROUPING_CONFIG=[{"name":"default", "rate":90}, {"name": "info", "rate":10, "keys": ["application"]}, {"name": "error", "rate":100}]'
       - OUTPUT=es
-      - 'OUTPUT_CONFIG={"endpoint":"http://elastic:9200", "index":"demo","batch_size":100,"batch_timeout":500}'
+      - 'OUTPUT_CONFIG={"endpoint":"http://elastic:9200", "index":"_demo_","batch_size":100,"batch_timeout":500, "append_date": true, "prefix_key":"wf_index_type"}'
       - SLEEP=40

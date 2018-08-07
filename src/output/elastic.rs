@@ -262,6 +262,7 @@ impl Output {
                 Value::Object(ref m) => match m.get(pfx) {
                     Some(Value::String(v)) => {
                         let mut index = v.clone();
+                        index.push('_');
                         index.push_str(self.config.index.as_str());
                         index
                     }
@@ -272,10 +273,20 @@ impl Output {
         };
         if self.config.append_date {
             let utc: DateTime<Utc> = Utc::now();
+            index.push('-');
             index.push_str(utc.format("%Y.%m.%d").to_string().as_str());
             index
         } else {
             index
+        }
+    }
+    fn doc_type(&self, event: &Event) -> String {
+        match event.parsed {
+            Value::Object(ref m) => match m.get("type") {
+                Some(Value::String(v)) => v.clone(),
+                _ => String::from("_doc"),
+            },
+            _ => String::from("_doc"),
         }
     }
 }
@@ -340,12 +351,13 @@ impl Step for Output {
         } else {
             let out_event = event.clone();
             let index = self.index(&event);
+            let doc_type = self.doc_type(&event);
             self.payload.push_str(
                 json!({
                     "index":
                     {
                         "_index": index,
-                        "_type": "_doc"
+                        "_type": doc_type
                     }}).to_string()
                     .as_str(),
             );
@@ -438,7 +450,7 @@ fn index_test() {
 fn index_prefix_test() {
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
@@ -450,14 +462,14 @@ fn index_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
     let utc: DateTime<Utc> = Utc::now();
     assert_eq!(
         idx,
-        format!("demo_{}", utc.format("%Y.%m.%d").to_string().as_str())
+        format!("demo-{}", utc.format("%Y.%m.%d").to_string().as_str())
     );
 }
 
@@ -466,13 +478,13 @@ fn index_prefix_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"_demo_\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
+    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
     let utc: DateTime<Utc> = Utc::now();
     assert_eq!(
         idx,
-        format!("value_demo_{}", utc.format("%Y.%m.%d").to_string().as_str())
+        format!("value_demo-{}", utc.format("%Y.%m.%d").to_string().as_str())
     );
 }
