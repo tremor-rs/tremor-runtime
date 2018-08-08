@@ -50,7 +50,7 @@ use elastic::prelude::SyncClientBuilder;
 use error::TSError;
 use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_SKIPED};
 use pipeline::{Event, Step};
-use prometheus::{Gauge, Histogram};
+use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
 //use std::collections::HashMap;
 use chrono::prelude::*;
@@ -66,9 +66,10 @@ use threadpool::ThreadPool;
 lazy_static! {
     // Histogram of the duration it takes between getting a message and
     // sending (or dropping) it.
-    static ref SEND_HISTOGRAM: Histogram = register_histogram!(
+    static ref SEND_HISTOGRAM: HistogramVec = register_histogram_vec!(
         "ts_es_latency",
         "Latency for logstash output.",
+        &["dest"],
         vec![
             0.0005, 0.001, 0.0025,
              0.005, 0.01, 0.025,
@@ -193,9 +194,16 @@ impl From<SinkEnqueueError> for TSError {
         }
     }
 }
+
+#[derive(Clone)]
+struct Destination {
+    client: Client<SyncSender>,
+    url: String,
+}
+
 pub struct Output {
     client_idx: usize,
-    clients: Vec<Client<SyncSender>>,
+    clients: Vec<Destination>,
     backoff: u64,
     queue: AsyncSink<f64>,
     qidx: usize,
@@ -211,7 +219,10 @@ impl Output {
     pub fn new(opts: &str) -> Self {
         match serde_json::from_str(opts) {
             Ok(config @ Config{..}) => {
-                let clients = config.endpoints.iter().map(|client| SyncClientBuilder::new().base_url(client.clone()).build().unwrap()).collect();
+                let clients = config.endpoints.iter().map(|client| Destination{
+                    client: SyncClientBuilder::new().base_url(client.clone()).build().unwrap(),
+                    url: client.clone()
+                }).collect();
                 let pool = ThreadPool::new(config.threads);
                 let queue = AsyncSink::new(config.concurrency);
                 Output {
@@ -233,16 +244,17 @@ impl Output {
     fn send_future(&mut self) -> Receiver<Result<f64, TSError>> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let payload = self.payload.clone();
-        let client = self.clients[self.client_idx].clone();
+        let destination = self.clients[self.client_idx].clone();
         let c = self.qidx;
         let (tx, rx) = channel();
         self.pool.execute(move || {
-            let r = flush(&client, payload.as_str());
+            let dst = destination.url.as_str();
+            let r = flush(&destination.client, dst, payload.as_str());
             match r.clone() {
-                Ok(_) => OUTPUT_DELIVERED.inc_by(c as i64),
+                Ok(_) => OUTPUT_DELIVERED.with_label_values(&[dst]).inc_by(c as i64),
                 Err(e) => {
                     println!("Error: {:?}", e);
-                    OUTPUT_DROPPED.inc_by(c as i64);
+                    OUTPUT_DROPPED.with_label_values(&[dst]).inc_by(c as i64);
                 }
             };
             let _ = tx.send(r);
@@ -294,9 +306,9 @@ impl Output {
     }
 }
 
-fn flush(client: &Client<SyncSender>, payload: &str) -> Result<f64, TSError> {
+fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> Result<f64, TSError> {
     let start = Instant::now();
-    let timer = SEND_HISTOGRAM.start_timer();
+    let timer = SEND_HISTOGRAM.with_label_values(&[url]).start_timer();
     let req = BulkRequest::new(payload.to_owned());
     client
         .request(req)
@@ -346,10 +358,10 @@ impl Step for Output {
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
         if event.drop {
-            OUTPUT_SKIPED.inc();
+            OUTPUT_SKIPED.with_label_values(&[""]).inc();
             Ok(event)
         } else if d <= self.backoff {
-            OUTPUT_DROPPED.inc();
+            OUTPUT_DROPPED.with_label_values(&[""]).inc();
             Ok(event)
         } else {
             let out_event = event.clone();
@@ -379,7 +391,9 @@ impl Step for Output {
                             let rx = self.send_future();
                             self.queue.enqueue(rx)?;
                         } else {
-                            OUTPUT_DROPPED.inc_by(self.qidx as i64);
+                            OUTPUT_DROPPED
+                                .with_label_values(&[""])
+                                .inc_by(self.qidx as i64);
                         };
                         Ok(out_event)
                     }

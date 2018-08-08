@@ -18,14 +18,14 @@ impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if !event.drop {
             let out_event = event.clone();
-            OUTPUT_DELIVERED.inc();
+            OUTPUT_DELIVERED.with_label_values(&["stdout"]).inc();
             match event.key {
                 None => println!("{}{}", self.pfx, event.raw),
                 Some(key) => println!("{}{} {}", self.pfx, key, event.raw),
             }
             Ok(out_event)
         } else {
-            OUTPUT_DROPPED.inc();
+            OUTPUT_DROPPED.with_label_values(&["stdout"]).inc();
             Ok(event)
         }
     }

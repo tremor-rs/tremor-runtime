@@ -37,7 +37,7 @@ impl Output {
 impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if !event.drop {
-            OUTPUT_DELIVERED.inc();
+            OUTPUT_DELIVERED.with_label_values(&["kafka"]).inc();
             let out_event = event.clone();
             let mut record = FutureRecord::to(self.topic.as_str());
             record = record.payload(event.raw.as_str());
@@ -53,7 +53,7 @@ impl Step for Output {
                 Err(TSError::new("Send failed"))
             }
         } else {
-            OUTPUT_SKIPED.inc();
+            OUTPUT_SKIPED.with_label_values(&["kafka"]).inc();
             Ok(event)
         }
     }

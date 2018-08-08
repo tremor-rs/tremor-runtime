@@ -13,9 +13,9 @@ impl Output {
 impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if !event.drop {
-            OUTPUT_DELIVERED.inc();
+            OUTPUT_DELIVERED.with_label_values(&["null"]).inc();
         } else {
-            OUTPUT_SKIPED.inc();
+            OUTPUT_SKIPED.with_label_values(&["null"]).inc();
         };
         Ok(event)
     }

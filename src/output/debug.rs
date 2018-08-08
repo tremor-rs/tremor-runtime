@@ -61,11 +61,11 @@ impl Step for Output {
             .entry(event.classification.clone())
             .or_insert(DebugBucket { pass: 0, drop: 0 });
         if event.drop {
-            OUTPUT_SKIPED.inc();
+            OUTPUT_SKIPED.with_label_values(&["stdout"]).inc();
             entry.drop += 1;
             self.drop += 1;
         } else {
-            OUTPUT_DELIVERED.inc();
+            OUTPUT_DELIVERED.with_label_values(&["stdout"]).inc();
             entry.pass += 1;
             self.pass += 1;
         };
