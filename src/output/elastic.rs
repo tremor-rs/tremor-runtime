@@ -1,3 +1,4 @@
+use chrono::prelude::*;
 /// Elastic search output with incremental backoff.
 ///
 /// The algoritm is as follows:
@@ -52,16 +53,13 @@ use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_ERROR, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
-//use std::collections::HashMap;
-use chrono::prelude::*;
 use std::collections::VecDeque;
 use std::convert::From;
 use std::f64;
 use std::sync::mpsc::{channel, Receiver};
-use std::time::Duration;
-use std::time::Instant;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use threadpool::ThreadPool;
+use utils::duration_to_millis;
 
 lazy_static! {
     // Histogram of the duration it takes between getting a message and
@@ -325,10 +323,6 @@ fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> Result<f64, T
     Ok(d)
 }
 
-fn duration_to_millis(at: Duration) -> u64 {
-    (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
-}
-
 fn update_send_time(event: Event) -> String {
     let start = SystemTime::now();
     let since_the_epoch = start
@@ -359,7 +353,7 @@ impl Step for Output {
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
         if d <= self.backoff {
-            OUTPUT_DROPPED.with_label_values(&[""]).inc();
+            OUTPUT_DROPPED.with_label_values(&"<backoff>").inc();
             let mut event = event;
             event.drop = true;
             Ok(event)
@@ -404,7 +398,7 @@ impl Step for Output {
                             self.queue.enqueue(rx)?;
                         } else {
                             OUTPUT_DROPPED
-                                .with_label_values(&[""])
+                                .with_label_values(&["<overload>"])
                                 .inc_by(self.qidx as i64);
                             out_event.drop = true;
                         };
