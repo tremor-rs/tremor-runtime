@@ -10,6 +10,7 @@ use rdkafka::Message;
 use rdkafka_sys;
 use serde_json;
 use std::collections::HashMap;
+
 use std::sync::mpsc;
 
 pub struct Input {

@@ -353,7 +353,7 @@ impl Step for Output {
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
         if d <= self.backoff {
-            OUTPUT_DROPPED.with_label_values(&"<backoff>").inc();
+            OUTPUT_DROPPED.with_label_values(&["<backoff>"]).inc();
             let mut event = event;
             event.drop = true;
             Ok(event)
