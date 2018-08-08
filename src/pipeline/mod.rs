@@ -7,9 +7,18 @@ use grouping::Grouper;
 use limiting::{Feedback, Limiter};
 use output::Output;
 use parser::Parser;
+use prometheus::Counter;
 
 pub use self::event::Event;
 pub use self::step::Step;
+
+lazy_static! {
+    /*
+     * Number of errors in the pipeline
+     */
+    static ref PIPELINE_ERR: Counter =
+        register_counter!(opts!("ts_pipeline_errors", "Errors in the pipeline.")).unwrap();
+}
 
 /// Pipeline struct, collecting all the steps of our internal pipeline
 pub struct Pipeline {
@@ -64,7 +73,10 @@ impl Pipeline {
                 Ok(())
             }
             Ok(_) => Ok(()),
-            Err(error) => Err(error),
+            Err(error) => {
+                PIPELINE_ERR.inc();
+                Err(error)
+            }
         }
     }
 }

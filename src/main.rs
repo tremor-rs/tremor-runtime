@@ -33,7 +33,9 @@ pub mod metrics;
 pub mod output;
 pub mod parser;
 pub mod pipeline;
+mod utils;
 pub mod window;
+
 use clap::{App, Arg};
 use input::Input;
 use pipeline::Pipeline;
