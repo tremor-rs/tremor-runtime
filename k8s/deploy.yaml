@@ -25,7 +25,7 @@ spec:
         - name: OUTPUT
           value: es
         - name: OUTPUT_CONFIG
-          value: '{"endpoint":"http://elastichotc3n1.dev.bo1.csnzoo.com:9200", "index":"demo","batch_size":300,"batch_timeout":100,"threads":5, "concurrency": 5, "backoff_rules": [50, 100, 250, 500, 1000, 5000, 10000]}'
+          value: '{"endpoints":["http://elastichotc3n1:9200"], "index":"demo","batch_size":300,"batch_timeout":100,"threads":5, "concurrency": 5, "backoff_rules": [50, 100, 250, 500, 1000, 5000, 10000]}'
         - name: PARSER
           value: json
         - name: CLASSIFIER
