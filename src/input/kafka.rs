@@ -9,6 +9,7 @@ use rdkafka::error::KafkaResult;
 use rdkafka::Message;
 use rdkafka_sys;
 use serde_json;
+use std::collections::HashMap;
 
 pub struct Input {
     pub consumer: LoggingConsumer,
@@ -32,11 +33,17 @@ impl ConsumerContext for LoggingConsumerContext {
     }
 }
 
+fn dflt_options() -> HashMap<String, String> {
+    HashMap::new()
+}
+
 #[derive(Deserialize, Debug)]
 struct Config {
     group_id: String,
     topics: Vec<String>,
     brokers: Vec<String>,
+    #[serde(default = "dflt_options")]
+    rdkafka_options: HashMap<String, String>,
 }
 // Define a new type for convenience
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
@@ -49,7 +56,7 @@ impl Input {
                     config.group_id, config.topics, config.brokers
                 );
                 let context = LoggingConsumerContext;
-                let consumer: LoggingConsumer = ClientConfig::new()
+                let consumer: LoggingConsumer = config.rdkafka_options.iter().fold(&mut ClientConfig::new(), |c: &mut ClientConfig, (k, v)| c.set(k, v))
                     .set("group.id", &config.group_id)
                     .set("bootstrap.servers", &config.brokers.join(","))
                     .set("enable.partition.eof", "false")
