@@ -102,10 +102,10 @@ fn default_append_date() -> bool {
     false
 }
 
-//[endpoint, index, batch_size, batch_timeout]
+//[endpoints, index, batch_size, batch_timeout]
 #[derive(Deserialize, Debug)]
 struct Config {
-    endpoint: String,
+    endpoints: Vec<String>,
     index: String,
     batch_size: usize,
     batch_timeout: f64,
@@ -194,7 +194,8 @@ impl From<SinkEnqueueError> for TSError {
     }
 }
 pub struct Output {
-    client: Client<SyncSender>,
+    client_idx: usize,
+    clients: Vec<Client<SyncSender>>,
     backoff: u64,
     queue: AsyncSink<f64>,
     qidx: usize,
@@ -210,27 +211,29 @@ impl Output {
     pub fn new(opts: &str) -> Self {
         match serde_json::from_str(opts) {
             Ok(config @ Config{..}) => {
-                let client = SyncClientBuilder::new().base_url(config.endpoint.clone()).build().unwrap();
+                let clients = config.endpoints.iter().map(|client| SyncClientBuilder::new().base_url(client.clone()).build().unwrap()).collect();
                 let pool = ThreadPool::new(config.threads);
                 let queue = AsyncSink::new(config.concurrency);
                 Output {
+                    client_idx: 0,
                     config,
                     backoff: 0,
                     pool,
-                    client,
+                    clients,
                     qidx: 0,
                     payload: String::new(),
                     last_flush: Instant::now(),
                     queue
                 }
             }
-            _ => panic!("Invalid options for Elastic output, use `{{\"endpoint\":\"<url>\", \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"prefix_key\": \"<key to use as prefix>\", \"append_date\": <bool>]}}`"),
+            _ => panic!("Invalid options for Elastic output, use `{{\"endpoints\":[\"<url>\"[, ...]], \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"prefix_key\": \"<key to use as prefix>\", \"append_date\": <bool>]}}`"),
         }
     }
 
-    fn send_future(&self) -> Receiver<Result<f64, TSError>> {
+    fn send_future(&mut self) -> Receiver<Result<f64, TSError>> {
+        self.client_idx = (self.client_idx + 1) % self.clients.len();
         let payload = self.payload.clone();
-        let client = self.client.clone();
+        let client = self.clients[self.client_idx].clone();
         let c = self.qidx;
         let (tx, rx) = channel();
         self.pool.execute(move || {
@@ -420,7 +423,7 @@ impl Step for Output {
 #[test]
 fn backoff_test() {
     let c = Config {
-        endpoint: String::from(""),
+        endpoints: vec![String::from("")],
         index: String::from(""),
         batch_size: 10,
         batch_timeout: 10.0,
@@ -439,7 +442,7 @@ fn backoff_test() {
 fn index_test() {
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
@@ -450,7 +453,7 @@ fn index_test() {
 fn index_prefix_test() {
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
@@ -462,7 +465,7 @@ fn index_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
@@ -478,7 +481,7 @@ fn index_prefix_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let s = Event::new("{\"key\":\"value\"}");
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoint\":\"http://elastic:9200\", \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true, \"prefix_key\":\"key\"}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);

@@ -84,10 +84,10 @@ The `debug` output prints a list of classifications and pass and drop statistics
 
 ### es
 
-The `es` output stores messages to elastic search. It takes an `endpoint` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts. If `prexif_key` is defined the value of the key will be prepended (with an `_` as seperator!). If `append_date` is set to true the current date in the format `%Y.%m.%d` is added (with a `-` as seperator!).
+The `es` output stores messages to elastic search. It takes a lost of `endpoints` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts. If `prexif_key` is defined the value of the key will be prepended (with an `_` as seperator!). If `append_date` is set to true the current date in the format `%Y.%m.%d` is added (with a `-` as seperator!).
 ```
 {
-  "endpoint": "<url>",
+  "endpoints": ["<url>"[, ...] ],
   "index": "<index>",
   "batch_size": <size of each batch>, 
   "batch_timeout": <maximum allowed timeout per batch>,
