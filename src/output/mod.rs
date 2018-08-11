@@ -16,7 +16,7 @@ lazy_static! {
      * Number of errors read received from the input
      */
     pub static ref OUTPUT_DROPPED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_droped", "Events dropped as part of the output."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_dropped", "Messages dropped as part of the output."), &["dest"]).unwrap();
     /*
      * Number of successes read received from the input
      */
