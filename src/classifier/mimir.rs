@@ -1,5 +1,5 @@
 use error::TSError;
-use mimir_rs::mimir::{RuleBuilder, RuleSet};
+use mimir::{RuleBuilder, RuleSet};
 use pipeline::{Event, Step};
 use serde_json::{self, Value};
 use std::collections::HashMap;

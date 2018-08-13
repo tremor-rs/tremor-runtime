@@ -21,7 +21,7 @@ extern crate lazy_static;
 extern crate chrono;
 extern crate elastic;
 extern crate hyper;
-extern crate mimir_rs;
+extern crate mimir;
 extern crate regex;
 extern crate threadpool;
 
@@ -55,7 +55,7 @@ use std::thread;
 fn main() {
     env_logger::init();
 
-    println!("mimir version: {}", mimir_rs::mimir::version());
+    println!("mimir version: {}", mimir::version());
     let (version_n, version_s) = get_rdkafka_version();
     println!("rd_kafka_version: 0x{:08x}, {}", version_n, version_s);
     let matches = App::new("tremor-runtime")
