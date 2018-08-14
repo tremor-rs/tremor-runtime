@@ -10,7 +10,7 @@ This tool allows to configure a pipeline that moves data from a source to a dest
 # Plugins
 Some plugins require additional configuration to be passed others do not.
 
-## Input
+## On-ramp
 The input step defines the source of the data.
 
 ### stdin
@@ -70,7 +70,7 @@ The `windowed` limiter limits the total message flow within a given time window 
 
 It is possible to also provide 3 more values, `low limit`, `high limit` and `adjust`. If those are provided the rate will adjust to keep the the feedback between low and high limits, where lower is better and higher is worse. Every time the feedback is either `lower limit` then `adjust` will be added to the `rate`. If the feedback exceeds `high limit` then `adjust` will be subtracted from `rate` until it reaches a `adjust` as a lowest value.
 
-## Output
+## Off-ramp
 The output plugin defines the destination the data is forwarded to.
 
 ### stdout
@@ -96,6 +96,7 @@ The `es` output stores messages to elastic search. It takes a lost of `endpoints
   ["backoff_rules": [<1st timeout in ms>, <second timeout in ms>, ...],]
   ["prefix_key": "<key to use as prefix>",]
   ["append_date": <bool>,]
+  ["pipeline": <pipeline name>,]
 }
 ```
 

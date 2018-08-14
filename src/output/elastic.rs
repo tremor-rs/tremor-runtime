@@ -119,6 +119,7 @@ struct Config {
     prefix_key: Option<String>,
     #[serde(default = "default_append_date")]
     append_date: bool,
+    pipeline: Option<String>,
 }
 
 impl Config {
@@ -237,7 +238,7 @@ impl Output {
                     queue
                 }
             }
-            _ => panic!("Invalid options for Elastic output, use `{{\"endpoints\":[\"<url>\"[, ...]], \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"prefix_key\": \"<key to use as prefix>\", \"append_date\": <bool>]}}`"),
+            _ => panic!("Invalid options for Elastic output, use `{{\"endpoints\":[\"<url>\"[, ...]], \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"prefix_key\": \"<key to use as prefix>\", \"append_date\": <bool>, \"pipeline\": <pipeline>]}}`"),
         }
     }
 
@@ -324,32 +325,28 @@ fn duration_to_millis(at: Duration) -> u64 {
     (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
 }
 
-fn update_send_time(event: Event) -> Result<String, serde_json::Error> {
-    match event.parsed {
-        Value::Object(mut m) => {
-            let start = SystemTime::now();
-            let since_the_epoch = start
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards");
-            let tremor_map: serde_json::Map<String, Value> = [
-                (
-                    String::from("send_time"),
-                    Value::Number(serde_json::Number::from(duration_to_millis(
-                        since_the_epoch,
-                    ))),
-                ),
-                (
-                    String::from("classification"),
-                    Value::String(event.classification),
-                ),
-            ].iter()
-                .cloned()
-                .collect();
-            m.insert(String::from("_tremor"), Value::Object(tremor_map));
-            serde_json::to_string(&Value::Object(m))
-        }
-        _ => serde_json::to_string(&event.parsed),
-    }
+fn update_send_time(event: Event) -> String {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let tremor_map: serde_json::Map<String, Value> = [
+        (
+            String::from("send_time"),
+            Value::Number(serde_json::Number::from(duration_to_millis(
+                since_the_epoch,
+            ))),
+        ),
+        (
+            String::from("classification"),
+            Value::String(event.classification),
+        ),
+    ].iter()
+        .cloned()
+        .collect();
+    let tmap = serde_json::to_string(&Value::Object(tremor_map));
+
+    add_json_kv(event.raw.as_str(), "_tremor", tmap.unwrap().as_str())
 }
 
 impl Step for Output {
@@ -367,18 +364,29 @@ impl Step for Output {
             let out_event = event.clone();
             let index = self.index(&event);
             let doc_type = self.doc_type(&event);
-            self.payload.push_str(
-                json!({
-                    "index":
-                    {
-                        "_index": index,
-                        "_type": doc_type
-                    }}).to_string()
-                    .as_str(),
-            );
+            match self.config.pipeline {
+                None => self.payload.push_str(
+                    json!({
+                            "index":
+                            {
+                                "_index": index,
+                                "_type": doc_type
+                            }}).to_string()
+                        .as_str(),
+                ),
+                Some(ref pipeline) => self.payload.push_str(
+                    json!({
+                            "index":
+                            {
+                                "_index": index,
+                                "_type": doc_type,
+                                "pipeline": pipeline
+                            }}).to_string()
+                        .as_str(),
+                ),
+            };
             self.payload.push('\n');
-            self.payload
-                .push_str(update_send_time(event).unwrap().as_str());
+            self.payload.push_str(update_send_time(event).as_str());
             self.payload.push('\n');
             self.qidx += 1;
 
@@ -433,6 +441,17 @@ impl Step for Output {
     }
 }
 
+fn add_json_kv(json: &str, key: &str, val: &str) -> String {
+    let mut s = String::from(json);
+    s.pop();
+    s.push_str(",\"");
+    s.push_str(key);
+    s.push_str("\":");
+    s.push_str(val);
+    s.push('}');
+    s
+}
+
 // We don't do this in a test module since we need to access private functions.
 #[test]
 fn backoff_test() {
@@ -446,6 +465,7 @@ fn backoff_test() {
         concurrency: 5,
         append_date: false,
         prefix_key: None,
+        pipeline: None,
     };
     assert_eq!(c.next_backoff(0), 10);
     assert_eq!(c.next_backoff(5), 10);
@@ -504,4 +524,11 @@ fn index_prefix_suffix_test() {
         idx,
         format!("value_demo-{}", utc.format("%Y.%m.%d").to_string().as_str())
     );
+}
+
+#[test]
+fn test_add_json_kv() {
+    let json = "{\"k1\": 1}";
+    let res = add_json_kv(json, "k2", "2");
+    assert_eq!(res, "{\"k1\": 1,\"k2\":2}");
 }
