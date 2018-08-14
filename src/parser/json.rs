@@ -4,6 +4,7 @@ use serde_json::{self, Value};
 use std::convert::From;
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`
+#[derive(Clone)]
 pub struct Parser {}
 impl Parser {
     pub fn new(_opts: &str) -> Self {

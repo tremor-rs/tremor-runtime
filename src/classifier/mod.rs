@@ -18,7 +18,6 @@ pub fn new(name: &str, opts: &str) -> Classifier {
     }
 }
 
-#[derive(Debug)]
 pub enum Classifier {
     Constant(constant::Classifier),
     Mimir(mimir::Classifier),

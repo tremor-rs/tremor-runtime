@@ -1,6 +1,6 @@
 use futures::prelude::*;
 use input::{Input as InputT, INPUT_ERR, INPUT_OK};
-use pipeline::{Msg, Pipeline};
+use pipeline::Msg;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::stream_consumer::StreamConsumer;
@@ -10,6 +10,7 @@ use rdkafka::Message;
 use rdkafka_sys;
 use serde_json;
 use std::collections::HashMap;
+use std::sync::mpsc;
 
 pub struct Input {
     pub consumer: LoggingConsumer,
@@ -83,8 +84,11 @@ impl Input {
 }
 
 impl InputT for Input {
-    fn enter_loop(&self, pipeline: &mut Pipeline) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
+        let mut idx = 0;
         for message in self.consumer.start().wait() {
+            idx += 1;
+            idx = idx % pipelines.len();
             match message {
                 Err(_e) => {
                     warn!("Input error");
@@ -97,10 +101,10 @@ impl InputT for Input {
                     // delivery report to be received.
                     if let Some(Ok(p)) = m.payload_view::<str>() {
                         let key = match m.key_view::<str>() {
-                            Some(key) => Some(key.unwrap()),
+                            Some(key) => Some(String::from(key.unwrap())),
                             None => None,
                         };
-                        if let Err(e) = pipeline.run(&Msg::new(key, p)) {
+                        if let Err(e) = pipelines[idx].send(Msg::new(key, String::from(p))) {
                             error!("Error during handling message: {:?}", e)
                         };
                     }

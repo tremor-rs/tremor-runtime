@@ -58,7 +58,7 @@ impl Pipeline {
         let output = &mut self.output;
         let drop_output = &mut self.drop_output;
         let event = parser
-            .apply(Event::new(msg.payload))
+            .apply(Event::new(msg.payload.as_str()))
             .and_then(|parsed| classifier.apply(parsed))
             .and_then(|classified| grouper.apply(classified))
             .and_then(|grouped| limiting.apply(grouped))
@@ -83,13 +83,13 @@ impl Pipeline {
 
 /// Generalized raw message struct
 #[derive(Debug)]
-pub struct Msg<'a> {
-    payload: &'a str,
-    key: Option<&'a str>,
+pub struct Msg {
+    payload: String,
+    key: Option<String>,
 }
 
-impl<'a> Msg<'a> {
-    pub fn new(key: Option<&'a str>, payload: &'a str) -> Self {
+impl Msg {
+    pub fn new(key: Option<String>, payload: String) -> Self {
         Msg { key, payload }
     }
 }

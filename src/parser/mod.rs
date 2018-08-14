@@ -17,6 +17,7 @@ pub fn new(name: &str, opts: &str) -> Parser {
     }
 }
 
+#[derive(Clone)]
 pub enum Parser {
     Raw(raw::Parser),
     JSON(json::Parser),

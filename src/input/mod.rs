@@ -3,8 +3,9 @@
 //! to then be processed.
 
 mod kafka;
-use pipeline::{Msg, Pipeline};
+use pipeline::Msg;
 use std::io::{self, BufRead, BufReader};
+use std::sync::mpsc;
 
 use prometheus::Counter;
 
@@ -22,7 +23,7 @@ lazy_static! {
 }
 
 pub trait Input {
-    fn enter_loop(&self, pipeline: &mut Pipeline);
+    fn enter_loop(&self, pipeline: Vec<mpsc::Sender<Msg>>);
 }
 
 pub fn new(name: &str, opts: &str) -> Inputs {
@@ -39,10 +40,10 @@ pub enum Inputs {
 }
 
 impl Input for Inputs {
-    fn enter_loop(&self, pipeline: &mut Pipeline) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
         match self {
-            Inputs::Kafka(i) => i.enter_loop(pipeline),
-            Inputs::Stdin(i) => i.enter_loop(pipeline),
+            Inputs::Kafka(i) => i.enter_loop(pipelines),
+            Inputs::Stdin(i) => i.enter_loop(pipelines),
         }
     }
 }
@@ -56,7 +57,7 @@ impl StdinInput {
 }
 
 impl Input for StdinInput {
-    fn enter_loop(&self, pipeline: &mut Pipeline) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
         let stdin = io::stdin();
         let stdin = BufReader::new(stdin);
         for line in stdin.lines() {
@@ -64,8 +65,8 @@ impl Input for StdinInput {
             match line {
                 Ok(line) => {
                     INPUT_OK.inc();
-                    let msg = Msg::new(None, line.as_str());
-                    let _ = pipeline.run(&msg);
+                    let msg = Msg::new(None, line);
+                    let _ = pipelines[0].send(msg);
                 }
                 Err(_) => INPUT_ERR.inc(),
             }

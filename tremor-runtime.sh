@@ -28,6 +28,9 @@ GROUPING_CONFIG=${GROUPING_CONFIG:-""}
 LIMITING=${LIMITING:-"pass"}
 LIMITING_CONFIG=${LIMITING_CONFIG:-""}
 
+# Threads
+THREADS=${THREADS:-"1"}
+
 SLEEP=${SLEEP:-"0"}
 
 sleep $SLEEP
@@ -39,5 +42,6 @@ export RUST_BACKTRACE=1
                  --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
                  --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
                  --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
-                 --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}"
+                 --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
+                 --pipeline-threads "${THREADS}"
 
