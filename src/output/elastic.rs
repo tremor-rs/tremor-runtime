@@ -48,7 +48,7 @@ use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_SKIPPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_ERROR, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
@@ -259,7 +259,7 @@ impl Output {
                 },
                 Err(e) => {
                     println!("Error: {:?}", e);
-                    OUTPUT_DROPPED.with_label_values(&[dst]).inc_by(c as i64);
+                    OUTPUT_ERROR.with_label_values(&[dst]).inc_by(c as i64);
                 }
             };
             let _ = tx.send(r);
@@ -360,9 +360,11 @@ impl Step for Output {
         // we are not in backoff time.
         if d <= self.backoff {
             OUTPUT_DROPPED.with_label_values(&[""]).inc();
+            let mut event = event;
+            event.drop = true;
             Ok(event)
         } else {
-            let out_event = event.clone();
+            let mut out_event = event.clone();
             let index = self.index(&event);
             let doc_type = self.doc_type(&event);
             let drop = event.drop;
@@ -404,6 +406,7 @@ impl Step for Output {
                             OUTPUT_DROPPED
                                 .with_label_values(&[""])
                                 .inc_by(self.qidx as i64);
+                            out_event.drop = true;
                         };
                         Ok(out_event)
                     }

@@ -16,17 +16,19 @@ lazy_static! {
      * Number of errors read received from the input
      */
     pub static ref OUTPUT_DROPPED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_droped", "Messages dropped as part of the output."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_droped", "Events dropped as part of the output."), &["dest"]).unwrap();
     /*
      * Number of successes read received from the input
      */
     pub static ref OUTPUT_DELIVERED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_delivered", "Messages delivered."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_delivered", "Events delivered."), &["dest"]).unwrap();
     /*
      * Number of successes read received from the input
      */
     pub static ref OUTPUT_SKIPPED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_skipped", "Messages skipped as an earlier step decided to drop them."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_skipped", "Events skipped as an earlier step decided to drop them."), &["dest"]).unwrap();
+    pub static ref OUTPUT_ERROR: IntCounterVec =
+        register_int_counter_vec!(opts!("ts_output_error", "Events discarded because of errors."), &["dest"]).unwrap();
 }
 
 // Constructor function that given the name of the output will return the correct
