@@ -25,7 +25,7 @@ lazy_static! {
     /*
      * Number of successes read received from the input
      */
-    pub static ref OUTPUT_SKIPED: IntCounterVec =
+    pub static ref OUTPUT_SKIPPED: IntCounterVec =
         register_int_counter_vec!(opts!("ts_output_skipped", "Messages skipped as an earlier step decided to drop them."), &["dest"]).unwrap();
 }
 

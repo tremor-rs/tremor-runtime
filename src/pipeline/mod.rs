@@ -18,6 +18,7 @@ pub struct Pipeline {
     grouper: Grouper,
     limiting: Limiter,
     output: Output,
+    drop_output: Output,
 }
 
 impl Pipeline {
@@ -28,6 +29,7 @@ impl Pipeline {
         grouper: Grouper,
         limiting: Limiter,
         output: Output,
+        drop_output: Output,
     ) -> Self {
         Pipeline {
             parser,
@@ -35,6 +37,7 @@ impl Pipeline {
             grouper,
             limiting,
             output,
+            drop_output,
         }
     }
     /// Runs each step of the pipeline and returns either a OK or a error result
@@ -44,12 +47,14 @@ impl Pipeline {
         let grouper = &mut self.grouper;
         let limiting = &mut self.limiting;
         let output = &mut self.output;
+        let drop_output = &mut self.drop_output;
         let event = parser
             .apply(Event::new(msg.payload))
             .and_then(|parsed| classifier.apply(parsed))
             .and_then(|classified| grouper.apply(classified))
             .and_then(|grouped| limiting.apply(grouped))
-            .and_then(|r| output.apply(r));
+            .and_then(|r| if !r.drop { output.apply(r) } else { Ok(r) })
+            .and_then(|r| if r.drop { drop_output.apply(r) } else { Ok(r) });
         match event {
             Ok(Event {
                 feedback: Some(feedback),

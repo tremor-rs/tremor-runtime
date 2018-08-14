@@ -18,13 +18,13 @@ spec:
     spec:
       containers:
       - env:
-        - name: INPUT
+        - name: ONRAMP
           value: kafka
-        - name: INPUT_CONFIG
+        - name: ONRAMP_CONFIG
           value: '{"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
-        - name: OUTPUT
+        - name: OFFRAMP
           value: es
-        - name: OUTPUT_CONFIG
+        - name: OFFRAMP_CONFIG
           value: '{"endpoints":["http://elastichotc3n1:9200"], "index":"demo","batch_size":300,"batch_timeout":100,"threads":5, "concurrency": 5, "backoff_rules": [50, 100, 250, 500, 1000, 5000, 10000]}'
         - name: PARSER
           value: json

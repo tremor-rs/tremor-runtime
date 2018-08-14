@@ -21,8 +21,8 @@ goss:
 	GOSS_FILES_PATH=docker/ dgoss run --name "$(APP)-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
 
 demo-containers:
-	docker build -f demo/loadgen.dockerfile . -t loadgen
 	docker build -f docker/tremor-runtime.dockerfile . -t tremor-runtime
+	docker build -f demo/loadgen.dockerfile . -t loadgen
 
 demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv

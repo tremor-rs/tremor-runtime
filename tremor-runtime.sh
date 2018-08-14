@@ -1,12 +1,16 @@
 #!/bin/sh
 set -x
 # Input configuration
-INPUT=${INPUT:-"kafka"}
-INPUT_CONFIG=${INPUT_CONFIG:-'{"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'}
+ONRAMP=${ONRAMP:-"kafka"}
+ONRAMP_CONFIG=${ONRAMP_CONFIG:-'{"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'}
 
-# Output configuration
-OUTPUT=${OUTPUT:-"stdout"}
-OUTPUT_CONFIG=${OUTPUT_CONFIG:-""}
+# Offramp configuration
+OFFRAMP=${OFFRAMP:-"stdout"}
+OFFRAMP_CONFIG=${OFFRAMP_CONFIG:-""}
+
+# Offramp configuration
+DROP_OFFRAMP=${DROP_OFFRAMP:-"null"}
+DROP_OFFRAMP_CONFIG=${DROP_OFFRAMP_CONFIG:-""}
 
 # Parser Configuration
 PARSER=${PARSER:-"raw"}
@@ -29,8 +33,9 @@ SLEEP=${SLEEP:-"0"}
 sleep $SLEEP
 
 export RUST_BACKTRACE=1
-./tremor-runtime --input "${INPUT}" --input-config "${INPUT_CONFIG}" \
-                 --output "${OUTPUT}" --output-config "${OUTPUT_CONFIG}" \
+./tremor-runtime --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
+                 --off-ramp "${OFFRAMP}" --off-ramp-config "${OFFRAMP_CONFIG}" \
+                 --drop-off-ramp "${DROP_OFFRAMP}" --drop-off-ramp-config "${DROP_OFFRAMP_CONFIG}" \
                  --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
                  --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
                  --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \

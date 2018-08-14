@@ -48,7 +48,7 @@ use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_SKIPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
@@ -242,7 +242,7 @@ impl Output {
         }
     }
 
-    fn send_future(&mut self) -> Receiver<Result<f64, TSError>> {
+    fn send_future(&mut self, drop: bool) -> Receiver<Result<f64, TSError>> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let payload = self.payload.clone();
         let destination = self.clients[self.client_idx].clone();
@@ -252,7 +252,11 @@ impl Output {
             let dst = destination.url.as_str();
             let r = flush(&destination.client, dst, payload.as_str());
             match r.clone() {
-                Ok(_) => OUTPUT_DELIVERED.with_label_values(&[dst]).inc_by(c as i64),
+                Ok(_) => if drop {
+                    OUTPUT_SKIPPED.with_label_values(&[""]).inc();
+                } else {
+                    OUTPUT_DELIVERED.with_label_values(&[dst]).inc_by(c as i64);
+                },
                 Err(e) => {
                     println!("Error: {:?}", e);
                     OUTPUT_DROPPED.with_label_values(&[dst]).inc_by(c as i64);
@@ -354,34 +358,32 @@ impl Step for Output {
         let d = duration_to_millis(self.last_flush.elapsed());
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
-        if event.drop {
-            OUTPUT_SKIPED.with_label_values(&[""]).inc();
-            Ok(event)
-        } else if d <= self.backoff {
+        if d <= self.backoff {
             OUTPUT_DROPPED.with_label_values(&[""]).inc();
             Ok(event)
         } else {
             let out_event = event.clone();
             let index = self.index(&event);
             let doc_type = self.doc_type(&event);
+            let drop = event.drop;
             match self.config.pipeline {
                 None => self.payload.push_str(
                     json!({
-                            "index":
-                            {
-                                "_index": index,
-                                "_type": doc_type
-                            }}).to_string()
+                        "index":
+                        {
+                            "_index": index,
+                        "_type": doc_type
+                        }}).to_string()
                         .as_str(),
                 ),
                 Some(ref pipeline) => self.payload.push_str(
                     json!({
-                            "index":
-                            {
-                                "_index": index,
-                                "_type": doc_type,
-                                "pipeline": pipeline
-                            }}).to_string()
+                        "index":
+                        {
+                            "_index": index,
+                            "_type": doc_type,
+                            "pipeline": pipeline
+                        }}).to_string()
                         .as_str(),
                 ),
             };
@@ -396,7 +398,7 @@ impl Step for Output {
                 let r = match self.queue.dequeue() {
                     Err(SinkDequeueError::NotReady) => {
                         if self.queue.has_capacity() {
-                            let rx = self.send_future();
+                            let rx = self.send_future(drop);
                             self.queue.enqueue(rx)?;
                         } else {
                             OUTPUT_DROPPED
@@ -406,12 +408,12 @@ impl Step for Output {
                         Ok(out_event)
                     }
                     Err(SinkDequeueError::Empty) => {
-                        let rx = self.send_future();
+                        let rx = self.send_future(drop);
                         self.queue.enqueue(rx)?;
                         Ok(out_event)
                     }
                     Ok(result) => {
-                        let rx = self.send_future();
+                        let rx = self.send_future(drop);
                         self.queue.enqueue(rx)?;
                         match result {
                             Ok(rtt) if rtt > self.config.batch_timeout as f64 => {

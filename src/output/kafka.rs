@@ -1,6 +1,6 @@
 use error::TSError;
 use futures::Future;
-use output::{OUTPUT_DELIVERED, OUTPUT_SKIPED};
+use output::{OUTPUT_DELIVERED, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -36,25 +36,25 @@ impl Output {
 
 impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
-        if !event.drop {
-            OUTPUT_DELIVERED.with_label_values(&["kafka"]).inc();
-            let out_event = event.clone();
-            let mut record = FutureRecord::to(self.topic.as_str());
-            record = record.payload(event.raw.as_str());
-            let r = if let Some(k) = event.key {
-                self.producer.send(record.key(k.as_str()), 1000).wait()
-            } else {
-                self.producer.send(record, 1000).wait()
-            };
-
-            if r.is_ok() {
-                Ok(out_event)
-            } else {
-                Err(TSError::new("Send failed"))
-            }
+        if event.drop {
+            OUTPUT_SKIPPED.with_label_values(&["kafka"]).inc();
         } else {
-            OUTPUT_SKIPED.with_label_values(&["kafka"]).inc();
-            Ok(event)
+            OUTPUT_DELIVERED.with_label_values(&["kafka"]).inc();
+        }
+
+        let out_event = event.clone();
+        let mut record = FutureRecord::to(self.topic.as_str());
+        record = record.payload(event.raw.as_str());
+        let r = if let Some(k) = event.key {
+            self.producer.send(record.key(k.as_str()), 1000).wait()
+        } else {
+            self.producer.send(record, 1000).wait()
+        };
+
+        if r.is_ok() {
+            Ok(out_event)
+        } else {
+            Err(TSError::new("Send failed"))
         }
     }
 }

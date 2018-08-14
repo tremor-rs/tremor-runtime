@@ -58,35 +58,52 @@ fn main() {
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Simple command line consumer")
         .arg(
-            Arg::with_name("input")
+            Arg::with_name("on-ramp")
                 .short("i")
-                .long("input")
-                .help("input to read from. Valid options are 'stdin' and 'kafka'")
+                .long("on-ramp")
+                .help("on-ramp to read from. Valid options are 'stdin' and 'kafka'")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
-            Arg::with_name("input-config")
-                .long("input-config")
-                .help("Configuration for the input if required.")
+            Arg::with_name("on-ramp-config")
+                .long("on-ramp-config")
+                .help("Configuration for the on-ramp if required.")
                 .takes_value(true)
                 .default_value(""),
         )
         .arg(
-            Arg::with_name("output")
+            Arg::with_name("off-ramp")
                 .short("o")
-                .long("output")
-                .help("output to send to. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
+                .long("off-ramp")
+                .help("off-ramp to send to. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
-            Arg::with_name("output-config")
-                .long("output-config")
-                .help("Configuration for the output of required.")
+            Arg::with_name("off-ramp-config")
+                .long("off-ramp-config")
+                .help("Configuration for the off-ramp of required.")
                 .takes_value(true)
                 .default_value(""),
         )
+
+        .arg(
+            Arg::with_name("drop-off-ramp")
+                .short("d")
+                .long("drop-off-ramp")
+                .help("off-ramp to send messages that are supposed to be dropped. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
+                .default_value("null")
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("drop-off-ramp-config")
+                .long("drop-off-ramp-config")
+                .help("Configuration for the drop-off-ramp of required.")
+                .takes_value(true)
+                .default_value(""),
+        )
+
         .arg(
             Arg::with_name("parser")
                 .short("p")
@@ -149,13 +166,17 @@ fn main() {
         )
         .get_matches();
 
-    let input_name = matches.value_of("input").unwrap();
-    let input_config = matches.value_of("input-config").unwrap();
+    let input_name = matches.value_of("on-ramp").unwrap();
+    let input_config = matches.value_of("on-ramp-config").unwrap();
     let input = input::new(input_name, input_config);
 
-    let output = matches.value_of("output").unwrap();
-    let output_config = matches.value_of("output-config").unwrap();
+    let output = matches.value_of("off-ramp").unwrap();
+    let output_config = matches.value_of("off-ramp-config").unwrap();
     let output = output::new(output, output_config);
+
+    let drop_output = matches.value_of("drop-off-ramp").unwrap();
+    let drop_output_config = matches.value_of("drop-off-ramp-config").unwrap();
+    let drop_output = output::new(drop_output, drop_output_config);
 
     let parser = matches.value_of("parser").unwrap();
     let parser_config = matches.value_of("parser-config").unwrap();
@@ -173,7 +194,7 @@ fn main() {
     let limiting_config = matches.value_of("limiting-config").unwrap();
     let limiting = limiting::new(limiting, limiting_config);
 
-    let mut pipeline = Pipeline::new(parser, classifier, grouping, limiting, output);
+    let mut pipeline = Pipeline::new(parser, classifier, grouping, limiting, output, drop_output);
 
     // We spawn the HTTP endpoint in an own thread so it doens't block the main loop.
     thread::spawn(move || {

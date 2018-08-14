@@ -14,25 +14,25 @@ Some plugins require additional configuration to be passed others do not.
 The input step defines the source of the data.
 
 ### stdin
-The `stdin` plugin reads from STDIN each line is treated as one message.
+The `stdin` plugin reads from STDIN each line is treated as one event.
 
 ### kafka
-The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`. Messages are only committed as processed when the pipeline finished.
+The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`. Events are only committed as processed when the pipeline finished.
 
 ## Parser
-Parsers handle converting the message from the raw binary to a representation format.
+Parsers handle converting the event from the raw binary to a representation format.
 
 ### raw (default)
-The `raw` parser performs no additional steps and just passes the message on untouched.
+The `raw` parser performs no additional steps and just passes the event on untouched.
 
 ### json
 The `json` parser parses the input as a JSON and fails if the data is invalid.
 
 ## Classifier
-Classifiers handle message classification based on rules.
+Classifiers handle event classification based on rules.
 
 ### constant (default)
-The `constant` classifier classifies all messages with the type passed as it's config.
+The `constant` classifier classifies all events with the type passed as it's config.
 
 ### mimir
 The `mimir` classifier uses the Mimir matching language to match rules against given classifications.
@@ -40,51 +40,57 @@ The `mimir` classifier uses the Mimir matching language to match rules against g
 The configuration is provided as a JSON in the form: `[{"rule1": "classification1"}, {"rule2": "classification2"}, ...]`. If no rule matches the classification is set to `"default"`.
 
 ## Grouping
-The grouping defines the algorithm used to group classified messages.
+The grouping defines the algorithm used to group classified events.
 
 ### pass (default)
-The `pass` grouping will pass all messages.
+The `pass` grouping will pass all events.
 
 ### drop
-The `drop` grouping will drop all messages.
+The `drop` grouping will drop all events.
 
 ### bucket
-The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in messages per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `[{{"name": "<name>", "rate": <rate>[, "time_range": <time range in ms>, "windows": <windows per range>, "keys": ["<dimension1>", ...]]}}]`
+The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in events per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `[{{"name": "<name>", "rate": <rate>[, "time_range": <time range in ms>, "windows": <windows per range>, "keys": ["<dimension1>", ...]]}}]`
 
 ## Limiting
-The limiting plugin is responsible for limiting the entirety of the message stream after grouping has been performed.
+The limiting plugin is responsible for limiting the entirety of the event stream after grouping has been performed.
 
 ### pass (default)
-The `pass` limiter will pass all messages.
+The `pass` limiter will pass all events.
 
 ### drop
-The `drop` limiter will drop all messages.
+The `drop` limiter will drop all events.
 
 ### percentile
-The `percentile` limiter will keep a percentage of messages. The percentage is provided as a fraction passed to it's config. `0` equals the `drop` limiter, `1` equals the `pass` limiter and `0.9` would mean 90% of the messages pass.
+The `percentile` limiter will keep a percentage of events. The percentage is provided as a fraction passed to it's config. `0` equals the `drop` limiter, `1` equals the `pass` limiter and `0.9` would mean 90% of the events pass.
 
 It is possible to also provide 3 more values, `low limit`, `high limit` and `adjust`. If those are provided the percentile will adjust to keep the the feedback between low and high limits, where lower is better and higher is worse. Every time the feedback is either `lower limit` then `adjust` will be added to the `percentile` until it reaches `1` (`100%`). If the feedback exceeds `high limit` then `adjust` will be subtracted from `percentile` until it reaches a `adjust` as a lowest value.
 
 ### windowed
-The `windowed` limiter limits the total message flow within a given time window based on a sliding window algorithm. It can be configured with `<time range>:<sub windows>:<rate>`. `1000:100:500` Would mean we have a window of `1000ms` (`1s`) split into `100` buckets and allow `500` messages during this timeframe.
+The `windowed` limiter limits the total event flow within a given time window based on a sliding window algorithm. It can be configured with `<time range>:<sub windows>:<rate>`. `1000:100:500` Would mean we have a window of `1000ms` (`1s`) split into `100` buckets and allow `500` events during this timeframe.
 
 It is possible to also provide 3 more values, `low limit`, `high limit` and `adjust`. If those are provided the rate will adjust to keep the the feedback between low and high limits, where lower is better and higher is worse. Every time the feedback is either `lower limit` then `adjust` will be added to the `rate`. If the feedback exceeds `high limit` then `adjust` will be subtracted from `rate` until it reaches a `adjust` as a lowest value.
 
-## Off-ramp
-The output plugin defines the destination the data is forwarded to.
+## Off-Ramp
+The off-ramp plugin defines the destination the data is forwarded to.
+
+There are two off-ramps, the default off-ramp specified as `--off-ramp` which will get all events which were not marked to be dropped. Then there is `--drop-off-ramp`, this is where all events that are marked to be dropped go.
 
 ### stdout
-The `stdout` output writes messages to stdout, one message per line.
+The `stdout` off-ramp writes events to stdout, one event per line.
 
 ### kafka
-The `kafka` output writes messages to a Kafka topic, this is configured in the format `<topic>|<broker list>`.
+The `kafka` off-ramp writes events to a Kafka topic, this is configured in the format `<topic>|<broker list>`.
+
+### null
+
+The `null` off-ramp drops all events. 
 
 ### debug
-The `debug` output prints a list of classifications and pass and drop statistics for them every second.
+The `debug` off-ramp prints a list of classifications and pass and drop statistics for them every second.
 
 ### es
 
-The `es` output stores messages to elastic search. It takes a lost of `endpoints` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts. If `prexif_key` is defined the value of the key will be prepended (with an `_` as seperator!). If `append_date` is set to true the current date in the format `%Y.%m.%d` is added (with a `-` as seperator!).
+The `es` off-ramp stores events to elastic search. It takes a lost of `endpoints` and `index` to write to. In addition a `batch_size` is defined to specify how many events are transmitted per batch as well as a `batch_timeout` which defines at what point backoff happens. If any write request exceeds the `batch_timeout` a timeout will be set and events will be dropped until the backoff passed. `threads` defines the number of treads in the pool that handles the writes while `concurrency` defines how many parallel writes can be in flight at a time. `backoff_rules` can be defined to specify the progression for repeating timeouts. If `prexif_key` is defined the value of the key will be prepended (with an `_` as seperator!). If `append_date` is set to true the current date in the format `%Y.%m.%d` is added (with a `-` as seperator!).
 ```
 {
   "endpoints": ["<url>"[, ...] ],
@@ -120,12 +126,12 @@ You need to be connected to the VPN.
 
 To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
 
-To [demo with Elasticsearch and kibana](#elastic-demo) 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana. In addition a full [kitchen sink demo](#kitchen-sink-demo) that also outputs data to influx and provides a  .
+To [demo with Elasticsearch and kibana](#elastic-demo) 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana. In addition a full [kitchen sink demo](#kitchen-sink-demo) that also off-ramps data to influx and provides a  .
 
 
 ## Design
 
-The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on Kafka and from there reads it into the tremor container to apply classification and bucketing. Finally it outputs statistics of the data based on those steps.
+The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on Kafka and from there reads it into the tremor container to apply classification and bucketing. Finally it off-ramps statistics of the data based on those steps.
 
 ![flow](docs/demo-flow.png)
 
@@ -155,7 +161,7 @@ services:
 
 #### MPS
 
-The rate at which data is generated can be configured in the `demo/demo.yaml` file in the `loadgen` section under the `MPS` (metrics per second) variable. How high this can be set depends on the system running the demo.
+The rate at which data is generated can be configured in the `demo/demo.yaml` file in the `loadgen` section under the `MPS` (messages/events per second) variable. How high this can be set depends on the system running the demo.
 
 ### Tremor
 

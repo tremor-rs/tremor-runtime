@@ -30,12 +30,13 @@ services:
     ports:
       - 9898:9898
     environment:
-      - INPUT=kafka
-      - 'INPUT_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
+      - ONRAMP=kafka
+      - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - PARSER=json
       - CLASSIFIER=mimir
       - 'CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]'
       - GROUPING=bucket
       - 'GROUPING_CONFIG=[{"name":"default","rate":90},{"name":"info","rate":10,"keys":["application"]},{"name":"error","rate":100}]'
-      - OUTPUT=debug
+      - OFFRAMP=debug
+      - DROP_OFFRAMP=debug
       - SLEEP=20
