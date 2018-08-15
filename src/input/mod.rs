@@ -23,7 +23,7 @@ lazy_static! {
 }
 
 pub trait Input {
-    fn enter_loop(&self, pipeline: Vec<mpsc::Sender<Msg>>);
+    fn enter_loop(&self, pipeline: Vec<mpsc::SyncSender<Msg>>);
 }
 
 pub fn new(name: &str, opts: &str) -> Inputs {
@@ -40,7 +40,7 @@ pub enum Inputs {
 }
 
 impl Input for Inputs {
-    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         match self {
             Inputs::Kafka(i) => i.enter_loop(pipelines),
             Inputs::Stdin(i) => i.enter_loop(pipelines),
@@ -57,7 +57,7 @@ impl StdinInput {
 }
 
 impl Input for StdinInput {
-    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let stdin = io::stdin();
         let stdin = BufReader::new(stdin);
         for line in stdin.lines() {

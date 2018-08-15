@@ -177,7 +177,7 @@ fn main() {
         )
         .get_matches();
 
-    let mut txs: Vec<mpsc::Sender<Msg>> = Vec::new();
+    let mut txs: Vec<mpsc::SyncSender<Msg>> = Vec::new();
     let threads = value_t!(matches.value_of("pipeline-threads"), u32).unwrap();
     let input_name = matches.value_of("on-ramp").unwrap();
     let input_config = matches.value_of("on-ramp-config").unwrap();

@@ -85,7 +85,7 @@ impl Input {
 }
 
 impl InputT for Input {
-    fn enter_loop(&self, pipelines: Vec<mpsc::Sender<Msg>>) {
+    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let mut idx = 0;
         for message in self.consumer.start().wait() {
             idx += 1;
