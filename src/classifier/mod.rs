@@ -3,7 +3,6 @@
 
 mod constant;
 mod mimir;
-mod mimir_js;
 
 use error::TSError;
 use pipeline::{Event, Step};
@@ -11,7 +10,6 @@ use pipeline::{Event, Step};
 pub fn new(name: &str, opts: &str) -> Classifier {
     match name {
         "mimir" => Classifier::Mimir(mimir::Classifier::new(opts)),
-        "mimir-js" => Classifier::MimirJS(mimir_js::Classifier::new(opts)),
         "constant" => Classifier::Constant(constant::Classifier::new(opts)),
         _ => panic!(
             "Unknown classifier: {} valid options are 'constant', and 'mimir'",
@@ -23,14 +21,12 @@ pub fn new(name: &str, opts: &str) -> Classifier {
 pub enum Classifier {
     Constant(constant::Classifier),
     Mimir(mimir::Classifier),
-    MimirJS(mimir_js::Classifier),
 }
 impl Step for Classifier {
     fn apply(&mut self, msg: Event) -> Result<Event, TSError> {
         match self {
             Classifier::Constant(c) => c.apply(msg),
             Classifier::Mimir(c) => c.apply(msg),
-            Classifier::MimirJS(c) => c.apply(msg),
         }
     }
 }

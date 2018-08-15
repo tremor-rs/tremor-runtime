@@ -64,54 +64,25 @@ impl Step for Classifier {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
         let mut doc = self.mimir_rules.document();
-        match event.parsed.clone() {
-            Value::Object(obj) => {
-                for (key, value) in &obj {
-                    match value {
-                        Value::String(s) => {
-                            doc.add_string(key, s);
-                        }
-                        Value::Number(n) => {
-                            if n.is_i64() {
-                                match n.as_i64() {
-                                    Some(num) => doc.add_int(key, num as i32),
-                                    None => break,
-                                };
-                            } else if n.is_u64() {
-                                match n.as_u64() {
-                                    Some(num) => doc.add_int(key, num as i32),
-                                    None => break,
-                                };
-                            } else {
-                                //TODO: addfloat
-                            }
-                        }
-                        _ => warn!("Unsupported value tyoe"),
+        doc.load_json(event.raw.as_str());
+        let rs = doc.test_json();
+        let mut event = Event::from(event);
+        for x in 0usize..self.mimir_rules.num_rules() as usize {
+            if rs.at(x) {
+                return match self.rules.get(&x) {
+                    Some(class) => {
+                        event.classification = class.clone();
+                        Ok(event)
                     }
-                }
-                let rs = doc.test();
-                let mut event = Event::from(event);
-                for x in 0usize..self.mimir_rules.num_rules() as usize {
-                    if rs.at(x) {
-                        return match self.rules.get(&x) {
-                            Some(class) => {
-                                event.classification = class.clone();
-                                Ok(event)
-                            }
-                            None => {
-                                event.classification = String::from("default");
-                                Ok(event)
-                            }
-                        };
+                    None => {
+                        event.classification = String::from("default");
+                        Ok(event)
                     }
-                }
-                event.classification = String::from("default");
-                Ok(event)
+                };
             }
-            _ => Err(TSError::new(
-                "Can't classifiy message, needs to be an object",
-            )),
         }
+        event.classification = String::from("default");
+        Ok(event)
     }
 }
 
@@ -129,7 +100,7 @@ mod tests1 {
 
     #[test]
     #[should_panic]
-    fn load_bad_json_top() {
+    fn load_bad_raw_top() {
         classifier::new("mimir", "{}");
     }
 
@@ -163,21 +134,25 @@ mod tests1 {
         assert!(true)
     }
 
-    #[test]
-    fn test_basd_json() {
-        let s = Event::new("[]");
-        let mut p = parser::new("json", "");
-        let mut c = classifier::new("mimir", "[{\"test:rule\": \"test-class\"}]");
-        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
-        assert!(r.is_err())
-    }
+    // #[test]
+    // fn test_basd_raw() {
+    //     let s = Event::new("[]");
+    //     let mut p = parser::new("raw", "");
+    //     let mut c = classifier::new("mimir", "[{\"test:rule\": \"class-test\"}]");
+    //     let r = p.apply(s).and_then(|parsed| c.apply(parsed));
+    //     assert!(r.is_err())
+    // }
 
     #[test]
     fn test_classification_default() {
         let s = Event::new("{}");
-        let mut p = parser::new("json", "");
+        let mut p = parser::new("raw", "");
         let mut c = classifier::new("mimir", "[]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
+        match r.clone() {
+            Err(e) => println!("e: {:?}", e),
+            _ => (),
+        };
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
     }
@@ -185,7 +160,7 @@ mod tests1 {
     #[test]
     fn test_match() {
         let s = Event::new("{\"key\": \"value\"}");
-        let mut p = parser::new("json", "");
+        let mut p = parser::new("raw", "");
         let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
@@ -194,7 +169,7 @@ mod tests1 {
     #[test]
     fn test_no_match() {
         let s = Event::new("{\"key\": \"not the value\"}");
-        let mut p = parser::new("json", "");
+        let mut p = parser::new("raw", "");
         let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
@@ -204,7 +179,7 @@ mod tests1 {
     #[test]
     fn test_partial_match() {
         let s = Event::new("{\"key\": \"contains the value\"}");
-        let mut p = parser::new("json", "");
+        let mut p = parser::new("raw", "");
         let mut c = classifier::new("mimir", "[{\"key:value\": \"test-class\"}]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());

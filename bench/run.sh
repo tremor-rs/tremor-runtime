@@ -14,6 +14,6 @@ for ((c=0; c<=$seconds; c++ ))
 do
   curl -s http://0.0.0.0:9898/metrics | grep '^ts_input_successes '
   sleep 1
-done | awk '{ print $2 }' > bench/result-$1.txt
+done | awk '{ print $2 }' > bench/results/$1.txt
 kill $PID
 pkill -P $$
