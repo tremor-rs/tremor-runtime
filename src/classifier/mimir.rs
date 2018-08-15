@@ -1,5 +1,5 @@
 use error::TSError;
-use mimir::{RuleBuilder, RuleSet};
+use mimir::{MimirError, RuleBuilder, RuleSet};
 use pipeline::{Event, Step};
 use serde_json::{self, Value};
 use std::collections::HashMap;
@@ -63,26 +63,31 @@ impl Classifier {
 impl Step for Classifier {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
-        let mut doc = self.mimir_rules.document();
-        doc.load_json(event.raw.as_str());
-        let rs = doc.test_json();
+        let res = self.mimir_rules
+            .document()
+            .load_json(event.raw.as_str())?
+            .first_match();
         let mut event = Event::from(event);
-        for x in 0usize..self.mimir_rules.num_rules() as usize {
-            if rs.at(x) {
-                return match self.rules.get(&x) {
-                    Some(class) => {
-                        event.classification = class.clone();
-                        Ok(event)
-                    }
-                    None => {
-                        event.classification = String::from("default");
-                        Ok(event)
-                    }
-                };
+        match res {
+            None => {
+                event.classification = String::from("default");
             }
-        }
-        event.classification = String::from("default");
+            Some(rid) => match self.rules.get(&rid) {
+                Some(class) => {
+                    event.classification = class.clone();
+                }
+                None => {
+                    event.classification = String::from("default");
+                }
+            },
+        };
         Ok(event)
+    }
+}
+
+impl From<MimirError> for TSError {
+    fn from(from: MimirError) -> TSError {
+        TSError::new(format!("{:?}", from).as_str())
     }
 }
 

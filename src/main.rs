@@ -182,7 +182,7 @@ fn main() {
     let input_name = matches.value_of("on-ramp").unwrap();
     let input_config = matches.value_of("on-ramp-config").unwrap();
     let input = input::new(input_name, input_config);
-    for tid in 0..threads {
+    for _tid in 0..threads {
         let (tx, rx) = mpsc::channel();
         txs.push(tx);
         let matches = matches.clone();
@@ -215,7 +215,7 @@ fn main() {
                 Pipeline::new(parser, classifier, grouping, limiting, output, drop_output);
 
             for msg in rx.iter() {
-                pipeline.run(&msg);
+                let _ = pipeline.run(&msg);
             }
         });
     }
