@@ -183,7 +183,7 @@ fn main() {
     let input_config = matches.value_of("on-ramp-config").unwrap();
     let input = input::new(input_name, input_config);
     for _tid in 0..threads {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(10);
         txs.push(tx);
         let matches = matches.clone();
         thread::spawn(move || {
