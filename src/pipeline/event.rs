@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use utils::duration_to_millis;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Event {
     pub key: Option<String>,
     pub drop: bool,
@@ -11,6 +11,7 @@ pub struct Event {
     pub classification: String,
     pub feedback: Option<f64>,
     pub ingest_time: u64,
+    pub dimensions: Vec<String>,
 }
 
 impl Event {
@@ -28,6 +29,7 @@ impl Event {
             classification: String::from(""),
             feedback: None,
             ingest_time,
+            dimensions: Vec::new(),
         }
     }
     pub fn from(original: Self) -> Self {
@@ -39,6 +41,7 @@ impl Event {
             classification: original.classification,
             feedback: original.feedback,
             ingest_time: original.ingest_time,
+            dimensions: original.dimensions,
         }
     }
 }

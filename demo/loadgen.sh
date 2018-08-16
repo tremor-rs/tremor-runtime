@@ -20,4 +20,4 @@ done | \
                  --off-ramp "kafka" --off-ramp-config "${OFFRAMP_CONFIG}" \
                  --parser "json" \
                  --classifier "constant" --classifier-config "default" \
-                 --grouping "bucket" --grouping-config "[{\"name\":\"default\",\"rate\":$MPS}]"
+                 --grouping "bucket" --grouping-config "[{\"class\":\"default\",\"rate\":$MPS}]"

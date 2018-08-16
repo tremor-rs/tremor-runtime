@@ -1,7 +1,8 @@
+use classifier::Classification;
 use error::TSError;
 use mimir::{MimirError, RuleBuilder, RuleSet};
 use pipeline::{Event, Step};
-use serde_json::{self, Value};
+use serde_json;
 use std::collections::HashMap;
 
 /// A constant classifier, it will classify all mesages the same way.
@@ -10,52 +11,29 @@ pub struct Classifier {
     // by keeping the RuleBuilder in scope we prevent it and by that
     // the mimir reference to be freed.
     builder: RuleBuilder,
-    rules: HashMap<usize, String>,
+    rules: HashMap<usize, Classification>,
     mimir_rules: RuleSet,
 }
 
 impl Classifier {
     pub fn new(opts: &str) -> Self {
         let mut builder = RuleBuilder::new();
-        match serde_json::from_str::<Value>(opts) {
-            Ok(Value::Array(parsed)) => {
-                let mut rules: HashMap<usize, String> = HashMap::new();
-                let mut i = 0;
-                for obj in &parsed {
-                    match obj {
-                        Value::Object(m) => {
-                            if m.len() == 1 {
-
-                                for (rule, name) in m.iter() {
-                                    match (rule, name) {
-                                        (_rule, Value::String(name)) => {
-                                            rules.insert(i, name.clone());
-                                            builder.add_rule(rule);
-                                            i += 1;
-                                        },
-                                        _ => panic!("Bad format argument needs to be an array of objects with one key value pair.")
-                                    };
-                                }
-                            } else {
-                                panic!("Bad format argument needs to be an array of objects with one key value pair.")
-                            }
-                        },
-                        _ => panic!("Bad format argument needs to be an array of objects with one key value pair.")
-
-                    }
-                }
-                let mimir_rules = builder.done();
-                Classifier {
-                    builder,
-                    rules,
-                    mimir_rules,
-                }
+        let mut rules: HashMap<usize, Classification> = HashMap::new();
+        let classifications: Vec<Classification> =
+            serde_json::from_str(opts).expect("Failed to parse classifications");
+        let mut i = 0;
+        for c in classifications.iter() {
+            if let Some(ref rule) = c.rule {
+                rules.insert(i, c.clone());
+                builder.add_rule(rule);
+                i += 1;
             }
-            Ok(_) => panic!("Bad format argument needs to be an array of objects."),
-            Err(e) => {
-                warn!("Bad JSON: {}", e);
-                panic!("Serade error while parsing rules for mimir classifier.")
-            }
+        }
+        let mimir_rules = builder.done();
+        Classifier {
+            builder,
+            rules,
+            mimir_rules,
         }
     }
 }
@@ -63,10 +41,9 @@ impl Classifier {
 impl Step for Classifier {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
-        let res = self.mimir_rules
-            .document()
-            .load_json(event.raw.as_str())?
-            .first_match();
+        let mut doc = self.mimir_rules.document();
+        doc.load_json(event.raw.as_str())?;
+        let res = doc.first_match();
         let mut event = Event::from(event);
         match res {
             None => {
@@ -74,7 +51,16 @@ impl Step for Classifier {
             }
             Some(rid) => match self.rules.get(&rid) {
                 Some(class) => {
-                    event.classification = class.clone();
+                    event.classification = class.class.clone();
+                    event.dimensions = class
+                        .clone()
+                        .dimensions
+                        .into_iter()
+                        .map(|key| match doc.find_string(&key) {
+                            Some(v) => v.clone(),
+                            None => String::from(""),
+                        })
+                        .collect()
                 }
                 None => {
                     event.classification = String::from("default");
@@ -135,7 +121,10 @@ mod tests1 {
 
     #[test]
     fn load_good_rule() {
-        classifier::new("mimir", "[{\"test:rule\": \"test-class\"}]");
+        classifier::new(
+            "mimir",
+            "[{\"rule\":\"test:rule\", \"class\":\"test-class\"}]",
+        );
         assert!(true)
     }
 
@@ -166,7 +155,10 @@ mod tests1 {
     fn test_match() {
         let s = Event::new("{\"key\": \"value\"}");
         let mut p = parser::new("raw", "");
-        let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
+        let mut c = classifier::new(
+            "mimir",
+            "[{\"rule\":\"key=value\", \"class\": \"test-class\"}]",
+        );
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
@@ -175,7 +167,10 @@ mod tests1 {
     fn test_no_match() {
         let s = Event::new("{\"key\": \"not the value\"}");
         let mut p = parser::new("raw", "");
-        let mut c = classifier::new("mimir", "[{\"key=value\": \"test-class\"}]");
+        let mut c = classifier::new(
+            "mimir",
+            "[{\"rule\":\"key=value\", \"class\": \"test-class\"}]",
+        );
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "default")
@@ -185,7 +180,10 @@ mod tests1 {
     fn test_partial_match() {
         let s = Event::new("{\"key\": \"contains the value\"}");
         let mut p = parser::new("raw", "");
-        let mut c = classifier::new("mimir", "[{\"key:value\": \"test-class\"}]");
+        let mut c = classifier::new(
+            "mimir",
+            "[{\"rule\": \"key:value\", \"class\": \"test-class\"}]",
+        );
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")

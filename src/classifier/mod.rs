@@ -18,6 +18,35 @@ pub fn new(name: &str, opts: &str) -> Classifier {
     }
 }
 
+fn dflt_dimensions() -> Vec<String> {
+    vec![]
+}
+fn dflt_time_range() -> u64 {
+    1000
+}
+
+fn dflt_windows() -> usize {
+    100
+}
+
+fn dflt_rate() -> u64 {
+    0
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Classification {
+    pub class: String,
+    pub rule: Option<String>,
+    #[serde(default = "dflt_dimensions")]
+    pub dimensions: Vec<String>,
+    #[serde(default = "dflt_time_range")]
+    pub time_range: u64,
+    #[serde(default = "dflt_rate")]
+    pub rate: u64,
+    #[serde(default = "dflt_windows")]
+    pub windows: usize,
+}
+
 pub enum Classifier {
     Constant(constant::Classifier),
     Mimir(mimir::Classifier),

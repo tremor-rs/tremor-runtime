@@ -86,7 +86,7 @@ impl InputT for Input {
                         .set("enable.auto.commit", "true")
                         .set("auto.commit.interval.ms", "5000")
                     // but only commit the offsets explicitly stored via `consumer.store_offset`.
-                        .set("enable.auto.offset.store", "false")
+                        .set("enable.auto.offset.store", "true")
                         .set_log_level(RDKafkaLogLevel::Debug)
                         .create_with_context(context)
                         .expect("Consumer creation failed");
@@ -99,9 +99,11 @@ impl InputT for Input {
                     idx = idx % pipelines.len();
                     match message {
                         Err(_e) => {
+                            INPUT_ERR.inc();
                             warn!("Input error");
                         }
                         Ok(Err(_m)) => {
+                            INPUT_ERR.inc();
                             warn!("Input error");
                         }
                         Ok(Ok(m)) => {
@@ -117,14 +119,7 @@ impl InputT for Input {
                                     error!("Error during handling message: {:?}", e)
                                 };
                             }
-                            // Now that the message is completely processed, add it's position to the offset
-                            // store. The actual offset will be committed every 5 seconds.
-                            if let Err(e) = consumer.store_offset(&m) {
-                                INPUT_ERR.inc();
-                                warn!("Error while storing offset: {}", e);
-                            } else {
-                                INPUT_OK.inc();
-                            }
+                            INPUT_OK.inc();
                         }
                     }
                 }

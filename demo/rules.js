@@ -1,100 +1,115 @@
 [
   {
-    "name": "default",
-    "rate": 1000
-  },
-  {
-    "name": "applog_recsvc",
-    "rate": 5000,
-    "keys": [
+    "rule": "application=recsvc",
+    "class": "applog_recsvc",
+    "rate": 1250,
+    "dimensions": [
       "application"
     ]
   },
   {
-    "name": "applog_sayl",
-    "rate": 10000,
-    "keys": [
+    "rule": "application=sayl",
+    "class": "applog_sayl",
+    "rate": 2500,
+    "dimensions": [
       "application"
     ]
   },
   {
-    "name": "applog_purest",
-    "rate": 75000,
-    "keys": [
+    "rule": "wf_index_type=applog_purest",
+    "class": "applog_purest",
+    "rate": 18750,
+    "dimensions": [
       "logger_name"
     ]
   },
   {
-    "name": "applog_admin",
-    "rate": 3000,
-    "keys": [
+    "rule": "wf_index_type=applog_admin",
+    "class": "applog_admin",
+    "rate": 750,
+    "dimensions": [
       "logger_name"
     ]
   },
   {
-    "name": "applog_supply_chain_services",
-    "rate": 75000
+    "rule": "wf_index_type=applog_supply_chain_services",
+    "class": "applog_supply_chain_services",
+    "rate": 18750
   },
   {
-    "name": "applog_logs",
-    "rate": 18000,
-    "keys": [
+    "rule": "wf_index_type=applog_logs",
+    "class": "applog_logs",
+    "rate": 4500,
+    "dimensions": [
       "application"
     ]
   },
   {
-    "name": "syslog_haproxy",
-    "rate": 10000,
-    "keys": [
+    "rule": "wf_index_type=syslog_haproxy",
+    "class": "syslog_haproxy",
+    "rate": 2500,
+    "dimensions": [
       "syslog_hostname"
     ]
   },
   {
-    "name": "syslog_cisco",
-    "rate": 500,
-    "keys": [
+    "rule": "tags:cisco",
+    "class": "syslog_cisco",
+    "rate": 125,
+    "dimensions": [
       "src_ip",
       "dst_ip"
     ]
   },
   {
-    "name": "syslog_logs",
-    "rate": 7000,
-    "keys": [
+    "rule": "wf_index_type=syslog_logs",
+    "class": "syslog_logs",
+    "rate": 1750,
+    "dimensions": [
       "syslog_hostname"
     ]
   },
   {
-    "name": "syslog_influxdb",
-    "rate": 7000
+    "rule": "wf_index_type=syslog_influxdb",
+    "class": "syslog_influxdb",
+    "rate": 1750
   },
   {
-    "name": "syslog_ftpd",
-    "rate": 30000,
-    "keys": [
+    "rule": "wf_index_type=syslog_ftpd",
+    "class": "syslog_ftpd",
+    "rate": 7500,
+    "dimensions": [
       "syslog_hostname"
     ]
   },
   {
-    "name": "syslog_hypernova",
-    "rate": 500,
-    "keys": [
+    "rule": "wf_index_type=syslog_hypernova",
+    "class": "syslog_hypernova",
+    "rate": 125,
+    "dimensions": [
       "syslog_hostname"
     ]
   },
   {
-    "name": "edilog",
-    "rate": 15000
+    "rule": "wf_index_type=edilog",
+    "class": "edilog",
+    "rate": 3750
   },
   {
-    "name": "sqlserverlog",
-    "rate": 500
+    "rule": "wf_index_type=sqlserverlog",
+    "class": "sqlserverlog",
+    "rate": 125
   },
   {
-    "name": "applog",
-    "rate": 300,
-    "keys": [
+    "rule": "type=applog",
+    "class": "applog",
+    "rate": 75,
+    "dimensions": [
       "application"
     ]
+  },
+  {
+    "class": "default",
+    "rate": 250
   }
 ]

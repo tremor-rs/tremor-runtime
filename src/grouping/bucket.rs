@@ -1,3 +1,4 @@
+use classifier::Classification;
 /// A This grouper is configred with a number of buckets and their alotted
 /// throughput on a persecond basis.
 ///
@@ -38,7 +39,6 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::iter::Iterator;
 use window::TimeWindow;
-
 lazy_static! {
     /*
      * Number of messages marked to pass based on a given bucket.
@@ -67,37 +67,13 @@ lazy_static! {
         register_counter!(opts!("ts_bucket_nomatchr", "Messages that could not be matched to any bucket.")).unwrap();
 }
 
-#[derive(Deserialize, Debug)]
-struct ConfigItem {
-    name: String,
-    rate: u64,
-    #[serde(default = "dflt_time_range")]
-    time_range: u64,
-    #[serde(default = "dflt_windows")]
-    windows: usize,
-    #[serde(default = "dflt_keys")]
-    keys: Vec<String>,
-}
-
-fn dflt_keys() -> Vec<String> {
-    vec![]
-}
-
-fn dflt_time_range() -> u64 {
-    1000
-}
-
-fn dflt_windows() -> usize {
-    100
-}
-
 /// A grouper either drops or keeps all messages.
 pub struct Grouper {
     buckets: HashMap<String, Bucket>,
 }
 
 struct Bucket {
-    config: ConfigItem,
+    config: Classification,
     groups: HashMap<String, TimeWindow>,
 }
 
@@ -113,13 +89,13 @@ impl Grouper {
     /// * `unimportant` that gets 100 msgs/s
     /// * `default` thet gets 10 msgs/s
     pub fn new(opts: &str) -> Self {
-        match serde_json::from_str::<Vec<ConfigItem>>(opts) {
+        match serde_json::from_str::<Vec<Classification>>(opts) {
             Ok(configs) => {
                 let mut bkt_map = HashMap::new();
                 for config in configs {
-                    let name = config.name.clone();
+                    let name = config.class.clone();
                     let bkt = Bucket {
-                         config,
+                        config,
                         groups: HashMap::new(),
                     };
                     bkt_map.insert(name, bkt);
@@ -133,28 +109,22 @@ impl Grouper {
         }
     }
 }
-fn extract_dimensions(keys: &[String], data: &Value) -> Vec<Value> {
-    match data {
-        Value::Object(m) => keys.into_iter()
-            .map(|key| match m.get(key) {
-                Some(v) => v.clone(),
-                None => Value::Null,
-            })
-            .collect(),
-        _ => vec![],
-    }
-}
 
 impl Step for Grouper {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         let mut event = Event::from(event);
         match self.buckets.get_mut(&event.classification) {
             Some(Bucket { config, groups }) => {
-                let dimensions = extract_dimensions(&config.keys, &event.parsed);
+                let dim_metric = event.dimensions.join(" / ");
+                let dimensions: Vec<Value> = event
+                    .dimensions
+                    .iter()
+                    .map(|d| Value::String(d.clone()))
+                    .collect();
                 // TODO: This is ugly! But it works. There sure is a better way of
                 // serializing then creating a json ...
                 let dimensions = serde_json::to_string(&Value::Array(dimensions))?;
-                let dim_metric = dimensions.clone();
+
                 let window = match groups.entry(dimensions) {
                     Entry::Occupied(o) => o.into_mut(),
                     Entry::Vacant(v) => v.insert(TimeWindow::new(
@@ -165,16 +135,16 @@ impl Step for Grouper {
                 };
                 let drop = match window.inc() {
                     Ok(_) => {
-                        BKT_PASS.with_label_values(&[config.name.as_str()]).inc();
+                        BKT_PASS.with_label_values(&[config.class.as_str()]).inc();
                         DIM_PASS
-                            .with_label_values(&[config.name.as_str(), dim_metric.as_str()])
+                            .with_label_values(&[config.class.as_str(), dim_metric.as_str()])
                             .inc();
                         false
                     }
                     Err(_) => {
-                        BKT_DROP.with_label_values(&[config.name.as_str()]).inc();
+                        BKT_DROP.with_label_values(&[config.class.as_str()]).inc();
                         DIM_DROP
-                            .with_label_values(&[config.name.as_str(), dim_metric.as_str()])
+                            .with_label_values(&[config.class.as_str(), dim_metric.as_str()])
                             .inc();
                         true
                     }
@@ -199,13 +169,13 @@ mod tests {
     use pipeline::{Event, Step};
     use std::thread::sleep;
     use std::time::Duration;
-
     #[test]
     fn grouping_test_pass() {
         let s = Event::new("Example");
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "[{\"name\": \"c\", \"rate\": 100}]");
+        let config = json!([{"class": "c", "rate": 100}]).to_string();
+        let mut g = grouping::new("bucket", &config);
         let r = p.apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
@@ -218,7 +188,8 @@ mod tests {
         let s = Event::new("Example");
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "[{\"name\": \"a\", \"rate\": 100}]");
+        let config = json!([{"class": "a", "rate": 100}]).to_string();
+        let mut g = grouping::new("bucket", &config);
         let r = p.apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
@@ -231,7 +202,8 @@ mod tests {
         let s = Event::new("Example");
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
-        let mut g = grouping::new("bucket", "[{\"name\": \"c\", \"rate\": 1}]");
+        let config = json!([{"class": "c", "rate": 1}]).to_string();
+        let mut g = grouping::new("bucket", &config);
         let r1 = p.apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
@@ -256,29 +228,37 @@ mod tests {
 
     #[test]
     fn grouping_bucket_test() {
-        let s1 = Event::new("{\"k\": 2}");
-        let s2 = Event::new("{\"k\": 1}");
-        let mut p = parser::new("json", "");
-        let mut c = classifier::new("constant", "c");
-        let mut g = grouping::new(
-            "bucket",
-            "[{\"name\": \"c\", \"rate\": 1, \"keys\": [\"k\"]}]",
-        );
+        let s1 = Event::new("{\"k\": \"12\"}");
+        let s2 = Event::new("{\"k\": \"11\"}");
+        let mut p = parser::new("raw", "");
+        let config =
+            json!([{"class": "c", "rule": "k:\"1\"", "rate": 1, "dimensions": ["k"]}]).to_string();
+        let mut c = classifier::new("mimir", &config);
+        let mut g = grouping::new("bucket", &config);
         let r = p.apply(s1.clone())
             .and_then(|parsed| c.apply(parsed))
-            .and_then(|classified| g.apply(classified))
+            .and_then(|classified| {
+                println!("{:?}", classified);
+                g.apply(classified)
+            })
             .expect("grouping failed");
         assert_eq!(r.drop, false);
 
         let r = p.apply(s1.clone())
             .and_then(|parsed| c.apply(parsed))
-            .and_then(|classified| g.apply(classified))
+            .and_then(|classified| {
+                println!("{:?}", classified);
+                g.apply(classified)
+            })
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
         let r = p.apply(s2.clone())
             .and_then(|parsed| c.apply(parsed))
-            .and_then(|classified| g.apply(classified))
+            .and_then(|classified| {
+                println!("{:?}", classified);
+                g.apply(classified)
+            })
             .expect("grouping failed");
         assert_eq!(r.drop, false);
     }
