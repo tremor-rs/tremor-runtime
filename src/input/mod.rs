@@ -48,11 +48,17 @@ impl Input for Inputs {
     }
 }
 
-pub struct StdinInput {}
+pub struct StdinInput {
+    ff: bool,
+}
 
 impl StdinInput {
-    fn new(_opts: &str) -> Self {
-        Self {}
+    fn new(opts: &str) -> Self {
+        if opts == "fire-and-forget" {
+            Self { ff: true }
+        } else {
+            Self { ff: false }
+        }
     }
 }
 
@@ -66,7 +72,11 @@ impl Input for StdinInput {
                 Ok(line) => {
                     INPUT_OK.inc();
                     let msg = Msg::new(None, line);
-                    let _ = pipelines[0].send(msg);
+                    if self.ff {
+                        let _ = pipelines[0].try_send(msg);
+                    } else {
+                        let _ = pipelines[0].send(msg);
+                    }
                 }
                 Err(_) => INPUT_ERR.inc(),
             }
