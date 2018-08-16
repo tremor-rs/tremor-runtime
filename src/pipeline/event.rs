@@ -1,7 +1,6 @@
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use utils::duration_to_millis;
-
 #[derive(Clone, Debug)]
 pub struct Event {
     pub key: Option<String>,
@@ -12,6 +11,7 @@ pub struct Event {
     pub feedback: Option<f64>,
     pub ingest_time: u64,
     pub dimensions: Vec<String>,
+    pub index: Option<String>,
 }
 
 impl Event {
@@ -30,6 +30,7 @@ impl Event {
             feedback: None,
             ingest_time,
             dimensions: Vec::new(),
+            index: None,
         }
     }
     pub fn from(original: Self) -> Self {
@@ -42,6 +43,7 @@ impl Event {
             feedback: original.feedback,
             ingest_time: original.ingest_time,
             dimensions: original.dimensions,
+            index: original.index,
         }
     }
 }

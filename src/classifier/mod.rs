@@ -45,6 +45,7 @@ pub struct Classification {
     pub rate: u64,
     #[serde(default = "dflt_windows")]
     pub windows: usize,
+    pub index_key: Option<String>,
 }
 
 pub enum Classifier {

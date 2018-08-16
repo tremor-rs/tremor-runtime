@@ -60,7 +60,12 @@ impl Step for Classifier {
                             Some(v) => v.clone(),
                             None => String::from(""),
                         })
-                        .collect()
+                        .collect();
+                    if let Some(ref key) = class.index_key {
+                        if let Some(v) = doc.find_string(key) {
+                            event.index = Some(v.clone());
+                        }
+                    }
                 }
                 None => {
                     event.classification = String::from("default");
