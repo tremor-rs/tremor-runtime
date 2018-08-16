@@ -94,9 +94,9 @@ impl InputT for Input {
                 consumer
                     .subscribe(&topics)
                     .expect("Can't subscribe to specified topic");
+                let len = pipelines.len();
                 for message in consumer.start().wait() {
-                    idx += 1;
-                    idx = idx % pipelines.len();
+                    idx = (idx + 1) % len;
                     match message {
                         Err(_e) => {
                             INPUT_ERR.inc();
@@ -114,10 +114,24 @@ impl InputT for Input {
                                     Some(key) => Some(String::from(key.unwrap())),
                                     None => None,
                                 };
-                                if let Err(e) = pipelines[idx].send(Msg::new(key, String::from(p)))
-                                {
-                                    error!("Error during handling message: {:?}", e)
-                                };
+                                let payload = String::from(p);
+                                let mut sent = false;
+                                if len > 0 {
+                                    for i in 0..len {
+                                        idx = (idx + i) % len;
+                                        if let Ok(_) = pipelines[idx]
+                                            .try_send(Msg::new(key.clone(), payload.clone()))
+                                        {
+                                            sent = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !sent {
+                                    if let Err(e) = pipelines[idx].send(Msg::new(key, payload)) {
+                                        error!("Error during handling message: {:?}", e)
+                                    };
+                                }
                             }
                             INPUT_OK.inc();
                         }
