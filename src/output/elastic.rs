@@ -105,7 +105,7 @@ fn default_append_date() -> bool {
 #[derive(Deserialize, Debug)]
 struct Config {
     endpoints: Vec<String>,
-    index: String,
+    index: Option<String>,
     batch_size: usize,
     batch_timeout: f64,
     #[serde(default = "default_backoff")]
@@ -274,11 +274,17 @@ impl Output {
     }
     fn index(&self, event: &Event) -> String {
         let mut index = match event.index {
-            None => self.config.index.clone(),
+            None => if let Some(ref idx) = self.config.index {
+                idx.clone()
+            } else {
+                String::from("")
+            },
             Some(ref index) => {
                 let mut index = index.clone();
-                index.push('_');
-                index.push_str(self.config.index.as_str());
+                if let Some(ref idx) = self.config.index {
+                    index.push('_');
+                    index.push_str(idx.as_str());
+                }
                 index
             }
         };
@@ -449,7 +455,7 @@ fn add_json_kv(json: &str, key: &str, val: &str) -> String {
 fn backoff_test() {
     let c = Config {
         endpoints: vec![String::from("")],
-        index: String::from(""),
+        index: None,
         batch_size: 10,
         batch_timeout: 10.0,
         backoff_rules: vec![10, 20, 30, 40],

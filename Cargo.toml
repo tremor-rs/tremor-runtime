@@ -14,7 +14,7 @@ env_logger = "0.5"
 serde_json = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
-prometheus = "0.4"
+prometheus = { version = "0.4", features = ["process"] }
 lazy_static = "0.2"
 elastic = "0.20"
 elastic_derive = "0.20"
