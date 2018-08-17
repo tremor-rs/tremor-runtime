@@ -157,7 +157,6 @@ impl<T> AsyncSink<T> {
     }
     pub fn enqueue(&mut self, value: Receiver<Result<T, TSError>>) -> Result<(), SinkEnqueueError> {
         if self.size >= self.capacity {
-            println!("size({}) >= capacity({})", self.size, self.capacity);
             Err(SinkEnqueueError::AtCapacity)
         } else {
             self.size += 1;
@@ -298,12 +297,10 @@ impl Output {
         }
     }
     fn doc_type(&self, event: &Event) -> String {
-        match event.parsed {
-            Value::Object(ref m) => match m.get("type") {
-                Some(Value::String(v)) => v.clone(),
-                _ => String::from("_doc"),
-            },
-            _ => String::from("_doc"),
+        if let Some(ref data_type) = event.data_type {
+            data_type.clone()
+        } else {
+            String::from("_doc")
         }
     }
 }
@@ -329,10 +326,14 @@ fn update_send_time(event: Event) -> String {
         .expect("Time went backwards");
     let tremor_map: serde_json::Map<String, Value> = [
         (
-            String::from("send_time"),
+            String::from("egress_time"),
             Value::Number(serde_json::Number::from(duration_to_millis(
                 since_the_epoch,
             ))),
+        ),
+        (
+            String::from("ingest_time"),
+            Value::Number(serde_json::Number::from(event.ingest_time)),
         ),
         (
             String::from("classification"),

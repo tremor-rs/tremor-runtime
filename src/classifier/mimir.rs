@@ -66,6 +66,9 @@ impl Step for Classifier {
                             event.index = Some(v.clone());
                         }
                     }
+                    if let Some(v) = doc.find_string("type") {
+                        event.data_type = Some(v.clone());
+                    }
                 }
                 None => {
                     event.classification = String::from("default");

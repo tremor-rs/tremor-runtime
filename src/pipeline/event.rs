@@ -12,6 +12,7 @@ pub struct Event {
     pub ingest_time: u64,
     pub dimensions: Vec<String>,
     pub index: Option<String>,
+    pub data_type: Option<String>,
 }
 
 impl Event {
@@ -31,6 +32,7 @@ impl Event {
             ingest_time,
             dimensions: Vec::new(),
             index: None,
+            data_type: None,
         }
     }
     pub fn from(original: Self) -> Self {
@@ -44,6 +46,7 @@ impl Event {
             ingest_time: original.ingest_time,
             dimensions: original.dimensions,
             index: original.index,
+            data_type: original.data_type,
         }
     }
 }
