@@ -1,1 +1,1 @@
-With no rules no data passes as classification goes to default and has by default 0 messages.
+When no mimir rules are specified we should move data into the default rule

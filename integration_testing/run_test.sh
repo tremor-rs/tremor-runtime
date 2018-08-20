@@ -11,10 +11,11 @@ IN_FILE="${BASEDIR}/${TEST}.test/in.json.xz"
 DATA_FILE="${BASEDIR}/${TEST}.test/in.json"
 RULES_FILE="${BASEDIR}/${TEST}.test/rules.json"
 OUT_FILE="${BASEDIR}/${TEST}.test/out.json.xz"
+README_FILE="${BASEDIR}/${TEST}.test/README.md"
+
 GEN_FILE="${BASEDIR}/${TEST}.test/gen.json"
 EXP_FILE="${BASEDIR}/${TEST}.test/exp.json"
 LOG_FILE="${BASEDIR}/${TEST}.test/log.txt"
-DIFF_FILE="${BASEDIR}/${TEST}.test/res.diff"
 
 if [ ! -d "${TEST_DIR}" ]
 then
@@ -48,6 +49,14 @@ else
   . ${CONFIG_FILE}
 fi
 
+if [ ! -f "${README_FILE}" ]
+then
+    error "${TEST}: file '${README_FILE}' not found"
+    exit 1
+else
+    . ${CONFIG_FILE}
+fi
+
 RULES=`cat ${RULES_FILE}`
 
 ONRAMP=${ONRAMP:-"file"}
@@ -77,9 +86,10 @@ GROUPING_CONFIG=${GROUPING_CONFIG:-${RULES:-""}}
 LIMITING=${LIMITING:-"pass"}
 LIMITING_CONFIG=${LIMITING_CONFIG:-""}
 
-
 THREADS=1
+
 xzcat $IN_FILE > $DATA_FILE
+cat ${README_FILE}
 if cargo run -- --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
       --off-ramp "${OFFRAMP}" --off-ramp-config "${OFFRAMP_CONFIG}" \
       --drop-off-ramp "${DROP_OFFRAMP}" --drop-off-ramp-config "${DROP_OFFRAMP_CONFIG}" \
@@ -89,15 +99,31 @@ if cargo run -- --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
       --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
       --pipeline-threads "${THREADS}" 2> ${LOG_FILE}
 then
-    xzcat ${OUT_FILE} > ${EXP_FILE}
-
-    if diff ${GEN_FILE} ${EXP_FILE} > ${DIFF_FILE}
+    if [ -z "${SHOULD_CRASH+x}" ]
     then
-        rm ${GEN_FILE} ${EXP_FILE} ${DIFF_FILE} ${LOG_FILE} ${DATA_FILE}
-        ok "${TEST}: passed"
+        xzcat ${OUT_FILE} > ${EXP_FILE}
+        rm ${DATA_FILE}
+
+        if diff ${GEN_FILE} ${EXP_FILE} > /dev/null
+        then
+            rm ${GEN_FILE} ${EXP_FILE} ${LOG_FILE}
+            ok "${TEST}: passed"
+        else
+            error "${TEST}: failed"
+            exit 1
+        fi
     else
-        error "${TEST}: failed"
+        error "${TEST}: execution failure expected but success received"
+        exit 1
     fi
 else
-    error "${TEST}: execution failed"
+    rm ${DATA_FILE}
+    if [ -z "${SHOULD_CRASH+x}" ]
+    then
+        error "${TEST}: execution failed"
+        exit 1
+    else
+        ok "${TEST}: expected failure"
+    fi
+
 fi

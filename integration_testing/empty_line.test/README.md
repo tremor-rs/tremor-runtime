@@ -1,1 +1,1 @@
-With no rules no data passes as classification goes to default and has by default 0 messages.
+Empty events should be handled gracefully and just get ignored
