@@ -47,17 +47,26 @@ use hyper::Server;
 
 use rdkafka::util::get_rdkafka_version;
 
+use std::io::Write;
 use std::sync::mpsc;
 use std::thread;
 
 // consumer example: https://github.com/fede1024/rust-rdkafka/blob/db7cf0883b6086300b7f61998e9fbcfe67cc8e73/examples/at_least_once.rs
 
+/// println_stderr and run_command_or_fail are copied from rdkafka-sys
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 fn main() {
     env_logger::init();
 
-    println!("mimir version: {}", mimir::version());
+    println_stderr!("mimir version: {}", mimir::version());
     let (version_n, version_s) = get_rdkafka_version();
-    println!("rd_kafka_version: 0x{:08x}, {}", version_n, version_s);
+    println_stderr!("rd_kafka_version: 0x{:08x}, {}", version_n, version_s);
     let matches = App::new("tremor-runtime")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Simple command line consumer")
@@ -182,11 +191,12 @@ fn main() {
     let input_name = matches.value_of("on-ramp").unwrap();
     let input_config = matches.value_of("on-ramp-config").unwrap();
     let input = input::new(input_name, input_config);
+    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
     for _tid in 0..threads {
         let (tx, rx) = mpsc::sync_channel(10);
         txs.push(tx);
         let matches = matches.clone();
-        thread::spawn(move || {
+        let h = thread::spawn(move || {
             let output = matches.value_of("off-ramp").unwrap();
             let output_config = matches.value_of("off-ramp-config").unwrap();
             let output = output::new(output, output_config);
@@ -218,12 +228,13 @@ fn main() {
                 let _ = pipeline.run(&msg);
             }
         });
+        handles.push(h);
     }
 
     // We spawn the HTTP endpoint in an own thread so it doens't block the main loop.
     thread::spawn(|| {
         let addr = ([0, 0, 0, 0], 9898).into();
-        println!("Listening at: http://{}", addr);
+        println_stderr!("Listening at: http://{}", addr);
         let server = Server::bind(&addr)
             .serve(|| service_fn(metrics::dispatch))
             .map_err(|e| error!("server error: {}", e));
@@ -231,4 +242,7 @@ fn main() {
     });
 
     input.enter_loop(txs);
+    while let Some(h) = handles.pop() {
+        let _ = h.join();
+    }
 }

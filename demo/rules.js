@@ -1,3 +1,4 @@
+
 [
   {
     "rule": "application=recsvc",
@@ -125,7 +126,6 @@
   },
   {
     "class": "default",
-    "rate": 250,
-    "index_key": "wf_index_type"
+    "rate": 250
   }
 ]
