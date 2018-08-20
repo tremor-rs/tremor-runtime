@@ -54,8 +54,8 @@ ONRAMP=${ONRAMP:-"file"}
 ONRAMP_CONFIG=${ONRAMP_CONFIG:-"$DATA_FILE"}
 
 # Offramp configuration
-OFFRAMP=${OFFRAMP:-"stdout"}
-OFFRAMP_CONFIG=${OFFRAMP_CONFIG:-''}
+OFFRAMP=${OFFRAMP:-"file"}
+OFFRAMP_CONFIG=${OFFRAMP_CONFIG:-"${GEN_FILE}"}
 
 # Offramp configuration
 DROP_OFFRAMP=${DROP_OFFRAMP:-"null"}
@@ -79,7 +79,6 @@ LIMITING_CONFIG=${LIMITING_CONFIG:-""}
 
 
 THREADS=1
-
 xzcat $IN_FILE > $DATA_FILE
 if cargo run -- --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
       --off-ramp "${OFFRAMP}" --off-ramp-config "${OFFRAMP_CONFIG}" \
@@ -88,7 +87,7 @@ if cargo run -- --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
       --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
       --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
       --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
-      --pipeline-threads "${THREADS}" > ${GEN_FILE} 2> ${LOG_FILE}
+      --pipeline-threads "${THREADS}" 2> ${LOG_FILE}
 then
     xzcat ${OUT_FILE} > ${EXP_FILE}
 

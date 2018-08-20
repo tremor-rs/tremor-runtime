@@ -15,6 +15,6 @@ impl TSError {
 
 impl From<elastic::Error> for TSError {
     fn from(from: elastic::Error) -> TSError {
-        TSError::new(format!("{}", from).as_str())
+        TSError::new(format!("ES Error: {}", from).as_str())
     }
 }

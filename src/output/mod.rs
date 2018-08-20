@@ -2,6 +2,7 @@
 
 mod debug;
 mod elastic;
+mod file;
 mod kafka;
 mod null;
 mod stdout;
@@ -40,8 +41,12 @@ pub fn new(name: &str, opts: &str) -> Output {
         "debug" => Output::Debug(debug::Output::new(opts)),
         "es" => Output::Elastic(Box::new(elastic::Output::new(opts))),
         "null" => Output::Null(null::Output::new(opts)),
+        "file" => Output::File(file::Output::new(opts)),
 
-        _ => panic!("Unknown output: {} use kafka, stdout, es or debug", name),
+        _ => panic!(
+            "Unknown output: {} use kafka, stdout, es, null, file or debug",
+            name
+        ),
     }
 }
 
@@ -53,6 +58,7 @@ pub enum Output {
     Stdout(stdout::Output),
     Debug(debug::Output),
     Null(null::Output),
+    File(file::Output),
 }
 
 /// Implements the Output trait for the enum.
@@ -65,6 +71,7 @@ impl Step for Output {
             Output::Stdout(o) => o.apply(msg),
             Output::Debug(o) => o.apply(msg),
             Output::Null(o) => o.apply(msg),
+            Output::File(o) => o.apply(msg),
         }
     }
 }
