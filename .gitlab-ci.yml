@@ -11,3 +11,4 @@ test:
     - apt update 
     - apt install -y bison flex cmake automake
     - cargo test
+    - make it
