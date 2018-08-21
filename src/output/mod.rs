@@ -8,7 +8,7 @@ mod null;
 mod stdout;
 
 use error::TSError;
-use pipeline::{Event, Step};
+use pipeline::{Event, OutputStep, Step};
 use prometheus::IntCounterVec;
 use std::boxed::Box;
 
@@ -17,19 +17,19 @@ lazy_static! {
      * Number of errors read received from the input
      */
     pub static ref OUTPUT_DROPPED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_dropped", "Messages dropped as part of the output."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_dropped", "Messages dropped as part of the output."), &["step", "dest"]).unwrap();
     /*
      * Number of successes read received from the input
      */
     pub static ref OUTPUT_DELIVERED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_delivered", "Events delivered."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_delivered", "Events delivered."), &["step", "dest"]).unwrap();
     /*
      * Number of successes read received from the input
      */
     pub static ref OUTPUT_SKIPPED: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_skipped", "Events skipped as an earlier step decided to drop them."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_skipped", "Events skipped as an earlier step decided to drop them."), &["step", "dest"]).unwrap();
     pub static ref OUTPUT_ERROR: IntCounterVec =
-        register_int_counter_vec!(opts!("ts_output_error", "Events discarded because of errors."), &["dest"]).unwrap();
+        register_int_counter_vec!(opts!("ts_output_error", "Events discarded because of errors."), &["step", "dest"]).unwrap();
 }
 
 // Constructor function that given the name of the output will return the correct
@@ -47,6 +47,13 @@ pub fn new(name: &str, opts: &str) -> Output {
             "Unknown output: {} use kafka, stdout, es, null, file or debug",
             name
         ),
+    }
+}
+
+pub fn step(event: &Event) -> &'static str {
+    match event.output_step {
+        OutputStep::Drop => "drop",
+        OutputStep::Deliver => "deliver",
     }
 }
 

@@ -1,6 +1,12 @@
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use utils::duration_to_millis;
+
+#[derive(Clone, Debug)]
+pub enum OutputStep {
+    Deliver,
+    Drop,
+}
 #[derive(Clone, Debug)]
 pub struct Event {
     pub key: Option<String>,
@@ -13,6 +19,7 @@ pub struct Event {
     pub dimensions: Vec<String>,
     pub index: Option<String>,
     pub data_type: Option<String>,
+    pub output_step: OutputStep,
 }
 
 impl Event {
@@ -33,6 +40,7 @@ impl Event {
             dimensions: Vec::new(),
             index: None,
             data_type: None,
+            output_step: OutputStep::Deliver,
         }
     }
     pub fn from(original: Self) -> Self {
@@ -47,6 +55,7 @@ impl Event {
             dimensions: original.dimensions,
             index: original.index,
             data_type: original.data_type,
+            output_step: original.output_step,
         }
     }
 }

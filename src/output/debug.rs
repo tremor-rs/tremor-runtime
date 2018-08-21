@@ -1,5 +1,5 @@
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_SKIPPED};
+use output::{self, OUTPUT_DELIVERED, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -61,11 +61,15 @@ impl Step for Output {
             .entry(event.classification.clone())
             .or_insert(DebugBucket { pass: 0, drop: 0 });
         if event.drop {
-            OUTPUT_SKIPPED.with_label_values(&["stdout"]).inc();
+            OUTPUT_SKIPPED
+                .with_label_values(&[output::step(&event), "stdout"])
+                .inc();
             entry.drop += 1;
             self.drop += 1;
         } else {
-            OUTPUT_DELIVERED.with_label_values(&["stdout"]).inc();
+            OUTPUT_DELIVERED
+                .with_label_values(&[output::step(&event), "stdout"])
+                .inc();
             entry.pass += 1;
             self.pass += 1;
         };

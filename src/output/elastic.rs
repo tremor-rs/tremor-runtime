@@ -49,7 +49,7 @@ use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_ERROR, OUTPUT_SKIPPED};
+use output::{self, OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_ERROR, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
@@ -238,7 +238,7 @@ impl Output {
         }
     }
 
-    fn send_future(&mut self, drop: bool) -> Receiver<Result<f64, TSError>> {
+    fn send_future(&mut self, step: &'static str, drop: bool) -> Receiver<Result<f64, TSError>> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let payload = self.payload.clone();
         let destination = self.clients[self.client_idx].clone();
@@ -249,13 +249,17 @@ impl Output {
             let r = flush(&destination.client, dst, payload.as_str());
             match r.clone() {
                 Ok(_) => if drop {
-                    OUTPUT_SKIPPED.with_label_values(&[""]).inc();
+                    OUTPUT_SKIPPED.with_label_values(&[step, dst]).inc();
                 } else {
-                    OUTPUT_DELIVERED.with_label_values(&[dst]).inc_by(c as i64);
+                    OUTPUT_DELIVERED
+                        .with_label_values(&[step, dst])
+                        .inc_by(c as i64);
                 },
                 Err(e) => {
                     println!("Error: {:?}", e);
-                    OUTPUT_ERROR.with_label_values(&[dst]).inc_by(c as i64);
+                    OUTPUT_ERROR
+                        .with_label_values(&[step, dst])
+                        .inc_by(c as i64);
                 }
             };
             let _ = tx.send(r);
@@ -362,6 +366,7 @@ impl Step for Output {
             let index = self.index(&event);
             let doc_type = self.doc_type(&event);
             let drop = event.drop;
+            let output_step = output::step(&event);
             match self.config.pipeline {
                 None => self.payload.push_str(
                     json!({
@@ -394,23 +399,23 @@ impl Step for Output {
                 let r = match self.queue.dequeue() {
                     Err(SinkDequeueError::NotReady) => {
                         if self.queue.has_capacity() {
-                            let rx = self.send_future(drop);
+                            let rx = self.send_future(output_step, drop);
                             self.queue.enqueue(rx)?;
                         } else {
                             OUTPUT_DROPPED
-                                .with_label_values(&["<overload>"])
+                                .with_label_values(&[output_step, "<overload>"])
                                 .inc_by(self.qidx as i64);
                             out_event.drop = true;
                         };
                         Ok(out_event)
                     }
                     Err(SinkDequeueError::Empty) => {
-                        let rx = self.send_future(drop);
+                        let rx = self.send_future(output_step, drop);
                         self.queue.enqueue(rx)?;
                         Ok(out_event)
                     }
                     Ok(result) => {
-                        let rx = self.send_future(drop);
+                        let rx = self.send_future(output_step, drop);
                         self.queue.enqueue(rx)?;
                         match result {
                             Ok(rtt) if rtt > self.config.batch_timeout as f64 => {

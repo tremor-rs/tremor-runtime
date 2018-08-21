@@ -5,11 +5,12 @@ use classifier::Classifier;
 use error::TSError;
 use grouping::Grouper;
 use limiting::{Feedback, Limiter};
-use output::Output;
+use output::{self, Output, OUTPUT_SKIPPED};
 use parser::Parser;
 use prometheus::Counter;
 
 pub use self::event::Event;
+pub use self::event::OutputStep;
 pub use self::step::Step;
 
 lazy_static! {
@@ -62,8 +63,28 @@ impl Pipeline {
             .and_then(|parsed| classifier.apply(parsed))
             .and_then(|classified| grouper.apply(classified))
             .and_then(|grouped| limiting.apply(grouped))
-            .and_then(|r| if !r.drop { output.apply(r) } else { Ok(r) })
-            .and_then(|r| if r.drop { drop_output.apply(r) } else { Ok(r) });
+            .and_then(|r| {
+                if !r.drop {
+                    output.apply(r)
+                } else {
+                    OUTPUT_SKIPPED
+                        .with_label_values(&[output::step(&r), "pipeline"])
+                        .inc();
+                    Ok(r)
+                }
+            })
+            .and_then(|mut r| {
+                r.output_step = OutputStep::Drop;
+                if r.drop {
+                    r.drop = false;
+                    drop_output.apply(r)
+                } else {
+                    OUTPUT_SKIPPED
+                        .with_label_values(&[output::step(&r), "pipeline"])
+                        .inc();
+                    Ok(r)
+                }
+            });
         match event {
             Ok(Event {
                 feedback: Some(feedback),

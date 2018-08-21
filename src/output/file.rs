@@ -1,5 +1,5 @@
 use error::TSError;
-use output::{OUTPUT_DELIVERED, OUTPUT_SKIPPED};
+use output::{self, OUTPUT_DELIVERED, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use std::fs::File;
 use std::io;
@@ -18,14 +18,17 @@ impl Output {
 impl Step for Output {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         if event.drop {
-            OUTPUT_SKIPPED.with_label_values(&["stdout"]).inc();
-        } else {
-            OUTPUT_DELIVERED.with_label_values(&["stdout"]).inc();
+            OUTPUT_SKIPPED
+                .with_label_values(&[output::step(&event), "stdout"])
+                .inc();
+            return Ok(event);
         }
-        let out_event = event.clone();
-        self.file.write(event.raw.as_bytes())?;
+        OUTPUT_DELIVERED
+            .with_label_values(&[output::step(&event), "stdout"])
+            .inc();
+        self.file.write(&event.raw.as_bytes())?;
         self.file.write(&['\n' as u8])?;
-        Ok(out_event)
+        Ok(event)
     }
 }
 
