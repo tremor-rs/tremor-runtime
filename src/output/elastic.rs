@@ -356,8 +356,11 @@ impl Step for Output {
         let d = duration_to_millis(self.last_flush.elapsed());
         // We only add the message if it is not already dropped and
         // we are not in backoff time.
+        let output_step = output::step(&event);
         if d <= self.backoff {
-            OUTPUT_DROPPED.with_label_values(&["<backoff>"]).inc();
+            OUTPUT_DROPPED
+                .with_label_values(&[output_step, "<backoff>"])
+                .inc();
             let mut event = event;
             event.drop = true;
             Ok(event)
@@ -366,7 +369,6 @@ impl Step for Output {
             let index = self.index(&event);
             let doc_type = self.doc_type(&event);
             let drop = event.drop;
-            let output_step = output::step(&event);
             match self.config.pipeline {
                 None => self.payload.push_str(
                     json!({
