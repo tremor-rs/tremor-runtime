@@ -375,7 +375,7 @@ impl Step for Output {
                         "index":
                         {
                             "_index": index,
-                        "_type": doc_type
+                            "_type": doc_type
                         }}).to_string()
                         .as_str(),
                 ),

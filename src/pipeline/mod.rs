@@ -7,7 +7,8 @@ use grouping::Grouper;
 use limiting::{Feedback, Limiter};
 use output::{self, Output, OUTPUT_SKIPPED};
 use parser::Parser;
-use prometheus::Counter;
+use prometheus::{Counter, HistogramVec};
+use std::f64;
 
 pub use self::event::Event;
 pub use self::event::OutputStep;
@@ -19,6 +20,19 @@ lazy_static! {
      */
     static ref PIPELINE_ERR: Counter =
         register_counter!(opts!("ts_pipeline_errors", "Errors in the pipeline.")).unwrap();
+    static ref PIPELINE_HISTOGRAM: HistogramVec = register_histogram_vec!(
+        "ts_pipeline_latency",
+        "Latency for event handing through the entire pipeline.",
+        &[],
+        vec![
+            0.00005, 0.0001, 0.00025,
+            0.0005, 0.001, 0.0025,
+            0.005, 0.01, 0.025,
+            0.05, 0.1, 0.25,
+            0.5, 1.0, 2.5,
+            f64::INFINITY]
+    ).unwrap();
+
 }
 
 /// Pipeline struct, collecting all the steps of our internal pipeline
@@ -58,6 +72,7 @@ impl Pipeline {
         let limiting = &mut self.limiting;
         let output = &mut self.output;
         let drop_output = &mut self.drop_output;
+        let timer = PIPELINE_HISTOGRAM.with_label_values(&[]).start_timer();
         let event = parser
             .apply(Event::new(msg.payload.as_str()))
             .and_then(|parsed| classifier.apply(parsed))
@@ -85,7 +100,7 @@ impl Pipeline {
                     Ok(r)
                 }
             });
-        match event {
+        let r = match event {
             Ok(Event {
                 feedback: Some(feedback),
                 ..
@@ -98,7 +113,9 @@ impl Pipeline {
                 PIPELINE_ERR.inc();
                 Err(error)
             }
-        }
+        };
+        timer.observe_duration();
+        r
     }
 }
 
