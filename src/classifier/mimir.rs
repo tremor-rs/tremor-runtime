@@ -25,7 +25,9 @@ impl Classifier {
         for c in classifications.iter() {
             if let Some(ref rule) = c.rule {
                 rules.insert(i, c.clone());
-                builder.add_rule(rule);
+                if let Err(_) = builder.add_rule(rule) {
+                    panic!("Syntax error in rule: {}", rule);
+                };
                 i += 1;
             }
         }
