@@ -1,7 +1,1 @@
-[
-  {
-    "class": "default",
-    "rate": 250
-  }
-]
-
+[{"class": "default", "rate": 100}]
