@@ -9,13 +9,15 @@ help() {
 Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
 tremor-runtime test runner
   -h         show this help
+  -l         lists all tests
+  -n NAME    creates a new test from the template
   -d         set -x for tracing
   -t TARGET  selects the build target 'debug', 'release', or 'none'
   -c CMD     command to run for tests, defaults to the command appropriate to the
              build target. Required for 'none'.
 EOF
 }
-while getopts hdt:c: opt; do
+while getopts hdlt:c:n: opt; do
     case $opt in
         h)
             help
@@ -26,21 +28,20 @@ while getopts hdt:c: opt; do
             ;;
         t)
             build_target=$OPTARG
-            case $build_target in
-                debug)
-                    cargo build
-
-                    ;;
-                release)
-                    cargo build --release
-                    ;;
-                none)
-                    ;;
-                *)
-                    echo "Unknown build target `$BUILD_TARGET`"
-                    exit 1
-                    ;;
-            esac
+            ;;
+        l)
+            ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g"
+            exit 0
+            ;;
+        n)
+            test=$OPTARG
+            if [ -d ${BASEDIR}/${test}.test ]
+            then
+                echo "Test ${test} already exists"
+                exit 1
+            fi
+            cp -r ${BASEDIR}/template.test ${BASEDIR}/${test}.test
+            exit 0
             ;;
         c)
             run_cmd=$OPTARG
@@ -56,6 +57,22 @@ if [ -z ${build_target+x} ]
 then
     build_target=debug
 fi
+
+case $build_target in
+    debug)
+        cargo build
+        ;;
+    release)
+        cargo build --release
+        ;;
+    none)
+        ;;
+    *)
+        echo "Unknown build target `$BUILD_TARGET`"
+        exit 1
+        ;;
+esac
+
 
 shift "$((OPTIND-1))"
 
@@ -86,7 +103,6 @@ fi
 
 for test in $tests
 do
-
     config_file="${BASEDIR}/${test}.test/config"
     data_file="${BASEDIR}/${test}.test/in.json"
     rules_file="${BASEDIR}/${test}.test/rules.json"
@@ -104,10 +120,10 @@ do
         exit 1
     fi
 
-    IN_file="${BASEDIR}/${test}.test/in.json.xz"
-    if [ ! -f "${IN_file}" ]
+    in_file="${BASEDIR}/${test}.test/in.json.xz"
+    if [ ! -f "${in_file}" ]
     then
-        error "${test}: file '${IN_file}' not found"
+        error "${test}: file '${in_file}' not found"
         exit 1
     fi
 
@@ -116,7 +132,7 @@ do
         error "${test}: file '${rules_file}' not found"
         exit 1
     else
-        rules=`jq -c '.' ${rules_file}`
+        rules=`cat ${rules_file}`
     fi
 
     if [ ! -f "${out_file}" ]
@@ -152,12 +168,16 @@ do
     if [ -f "${config_file}" ]
     then
         . ${config_file}
+    else
+        echo "Missing config file: ${config_file}"
+        exit 1
     fi
 
     # Limiting Configuration
 
 
-    xzcat $IN_file > $data_file
+    echo "xzcat $in_file > $data_file"
+    xzcat $in_file > $data_file
     cat ${readme_file}
     if $run_cmd --on-ramp "${onramp}" --on-ramp-config "${onramp_config}" \
                 --off-ramp "${offramp}" --off-ramp-config "${offramp_config}" \
@@ -186,15 +206,23 @@ do
             FAILED_TESTS="${FAILED_TESTS}$test "
         fi
     else
+        exit_code=$?
         rm ${data_file}
-        if [ "${should_crash}" -eq 0 ]
+        if [ ${exit_code} -eq 139 ]
         then
-            error "${test}: execution failed"
+            error "${test}: SEGFAULT"
             FAILED_TESTS="${FAILED_TESTS}$test "
         else
-            ok "${test}: expected failure"
-            PASSED_TESTS="${PASSED_TESTS}$test "
+            if [ "${should_crash}" -eq 0 ]
+            then
+                error "${test}: execution failed"
+                FAILED_TESTS="${FAILED_TESTS}$test "
+            else
+                ok "${test}: expected failure"
+                PASSED_TESTS="${PASSED_TESTS}$test "
+            fi
         fi
+
     fi
 done
 
