@@ -1,0 +1,210 @@
+#!/usr/bin/env sh
+
+BASEDIR=$(dirname "$0")
+
+. ${BASEDIR}/common.sh
+
+help() {
+    cat <<EOF
+Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
+tremor-runtime test runner
+  -h         show this help
+  -d         set -x for tracing
+  -t TARGET  selects the build target 'debug', 'release', or 'none'
+  -c CMD     command to run for tests, defaults to the command appropriate to the
+             build target. Required for 'none'.
+EOF
+}
+while getopts hdt:c: opt; do
+    case $opt in
+        h)
+            help
+            exit 0
+            ;;
+        d)
+            set -x
+            ;;
+        t)
+            build_target=$OPTARG
+            case $build_target in
+                debug)
+                    cargo build
+
+                    ;;
+                release)
+                    cargo build --release
+                    ;;
+                none)
+                    ;;
+                *)
+                    echo "Unknown build target `$BUILD_TARGET`"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        c)
+            run_cmd=$OPTARG
+            ;;
+        *)
+            help
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z ${build_target+x} ]
+then
+    build_target=debug
+fi
+
+shift "$((OPTIND-1))"
+
+case $build_target in
+    debug)
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-runtime"}
+        ;;
+    release)
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor-runtime"}
+        ;;
+    none)
+        if [ -z ${run_cmd+x} ]
+        then
+            echo "the run command (-c) needs to be set with the 'none' target."
+            exit 1
+        fi
+esac
+
+echo $run_cmd
+
+
+if [ ! -z ${@+x} ]
+then
+    tests=$@
+else
+    tests=$(ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g")
+fi
+
+for test in $tests
+do
+
+    config_file="${BASEDIR}/${test}.test/config"
+    data_file="${BASEDIR}/${test}.test/in.json"
+    rules_file="${BASEDIR}/${test}.test/rules.json"
+    out_file="${BASEDIR}/${test}.test/out.json.xz"
+    readme_file="${BASEDIR}/${test}.test/readme.md"
+
+    gen_file="${BASEDIR}/${test}.test/gen.json"
+    exp_file="${BASEDIR}/${test}.test/exp.json"
+    log_file="${BASEDIR}/${test}.test/log.txt"
+
+    TEST_DIR="${BASEDIR}/${test}.test"
+    if [ ! -d "${TEST_DIR}" ]
+    then
+        error "${test}: directory '${TEST_DIR}' not found"
+        exit 1
+    fi
+
+    IN_file="${BASEDIR}/${test}.test/in.json.xz"
+    if [ ! -f "${IN_file}" ]
+    then
+        error "${test}: file '${IN_file}' not found"
+        exit 1
+    fi
+
+    if [ ! -f "${rules_file}" ]
+    then
+        error "${test}: file '${rules_file}' not found"
+        exit 1
+    else
+        rules=`jq -c '.' ${rules_file}`
+    fi
+
+    if [ ! -f "${out_file}" ]
+    then
+        error "${test}: file '${out_file}' not found"
+        exit 1
+    fi
+
+    if [ ! -f "${readme_file}" ]
+    then
+        error "${test}: file '${readme_file}' not found"
+        exit 1
+    fi
+
+    # reset config
+    should_crash=0
+    onramp="file"
+    onramp_config="${data_file}"
+    offramp="file"
+    offramp_config="${gen_file}"
+    drop_offramp="null"
+    drop_offramp_config=""
+    parser="raw"
+    parser_config=""
+    classifier="mimir"
+    classifier_config=${rules:-""}
+    grouping="bucket"
+    grouping_config=${rules:-""}
+    limiting="pass"
+    limiting_config=""
+    threads=1
+
+    if [ -f "${config_file}" ]
+    then
+        . ${config_file}
+    fi
+
+    # Limiting Configuration
+
+
+    xzcat $IN_file > $data_file
+    cat ${readme_file}
+    if $run_cmd --on-ramp "${onramp}" --on-ramp-config "${onramp_config}" \
+                --off-ramp "${offramp}" --off-ramp-config "${offramp_config}" \
+                --drop-off-ramp "${drop_offramp}" --drop-off-ramp-config "${drop_offramp_config}" \
+                --parser "${parser}" --parser-config "${parser_config}" \
+                --classifier "${classifier}" --classifier-config "${classifier_config}" \
+                --grouping "${grouping}" --grouping-config "${grouping_config}" \
+                --limiting "${limiting}" --limiting-config "${limiting_config}" \
+                --pipeline-threads "${threads}" 2> ${log_file}
+    then
+        if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
+        then
+            xzcat ${out_file} > ${exp_file}
+            rm ${data_file}
+            if diff ${gen_file} ${exp_file} > /dev/null
+            then
+                rm ${gen_file} ${exp_file} ${log_file}
+                ok "${test}: passed"
+                PASSED_TESTS="${PASSED_TESTS}$test "
+            else
+                error "${test}: failed"
+                FAILED_TESTS="${FAILED_TESTS}$test "
+            fi
+        else
+            error "${test}: execution failure expected but success received"
+            FAILED_TESTS="${FAILED_TESTS}$test "
+        fi
+    else
+        rm ${data_file}
+        if [ "${should_crash}" -eq 0 ]
+        then
+            error "${test}: execution failed"
+            FAILED_TESTS="${FAILED_TESTS}$test "
+        else
+            ok "${test}: expected failure"
+            PASSED_TESTS="${PASSED_TESTS}$test "
+        fi
+    fi
+done
+
+if [ ! -z "${PASSED_TESTS+x}" ]
+then
+    echo "Passed test cases: ${PASSED_TESTS}"
+fi
+
+if [ ! -z "${FAILED_TESTS+x}" ]
+then
+    echo "Failed test cases: ${FAILED_TESTS}"
+    exit 1
+fi

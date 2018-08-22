@@ -313,10 +313,13 @@ fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> Result<f64, T
     let start = Instant::now();
     let timer = SEND_HISTOGRAM.with_label_values(&[url]).start_timer();
     let req = BulkRequest::new(payload.to_owned());
-    client
+    let response = client
         .request(req)
         .send()?
         .into_response::<BulkErrorsResponse>()?;
+    for item in response {
+        println!("item: {}", item);
+    }
     timer.observe_duration();
     let d = start.elapsed();
     let d = duration_to_millis(d) as f64;

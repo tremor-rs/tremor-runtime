@@ -48,4 +48,4 @@ clippy:
 	CARGO_TARGET_DIR=target.clippy cargo +nightly clippy
 
 it:
-	integration_testing/run_all.sh
+	integration_testing/runner

@@ -5,7 +5,7 @@
 Each tests has a own folder. The name of the folder has to be `<test name>.test` The required files are:
 
 * `README.md` - a description of the test
-* `config` - a shell script that gets sourced
+* `config` - a shell script that gets sourced to customize configuration
 * `rules.json` - a json file with the rules to use for the test (can be formated)
 * `in.json.xz` - the input file to use for testing - one rule per line, xz compressed.
 * `out.json.xz` - the expected result of the test, xz compressed.
@@ -14,7 +14,7 @@ Each tests has a own folder. The name of the folder has to be `<test name>.test`
 
 The following values are currently supported:
 
-* `SHOULD_CRASH` - set to 1 if a test run is expected to fail (tremmor returning non zero)
+* `should_crash` - set to 1 if a test run is expected to fail (tremor returning non zero)
 
 In addition the normal tremor environment variables can be set however they should be used at with care as they will affect the test run.
 
