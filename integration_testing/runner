@@ -176,7 +176,6 @@ do
     # Limiting Configuration
 
 
-    echo "xzcat $in_file > $data_file"
     xzcat $in_file > $data_file
     cat ${readme_file}
     if $run_cmd --on-ramp "${onramp}" --on-ramp-config "${onramp_config}" \
