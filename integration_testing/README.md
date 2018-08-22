@@ -20,7 +20,7 @@ In addition the normal tremor environment variables can be set however they shou
 
 ## Running tests
 
-Tests can be run as batch using `make it` or individually using the test runner under `./integration_testing/run_test.sh` with the test name (without `.test`!) passed as an argument.
+Tests can be run as batch using `make it` or individually using the test runner under `./integration_testing/runner` with the test name (without `.test`!) passed as an argument.
 
 Failed tests will leave the following artifacts for analysis:
 
