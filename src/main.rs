@@ -223,7 +223,6 @@ fn main() {
 
             let mut pipeline =
                 Pipeline::new(parser, classifier, grouping, limiting, output, drop_output);
-
             for msg in rx.iter() {
                 let _ = pipeline.run(&msg);
             }
@@ -242,7 +241,13 @@ fn main() {
     });
 
     input.enter_loop(txs);
+    let mut is_bad = false;
     while let Some(h) = handles.pop() {
-        let _ = h.join();
+        if h.join().is_err() {
+            is_bad = true;
+        };
+    }
+    if is_bad {
+        ::std::process::exit(1);
     }
 }
