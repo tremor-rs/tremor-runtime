@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.1.16"
+version = "0.1.17"
 authors = ["Heinz Gies <hgies@wayfair.com>"]
 
 [dependencies]
@@ -23,6 +23,6 @@ hyper = "0.12"
 chrono = "0.4"
 regex = "1"
 
-mimir = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "handle-bad-syntax" }
+mimir = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "master" }
 # mimir = { path = "../mimir-rs" }
 
