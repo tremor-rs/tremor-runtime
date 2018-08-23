@@ -26,8 +26,8 @@ impl Step for Output {
         OUTPUT_DELIVERED
             .with_label_values(&[output::step(&event), "stdout"])
             .inc();
-        self.file.write(&event.raw.as_bytes())?;
-        self.file.write(&['\n' as u8])?;
+        self.file.write_all(&event.raw.as_bytes())?;
+        self.file.write_all(&[13])?; // newline
         Ok(event)
     }
 }

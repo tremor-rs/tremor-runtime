@@ -1,9 +1,7 @@
-stages:
-  - test
 
 test:
   stage: test
-  image: rust:1.27
+  image: rust:1.28
   when: always
   tags:
     - docker
@@ -12,3 +10,6 @@ test:
     - apt install -y bison flex cmake automake
     - cargo test
     - make it
+    - make clippy-install
+    - make clippy
+

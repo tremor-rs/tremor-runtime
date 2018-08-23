@@ -22,11 +22,11 @@ impl Classifier {
         let classifications: Vec<Classification> =
             serde_json::from_str(opts).expect("Failed to parse classifications");
         let mut i = 0;
-        for c in classifications.iter() {
+        for c in &classifications {
             if let Some(ref rule) = c.rule {
                 rules.insert(i, c.clone());
-                if let Err(_) = builder.add_rule(rule) {
-                    panic!("Syntax error in rule: {}", rule);
+                if let Err(err) = builder.add_rule(rule) {
+                    panic!("Error parsing rule {:?} => {}", err, rule);
                 };
                 i += 1;
             }

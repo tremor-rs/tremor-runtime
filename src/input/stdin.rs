@@ -27,9 +27,9 @@ impl InputT for Input {
                     INPUT_OK.inc();
                     let msg = Msg::new(None, line);
                     if self.ff {
-                        let _ = pipelines[0].try_send(msg).unwrap();
+                        pipelines[0].try_send(msg).unwrap();
                     } else {
-                        let _ = pipelines[0].send(msg).unwrap();
+                        pipelines[0].send(msg).unwrap();
                     }
                 }
                 Err(_) => INPUT_ERR.inc(),

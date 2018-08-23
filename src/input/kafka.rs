@@ -119,8 +119,9 @@ impl InputT for Input {
                                 if len > 0 {
                                     for i in 0..len {
                                         idx = (idx + i) % len;
-                                        if let Ok(_) = pipelines[idx]
+                                        if pipelines[idx]
                                             .try_send(Msg::new(key.clone(), payload.clone()))
+                                            .is_ok()
                                         {
                                             sent = true;
                                             break;
