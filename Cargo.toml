@@ -3,6 +3,14 @@ name = "tremor-runtime"
 version = "0.1.17"
 authors = ["Heinz Gies <hgies@wayfair.com>"]
 
+[[bin]]
+name = "tremor-runtime"
+path = "src/main.rs"
+
+[[bin]]
+name = "mimir-tool"
+path = "src/tool/main.rs"
+
 [dependencies]
 futures = "0.1"
 rand = "0.5"
