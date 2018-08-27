@@ -34,12 +34,12 @@ LIMITING_CONFIG=${LIMITING_CONFIG:-""}
 THREADS=${THREADS:-"1"}
 
 export RUST_BACKTRACE=1
-./tremor-runtime --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
-                 --off-ramp "${OFFRAMP}" --off-ramp-config "${OFFRAMP_CONFIG}" \
-                 --drop-off-ramp "${DROP_OFFRAMP}" --drop-off-ramp-config "${DROP_OFFRAMP_CONFIG}" \
-                 --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
-                 --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
-                 --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
-                 --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
-                 --pipeline-threads "${THREADS}"
+tremor-runtime --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
+               --off-ramp "${OFFRAMP}" --off-ramp-config "${OFFRAMP_CONFIG}" \
+               --drop-off-ramp "${DROP_OFFRAMP}" --drop-off-ramp-config "${DROP_OFFRAMP_CONFIG}" \
+               --parser "${PARSER}" --parser-config "${PARSER_CONFIG}" \
+               --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
+               --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
+               --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
+               --pipeline-threads "${THREADS}"
 

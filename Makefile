@@ -49,3 +49,13 @@ clippy:
 
 it:
 	integration_testing/runner
+
+rpm: force
+	docker build . -f rpm/Dockerfile -t tremor-rpm-build
+	-mkdir rpm/out
+	docker run --name tremor-rpm-build-copy tremor-rpm-build /bin/true
+	docker cp tremor-rpm-build-copy:/root/rpmbuild/RPMS/x86_64/tremor-1.0.0-1.x86_64.rpm rpm/out
+	docker rm -f tremor-rpm-build-copy
+
+force:
+	true
