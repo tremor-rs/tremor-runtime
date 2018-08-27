@@ -1,0 +1,17 @@
+[Unit]
+Description=Tremor service
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+User=tremor
+Group=tremor
+
+ExecStart=/usr/bin/tremor-runtime-svc.sh
+
+# Give a reasonable amount of time for the server to start up/shut down
+TimeoutSec=300
+
+[Install]
+WantedBy=multi-user.target
