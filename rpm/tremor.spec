@@ -48,6 +48,14 @@ getent passwd tremor >/dev/null || \
             -c "Tremor service user" tremor
 exit 0
 
+%post
+
+if [ ! -f /etc/tremor/tremor.conf ]
+then
+    cp /etc/tremor/tremor.conf.sample /etc/tremor/tremor.conf
+fi
+
+
 %changelog
 * Mon Aug 27 2018 hgies
 - Initial release
