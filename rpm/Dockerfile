@@ -14,7 +14,6 @@ FROM artifactory.service.bo1.csnzoo.com/wayfair/centos74-base:0.1.2
 
 WORKDIR /root/
 RUN yum install -y rpm-build
-ENV APIKEY AKCp5bBXeUgmuY4puptU8emK2mSfwEiUTR7Uo4c5pXnbdUh4R6iQpxFc7WpbRzvzvJP8vaFi2
 RUN mkdir -p /root/rpmbuild/SOURCES/tremor-1.0.0
 RUN mkdir -p /root/rpmbuild/SPECS/
 COPY --from=builder /home/rust/src/target/x86_64-unknown-linux-musl/release/tremor-runtime /root/rpmbuild/SOURCES/tremor-1.0.0/tremor-runtime
@@ -26,7 +25,6 @@ RUN cd /root/rpmbuild/SOURCES && tar -czf tremor-1.0.0.tar.gz tremor-1.0.0
 COPY rpm/tremor.spec /root/rpmbuild/SPECS/tremor-1.0.0.spec
 
 RUN rpmbuild -v -ba /root/rpmbuild/SPECS/tremor-1.0.0.spec
-RUN curl -v -H "X-JFrog-Art-Api:$APIKEY" -X PUT "http://artifactory.service.bo1.csnzoo.com/artifactory/data-eng/tremor/tremor-1.0.0-1.x86_64.rpm" -T /root/rpmbuild/RPMS/x86_64/tremor-1.0.0-1.x86_64.rpm
 
 # This image runs SimpleHTTPServer when the container starts.
 #
