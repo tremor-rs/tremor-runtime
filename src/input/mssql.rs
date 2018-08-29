@@ -19,9 +19,15 @@ const DATE_FORMAT: &'static str = "%Y-%m-%d";
 fn dflt_false() -> bool {
     false
 }
+
+fn dflt_port() -> u32 {
+    1433
+}
+
 #[derive(Deserialize, Debug, Clone)]
 struct Config {
     host: String,
+    #[serde(default = "dflt_port")]
     port: u32,
     username: String,
     password: String,

@@ -77,7 +77,7 @@ fn main() {
             Arg::with_name("on-ramp")
                 .short("i")
                 .long("on-ramp")
-                .help("on-ramp to read from. Valid options are 'stdin' and 'kafka'")
+                .help("on-ramp to read from. Valid options are 'stdin', 'file', 'mssql' and 'kafka'")
                 .takes_value(true)
                 .required(true),
         )
@@ -92,7 +92,7 @@ fn main() {
             Arg::with_name("off-ramp")
                 .short("o")
                 .long("off-ramp")
-                .help("off-ramp to send to. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
+                .help("off-ramp to send to. Valid options are 'null', 'file', stdout', 'kafka', 'es' and 'debug'")
                 .takes_value(true)
                 .required(true),
         )
@@ -108,7 +108,7 @@ fn main() {
             Arg::with_name("drop-off-ramp")
                 .short("d")
                 .long("drop-off-ramp")
-                .help("off-ramp to send messages that are supposed to be dropped. Valid options are 'stdout', 'kafka', 'es' and 'debug'")
+                .help("off-ramp to send messages that are supposed to be dropped. Valid options are 'null', 'file', 'stdout', 'kafka', 'es' and 'debug'")
                 .default_value("null")
                 .required(true),
         )

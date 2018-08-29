@@ -19,6 +19,11 @@ The `stdin` plugin reads from STDIN each line is treated as one event.
 ### kafka
 The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`. Events are only committed as processed when the pipeline finished.
 
+### mssql
+The mssql plugin executes a query against a mssql database and feeds the rows as JSON into kafka. The query can be executed on a periodic basis. It is confugured using the following config: `{"host": "<sql server host>"[, "port": <sql server port default - 1433>], "username": "<username>", "password": "<password>", "query": "<query to run>"[, "interval_ms": <interval in milliseconds to re-execute the query>]}`
+
+Note: As this is JSON encoded some type information will be lost!
+
 ## Parser
 Parsers handle converting the event from the raw binary to a representation format.
 
