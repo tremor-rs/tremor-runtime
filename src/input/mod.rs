@@ -4,6 +4,7 @@
 
 mod file;
 mod kafka;
+mod mssql;
 mod stdin;
 use pipeline::Msg;
 use std::sync::mpsc;
@@ -32,6 +33,7 @@ pub fn new(name: &str, opts: &str) -> Inputs {
         "kafka" => Inputs::Kafka(kafka::Input::new(opts)),
         "stdin" => Inputs::Stdin(stdin::Input::new(opts)),
         "file" => Inputs::File(file::Input::new(opts)),
+        "mssql" => Inputs::MSSql(mssql::Input::new(opts)),
         _ => panic!("Unknown classifier: {}", name),
     }
 }
@@ -39,6 +41,7 @@ pub fn new(name: &str, opts: &str) -> Inputs {
 pub enum Inputs {
     Kafka(kafka::Input),
     Stdin(stdin::Input),
+    MSSql(mssql::Input),
     File(file::Input),
 }
 
@@ -48,6 +51,7 @@ impl Input for Inputs {
             Inputs::Kafka(i) => i.enter_loop(pipelines),
             Inputs::Stdin(i) => i.enter_loop(pipelines),
             Inputs::File(i) => i.enter_loop(pipelines),
+            Inputs::MSSql(i) => i.enter_loop(pipelines),
         }
     }
 }

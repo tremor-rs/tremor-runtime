@@ -2,7 +2,6 @@
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-
 #[macro_use]
 extern crate clap;
 extern crate futures;
@@ -20,10 +19,14 @@ extern crate prometheus;
 extern crate lazy_static;
 extern crate chrono;
 extern crate elastic;
+extern crate futures_state_stream;
 extern crate hyper;
 extern crate mimir;
 extern crate regex;
 extern crate threadpool;
+extern crate tiberius;
+extern crate tokio;
+extern crate tokio_current_thread;
 
 pub mod classifier;
 pub mod error;

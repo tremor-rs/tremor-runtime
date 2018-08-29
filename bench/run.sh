@@ -5,7 +5,7 @@ seconds=120
 while true; do xzcat demo/data.json.xz; done | sh bench/test-$1.sh&
 PID=$(echo $!)
 echo PID: $PID
-while !curl curl -s http://0.0.0.0:9898/metrics > /dev/null
+while !curl -s http://0.0.0.0:9898/metrics > /dev/null
 do
   sleep 1
 done
