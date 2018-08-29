@@ -1,15 +1,14 @@
 use chrono;
-use futures::Future;
+use futures::future::{loop_fn, Future, Loop};
 use futures_state_stream::StateStream;
 use input::Input as InputT;
 use pipeline::Msg;
 use serde_json;
 use std::sync::mpsc;
-use std::{str, thread, time};
+use std::{boxed, str, thread, time};
 use tiberius::ty::{ColumnData, FromColumnData};
 use tiberius::{self, SqlConnection};
 use tokio_current_thread::block_on_all;
-
 pub struct Input {
     config: Config,
 }
@@ -148,27 +147,29 @@ impl InputT for Input {
             self.config.password,
             self.config.trust_server_certificate
         );
-        let mut idx = 0;
         let len = pipelines.len();
         let query = self.config.query.as_str();
         if let Some(ival) = self.config.interval_ms {
+            let conn = SqlConnection::connect(conn_str.as_str());
+            //let conn = block_on_all(conn).unwrap();
             let ival = time::Duration::from_millis(ival);
-            loop {
-                let now = time::Instant::now();
-                // TODO: This is ugly, need to figure out how the heck to get
-                // the connection outside of the loop
-                // ... but borrowing and tokio ...
-                let conn = SqlConnection::connect(conn_str.as_str());
-                let f = conn.and_then(|conn| {
-                    conn.simple_query(query).for_each(|row| {
-                        idx = send_row(&pipelines, row, idx, len);
-                        Ok(())
-                    })
-                });
-                block_on_all(f).unwrap();
-                thread::sleep(ival - now.elapsed());
-            }
+            let f = conn.and_then(|conn| {
+                loop_fn::<_, SqlConnection<boxed::Box<tiberius::BoxableIo>>, _, _>(conn, |conn| {
+                    let now = time::Instant::now();
+                    conn.simple_query(query)
+                        .for_each(|row| {
+                            send_row(&pipelines, row, 0, len);
+                            Ok(())
+                        })
+                        .and_then(move |conn| {
+                            thread::sleep(ival - now.elapsed());
+                            Ok(Loop::Continue(conn))
+                        })
+                })
+            });
+            block_on_all(f).unwrap();
         } else {
+            let mut idx = 0;
             let conn = SqlConnection::connect(conn_str.as_str());
             let future = conn.and_then(|conn| {
                 conn.simple_query(query).for_each(|row| {
