@@ -105,6 +105,33 @@ fn row_to_json(row: &tiberius::query::QueryRow) -> serde_json::Value {
     serde_json::Value::Object(json)
 }
 
+fn send_row(
+    pipelines: &Vec<mpsc::SyncSender<Msg>>,
+    row: tiberius::query::QueryRow,
+    idx: usize,
+    len: usize,
+) -> usize {
+    let mut idx = (idx + 1) % len;
+    let json = row_to_json(&row);
+    let json = serde_json::to_string(&json).unwrap();
+    let mut sent = false;
+    for i in 0..len {
+        idx = (idx + i) % len;
+        if pipelines[idx]
+            .try_send(Msg::new(None, json.clone()))
+            .is_ok()
+        {
+            sent = true;
+            break;
+        }
+    }
+    if !sent {
+        if let Err(e) = pipelines[idx].send(Msg::new(None, json)) {
+            error!("Error during handling message: {:?}", e)
+        };
+    }
+    idx
+}
 impl InputT for Input {
     fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let conn_str = format!(
@@ -115,17 +142,20 @@ impl InputT for Input {
             self.config.password,
             self.config.trust_server_certificate
         );
+        let mut idx = 0;
+        let len = pipelines.len();
         let query = self.config.query.as_str();
         if let Some(ival) = self.config.interval_ms {
             let ival = time::Duration::from_millis(ival);
             loop {
                 let now = time::Instant::now();
+                // TODO: This is ugly, need to figure out how the heck to get
+                // the connection outside of the loop
+                // ... but borrowing and tokio ...
                 let conn = SqlConnection::connect(conn_str.as_str());
                 let f = conn.and_then(|conn| {
                     conn.simple_query(query).for_each(|row| {
-                        let json = row_to_json(&row);
-                        let msg = Msg::new(None, serde_json::to_string(&json).unwrap());
-                        pipelines[0].send(msg).unwrap();
+                        idx = send_row(&pipelines, row, idx, len);
                         Ok(())
                     })
                 });
@@ -136,10 +166,7 @@ impl InputT for Input {
             let conn = SqlConnection::connect(conn_str.as_str());
             let future = conn.and_then(|conn| {
                 conn.simple_query(query).for_each(|row| {
-                    let json = row_to_json(&row);
-                    let msg = Msg::new(None, serde_json::to_string(&json).unwrap());
-
-                    pipelines[0].send(msg).unwrap();
+                    idx = send_row(&pipelines, row, idx, len);
                     Ok(())
                 })
             });
