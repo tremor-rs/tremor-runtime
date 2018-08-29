@@ -125,7 +125,7 @@ impl InputT for Input {
                     conn.simple_query(query).for_each(|row| {
                         let json = row_to_json(&row);
                         let msg = Msg::new(None, serde_json::to_string(&json).unwrap());
-                        pipelines[0].send(msg);
+                        pipelines[0].send(msg).unwrap();
                         Ok(())
                     })
                 });
@@ -139,7 +139,7 @@ impl InputT for Input {
                     let json = row_to_json(&row);
                     let msg = Msg::new(None, serde_json::to_string(&json).unwrap());
 
-                    pipelines[0].send(msg);
+                    pipelines[0].send(msg).unwrap();
                     Ok(())
                 })
             });
