@@ -49,13 +49,12 @@ services:
     ports:
       - 9898:9898
     environment:
-      - INPUT=kafka
-      - 'INPUT_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
-      - PARSER=json
+      - ONRAMP=kafka
+      - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - CLASSIFIER=mimir
       - 'CLASSIFIER_CONFIG=[{"short_message=info OR short_message=info":"info"},{"short_message=ERROR":"error"}]'
       - GROUPING=bucket
       - 'GROUPING_CONFIG=[{"name":"default", "rate":90}, {"name": "info", "rate":10, "keys": ["application"]}, {"name": "error", "rate":100}]'
-      - OUTPUT=es
+      - OFFRAMP=es
       - 'OUTPUT_CONFIG={"endpoints":["http://elastic:9200"], "index":"demo","batch_size":100,"batch_timeout":500}'
       - SLEEP=20

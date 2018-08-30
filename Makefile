@@ -29,6 +29,11 @@ demo-run:
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
 
+demo-mssql-run:
+	-docker-compose -f demo/mssql.yaml rm -fsv
+	-docker-compose -f demo/mssql.yaml up
+	-docker-compose -f demo/mssql.yaml rm -fsv
+
 demo-all-run:
 	-docker-compose -f demo/all.yaml rm -fsv
 	-docker-compose -f demo/all.yaml up

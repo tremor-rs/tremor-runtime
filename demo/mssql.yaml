@@ -1,0 +1,20 @@
+version: '3.3'
+services:
+  mssql:
+    image: 'artifactory.service.bo1.csnzoo.com/external-staging/microsoft/mssql-server-linux:2017-latest'
+    ports:
+      - '1433:1433'
+    environment:
+      - ACCEPT_EULA=Y
+      - 'SA_PASSWORD=8Characters!'
+  tremor:
+    image: tremor-runtime
+    depends_on:
+      - mssql
+    ports:
+      - 9898:9898
+    environment:
+      - ONRAMP=mssql
+      - 'ONRAMP_CONFIG={"host": "mssql", "username": "sa", "password": "8Characters!", "query": "select * from sys.tables", "interval_ms": 10000}'
+      - OFFRAMP=stdout
+      - SLEEP=20
