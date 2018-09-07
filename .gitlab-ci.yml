@@ -10,6 +10,8 @@ test:
     - apt install -y bison flex cmake automake
     - cargo test
     - make it
+    - cd window
+    - cargo test
    # - make clippy-install
    # - make clippy
 

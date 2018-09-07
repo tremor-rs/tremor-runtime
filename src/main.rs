@@ -29,6 +29,7 @@ extern crate tokio;
 extern crate tokio_current_thread;
 #[macro_use]
 extern crate maplit;
+extern crate window;
 
 pub mod classifier;
 pub mod error;
@@ -40,7 +41,6 @@ pub mod output;
 pub mod parser;
 pub mod pipeline;
 mod utils;
-pub mod window;
 
 use clap::{App, Arg};
 use input::Input;

@@ -1815,6 +1815,7 @@ dependencies = [
  "tiberius 0.3.0 (git+https://github.com/Licenser/tiberius?branch=fixes)",
  "tokio 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-current-thread 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "window 0.1.0",
 ]
 
 [[package]]
@@ -2015,6 +2016,10 @@ dependencies = [
  "winapi 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-util 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "window"
+version = "0.1.0"
 
 [[package]]
 name = "ws2_32-sys"

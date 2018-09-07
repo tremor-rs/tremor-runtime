@@ -1,5 +1,8 @@
-use std;
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
 use std::time::Instant;
+
 /// A simple sliding window implementation in rust. It uses a vector as ring
 /// buffer and a sum counter to prevent the requirement of iterating over
 /// the entire buffer for each time the total count is required.
@@ -100,6 +103,7 @@ impl TimeWindow {
     /// keeps track of it at a granularity of `100` ms we would use:
     ///
     /// ```
+    /// use window::TimeWindow;
     /// TimeWindow::new(10, 100, 1000);
     /// ````
 
@@ -146,9 +150,9 @@ impl TimeWindow {
 
 #[cfg(test)]
 mod tests {
+    use super::{SlidingWindow, TimeWindow};
     use std::thread::sleep;
     use std::time::Duration;
-    use window::{SlidingWindow, TimeWindow};
 
     #[test]
     fn too_much() {
@@ -212,4 +216,78 @@ mod tests {
         assert!(r.is_ok());
     }
 
+}
+
+#[cfg(test)]
+mod properties {
+    use super::{SlidingWindow, TimeWindow};
+    use proptest::prelude::*;
+
+    #[derive(Clone, Debug)]
+    enum WindowAction {
+        //        Add(u8),
+        Inc,
+        Tick,
+    }
+
+    #[derive(Clone, Debug)]
+    enum Window {
+        New,
+        Step {
+            next: Vec<Window>,
+            step: WindowAction,
+        },
+    }
+
+    impl Window {
+        pub fn execute(&mut self, size: usize, max: u32) -> SlidingWindow<u32> {
+            match self {
+                Window::New => SlidingWindow::new(size, max),
+                Window::Step { next, step } => {
+                    let mut next = next.pop().unwrap().execute(size, max);
+                    match step {
+                        WindowAction::Tick => {
+                            next.tick();
+                            next
+                        }
+                        WindowAction::Inc => {
+                            let _ = next.inc();
+                            next
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn a_window() -> BoxedStrategy<Window> {
+        let leaf = prop_oneof![Just(Window::New)];
+        leaf.prop_recursive(8, 256, 1, |inner| {
+            prop_oneof![
+                prop::collection::vec(inner.clone(), 1).prop_map(|n| Window::Step {
+                    next: n,
+                    step: WindowAction::Tick
+                }),
+                prop::collection::vec(inner.clone(), 1).prop_map(|n| Window::Step {
+                    next: n,
+                    step: WindowAction::Inc
+                })
+            ]
+        }).boxed()
+    }
+    proptest! {
+        #[test]
+        fn always(size in 10..200,
+                  max in 10..1000,
+                  ref s in a_window()) {
+            let mut s = s.clone();
+            let max = 1000;
+            let mut w = s.execute(size as usize, max as u32);
+            if w.count() == max {
+                prop_assert!(w.inc().is_err())
+            } else {
+                prop_assert!(w.inc().is_ok())
+            }
+        }
+    }
 }
