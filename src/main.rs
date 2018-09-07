@@ -27,6 +27,8 @@ extern crate threadpool;
 extern crate tiberius;
 extern crate tokio;
 extern crate tokio_current_thread;
+#[macro_use]
+extern crate maplit;
 
 pub mod classifier;
 pub mod error;

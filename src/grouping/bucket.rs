@@ -172,11 +172,12 @@ mod tests {
     #[test]
     fn grouping_test_pass() {
         let s = Event::new("Example");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new("constant", "c");
         let config = json!([{"class": "c", "rate": 100}]).to_string();
         let mut g = grouping::new("bucket", &config);
-        let r = p.apply(s)
+        let r = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .expect("grouping failed");
@@ -186,11 +187,12 @@ mod tests {
     #[test]
     fn grouping_test_fail() {
         let s = Event::new("Example");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new("constant", "c");
         let config = json!([{"class": "a", "rate": 100}]).to_string();
         let mut g = grouping::new("bucket", &config);
-        let r = p.apply(s)
+        let r = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .expect("grouping failed");
@@ -200,24 +202,27 @@ mod tests {
     #[test]
     fn grouping_time_refresh() {
         let s = Event::new("Example");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new("constant", "c");
         let config = json!([{"class": "c", "rate": 1}]).to_string();
         let mut g = grouping::new("bucket", &config);
-        let r1 = p.apply(s)
+        let r1 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .expect("grouping failed");
 
         let s = Event::new("Example");
-        let r2 = p.apply(s)
+        let r2 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .expect("grouping failed");
         // we sleep for 1.1s as this should refresh our bucket
         sleep(Duration::new(1, 200_000_000));
         let s = Event::new("Example");
-        let r3 = p.apply(s)
+        let r3 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .expect("grouping failed");
@@ -230,12 +235,13 @@ mod tests {
     fn grouping_bucket_test() {
         let s1 = Event::new("{\"k\": \"12\"}");
         let s2 = Event::new("{\"k\": \"11\"}");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let config =
             json!([{"class": "c", "rule": "k:\"1\"", "rate": 1, "dimensions": ["k"]}]).to_string();
         let mut c = classifier::new("mimir", &config);
         let mut g = grouping::new("bucket", &config);
-        let r = p.apply(s1.clone())
+        let r = p
+            .apply(s1.clone())
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| {
                 println!("{:?}", classified);
@@ -244,7 +250,8 @@ mod tests {
             .expect("grouping failed");
         assert_eq!(r.drop, false);
 
-        let r = p.apply(s1.clone())
+        let r = p
+            .apply(s1.clone())
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| {
                 println!("{:?}", classified);
@@ -253,7 +260,8 @@ mod tests {
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
-        let r = p.apply(s2.clone())
+        let r = p
+            .apply(s2.clone())
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| {
                 println!("{:?}", classified);

@@ -155,7 +155,7 @@ do
     offramp_config="${gen_file}"
     drop_offramp="null"
     drop_offramp_config=""
-    parser="raw"
+    parser="json"
     parser_config=""
     classifier="mimir"
     classifier_config=${rules:-""}

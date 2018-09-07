@@ -1,5 +1,6 @@
 //! This module contains the definition of different parsers
 
+mod influx;
 mod json;
 mod raw;
 
@@ -10,8 +11,9 @@ pub fn new(name: &str, opts: &str) -> Parser {
     match name {
         "raw" => Parser::Raw(raw::Parser::new(opts)),
         "json" => Parser::JSON(json::Parser::new(opts)),
+        "influx" => Parser::Influx(influx::Parser::new(opts)),
         _ => panic!(
-            "Unknown parser: '{}' valid options are 'raw', and 'json'",
+            "Unknown parser: '{}' valid options are 'raw', 'influx' and 'json'",
             name
         ),
     }
@@ -21,6 +23,7 @@ pub fn new(name: &str, opts: &str) -> Parser {
 pub enum Parser {
     Raw(raw::Parser),
     JSON(json::Parser),
+    Influx(influx::Parser),
 }
 
 impl Step for Parser {
@@ -28,6 +31,7 @@ impl Step for Parser {
         match self {
             Parser::Raw(p) => p.apply(event),
             Parser::JSON(p) => p.apply(event),
+            Parser::Influx(p) => p.apply(event),
         }
     }
 }
@@ -50,13 +54,7 @@ mod tests {
         let mut p = parser::new("json", "");
         let parsed = p.apply(s).expect("parsing failed!");
         assert_eq!("[1]", parsed.raw);
+        assert_eq!("[1]", parsed.json.unwrap());
     }
 
-    #[test]
-    fn json_parser_error() {
-        let s = Event::new("[1");
-        let mut p = parser::new("json", "");
-        let parsed = p.apply(s);
-        assert!(parsed.is_err());
-    }
 }

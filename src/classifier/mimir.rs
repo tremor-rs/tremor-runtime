@@ -29,7 +29,12 @@ impl Classifier {
 impl Step for Classifier {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         // TODO: this clone is ugly
-        let doc = self.classifier.document_from_json(event.raw.as_str())?;
+
+        let doc = if let Some(ref json) = event.json {
+            self.classifier.document_from_json(json.as_str())?
+        } else {
+            return Err(TSError::new("Event doesn't have a JSON element"));
+        };
         let mut event = Event::from(event);
         match self.classifier.classify(&doc) {
             None => {
@@ -129,7 +134,7 @@ mod tests1 {
     #[test]
     fn test_classification_default() {
         let s = Event::new("{}");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new("mimir", "[]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
         match r.clone() {
@@ -143,7 +148,7 @@ mod tests1 {
     #[test]
     fn test_match() {
         let s = Event::new("{\"key\": \"value\"}");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
             "[{\"rule\":\"key=value\", \"class\": \"test-class\"}]",
@@ -155,7 +160,7 @@ mod tests1 {
     #[test]
     fn test_no_match() {
         let s = Event::new("{\"key\": \"not the value\"}");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
             "[{\"rule\":\"key=value\", \"class\": \"test-class\"}]",
@@ -168,7 +173,7 @@ mod tests1 {
     #[test]
     fn test_partial_match() {
         let s = Event::new("{\"key\": \"contains the value\"}");
-        let mut p = parser::new("raw", "");
+        let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
             "[{\"rule\": \"key:value\", \"class\": \"test-class\"}]",
