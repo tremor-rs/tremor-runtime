@@ -1,5 +1,7 @@
 use input::{Input as InputT, INPUT_ERR, INPUT_OK};
 use pipeline::Msg;
+#[cfg(feature = "try_spmc")]
+use spmc;
 use std::io::{self, BufRead, BufReader};
 use std::sync::mpsc;
 
@@ -18,7 +20,7 @@ impl Input {
 }
 
 impl InputT for Input {
-    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
+    fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let stdin = io::stdin();
         let stdin = BufReader::new(stdin);
         for line in stdin.lines() {
@@ -31,6 +33,23 @@ impl InputT for Input {
                     } else {
                         pipelines[0].send(msg).unwrap();
                     }
+                }
+                Err(_) => INPUT_ERR.inc(),
+            }
+        }
+    }
+
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, pipelines: Vec<spmc::Sender<Msg>>) {
+        let stdin = io::stdin();
+        let stdin = BufReader::new(stdin);
+        for line in stdin.lines() {
+            debug!("Line: {:?}", line);
+            match line {
+                Ok(line) => {
+                    INPUT_OK.inc();
+                    let msg = Msg::new(None, line);
+                    let _ = pipelines[0].send(msg);
                 }
                 Err(_) => INPUT_ERR.inc(),
             }

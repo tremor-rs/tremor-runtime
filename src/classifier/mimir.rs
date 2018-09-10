@@ -76,6 +76,7 @@ mod tests1 {
     use classifier;
     use parser;
     use pipeline::{Event, Step};
+    use utils;
 
     #[test]
     #[should_panic]
@@ -133,7 +134,7 @@ mod tests1 {
 
     #[test]
     fn test_classification_default() {
-        let s = Event::new("{}");
+        let s = Event::new("{}", false, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new("mimir", "[]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
@@ -147,7 +148,7 @@ mod tests1 {
 
     #[test]
     fn test_match() {
-        let s = Event::new("{\"key\": \"value\"}");
+        let s = Event::new("{\"key\": \"value\"}", false, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -159,7 +160,7 @@ mod tests1 {
     }
     #[test]
     fn test_no_match() {
-        let s = Event::new("{\"key\": \"not the value\"}");
+        let s = Event::new("{\"key\": \"not the value\"}", false, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -172,7 +173,11 @@ mod tests1 {
 
     #[test]
     fn test_partial_match() {
-        let s = Event::new("{\"key\": \"contains the value\"}");
+        let s = Event::new(
+            "{\"key\": \"contains the value\"}",
+            false,
+            utils::nanotime(),
+        );
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",

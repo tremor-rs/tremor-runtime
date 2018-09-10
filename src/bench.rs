@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+
 #[macro_use]
 extern crate clap;
 extern crate futures;
@@ -25,16 +26,16 @@ extern crate hyper;
 extern crate libc;
 extern crate mimir;
 extern crate regex;
+#[cfg(feature = "try_spmc")]
 extern crate spmc;
 extern crate threadpool;
 extern crate tiberius;
-extern crate tokio;
 extern crate tokio_current_thread;
+extern crate window;
+extern crate xz2;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate maplit;
-extern crate window;
-extern crate xz2;
 
 mod args;
 pub mod classifier;
@@ -49,28 +50,29 @@ pub mod pipeline;
 mod utils;
 mod version;
 
-use input::Input;
 use pipeline::{Msg, Pipeline, Pipelineable};
 
+use clap::Arg;
 use hyper::rt::Future;
 use hyper::service::service_fn;
 use hyper::Server;
 
-use std::io::Write;
+#[cfg(not(feature = "try_spmc"))]
 use std::sync::mpsc;
 use std::thread;
 
+use input::Input;
 use utils::nanotime;
 
-// consumer example: https://github.com/fede1024/rust-rdkafka/blob/db7cf0883b6086300b7f61998e9fbcfe67cc8e73/examples/at_least_once.rs
-
-/// println_stderr and run_command_or_fail are copied from rdkafka-sys
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
+fn bench_args<'a>(app: clap::App<'a, 'a>) -> clap::App<'a, 'a> {
+    app.arg(
+        Arg::with_name("bench-with-metrics-endpoint")
+            .long("bench-with-metrics-endpoint")
+            .help("Expose a prometheus API metrics endpoint.")
+            .takes_value(true)
+            .default_value("false"),
+    )
+}
 
 fn setup_worker<'a>(matches: &clap::ArgMatches<'a>) -> Box<Pipelineable + Send + 'static> {
     let output = matches.value_of("off-ramp").unwrap();
@@ -113,51 +115,79 @@ fn main() {
 
     version::print();
 
-    let matches = args::parse().get_matches();
+    let matches = bench_args(args::parse()).get_matches();
 
-    let mut txs: Vec<mpsc::SyncSender<Msg>> = Vec::new();
-    let threads = value_t!(matches.value_of("pipeline-threads"), u32).unwrap();
+    let with_metrics_endpoint: bool = matches
+        .value_of("bench-with-metrics-endpoint")
+        .unwrap()
+        .parse()
+        .unwrap();
+    if with_metrics_endpoint {
+        thread::spawn(move || {
+            let addr = ([0, 0, 0, 0], 9898).into();
+            println!("Spawning metrics endpoint on: http://{}", addr);
+            let server = Server::bind(&addr)
+                .serve(|| service_fn(metrics::dispatch))
+                .map_err(|e| error!("server error: {}", e));
+            hyper::rt::run(server);
+        });
+    } else {
+        println!("Not spawning metrics endpoint");
+    }
+
+    let threads = value_t!(matches.value_of("pipeline-threads"), u32).unwrap() as usize;
     let input_name = matches.value_of("on-ramp").unwrap();
     let input_config = matches.value_of("on-ramp-config").unwrap();
     let mut input = input::new(input_name, input_config);
-    let mut handles: Vec<thread::JoinHandle<()>> = Vec::new();
-
-    for _tid in 0..threads {
-        let (tx, rx) = mpsc::sync_channel(10);
-        txs.push(tx);
-        let matches = matches.clone();
-        let h = thread::spawn(move || {
-            let mut pipeline = setup_worker(&matches.clone());
-            for msg in rx.iter() {
-                let _ = pipeline.run(&msg);
-            }
-        });
-        handles.push(h);
-    }
-
-    // We spawn the HTTP endpoint in an own thread so it doens't block the main loop.
-    thread::spawn(|| {
-        let addr = ([0, 0, 0, 0], 9898).into();
-        println_stderr!("Listening at: http://{}", addr);
-        let server = Server::bind(&addr)
-            .serve(|| service_fn(metrics::dispatch))
-            .map_err(|e| error!("server error: {}", e));
-        hyper::rt::run(server);
-    });
+    let mut workers = vec![];
 
     #[cfg(feature = "try_spmc")]
-    input.enter_loop2(txs);
+    {
+        let mut txs: Vec<spmc::Sender<Msg>> = Vec::new();
+
+        let (tx, rx) = spmc::channel();
+        txs.push(tx);
+
+        {
+            for _tid in 0..threads {
+                let rx = rx.clone();
+                let mut pipeline = setup_worker(&matches.clone());
+                let _child = thread::spawn(move || loop {
+                    let msg = rx.recv().unwrap();
+                    let _ = pipeline.run(&msg);
+                });
+                workers.push(_child);
+            }
+            input.enter_loop2(txs);
+        }
+    }
 
     #[cfg(not(feature = "try_spmc"))]
-    input.enter_loop(txs);
+    {
+        let mut txs: Vec<mpsc::SyncSender<Msg>> = Vec::new();
+        {
+            for _tid in 0..threads {
+                let (tx, rx) = mpsc::sync_channel(10);
+                txs.push(tx);
+                let matches = matches.clone();
+                let _child = thread::spawn(move || {
+                    let mut pipeline = setup_worker(&matches.clone());
 
-    let mut is_bad = false;
-    while let Some(h) = handles.pop() {
-        if h.join().is_err() {
-            is_bad = true;
-        };
+                    for msg in rx.iter() {
+                        let _ = pipeline.run(&msg);
+                    }
+
+                    pipeline.shutdown();
+
+                    pipeline
+                });
+                workers.push(_child);
+            }
+        }
+        input.enter_loop(txs);
     }
-    if is_bad {
-        ::std::process::exit(1);
+
+    for worker in workers {
+        worker.join().expect("Failed to join worker thread");
     }
 }

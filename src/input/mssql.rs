@@ -4,6 +4,8 @@ use futures_state_stream::StateStream;
 use input::Input as InputT;
 use pipeline::Msg;
 use serde_json;
+#[cfg(feature = "try_spmc")]
+use spmc;
 use std::sync::mpsc;
 use std::{boxed, str, thread, time};
 use tiberius::ty::{ColumnData, FromColumnData};
@@ -138,7 +140,7 @@ fn send_row(
     idx
 }
 impl InputT for Input {
-    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
+    fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let conn_str = format!(
             "server=tcp:{},{};username={};password={};trustservercertificate={}",
             self.config.host,
@@ -179,5 +181,10 @@ impl InputT for Input {
             });
             block_on_all(future).unwrap();
         }
+    }
+
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, pipelines: Vec<spmc::Sender<Msg>>) {
+        panic!("Not implemented");
     }
 }

@@ -108,15 +108,17 @@ mod tests {
     use pipeline::{Event, Step};
     use std::thread::sleep;
     use std::time::Duration;
+    use utils;
 
     #[test]
     fn no_capacity() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:0");
-        let msg = p.apply(s)
+        let msg = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
@@ -126,12 +128,13 @@ mod tests {
 
     #[test]
     fn grouping_test_fail() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:1");
-        let msg = p.apply(s)
+        let msg = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
@@ -141,26 +144,29 @@ mod tests {
 
     #[test]
     fn grouping_time_refresh() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "c");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("windowed", "1000:100:1");
-        let r1 = p.apply(s)
+        let r1 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("grouping failed");
-        let s = Event::new("Example");
-        let r2 = p.apply(s)
+        let s = Event::new("Example", false, utils::nanotime());
+        let r2 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
             .expect("grouping failed");
         // we sleep for 1.1s as this should refresh our bucket
         sleep(Duration::new(1, 200_000_000));
-        let s = Event::new("Example");
-        let r3 = p.apply(s)
+        let s = Event::new("Example", false, utils::nanotime());
+        let r3 = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))

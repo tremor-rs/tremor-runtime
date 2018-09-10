@@ -1,5 +1,6 @@
 //! This module handles outputs
 
+mod blackhole;
 mod debug;
 mod elastic;
 mod file;
@@ -36,6 +37,7 @@ lazy_static! {
 // output connector.
 pub fn new(name: &str, opts: &str) -> Output {
     match name {
+        "blackhole" => Output::Blackhole(blackhole::Output::new(opts)),
         "kafka" => Output::Kafka(kafka::Output::new(opts)),
         "stdout" => Output::Stdout(stdout::Output::new(opts)),
         "debug" => Output::Debug(debug::Output::new(opts)),
@@ -60,6 +62,7 @@ pub fn step(event: &Event) -> &'static str {
 /// Enum of all output connectors we have implemented.
 /// New connectors need to be added here.
 pub enum Output {
+    Blackhole(blackhole::Output),
     Kafka(kafka::Output),
     Elastic(Box<elastic::Output>),
     Stdout(stdout::Output),
@@ -73,12 +76,25 @@ pub enum Output {
 impl Step for Output {
     fn apply(&mut self, msg: Event) -> Result<Event, TSError> {
         match self {
+            Output::Blackhole(o) => o.apply(msg),
             Output::Kafka(o) => o.apply(msg),
             Output::Elastic(o) => o.apply(msg),
             Output::Stdout(o) => o.apply(msg),
             Output::Debug(o) => o.apply(msg),
             Output::Null(o) => o.apply(msg),
             Output::File(o) => o.apply(msg),
+        }
+    }
+
+    fn shutdown(&mut self) {
+        match self {
+            Output::Blackhole(o) => o.shutdown(),
+            Output::Kafka(o) => o.shutdown(),
+            Output::Elastic(o) => o.shutdown(),
+            Output::Stdout(o) => o.shutdown(),
+            Output::Debug(o) => o.shutdown(),
+            Output::Null(o) => o.shutdown(),
+            Output::File(o) => o.shutdown(),
         }
     }
 }

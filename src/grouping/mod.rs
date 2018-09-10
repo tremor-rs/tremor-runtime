@@ -64,22 +64,26 @@ mod tests {
     use grouping;
     use parser;
     use pipeline::{Event, Step};
+    use utils;
+
     #[test]
     fn boolean_grouper() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");
         let mut g_d = grouping::new("drop", "");
         let mut g_k = grouping::new("pass", "");
 
-        let r = p.apply(s)
+        let r = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g_d.apply(classified))
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
-        let s = Event::new("Example");
-        let r = p.apply(s)
+        let s = Event::new("Example", false, utils::nanotime());
+        let r = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g_k.apply(classified))
             .expect("grouping failed");

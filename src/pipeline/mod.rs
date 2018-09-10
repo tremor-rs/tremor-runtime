@@ -9,6 +9,7 @@ use output::{self, Output, OUTPUT_SKIPPED};
 use parser::Parser;
 use prometheus::{Counter, HistogramVec};
 use std::f64;
+use std::marker::Send;
 
 pub use self::event::Event;
 pub use self::event::OutputStep;
@@ -35,6 +36,13 @@ lazy_static! {
 
 }
 
+pub trait Pipelineable {
+    fn run(&mut self, msg: &Msg) -> Result<(), TSError>;
+    fn shutdown(&mut self) {
+        println!("Hitting default pipelieable shutdown impl");
+    }
+}
+
 /// Pipeline struct, collecting all the steps of our internal pipeline
 pub struct Pipeline {
     parser: Parser,
@@ -43,6 +51,7 @@ pub struct Pipeline {
     limiting: Limiter,
     output: Output,
     drop_output: Output,
+    app_epoch: u64,
 }
 
 impl Pipeline {
@@ -54,18 +63,23 @@ impl Pipeline {
         limiting: Limiter,
         output: Output,
         drop_output: Output,
-    ) -> Self {
-        Pipeline {
+        app_epoch: u64,
+    ) -> Box<Pipelineable + Send> {
+        Box::new(Pipeline {
             parser,
             classifier,
             grouper,
             limiting,
             output,
             drop_output,
-        }
+            app_epoch,
+        })
     }
+}
+
+impl Pipelineable for Pipeline {
     /// Runs each step of the pipeline and returns either a OK or a error result
-    pub fn run(&mut self, msg: &Msg) -> Result<(), TSError> {
+    fn run(&mut self, msg: &Msg) -> Result<(), TSError> {
         let parser = &mut self.parser;
         let classifier = &mut self.classifier;
         let grouper = &mut self.grouper;
@@ -74,7 +88,11 @@ impl Pipeline {
         let drop_output = &mut self.drop_output;
         let timer = PIPELINE_HISTOGRAM.with_label_values(&[]).start_timer();
         let event = parser
-            .apply(Event::new(msg.payload.as_str()))
+            .apply(Event::new(
+                msg.payload.as_str(),
+                msg.ctx.unwrap().warmup,
+                self.app_epoch,
+            ))
             .and_then(|parsed| classifier.apply(parsed))
             .and_then(|classified| grouper.apply(classified))
             .and_then(|grouped| limiting.apply(grouped))
@@ -117,17 +135,62 @@ impl Pipeline {
         timer.observe_duration();
         r
     }
+
+    fn shutdown(&mut self) {
+        println!("calling shutdown in pipeline");
+        self.parser.shutdown();
+        self.classifier.shutdown();
+        self.grouper.shutdown();
+        self.limiting.shutdown();
+        self.output.shutdown();
+        self.drop_output.shutdown();
+    }
+}
+
+unsafe impl Send for Pipeline {}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Context {
+    pub warmup: bool,
+}
+
+impl Context {
+    pub fn should_warmup(&self) -> bool {
+        return self.warmup;
+    }
 }
 
 /// Generalized raw message struct
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Msg {
     payload: String,
     key: Option<String>,
+    pub ctx: Option<Context>,
 }
 
 impl Msg {
     pub fn new(key: Option<String>, payload: String) -> Self {
-        Msg { key, payload }
+        Msg {
+            key,
+            payload,
+            ctx: None,
+        }
+    }
+    pub fn new_with_context(key: Option<String>, payload: String, ctx: Option<Context>) -> Self {
+        Msg { key, payload, ctx }
     }
 }
+
+pub struct FakePipeline {}
+
+impl Pipelineable for FakePipeline {
+    fn run(&mut self, _msg: &Msg) -> Result<(), TSError> {
+        Ok(())
+    }
+
+    fn shutdown(&mut self) {
+        // Nothing to do
+    }
+}
+
+unsafe impl Send for FakePipeline {}

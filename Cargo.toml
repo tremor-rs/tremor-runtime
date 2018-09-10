@@ -1,15 +1,8 @@
 [package]
 name = "tremor-runtime"
-version = "0.1.19"
-authors = ["Heinz Gies <hgies@wayfair.com>"]
-
-[[bin]]
-name = "tremor-runtime"
-path = "src/main.rs"
-
-[[bin]]
-name = "mimir-tool"
-path = "src/tool/main.rs"
+version = "0.1.20"
+description = "Tremor Runtime"
+authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>"]
 
 [dependencies]
 futures = "0.1"
@@ -44,3 +37,23 @@ window = { path = "window" }
 
 mimir = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "master" }
 # mimir = { path = "../mimir-rs" }
+hdrhistogram = "6.0.6"
+xz2 = "0.1.5"
+libc = "0.2.43"
+spmc = "0.2.2"
+
+[[bin]]
+name = "tremor-runtime"
+path = "src/main.rs"
+
+[[bin]]
+name = "tremor-runtime-bench"
+path = "src/bench.rs"
+
+[[bin]]
+name = "mimir-tool"
+path = "src/tool/main.rs"
+
+[features]
+default = []
+try_spmc = []

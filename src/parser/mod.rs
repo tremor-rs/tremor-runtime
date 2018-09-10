@@ -40,9 +40,11 @@ impl Step for Parser {
 mod tests {
     use parser;
     use pipeline::{Event, Step};
+    use utils;
+
     #[test]
     fn raw_parser() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
         let mut p = parser::new("raw", "");
         let event = p.apply(s).expect("parsing failed!");
         assert_eq!("Example", event.raw);
@@ -50,7 +52,7 @@ mod tests {
 
     #[test]
     fn json_parser() {
-        let s = Event::new("[1]");
+        let s = Event::new("[1]", false, utils::nanotime());
         let mut p = parser::new("json", "");
         let parsed = p.apply(s).expect("parsing failed!");
         assert_eq!("[1]", parsed.raw);

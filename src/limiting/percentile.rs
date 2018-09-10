@@ -104,16 +104,19 @@ mod tests {
     use limiting;
     use parser;
     use pipeline::{Event, Step};
+    use utils;
+
     #[test]
     fn keep_all() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
 
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("percentile", "1:0:1:0.1");
 
-        let msg = p.apply(s)
+        let msg = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))
@@ -123,14 +126,15 @@ mod tests {
 
     #[test]
     fn keep_non() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, utils::nanotime());
 
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");
         let mut g = grouping::new("pass", "");
         let mut b = limiting::new("percentile", "0:0:1:0.1");
 
-        let msg = p.apply(s)
+        let msg = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .and_then(|classified| g.apply(classified))
             .and_then(|msg| b.apply(msg))

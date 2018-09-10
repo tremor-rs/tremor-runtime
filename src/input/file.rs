@@ -1,5 +1,7 @@
 use input::{Input as InputT, INPUT_ERR, INPUT_OK};
 use pipeline::Msg;
+#[cfg(feature = "try_spmc")]
+use spmc;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::sync::mpsc;
@@ -17,7 +19,8 @@ impl Input {
 }
 
 impl InputT for Input {
-    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
+    #[cfg(not(feature = "try_spmc"))]
+    fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let reader = BufReader::new(File::open(self.file.clone()).unwrap());
 
         for (_num, line) in reader.lines().enumerate() {
@@ -30,5 +33,10 @@ impl InputT for Input {
                 Err(_) => INPUT_ERR.inc(),
             }
         }
+    }
+
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, pipelines: Vec<spmc::Sender<Msg>>) {
+        panic!("Not implemented");
     }
 }

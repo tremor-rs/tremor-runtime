@@ -1,4 +1,5 @@
 use chrono::prelude::*;
+
 /// Elastic search output with incremental backoff.
 ///
 /// The algoritm is as follows:
@@ -57,9 +58,9 @@ use std::collections::VecDeque;
 use std::convert::From;
 use std::f64;
 use std::sync::mpsc::{channel, Receiver};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 use threadpool::ThreadPool;
-use utils::duration_to_millis;
+use utils::{duration_to_millis, nanos_to_millis, nanotime};
 
 lazy_static! {
     // Histogram of the duration it takes between getting a message and
@@ -327,20 +328,17 @@ fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> Result<f64, T
 }
 
 fn update_send_time(event: Event) -> String {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
+    let start_time_ms = nanos_to_millis(nanotime());
     let tremor_map: serde_json::Map<String, Value> = [
         (
             String::from("egress_time"),
-            Value::Number(serde_json::Number::from(duration_to_millis(
-                since_the_epoch,
-            ))),
+            Value::Number(serde_json::Number::from(start_time_ms)),
         ),
         (
             String::from("ingest_time"),
-            Value::Number(serde_json::Number::from(event.ingest_time)),
+            Value::Number(serde_json::Number::from(nanos_to_millis(
+                event.ingest_time_ns,
+            ))),
         ),
         (
             String::from("classification"),
@@ -482,7 +480,7 @@ fn backoff_test() {
 
 #[test]
 fn index_test() {
-    let s = Event::new("{\"key\":\"value\"}");
+    let s = Event::new("{\"key\":\"value\"}", false, nanotime());
     let mut p = ::parser::new("json", "");
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
@@ -493,7 +491,7 @@ fn index_test() {
 
 #[test]
 fn index_prefix_test() {
-    let mut e = Event::new("{\"key\":\"value\"}");
+    let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
     e.index = Some(String::from("value"));
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
@@ -504,7 +502,7 @@ fn index_prefix_test() {
 #[test]
 fn index_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let e = Event::new("{\"key\":\"value\"}");
+    let e = Event::new("{\"key\":\"value\"}", false, nanotime());
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let idx = o.index(&e);
@@ -518,7 +516,7 @@ fn index_suffix_test() {
 #[test]
 fn index_prefix_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let mut e = Event::new("{\"key\":\"value\"}");
+    let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
     e.index = Some(String::from("value"));
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 

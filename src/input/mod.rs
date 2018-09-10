@@ -2,11 +2,14 @@
 //! Input connectors are used to get data into the system
 //! to then be processed.
 
+mod blaster;
 mod file;
 mod kafka;
 mod mssql;
 mod stdin;
 use pipeline::Msg;
+
+extern crate spmc;
 use std::sync::mpsc;
 
 use prometheus::Counter;
@@ -25,11 +28,18 @@ lazy_static! {
 }
 
 pub trait Input {
-    fn enter_loop(&self, pipeline: Vec<mpsc::SyncSender<Msg>>);
+    #[cfg(not(feature = "try_spmc"))]
+    fn enter_loop(&mut self, pipeline: Vec<mpsc::SyncSender<Msg>>);
+
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, _pipeline: Vec<spmc::Sender<Msg>>) {
+        panic!("!enter_loop2 not implemented for this cofiguration error");
+    }
 }
 
 pub fn new(name: &str, opts: &str) -> Inputs {
     match name {
+        "blaster" => Inputs::Blaster(blaster::Input::new(opts)),
         "kafka" => Inputs::Kafka(kafka::Input::new(opts)),
         "stdin" => Inputs::Stdin(stdin::Input::new(opts)),
         "file" => Inputs::File(file::Input::new(opts)),
@@ -39,6 +49,7 @@ pub fn new(name: &str, opts: &str) -> Inputs {
 }
 
 pub enum Inputs {
+    Blaster(blaster::Input),
     Kafka(kafka::Input),
     Stdin(stdin::Input),
     MSSql(mssql::Input),
@@ -46,10 +57,22 @@ pub enum Inputs {
 }
 
 impl Input for Inputs {
-    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
+    #[cfg(not(feature = "try_spmc"))]
+    fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         match self {
+            Inputs::Blaster(i) => i.enter_loop(pipelines),
             Inputs::Kafka(i) => i.enter_loop(pipelines),
             Inputs::Stdin(i) => i.enter_loop(pipelines),
+            Inputs::File(i) => i.enter_loop(pipelines),
+            Inputs::MSSql(i) => i.enter_loop(pipelines),
+        }
+    }
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, pipelines: Vec<spmc::Sender<Msg>>) {
+        match self {
+            Inputs::Blaster(i) => i.enter_loop2(pipelines),
+            Inputs::Kafka(i) => i.enter_loop2(pipelines),
+            Inputs::Stdin(i) => i.enter_loop2(pipelines),
             Inputs::File(i) => i.enter_loop(pipelines),
             Inputs::MSSql(i) => i.enter_loop(pipelines),
         }

@@ -12,6 +12,9 @@ use serde_json;
 use std::collections::HashMap;
 use std::thread;
 
+#[cfg(feature = "try_spmc")]
+use spmc;
+#[cfg(not(feature = "try_spmc"))]
 use std::sync::mpsc;
 
 pub struct Input {
@@ -69,7 +72,8 @@ impl Input {
 }
 
 impl InputT for Input {
-    fn enter_loop(&self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
+    #[cfg(not(feature = "try_spmc"))]
+    fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let mut idx = 0;
         let mut t: Option<thread::JoinHandle<()>> = None;
         for _tid in 0..self.config.threads {
@@ -144,5 +148,10 @@ impl InputT for Input {
         if let Some(h) = t {
             let _ = h.join();
         }
+    }
+
+    #[cfg(feature = "try_spmc")]
+    fn enter_loop2(&mut self, pipelines: Vec<spmc::Sender<Msg>>) {
+        println!("TBD kafka enter_loop2");
     }
 }

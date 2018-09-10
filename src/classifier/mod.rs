@@ -66,14 +66,16 @@ mod tests {
     use classifier;
     use parser;
     use pipeline::{Event, Step};
+    use utils::nanotime;
 
     #[test]
     fn constant_classifier() {
-        let s = Event::new("Example");
+        let s = Event::new("Example", false, nanotime());
         let t = String::from("Classification");
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", t.as_str());
-        let classified = p.apply(s)
+        let classified = p
+            .apply(s)
             .and_then(|parsed| c.apply(parsed))
             .expect("classification failed!");
         assert_eq!(t, classified.classification);

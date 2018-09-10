@@ -228,3 +228,15 @@ brew install telegraf
 ```
 
 Only Telegraf and jq is required to run the demos, the influx cli is optional (and ships with influxdb on OS X in homebrew)
+
+### Benchmark Framework
+
+The tremor-runtime supports a micro-benchmarking framework via specialized on-ramp ( blaster ) and off-ramp ( blackhole )
+tremor input and output adapters. Benchmarks ( via blackhole ) output high dynamic range histogram latency reports to
+standard output that are compatible with HDR Histogram's plot files [service](https://hdrhistogram.github.io/HdrHistogram/plotFiles.html)
+
+To execute a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
+
+```
+./bench2/bench0.sh
+```
