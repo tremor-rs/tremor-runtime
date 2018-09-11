@@ -19,10 +19,16 @@ lint:
 
 goss:
 	GOSS_FILES_PATH=docker/ dgoss run --name "$(APP)-dgoss-test" --rm "wayfair/data-engineering/$(APP)"
-
-demo-containers:
+tremor-image:
 	docker build -f docker/tremor-runtime.dockerfile . -t tremor-runtime
+loadgen-image: tremor-image
 	docker build -f demo/loadgen.dockerfile . -t loadgen
+demo-images: loadgen-image
+
+demo-containers: demo-images
+	@echo "**************************************************************"
+	@echo "demo-containers is deprecated, please use demo-images instead."
+	@echo "**************************************************************"
 
 demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv

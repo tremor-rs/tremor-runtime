@@ -1,3 +1,6 @@
+**tremor-runtime**
+------------------
+
 This tool allows to configure a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 
 
@@ -17,12 +20,23 @@ The input step defines the source of the data.
 The `stdin` plugin reads from STDIN each line is treated as one event.
 
 ### kafka
-The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`. Events are only committed as processed when the pipeline finished.
+The `kafka` plugin reads from a given Kafka topic. The configuration passed is: `{"group_id": "<group.id>", "topics": ["<topic>"], "brokers": ["<broker>", "<broker>", ...]}`.
+
+In addition it is possible to specify the key `rdkafka_options` which allows to set additional (librdkafka specific options)[https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md]. This is done as a map where the key is option option name and the value the setting **as a string**.
+
+An example would be:
+```
+{
+  "rdkafka_options": {"auto.offset.reset": "beginning"},
+  ...
+}
+```
 
 ### mssql
 The mssql plugin executes a query against a mssql database and feeds the rows as JSON into kafka. The query can be executed on a periodic basis. It is confugured using the following config: `{"host": "<sql server host>"[, "port": <sql server port default - 1433>], "username": "<username>", "password": "<password>", "query": "<query to run>"[, "interval_ms": <interval in milliseconds to re-execute the query>]}`
 
 Note: As this is JSON encoded some type information will be lost!
+
 
 ## Parser
 Parsers handle converting the event from the raw binary to a representation format.
@@ -86,7 +100,7 @@ The `stdout` off-ramp writes events to stdout, one event per line.
 ### kafka
 The `kafka` off-ramp writes events to a Kafka topic, this is configured in the format `<topic>|<broker list>`.
 
-### null
+### null (default for the diverted offramp)
 
 The `null` off-ramp drops all events. 
 
@@ -129,7 +143,7 @@ Docker needs to have at least 4GB of memory.
 
 You need to be connected to the VPN.
 
-To demo run `make demo-containers`  to build the demo containers and then `make demo-run` to run the demo containers.
+To demo run `make demo-images`  to build the demo containers and then `make demo-run` to run the demo containers.
 
 To [demo with Elasticsearch and kibana](#elastic-demo) 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana. In addition a full [kitchen sink demo](#kitchen-sink-demo) that also off-ramps data to influx and provides a  .
 
@@ -182,7 +196,7 @@ The configured classification / bucketing rules, they should match the classific
 
 ### Test data
 
-The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`. Changing this document requires re-running `make demo-containers`!
+The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`. Changing this document requires re-running `make demo-images`!
 
 ### Elastic demo
 

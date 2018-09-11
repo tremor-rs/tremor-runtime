@@ -1,0 +1,12 @@
+version: '3.3'
+services:
+  tremor:
+    image: tremor-runtime
+    ports:
+      - 9898:9898
+    environment:
+      - ONRAMP=kafka
+      - 'ONRAMP_CONFIG={"rdkafka_options": {"auto.offset.reset": "beginning"}, "group_id":"demo","topics":["MSSQL_META_DATA_RAW"],"brokers":["distsysberlinc1n1.dev.bo1.csnzoo.com:9092", "distsysberlinc1n2.dev.bo1.csnzoo.com:9092", "distsysberlinc1n3.dev.bo1.csnzoo.com:9092"]}'
+      - OFFRAMP=es
+      - 'OFFRAMP_CONFIG={"endpoints":["http://elastichotc3n1.dev.bo1.csnzoo.com:9092", "http://elastichotc3n2.dev.bo1.csnzoo.com:9092", "http://elastichotc3n3.dev.bo1.csnzoo.com:9092"], "index":"metadata","batch_size":100,"batch_timeout":500}'
+      

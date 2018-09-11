@@ -56,5 +56,5 @@ services:
       - GROUPING=bucket
       - 'GROUPING_CONFIG=[{"name":"default", "rate":90}, {"name": "info", "rate":10, "keys": ["application"]}, {"name": "error", "rate":100}]'
       - OFFRAMP=es
-      - 'OUTPUT_CONFIG={"endpoints":["http://elastic:9200"], "index":"demo","batch_size":100,"batch_timeout":500}'
+      - 'OFFRAMP_CONFIG={"endpoints":["http://elastic:9200"], "index":"demo","batch_size":100,"batch_timeout":500}'
       - SLEEP=20
