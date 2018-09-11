@@ -87,12 +87,14 @@ impl Pipelineable for Pipeline {
         let output = &mut self.output;
         let drop_output = &mut self.drop_output;
         let timer = PIPELINE_HISTOGRAM.with_label_values(&[]).start_timer();
+        let warmup = if let Some(ctx) = msg.ctx {
+            ctx.warmup
+        } else {
+            false
+        };
+        let event = Event::new(msg.payload.as_str(), warmup, self.app_epoch);
         let event = parser
-            .apply(Event::new(
-                msg.payload.as_str(),
-                msg.ctx.unwrap().warmup,
-                self.app_epoch,
-            ))
+            .apply(event)
             .and_then(|parsed| classifier.apply(parsed))
             .and_then(|classified| grouper.apply(classified))
             .and_then(|grouped| limiting.apply(grouped))

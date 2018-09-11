@@ -73,7 +73,6 @@ case $build_target in
         ;;
 esac
 
-
 shift "$((OPTIND-1))"
 
 case $build_target in
@@ -97,7 +96,10 @@ echo $run_cmd
 if [ ! -z ${@+x} ]
 then
     tests=$@
-else
+fi
+
+if [ -z "${tests}"]
+then
     tests=$(ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g")
 fi
 
@@ -105,9 +107,6 @@ for test in $tests
 do
     config_file="${BASEDIR}/${test}.test/config"
     data_file="${BASEDIR}/${test}.test/in.json"
-    rules_file="${BASEDIR}/${test}.test/rules.json"
-    out_file="${BASEDIR}/${test}.test/out.json.xz"
-    readme_file="${BASEDIR}/${test}.test/readme.md"
 
     gen_file="${BASEDIR}/${test}.test/gen.json"
     exp_file="${BASEDIR}/${test}.test/exp.json"
@@ -127,6 +126,7 @@ do
         exit 1
     fi
 
+    rules_file="${BASEDIR}/${test}.test/rules.json"
     if [ ! -f "${rules_file}" ]
     then
         error "${test}: file '${rules_file}' not found"
@@ -135,12 +135,14 @@ do
         rules=`cat ${rules_file}`
     fi
 
+    out_file="${BASEDIR}/${test}.test/out.json.xz"
     if [ ! -f "${out_file}" ]
     then
         error "${test}: file '${out_file}' not found"
         exit 1
     fi
 
+    readme_file="${BASEDIR}/${test}.test/README.md"
     if [ ! -f "${readme_file}" ]
     then
         error "${test}: file '${readme_file}' not found"
@@ -233,5 +235,11 @@ fi
 if [ ! -z "${FAILED_TESTS+x}" ]
 then
     echo "Failed test cases: ${FAILED_TESTS}"
+    exit 1
+fi
+
+if [ -z "${PASSED_TESTS+x}" ]
+then
+    echo "No tests run, this is bad"
     exit 1
 fi
