@@ -106,7 +106,7 @@ fn default_append_date() -> bool {
 #[derive(Deserialize, Debug)]
 struct Config {
     endpoints: Vec<String>,
-    index: Option<String>,
+    suffix: Option<String>,
     batch_size: usize,
     batch_timeout: f64,
     #[serde(default = "default_backoff")]
@@ -235,7 +235,7 @@ impl Output {
                     queue
                 }
             }
-            _ => panic!("Invalid options for Elastic output, use `{{\"endpoints\":[\"<url>\"[, ...]], \"index\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"append_date\": <bool>, \"pipeline\": <pipeline>]}}`"),
+            _ => panic!("Invalid options for Elastic output, use `{{\"endpoints\":[\"<url>\"[, ...]], \"suffix\":\"<index>\", \"batch_size\":<size of each batch>, \"batch_timeout\": <maximum allowed timeout per batch>,[ \"threads\": <number of threads used to serve asyncornous writes>, \"concurrency\": <maximum number of batches in flight at any time>, \"backoff_rules\": [<1st timeout in ms>, <second timeout in ms>, ...], \"append_date\": <bool>, \"pipeline\": <pipeline>]}}`"),
         }
     }
 
@@ -278,15 +278,14 @@ impl Output {
     }
     fn index(&self, event: &Event) -> String {
         let mut index = match event.index {
-            None => if let Some(ref idx) = self.config.index {
+            None => if let Some(ref idx) = self.config.suffix {
                 idx.clone()
             } else {
                 String::from("")
             },
             Some(ref index) => {
                 let mut index = index.clone();
-                if let Some(ref idx) = self.config.index {
-                    index.push('_');
+                if let Some(ref idx) = self.config.suffix {
                     index.push_str(idx.as_str());
                 }
                 index
@@ -464,7 +463,7 @@ fn add_json_kv(json: &str, key: &str, val: &str) -> String {
 fn backoff_test() {
     let c = Config {
         endpoints: vec![String::from("")],
-        index: None,
+        suffix: None,
         batch_size: 10,
         batch_timeout: 10.0,
         backoff_rules: vec![10, 20, 30, 40],
@@ -482,7 +481,7 @@ fn backoff_test() {
 fn index_test() {
     let s = Event::new("{\"key\":\"value\"}", false, nanotime());
     let mut p = ::parser::new("json", "");
-    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
     let r = p.apply(s).expect("couldn't parse data");
     let idx = o.index(&r);
@@ -493,7 +492,7 @@ fn index_test() {
 fn index_prefix_test() {
     let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
     e.index = Some(String::from("value"));
-    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
     let idx = o.index(&e);
     assert_eq!(idx, "value_demo");
@@ -503,7 +502,7 @@ fn index_prefix_test() {
 fn index_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let e = Event::new("{\"key\":\"value\"}", false, nanotime());
-    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let idx = o.index(&e);
     let utc: DateTime<Utc> = Utc::now();
@@ -518,7 +517,7 @@ fn index_prefix_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
     let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
     e.index = Some(String::from("value"));
-    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"index\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
+    let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let idx = o.index(&e);
     let utc: DateTime<Utc> = Utc::now();
