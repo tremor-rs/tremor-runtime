@@ -1,4 +1,5 @@
 APP=tremor-runtime
+VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=//')
 
 help:
 	@echo "This docker files wraps the tasks:"
@@ -70,3 +71,9 @@ rpm: force
 
 force:
 	true
+
+bench-vsn:
+	cargo build --release
+	echo > bench-results/$(VSN).txt
+	for f in bench2/*.sh; do $$f >> bench-results/$(VSN).txt; done
+	git add bench-results/$(VSN).txt
