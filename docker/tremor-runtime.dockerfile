@@ -25,6 +25,7 @@ RUN sudo cp /usr/bin/musl-gcc /usr/bin/musl-g++
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
+COPY window /home/rust/src/window
 ENV CC=musl-gcc
 ENV CFLAGS=-I/usr/local/musl/include
 ENV LIB_LDFLAGS=-L/usr/lib/x86_64-linux-gnu
@@ -46,7 +47,7 @@ FROM artifactory.service.bo1.csnzoo.com/external/alpine:3.6
 #
 # 2. Start at a version semantic version you prefer to use.
 #
-ARG tag=0.1.19
+ARG tag=0.2.0
 ENV wf_version=$tag
 
 # This ENV declaration uses a base image build hook defined in `centos74-base`.
