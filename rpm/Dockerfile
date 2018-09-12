@@ -4,6 +4,7 @@ RUN sudo cp /usr/bin/musl-gcc /usr/bin/musl-g++
 WORKDIR /home/rust/src
 COPY Cargo.* /home/rust/src/
 COPY src /home/rust/src/src
+COPY window /home/rust/src/window
 ENV CC=musl-gcc
 ENV CFLAGS=-I/usr/local/musl/include
 ENV LIB_LDFLAGS=-L/usr/lib/x86_64-linux-gnu
