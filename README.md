@@ -65,7 +65,22 @@ The `constant` classifier classifies all events with the type passed as it's con
 
 The `mimir` classifier uses the Mimir matching language to match rules against given classifications.
 
-The configuration is provided as a JSON in the form: `[{"rule1": "classification1"}, {"rule2": "classification2"}, ...]`. If no rule matches the classification is set to `"default"`.
+The configuration is provided as a JSON in the form: `[{"rule": "rule1", "class":"classification1"}, {"rule":"key2:value", "class": "classification2"}, ...]`. If no rule matches the classification is set to `"default"`.
+
+* `dimensions` can contain an array of dimensions used for grouping.
+* `index_key` can be used to specify the index for off-ramps such as elastic search
+
+To use a index on the `default` rule the rule can be adopted as:
+
+```json
+{
+  "rule": "_exists_:<index_key>",
+  "class": "default",
+  "index_key": "<index_key>"
+}
+```
+
+The structure **does allow** specifying `rate`, `time_range` and `windows`  but the value will be ignored by mimir, however that way the same structure can be used for the mimir classifier as well as the **bucket** grouping preventing mismatches.
 
 ### Grouping
 
@@ -81,7 +96,9 @@ The `drop` grouping will drop all events.
 
 #### bucket
 
-The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in events per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `[{{"name": "<name>", "rate": <rate>[, "time_range": <time range in ms>, "windows": <windows per range>, "keys": ["<dimension1>", ...]]}}]`
+The bucket grouper allows for rule based rate limiting, for each classification you can specify a limit in events per second that will be applied using a sliding window with 10ms granularity. buckets are defined by: `[{{"class": "<name>", "rate": <rate>[, "time_range": <time range in ms>, "windows": <windows per range>, "dimensions": ["<dimension1>", ...]]}}]`
+
+The structure **does allow** specifying `rule` and `index_key` but the value will be ignored by bucket grouper, however that way the same structure can be used for the **mimir** classifier as well as the **bucket** grouping preventing mismatches.
 
 ### Limiting
 

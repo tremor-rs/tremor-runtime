@@ -187,4 +187,35 @@ mod tests1 {
         assert!(r.is_ok());
         assert_eq!(r.unwrap().classification, "test-class")
     }
+
+    #[test]
+    fn test_exists() {
+        let s = Event::new("{\"wf_index_type\": \"cake\"}", false, utils::nanotime());
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new(
+            "mimir",
+            "[{\"rule\":\"_exists_:wf_index_type\",\"class\":\"default\",\"rate\":18750,\"dimensions\":[\"logger_name\"],\"index_key\":\"wf_index_type\"}]",
+        );
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
+        assert!(r.is_ok());
+        let r = r.unwrap();
+        assert_eq!(r.classification, "default");
+        assert_eq!(r.index, Some(String::from("cake")));
+    }
+    #[test]
+    fn test_key_field() {
+        let s = Event::new(
+            "{\"key\": \"contains the value\", \"idx\":\"hello\"}",
+            false,
+            utils::nanotime(),
+        );
+        let mut p = parser::new("json", "");
+        let mut c = classifier::new(
+            "mimir",
+            "[{\"rule\": \"key:value\", \"class\": \"test-class\", \"index_key\":\"idx\"}]",
+        );
+        let r = p.apply(s).and_then(|parsed| c.apply(parsed));
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap().index, Some(String::from("hello")))
+    }
 }

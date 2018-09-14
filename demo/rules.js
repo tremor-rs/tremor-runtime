@@ -126,6 +126,8 @@
   },
   {
     "class": "default",
-    "rate": 250
+    "rate": 250,
+    "rule": "_exists_:wf_index_type",
+    "index_key": "wf_index_type"
   }
 ]
