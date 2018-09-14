@@ -1,0 +1,46 @@
+version: '3.3'
+services:
+  zookeeper:
+    image: 'artifactory.service.bo1.csnzoo.com/external-staging/wurstmeister/zookeeper:3.4.6'
+    ports:
+      - '2181:2181'
+  kafka:
+    image: 'artifactory.service.bo1.csnzoo.com/external-staging/wurstmeister/kafka:2.11-1.1.0'
+    depends_on:
+      - zookeeper
+    ports:
+      - '9092:9092'
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_CREATE_TOPICS: "demo:1:1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  influx:
+    image: influxdb
+    depends_on:
+      - tremor
+    ports:
+      - 8086:8086
+  loadgen:
+    image: loadgen
+    depends_on:
+      - kafka
+    environment:
+      - PRODUCERS=kafka:9092
+      - TOPIC=demo
+      - MPS=250
+      - SLEEP=30
+  tremor:
+    image: tremor-runtime
+    depends_on:
+      - kafka
+    ports:
+      - 9898:9898
+    environment:
+      - ONRAMP=kafka
+      - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
+      - OFFRAMP=influx
+      - 'OFFRAMP_CONFIG=http://influx:8086/write?db=demo'
+      - PARSER=influx
+      - CLASSIFIER=constant
+      - GROUPING=pass
+      - SLEEP=40

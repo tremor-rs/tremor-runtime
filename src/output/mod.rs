@@ -4,6 +4,7 @@ mod blackhole;
 mod debug;
 mod elastic;
 mod file;
+mod influx;
 mod kafka;
 mod null;
 mod stdout;
@@ -42,6 +43,7 @@ pub fn new(name: &str, opts: &str) -> Output {
         "stdout" => Output::Stdout(stdout::Output::new(opts)),
         "debug" => Output::Debug(debug::Output::new(opts)),
         "es" => Output::Elastic(Box::new(elastic::Output::new(opts))),
+        "influx" => Output::Influx(influx::Output::new(opts)),
         "null" => Output::Null(null::Output::new(opts)),
         "file" => Output::File(file::Output::new(opts)),
 
@@ -65,6 +67,7 @@ pub enum Output {
     Blackhole(blackhole::Output),
     Kafka(kafka::Output),
     Elastic(Box<elastic::Output>),
+    Influx(influx::Output),
     Stdout(stdout::Output),
     Debug(debug::Output),
     Null(null::Output),
@@ -79,6 +82,7 @@ impl Step for Output {
             Output::Blackhole(o) => o.apply(msg),
             Output::Kafka(o) => o.apply(msg),
             Output::Elastic(o) => o.apply(msg),
+            Output::Influx(o) => o.apply(msg),
             Output::Stdout(o) => o.apply(msg),
             Output::Debug(o) => o.apply(msg),
             Output::Null(o) => o.apply(msg),
@@ -91,6 +95,7 @@ impl Step for Output {
             Output::Blackhole(o) => o.shutdown(),
             Output::Kafka(o) => o.shutdown(),
             Output::Elastic(o) => o.shutdown(),
+            Output::Influx(o) => o.shutdown(),
             Output::Stdout(o) => o.shutdown(),
             Output::Debug(o) => o.shutdown(),
             Output::Null(o) => o.shutdown(),

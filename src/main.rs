@@ -8,6 +8,7 @@ extern crate futures;
 extern crate rand;
 extern crate rdkafka;
 extern crate rdkafka_sys;
+extern crate reqwest;
 #[macro_use]
 extern crate serde_json;
 #[macro_use]

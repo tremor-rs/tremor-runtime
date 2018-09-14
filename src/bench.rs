@@ -36,6 +36,7 @@ extern crate xz2;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate maplit;
+extern crate reqwest;
 
 mod args;
 pub mod classifier;

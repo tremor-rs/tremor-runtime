@@ -5,6 +5,7 @@ description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>"]
 
 [dependencies]
+reqwest = "0.8"
 futures = "0.1"
 rand = "0.5"
 clap = "2.23"

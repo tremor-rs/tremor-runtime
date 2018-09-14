@@ -1,4 +1,5 @@
 use elastic;
+use reqwest;
 use serde_json;
 use std::{convert, num};
 /// Generic error
@@ -35,5 +36,11 @@ impl convert::From<num::ParseIntError> for TSError {
 impl From<serde_json::Error> for TSError {
     fn from(e: serde_json::Error) -> TSError {
         TSError::new(format!("Serade error: {}", e).as_str())
+    }
+}
+
+impl From<reqwest::Error> for TSError {
+    fn from(from: reqwest::Error) -> TSError {
+        TSError::new(format!("HTTP Error: {}", from).as_str())
     }
 }
