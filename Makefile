@@ -62,12 +62,7 @@ clippy:
 it:
 	integration_testing/runner
 
-rpm: force
-	docker build . -f rpm/Dockerfile -t tremor-rpm-build
-	-mkdir rpm/out
-	docker run --name tremor-rpm-build-copy tremor-rpm-build /bin/true
-	docker cp tremor-rpm-build-copy:/root/rpmbuild/RPMS/x86_64/tremor-1.0.0-1.x86_64.rpm rpm/out
-	docker rm -f tremor-rpm-build-copy
+
 
 force:
 	true
@@ -77,3 +72,16 @@ bench-vsn:
 	echo > bench-results/$(VSN).txt
 	for f in bench2/*.sh; do $$f >> bench-results/$(VSN).txt; done
 	git add bench-results/$(VSN).txt
+
+rpm: force rpm/tremor.spec rpm/Dockerfile
+	docker build . -f rpm/Dockerfile -t tremor-rpm-build
+	-mkdir rpm/out
+	docker run --name tremor-rpm-build-copy tremor-rpm-build /bin/true
+	docker cp tremor-rpm-build-copy:/root/rpmbuild/RPMS/x86_64/tremor-$(VSN)-1.x86_64.rpm rpm/out
+	docker rm -f tremor-rpm-build-copy
+	
+rpm/tremor.spec: rpm/tremor.spec.tpl Cargo.lock CHANGELOG.md
+	sed -e 's/{vsn}/${VSN}/g' rpm/tremor.spec.tpl > rpm/tremor.spec
+
+rpm/Dockerfile: rpm/tremor.spec Cargo.lock CHANGELOG.md rpm/Dockerfile.tpl
+	sed -e 's/{vsn}/${VSN}/g' rpm/Dockerfile.tpl > rpm/Dockerfile

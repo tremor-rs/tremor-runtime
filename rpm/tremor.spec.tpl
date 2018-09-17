@@ -1,9 +1,9 @@
 Name:       tremor
-Version:    1.0.0
+Version:    {vsn}
 Release:    1
 Summary:    Tremor runtime
 License:    LICENSE
-Source:     tremor-1.0.0.tar.gz
+Source:     tremor-{vsn}.tar.gz
 Requires(pre): shadow-utils
 
 
