@@ -4,4 +4,4 @@ BLASTER_CONFIG='{"source":"./demo/data.json.xz", "warmup_iters":100, "iters":500
 
 BLACKHOLE_CONFIG='{"stop_after_secs": 120, "significant_figures": 2}'
 
-RUST_BACKTRACE=full /usr/bin/time target/release/tremor-runtime-bench --bench-with-metrics-endpoint false --on-ramp blaster --on-ramp-config "${BLASTER_CONFIG}" --parser json --classifier mimir --classifier-config "${CFG}" --grouping bucket --grouping-config "${CFG}" --off-ramp blackhole --off-ramp-config "${BLACKHOLE_CONFIG}" --drop-off-ramp null
+RUST_BACKTRACE=full /usr/bin/time target/release/examples/bench --no-metrics-endpoint --on-ramp blaster --on-ramp-config "${BLASTER_CONFIG}" --parser json --classifier mimir --classifier-config "${CFG}" --grouping bucket --grouping-config "${CFG}" --off-ramp blackhole --off-ramp-config "${BLACKHOLE_CONFIG}" --drop-off-ramp null

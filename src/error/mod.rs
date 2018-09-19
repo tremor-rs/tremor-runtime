@@ -1,7 +1,7 @@
 use elastic;
 use reqwest;
 use serde_json;
-use std::{convert, num};
+use std::{convert, fmt, num};
 /// Generic error
 #[derive(Debug, Clone)]
 pub struct TSError {
@@ -13,6 +13,12 @@ impl TSError {
         TSError {
             message: String::from(msg),
         }
+    }
+}
+
+impl fmt::Display for TSError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
     }
 }
 

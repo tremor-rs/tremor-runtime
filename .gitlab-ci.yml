@@ -1,17 +1,34 @@
-
 test:
   stage: test
   image: rust:1.28
   when: always
+  cache:
+    paths:
+      - target/
+      - ~/.cargo/
   tags:
     - docker
   script:
+    - make check-vsn
     - apt update 
     - apt install -y bison flex cmake automake
     - cargo test
     - make it
     - cd window
     - cargo test
-   # - make clippy-install
-   # - make clippy
 
+lint:
+  stage: test
+  image: rust:1.28
+  when: always
+  cache:
+    paths:
+      - target.clippy/
+      - ~/.cargo/
+  tags:
+    - docker
+  script:
+    - apt update 
+    - apt install -y bison flex cmake automake
+    - make clippy-install
+    - make clippy

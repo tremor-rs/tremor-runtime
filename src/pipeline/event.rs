@@ -1,3 +1,4 @@
+use super::Context;
 use serde_json::Value;
 
 #[derive(Clone, Debug)]
@@ -20,13 +21,13 @@ pub struct Event {
     pub index: Option<String>,
     pub data_type: Option<String>,
     pub output_step: OutputStep,
-    pub bench_warmup: bool,
     pub app_epoch_ns: u64,
     pub ingest_time_ns: u64,
+    pub ctx: Option<Context>,
 }
 
 impl Event {
-    pub fn new(raw: &str, bench_warmup: bool, app_epoch: u64) -> Self {
+    pub fn new(raw: &str, ctx: Option<Context>, app_epoch_ns: u64) -> Self {
         let ingest_time_ns = nanotime();
         Event {
             key: None,
@@ -41,8 +42,8 @@ impl Event {
             index: None,
             data_type: None,
             output_step: OutputStep::Deliver,
-            bench_warmup: bench_warmup,
-            app_epoch_ns: app_epoch,
+            app_epoch_ns,
+            ctx,
         }
     }
     pub fn from(original: Self) -> Self {
@@ -59,8 +60,8 @@ impl Event {
             index: original.index,
             data_type: original.data_type,
             output_step: original.output_step,
-            bench_warmup: original.bench_warmup,
             app_epoch_ns: original.app_epoch_ns,
+            ctx: original.ctx,
         }
     }
 }

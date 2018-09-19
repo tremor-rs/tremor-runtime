@@ -1,5 +1,7 @@
 APP=tremor-runtime
-VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=//')
+DOCKER_VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=//')
+CARGO_VSN=$(shell grep '^version' Cargo.toml | sed -e 's/.*=[^"]*"//' -e 's/"$$//')
+VSN=$(DOCKER_VSN)
 
 help:
 	@echo "This docker files wraps the tasks:"
@@ -36,6 +38,11 @@ demo-run:
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
 
+demo-influx-run:
+	-docker-compose -f demo/influx.yaml rm -fsv
+	-docker-compose -f demo/influx.yaml up
+	-docker-compose -f demo/influx.yaml rm -fsv
+
 demo-mssql-run:
 	-docker-compose -f demo/mssql.yaml rm -fsv
 	-docker-compose -f demo/mssql.yaml up
@@ -50,7 +57,6 @@ demo-all-bootstrap:
 	cd demo && ./grafana-bootstrap.sh
 	telegraf -config demo/telegraf.conf
 
-
 clippy-install:
 	rustup update
 	rustup install nightly
@@ -64,13 +70,10 @@ it:
 
 
 
-force:
-	true
-
-bench-vsn:
+release-bench:
 	cargo build --release
 	echo > bench-results/$(VSN).txt
-	for f in bench2/*.sh; do $$f >> bench-results/$(VSN).txt; done
+	for f in bench2/*.sh; do echo "$$f" >> bench-results/$(VSN).txt; $$f >> bench-results/$(VSN).txt; done
 	git add bench-results/$(VSN).txt
 
 rpm: force rpm/tremor.spec rpm/Dockerfile
@@ -85,3 +88,9 @@ rpm/tremor.spec: rpm/tremor.spec.tpl Cargo.lock CHANGELOG.md
 
 rpm/Dockerfile: rpm/tremor.spec Cargo.lock CHANGELOG.md rpm/Dockerfile.tpl
 	sed -e 's/{vsn}/${VSN}/g' rpm/Dockerfile.tpl > rpm/Dockerfile
+
+check-vsn:
+	[ "$(DOCKER_VSN)" = "$(CARGO_VSN)" ]
+
+force:
+	true

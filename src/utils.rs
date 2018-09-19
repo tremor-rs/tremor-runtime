@@ -28,9 +28,9 @@ pub fn duration_to_libc_timespec(at: Duration) -> libc::timespec {
 pub fn nanotime() -> u64 {
     let now = Utc::now();
     let seconds: u64 = now.timestamp() as u64;
-    let nanoseconds: u64 = now.nanosecond() as u64;
+    let nanoseconds: u64 = u64::from(now.nanosecond());
 
-    (seconds * 1000_000_000) + nanoseconds as u64
+    (seconds * 1_000_000_000) + nanoseconds
 }
 
 /// Park current thread for a precise ( nanosecond granular, more precise than sleep ) amount of time
@@ -80,7 +80,9 @@ fn linux_park(
         Some(p) => unsafe {
             libc::clock_nanosleep(clock_id, flags, request as *const _, p as *mut _)
         },
-        _ => unsafe { libc::clock_nanosleep(clock_id, flags, request as *const _, ptr::null_mut()) },
+        _ => unsafe {
+            libc::clock_nanosleep(clock_id, flags, request as *const _, ptr::null_mut())
+        },
     }
 }
 

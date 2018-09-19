@@ -41,6 +41,10 @@ The mssql plugin executes a query against a mssql database and feeds the rows as
 
 Note: As this is JSON encoded some type information will be lost!
 
+#### file
+
+Reads a file and ingests it line by line as events. The configuration is the filename.
+
 ### Parser
 
 Parsers handle converting the event from the raw binary to a representation format.
@@ -53,9 +57,30 @@ The `raw` parser performs no additional steps and just passes the event on untou
 
 The `json` parser parses the input as a JSON and fails if the data is invalid.
 
+#### influx (parser)
+
+The `influx` parser translates InfluxDB line protocl to a nested datastructure. Represented as json it would look like this:
+
+InfluxDB:
+
+```text
+weather,location=us-midwest temperature=82 1465839830100400200
+```
+
+Nested Representation (JSONesq):
+
+```json
+{
+  "measurement": "weather",
+  "tags": {"location": "us-midwest"},
+  "fields": {"temperature": 82.0},
+  "timestamp": 1465839830100400200
+}
+```
+
 ### Classifier
 
-Classifiers handle event classification based on rules.
+sClassifiers handle event classification based on rules.
 
 #### constant (default)
 
@@ -166,9 +191,31 @@ The `es` off-ramp stores events to elastic search. It takes a lost of `endpoints
 
 Note, requests are *NOT* canceled after the timeout as there is no way to recall a bulk write from elastic search.
 
+#### influx (offramp)
+
+InfluxDB offramp using the InfluxDB `/write` endpoint to do batch inserts. The database `databaser` is used to write to. Batching otherwise works the same as in the [es](#es) connector
+
+```json
+{
+  "endpoints": ["<url>"[, ...] ],
+  "batch_size": <size of each batch>,
+  "batch_timeout": <maximum allowed timeout per batch>,
+  "database": "<database to write to>",
+  ["threads": <number of threads used to serve asyncornous writes>,]
+  ["concurrency": <maximum number of batches in flight at any time>,]
+  ["backoff_rules": [<1st timeout in ms>, <second timeout in ms>, ...],]
+}
+```
+
+#### file (offramp)
+
+Writes all data to a file, one event per line. The config is the file to write to.
+
 ## Docker
 
 The docker container build takes environment variables for each plugin. The `input` plugin is provided as `INPUT=...` and it's configuration as `INPUT_CONFIG=...`. Plugins and configs may be omitted and will then be replaced with a default, for configurations the default is an empty configuration.
+
+The additional fild `PRE_PROCESSOR` can be specified to do processing steps on an event. Currently supported options are `split-lines` that will split multi line messages into one event per line.
 
 In addition the `RUST_LOG` environment variable can be passed to define the log level of the application.
 

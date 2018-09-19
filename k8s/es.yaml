@@ -1,0 +1,43 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: tremor-runtime
+  name: tremor-runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tremor-runtime
+  template:
+    metadata:
+      labels:
+        app: tremor-runtime
+    spec:
+      containers:
+      - env:
+        - name: ONRAMP
+          value: kafka
+        - name: ONRAMP_CONFIG
+          value: '{"group_id":"tremor","topics":["applogIngest"],"brokers":["kafkac1n1.dev.bo1.csnzoo.com:9092","kafkac1n2.dev.bo1.csnzoo.com:9092","kafkac1n3.dev.bo1.csnzoo.com:9092"],
+            "threads": 1}'
+        - name: OFFRAMP
+          value: es
+        - name: PARSER
+          value: json
+        - name: OFFRAMP_CONFIG
+          value: '{"suffix":"_rollover","batch_size":100,"batch_timeout":300,"threads":4,"concurrency":4,"backoff_rules":[50,100,250,500,1000
+            ,5000],"pipeline":"log_pipeline","endpoints":["http://elastichotc3n1:9200","http://elastichotc3n2:9200","http://elastichotc3n3:9200"]}'
+        - name: CLASSIFIER
+          value: mimir
+        - name: GROUPING
+          value: bucket
+        - name: RULES
+          value: '[{"rule":"wf_index_type=applog_purest","class":"applog_purest","rate":18750,"dimensions":["logger_name"],"index_key":"wf_index_type"},{"rule":"_exists_:wf_index_type","class":"default","rate":18750,"dimensions":["logger_name"],"index_key":"wf_index_type"}]'
+        - name: THREADS
+          value: "4"
+        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.2.1
+        name: tremor-runtime
+        ports:
+        - containerPort: 9898
+          protocol: TCP

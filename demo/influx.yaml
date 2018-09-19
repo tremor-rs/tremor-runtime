@@ -20,14 +20,17 @@ services:
       - tremor
     ports:
       - 8086:8086
+    environment:
+      INFLUXDB_DB: demo
   loadgen:
     image: loadgen
     depends_on:
       - kafka
     environment:
       - PRODUCERS=kafka:9092
+      - LOAD_FILE=data.influx.xz
       - TOPIC=demo
-      - MPS=250
+      - MPS=100
       - SLEEP=30
   tremor:
     image: tremor-runtime
@@ -39,7 +42,7 @@ services:
       - ONRAMP=kafka
       - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - OFFRAMP=influx
-      - 'OFFRAMP_CONFIG=http://influx:8086/write?db=demo'
+      - 'OFFRAMP_CONFIG={"endpoints": ["http://influx:8086"], "database":"demo", "batch_size":100, "batch_timeout":500}'
       - PARSER=influx
       - CLASSIFIER=constant
       - GROUPING=pass

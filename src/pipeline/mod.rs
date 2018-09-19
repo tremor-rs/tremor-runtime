@@ -1,19 +1,17 @@
 mod event;
 mod step;
 
-use classifier::Classifier;
 use error::TSError;
-use grouping::Grouper;
 use limiting::{Feedback, Limiter};
 use output::{self, Output, OUTPUT_SKIPPED};
-use parser::Parser;
 use prometheus::{Counter, HistogramVec};
 use std::f64;
-use std::marker::Send;
 
 pub use self::event::Event;
 pub use self::event::OutputStep;
 pub use self::step::Step;
+
+type PipeLineResult = Result<Option<f64>, TSError>;
 
 lazy_static! {
     /*
@@ -37,67 +35,217 @@ lazy_static! {
 }
 
 pub trait Pipelineable {
-    fn run(&mut self, msg: &Msg) -> Result<(), TSError>;
+    fn run(&mut self, event: Event) -> PipeLineResult;
     fn shutdown(&mut self) {
         println!("Hitting default pipelieable shutdown impl");
     }
 }
 
-/// Pipeline struct, collecting all the steps of our internal pipeline
-pub struct Pipeline {
-    parser: Parser,
-    classifier: Classifier,
-    grouper: Grouper,
-    limiting: Limiter,
-    output: Output,
-    drop_output: Output,
-    app_epoch: u64,
+#[derive(Clone)]
+pub struct SplitMultiLineBatch<T>
+where
+    T: Pipelineable,
+{
+    next: T,
 }
 
-impl Pipeline {
-    /// Creates a new pipeline
-    pub fn new(
-        parser: Parser,
-        classifier: Classifier,
-        grouper: Grouper,
-        limiting: Limiter,
-        output: Output,
-        drop_output: Output,
-        app_epoch: u64,
-    ) -> Box<Pipelineable + Send> {
-        Box::new(Pipeline {
-            parser,
-            classifier,
-            grouper,
-            limiting,
-            output,
-            drop_output,
-            app_epoch,
-        })
+impl<T> SplitMultiLineBatch<T>
+where
+    T: Pipelineable,
+{
+    pub fn new(next: T) -> Self {
+        SplitMultiLineBatch { next }
     }
 }
 
-impl Pipelineable for Pipeline {
+impl<T> Pipelineable for SplitMultiLineBatch<T>
+where
+    T: Pipelineable,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        let mut clone_event = Event::from(event.clone());
+        clone_event.raw = String::new();
+        let mut feedback: Option<f64> = None;
+        for line in event.raw.as_str().lines() {
+            let mut line_event = Event::from(clone_event.clone());
+            line_event.raw = String::from(line);
+            feedback = self.next.run(line_event)?;
+        }
+        Ok(feedback)
+    }
+}
+
+#[derive(Clone)]
+pub struct FilterEmpty<T>
+where
+    T: Pipelineable,
+{
+    next: T,
+}
+impl<T> FilterEmpty<T>
+where
+    T: Pipelineable,
+{
+    pub fn new(next: T) -> Self {
+        FilterEmpty { next }
+    }
+}
+impl<T> Pipelineable for FilterEmpty<T>
+where
+    T: Pipelineable,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        if event.raw == "" {
+            Ok(None)
+        } else {
+            self.next.run(event)
+        }
+    }
+}
+pub struct Pipeline<T>
+where
+    T: Pipelineable,
+{
+    pipeline: T,
+}
+impl<T> Pipelineable for Pipeline<T>
+where
+    T: Pipelineable,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        self.pipeline.run(event)
+    }
+}
+
+pub struct DivertablePipelineStep<S, N, D>
+where
+    S: Step,
+    N: Pipelineable,
+    D: Pipelineable,
+{
+    step: S,
+    next: N,
+    divert: D,
+}
+
+impl<S, N, D> DivertablePipelineStep<S, N, D>
+where
+    S: Step,
+    N: Pipelineable,
+    D: Pipelineable,
+{
+    pub fn new(step: S, next: N, divert: D) -> Self {
+        Self { step, next, divert }
+    }
+}
+
+impl<S, N, D> Pipelineable for DivertablePipelineStep<S, N, D>
+where
+    S: Step,
+    N: Pipelineable,
+    D: Pipelineable,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        let event = self.step.apply(event)?;
+        if event.drop {
+            self.divert.run(event)?;
+            Ok(None)
+        } else {
+            self.next.run(event)
+        }
+    }
+}
+
+pub struct PipelineStep<S, N>
+where
+    S: Step,
+    N: Pipelineable,
+{
+    step: S,
+    next: N,
+}
+
+impl<S, N> PipelineStep<S, N>
+where
+    S: Step,
+    N: Pipelineable,
+{
+    pub fn new(step: S, next: N) -> Self {
+        Self { step, next }
+    }
+}
+
+impl<S, N> Pipelineable for PipelineStep<S, N>
+where
+    S: Step,
+    N: Pipelineable,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        let event = self.step.apply(event)?;
+        self.next.run(event)
+    }
+}
+
+pub struct TerminalPipelineStep<S>
+where
+    S: Step,
+{
+    step: S,
+}
+
+impl<S> TerminalPipelineStep<S>
+where
+    S: Step,
+{
+    pub fn new(step: S) -> Self {
+        Self { step }
+    }
+}
+
+impl<S> Pipelineable for TerminalPipelineStep<S>
+where
+    S: Step,
+{
+    fn run(&mut self, event: Event) -> PipeLineResult {
+        let e = self.step.apply(event)?;
+        Ok(e.feedback)
+    }
+}
+impl<T> Pipeline<T>
+where
+    T: Pipelineable,
+{
+    pub fn new(pipeline: T) -> Self {
+        Pipeline { pipeline }
+    }
+}
+/// MainPipeline struct, collecting all the steps of our internal pipeline
+pub struct MainPipeline {
+    limiting: Limiter,
+    output: Output,
+    drop_output: Output,
+}
+
+impl MainPipeline {
+    /// Creates a new pipeline
+    pub fn new(limiting: Limiter, output: Output, drop_output: Output) -> Self {
+        MainPipeline {
+            limiting,
+            output,
+            drop_output,
+        }
+    }
+}
+
+impl Pipelineable for MainPipeline {
     /// Runs each step of the pipeline and returns either a OK or a error result
-    fn run(&mut self, msg: &Msg) -> Result<(), TSError> {
-        let parser = &mut self.parser;
-        let classifier = &mut self.classifier;
-        let grouper = &mut self.grouper;
+    fn run(&mut self, event: Event) -> PipeLineResult {
         let limiting = &mut self.limiting;
         let output = &mut self.output;
         let drop_output = &mut self.drop_output;
         let timer = PIPELINE_HISTOGRAM.with_label_values(&[]).start_timer();
-        let warmup = if let Some(ctx) = msg.ctx {
-            ctx.warmup
-        } else {
-            false
-        };
-        let event = Event::new(msg.payload.as_str(), warmup, self.app_epoch);
-        let event = parser
+        let event = limiting
             .apply(event)
-            .and_then(|parsed| classifier.apply(parsed))
-            .and_then(|classified| grouper.apply(classified))
-            .and_then(|grouped| limiting.apply(grouped))
             .and_then(|r| {
                 if !r.drop {
                     output.apply(r)
@@ -126,9 +274,9 @@ impl Pipelineable for Pipeline {
                 ..
             }) => {
                 limiting.feedback(feedback);
-                Ok(())
+                Ok(Some(feedback))
             }
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(None),
             Err(error) => {
                 PIPELINE_ERR.inc();
                 Err(error)
@@ -140,16 +288,11 @@ impl Pipelineable for Pipeline {
 
     fn shutdown(&mut self) {
         println!("calling shutdown in pipeline");
-        self.parser.shutdown();
-        self.classifier.shutdown();
-        self.grouper.shutdown();
         self.limiting.shutdown();
         self.output.shutdown();
         self.drop_output.shutdown();
     }
 }
-
-unsafe impl Send for Pipeline {}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Context {
@@ -157,15 +300,15 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn should_warmup(&self) -> bool {
-        return self.warmup;
+    pub fn should_warmup(self) -> bool {
+        self.warmup
     }
 }
 
 /// Generalized raw message struct
 #[derive(Clone, Debug)]
 pub struct Msg {
-    payload: String,
+    pub payload: String,
     key: Option<String>,
     pub ctx: Option<Context>,
 }
@@ -186,13 +329,11 @@ impl Msg {
 pub struct FakePipeline {}
 
 impl Pipelineable for FakePipeline {
-    fn run(&mut self, _msg: &Msg) -> Result<(), TSError> {
-        Ok(())
+    fn run(&mut self, _event: Event) -> PipeLineResult {
+        Ok(None)
     }
 
     fn shutdown(&mut self) {
         // Nothing to do
     }
 }
-
-unsafe impl Send for FakePipeline {}

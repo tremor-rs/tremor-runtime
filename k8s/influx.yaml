@@ -1,0 +1,43 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: tremor-runtime-influx
+  name: tremor-runtime-influx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tremor-runtime-influx
+  template:
+    metadata:
+      labels:
+        app: tremor-runtime-influx
+    spec:
+      containers:
+      - env:
+        - name: ONRAMP
+          value: kafka
+        - name: ONRAMP_CONFIG
+          value: '{"group_id":"tremor","topics":["influx_metrics"],"brokers":["kafkac1n1.dev.bo1.csnzoo.com:9092","kafkac1n2.dev.bo1.csnzoo.com:9092","kafkac1n3.dev.bo1.csnzoo.com:9092"], "threads": 1}'
+        - name: OFFRAMP
+          value: influx
+        - name: OFFRAMP_CONFIG
+          value: '{"batch_size":100,"batch_timeout":300,"threads":4,"concurrency":4,"backoff_rules":[50,100,250,500,1000,5000],"database":"tremor","endpoints":["http://influxdbc3n1:8086","http://influxdbc3n2:8086","http://influxdbc3n3:8086"]}'
+        - name: PARSER
+          value: influx
+        - name: CLASSIFIER
+          value: mimir
+        - name: GROUPING
+          value: bucket
+        - name: RULES
+          value: '[{"class":"default","rate":18750}]'
+        - name: THREADS
+          value: "1"
+        - name: PRE_PROCESSOR
+          value: split-lines
+        image: artifactory.service.bo1.csnzoo.com/wayfair/data-engineering/tremor-runtime:0.2.1
+        name: tremor-runtime-influx
+        ports:
+        - containerPort: 9898
+          protocol: TCP

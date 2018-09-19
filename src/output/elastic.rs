@@ -1,5 +1,3 @@
-use chrono::prelude::*;
-
 /// Elastic search output with incremental backoff.
 ///
 /// The algoritm is as follows:
@@ -19,7 +17,7 @@ use chrono::prelude::*;
 ///   * queue - a queue of fugure sends.
 ///
 /// Pseudocode:
-/// ```
+/// ```pseudo,no_run
 /// for m in messages {
 ///   if now() - last_done > backoff {
 ///     batch.add(m)
@@ -45,6 +43,8 @@ use chrono::prelude::*;
 ///   }
 /// }
 /// ```
+use async_sink::{AsyncSink, SinkDequeueError};
+use chrono::prelude::*;
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
@@ -54,7 +54,6 @@ use output::{self, OUTPUT_DELIVERED, OUTPUT_DROPPED, OUTPUT_ERROR, OUTPUT_SKIPPE
 use pipeline::{Event, Step};
 use prometheus::{Gauge, HistogramVec};
 use serde_json::{self, Value};
-use std::collections::VecDeque;
 use std::convert::From;
 use std::f64;
 use std::sync::mpsc::{channel, Receiver};
@@ -67,7 +66,7 @@ lazy_static! {
     // sending (or dropping) it.
     static ref SEND_HISTOGRAM: HistogramVec = register_histogram_vec!(
         "ts_es_latency",
-        "Latency for logstash output.",
+        "Latency for Elastic Search output.",
         &["dest"],
         vec![
             0.0005, 0.001, 0.0025,
@@ -131,68 +130,6 @@ impl Config {
     }
 }
 
-struct AsyncSink<T> {
-    queue: VecDeque<Receiver<Result<T, TSError>>>,
-    capacity: usize,
-    size: usize,
-}
-
-enum SinkEnqueueError {
-    AtCapacity,
-}
-
-enum SinkDequeueError {
-    Empty,
-    NotReady,
-}
-
-/// A queue of async tasks defined by an receiver that returns once the task
-/// completes.
-impl<T> AsyncSink<T> {
-    pub fn new(capacity: usize) -> Self {
-        AsyncSink {
-            queue: VecDeque::with_capacity(capacity),
-            capacity,
-            size: 0,
-        }
-    }
-    pub fn enqueue(&mut self, value: Receiver<Result<T, TSError>>) -> Result<(), SinkEnqueueError> {
-        if self.size >= self.capacity {
-            Err(SinkEnqueueError::AtCapacity)
-        } else {
-            self.size += 1;
-            self.queue.push_back(value);
-            Ok(())
-        }
-    }
-    pub fn dequeue(&mut self) -> Result<Result<T, TSError>, SinkDequeueError> {
-        match self.queue.pop_front() {
-            None => Err(SinkDequeueError::Empty),
-            Some(rx) => match rx.try_recv() {
-                Err(_) => {
-                    self.queue.push_front(rx);
-                    Err(SinkDequeueError::NotReady)
-                }
-                Ok(result) => {
-                    self.size -= 1;
-                    Ok(result)
-                }
-            },
-        }
-    }
-    pub fn has_capacity(&self) -> bool {
-        self.size < self.capacity
-    }
-}
-
-impl From<SinkEnqueueError> for TSError {
-    fn from(e: SinkEnqueueError) -> TSError {
-        match e {
-            SinkEnqueueError::AtCapacity => TSError::new("Queue overflow"),
-        }
-    }
-}
-
 #[derive(Clone)]
 struct Destination {
     client: Client<SyncSender>,
@@ -212,8 +149,6 @@ pub struct Output {
 }
 
 impl Output {
-    /// Creates a new output connector, `brokers` is a coma seperated list of
-    /// brokers to connect to. `topic` is the topic to send to.
     pub fn new(opts: &str) -> Self {
         match serde_json::from_str(opts) {
             Ok(config @ Config{..}) => {
@@ -313,11 +248,17 @@ fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> Result<f64, T
     let start = Instant::now();
     let timer = SEND_HISTOGRAM.with_label_values(&[url]).start_timer();
     let req = BulkRequest::new(payload.to_owned());
-    let response = client
-        .request(req)
-        .send()?
-        .into_response::<BulkErrorsResponse>()?;
-    for item in response {
+    let res = client.request(req).send();
+    if let Err(e) = res {
+        println!(">>> ES Error: {:?}", e);
+        return Err(TSError::from(e));
+    }
+    let response = res.unwrap().into_response::<BulkErrorsResponse>();
+    if let Err(e) = response {
+        println!(">>> ES Error response: {:?}", e);
+        return Err(TSError::from(e));
+    }
+    for item in response.unwrap() {
         println!("item: {}", item);
     }
     timer.observe_duration();
@@ -343,7 +284,8 @@ fn update_send_time(event: Event) -> String {
             String::from("classification"),
             Value::String(event.classification),
         ),
-    ].iter()
+    ]
+        .iter()
         .cloned()
         .collect();
     let tmap = serde_json::to_string(&Value::Object(tremor_map));
@@ -377,7 +319,7 @@ impl Step for Output {
                             "_index": index,
                             "_type": doc_type
                         }}).to_string()
-                        .as_str(),
+                    .as_str(),
                 ),
                 Some(ref pipeline) => self.payload.push_str(
                     json!({
@@ -387,7 +329,7 @@ impl Step for Output {
                             "_type": doc_type,
                             "pipeline": pipeline
                         }}).to_string()
-                        .as_str(),
+                    .as_str(),
                 ),
             };
             self.payload.push('\n');
@@ -479,7 +421,7 @@ fn backoff_test() {
 
 #[test]
 fn index_test() {
-    let s = Event::new("{\"key\":\"value\"}", false, nanotime());
+    let s = Event::new("{\"key\":\"value\"}", None, nanotime());
     let mut p = ::parser::new("json", "");
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
@@ -490,7 +432,7 @@ fn index_test() {
 
 #[test]
 fn index_prefix_test() {
-    let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
+    let mut e = Event::new("{\"key\":\"value\"}", None, nanotime());
     e.index = Some(String::from("value"));
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500}");
 
@@ -501,7 +443,7 @@ fn index_prefix_test() {
 #[test]
 fn index_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let e = Event::new("{\"key\":\"value\"}", false, nanotime());
+    let e = Event::new("{\"key\":\"value\"}", None, nanotime());
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 
     let idx = o.index(&e);
@@ -515,7 +457,7 @@ fn index_suffix_test() {
 #[test]
 fn index_prefix_suffix_test() {
     println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let mut e = Event::new("{\"key\":\"value\"}", false, nanotime());
+    let mut e = Event::new("{\"key\":\"value\"}", None, nanotime());
     e.index = Some(String::from("value"));
     let o = Output::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
 

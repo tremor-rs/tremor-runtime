@@ -50,7 +50,7 @@ impl Input {
         }
     }
 
-    pub fn step(&mut self, pipelines: &Vec<mpsc::SyncSender<Msg>>, ctx: Option<Context>) {
+    pub fn step(&mut self, pipelines: &[mpsc::SyncSender<Msg>], ctx: Option<Context>) {
         {
             for line in self.data.lines() {
                 match line {

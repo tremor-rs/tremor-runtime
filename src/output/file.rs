@@ -27,7 +27,7 @@ impl Step for Output {
             .with_label_values(&[output::step(&event), "stdout"])
             .inc();
         self.file.write_all(&event.raw.as_bytes())?;
-        self.file.write_all("\n".as_bytes())?;
+        self.file.write_all(b"\n")?;
         Ok(event)
     }
 }

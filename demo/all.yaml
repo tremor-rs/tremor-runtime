@@ -76,5 +76,5 @@ services:
       - 'OFFRAMP_CONFIG={"endpoints":["http://elastic:9200"], "index":"_demo_","batch_size":100,"batch_timeout":500, "append_date": true, "prefix_key":"wf_index_type"}'
       - CLASSIFIER=mimir
       - GROUPING=bucket
-      - 'RULES=[{"class":"info", "rule": "short_message=info OR short_message=INFO", "rate": 10, "dimensions": ["application"]},{"class":"info", "rule": "short_message=ERROR", "rate": 100},{"class":"default","rate":90}]'
+      - 'RULES=[{"class":"info", "rule": "short_message=info OR short_message=INFO", "rate": 10, "dimensions": ["application"]}, {"class":"info", "rule": "short_message=ERROR", "rate": 100},{"class":"default","rate":90}]'
       - SLEEP=40

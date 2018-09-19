@@ -1,0 +1,29 @@
+version: '3.3'
+services:
+  elastic:
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:6.2.2'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      discovery.type: single-node
+  kibana:
+    image: 'docker.elastic.co/kibana/kibana:6.2.2'
+    ports:
+      - '5601:5601'
+    depends_on:
+      - elastic
+    environment:
+      ELASTICSEARCH_URL: 'http://elastic:9200'
+    links:
+      - elastic
+  tremor:
+    image: tremor-runtime
+    ports:
+      - 9898:9898
+    environment:
+      - ONRAMP=kafka
+      - 'ONRAMP_CONFIG={"rdkafka_options": {"auto.offset.reset": "beginning"}, "group_id":"demo7","topics":["MSSQL_META_DATA_RAW"],"brokers":["distsysberlinc1n1.dev.bo1.csnzoo.com:9092", "distsysberlinc1n2.dev.bo1.csnzoo.com:9092", "distsysberlinc1n3.dev.bo1.csnzoo.com:9092"]}'
+      - OFFRAMP=es
+      - 'OFFRAMP_CONFIG={"endpoints":["http://elastic:9200"], "suffix":"metadata", "batch_size":10,"batch_timeout":500}'
+      - SLEEP=60

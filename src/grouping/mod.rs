@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn boolean_grouper() {
-        let s = Event::new("Example", false, utils::nanotime());
+        let s = Event::new("Example", None, utils::nanotime());
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");
         let mut g_d = grouping::new("drop", "");
@@ -81,7 +81,7 @@ mod tests {
             .expect("grouping failed");
         assert_eq!(r.drop, true);
 
-        let s = Event::new("Example", false, utils::nanotime());
+        let s = Event::new("Example", None, utils::nanotime());
         let r = p
             .apply(s)
             .and_then(|parsed| c.apply(parsed))

@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn constant_classifier() {
-        let s = Event::new("Example", false, nanotime());
+        let s = Event::new("Example", None, nanotime());
         let t = String::from("Classification");
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", t.as_str());

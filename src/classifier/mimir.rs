@@ -134,7 +134,7 @@ mod tests1 {
 
     #[test]
     fn test_classification_default() {
-        let s = Event::new("{}", false, utils::nanotime());
+        let s = Event::new("{}", None, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new("mimir", "[]");
         let r = p.apply(s).and_then(|parsed| c.apply(parsed));
@@ -148,7 +148,7 @@ mod tests1 {
 
     #[test]
     fn test_match() {
-        let s = Event::new("{\"key\": \"value\"}", false, utils::nanotime());
+        let s = Event::new("{\"key\": \"value\"}", None, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -160,7 +160,7 @@ mod tests1 {
     }
     #[test]
     fn test_no_match() {
-        let s = Event::new("{\"key\": \"not the value\"}", false, utils::nanotime());
+        let s = Event::new("{\"key\": \"not the value\"}", None, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -173,11 +173,7 @@ mod tests1 {
 
     #[test]
     fn test_partial_match() {
-        let s = Event::new(
-            "{\"key\": \"contains the value\"}",
-            false,
-            utils::nanotime(),
-        );
+        let s = Event::new("{\"key\": \"contains the value\"}", None, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -190,7 +186,7 @@ mod tests1 {
 
     #[test]
     fn test_exists() {
-        let s = Event::new("{\"wf_index_type\": \"cake\"}", false, utils::nanotime());
+        let s = Event::new("{\"wf_index_type\": \"cake\"}", None, utils::nanotime());
         let mut p = parser::new("json", "");
         let mut c = classifier::new(
             "mimir",
@@ -206,7 +202,7 @@ mod tests1 {
     fn test_key_field() {
         let s = Event::new(
             "{\"key\": \"contains the value\", \"idx\":\"hello\"}",
-            false,
+            None,
             utils::nanotime(),
         );
         let mut p = parser::new("json", "");

@@ -1,8 +1,15 @@
 [package]
 name = "tremor-runtime"
-version = "0.2.0"
+version = "0.2.1"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>"]
+
+[[bin]]
+name = "tremor-runtime"
+path = "src/main.rs"
+
+[lib]
+path="src/lib.rs"
 
 [dependencies]
 reqwest = "0.8"
@@ -26,9 +33,8 @@ chrono = "0.4"
 regex = "1"
 maplit = "1.0.1"
 
-
 # tiberius = "0.3"
-#tiberius = { version = "0.3", default-features=false, features=["chrono"] }
+# tiberius = { version = "0.3", default-features=false, features=["chrono"] }
 tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"] }
 futures-state-stream = "0.1"
 tokio = "0.1.8"
@@ -42,18 +48,6 @@ hdrhistogram = "6.0.6"
 xz2 = "0.1.5"
 libc = "0.2.43"
 spmc = "0.2.2"
-
-[[bin]]
-name = "tremor-runtime"
-path = "src/main.rs"
-
-[[bin]]
-name = "tremor-runtime-bench"
-path = "src/bench.rs"
-
-[[bin]]
-name = "mimir-tool"
-path = "src/tool/main.rs"
 
 [features]
 default = []

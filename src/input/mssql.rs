@@ -7,15 +7,15 @@ use serde_json;
 #[cfg(feature = "try_spmc")]
 use spmc;
 use std::sync::mpsc;
-use std::{boxed, str, thread, time};
+use std::{boxed, f64, str, thread, time};
 use tiberius::ty::{ColumnData, FromColumnData};
 use tiberius::{self, SqlConnection};
 use tokio_current_thread::block_on_all;
 pub struct Input {
     config: Config,
 }
-const DATETIME_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
-const DATE_FORMAT: &'static str = "%Y-%m-%d";
+const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+const DATE_FORMAT: &str = "%Y-%m-%d";
 
 fn dflt_false() -> bool {
     false
@@ -61,7 +61,7 @@ fn row_to_json(row: &tiberius::query::QueryRow) -> serde_json::Value {
             ColumnData::I32(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
             ColumnData::I64(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
             ColumnData::F32(f) => {
-                serde_json::Value::Number(serde_json::Number::from_f64(*f as f64).unwrap())
+                serde_json::Value::Number(serde_json::Number::from_f64(f64::from(*f)).unwrap())
             }
             ColumnData::F64(f) => {
                 serde_json::Value::Number(serde_json::Number::from_f64(*f).unwrap())
@@ -113,8 +113,8 @@ fn row_to_json(row: &tiberius::query::QueryRow) -> serde_json::Value {
 }
 
 fn send_row(
-    pipelines: &Vec<mpsc::SyncSender<Msg>>,
-    row: tiberius::query::QueryRow,
+    pipelines: &[mpsc::SyncSender<Msg>],
+    row: &tiberius::query::QueryRow,
     idx: usize,
     len: usize,
 ) -> usize {
@@ -160,7 +160,7 @@ impl InputT for Input {
                     let now = time::Instant::now();
                     conn.simple_query(query)
                         .for_each(|row| {
-                            send_row(&pipelines, row, 0, len);
+                            send_row(&pipelines, &row, 0, len);
                             Ok(())
                         })
                         .and_then(move |conn| {
@@ -175,7 +175,7 @@ impl InputT for Input {
             let conn = SqlConnection::connect(conn_str.as_str());
             let future = conn.and_then(|conn| {
                 conn.simple_query(query).for_each(|row| {
-                    idx = send_row(&pipelines, row, idx, len);
+                    idx = send_row(&pipelines, &row, idx, len);
                     Ok(())
                 })
             });

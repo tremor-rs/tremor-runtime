@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+### Action required
+
+### Action required
+
+* `DROP_OFFRAMP` and `DROP_OFFRAMP_CONFIG` are renamed to `DIVERTED_OFFRAMP` and `DIVERTED_OFFRAMP_CONFIG` respectively in the RPM config. The old settings will work for the time being and removed in a later release.
+
+### Changes
+
+* Add influx offramp with the same batching and backoff as the elastic search offramp. So far filtering is only possible on the `measurement` and `timestamp` field.
+* Documented file on- and off-ramp
+
 ## 0.2.0
 
 ### Action required

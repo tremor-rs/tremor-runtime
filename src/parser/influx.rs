@@ -17,38 +17,56 @@ impl Parser {
 impl Step for Parser {
     fn apply(&mut self, event: Event) -> Result<Event, TSError> {
         let mut event = Event::from(event);
-        event.json = Some(serde_json::to_string(&parse(&event.raw)?)?);
-        Ok(event)
+        match parse(&event.raw) {
+            Ok(parsed) => {
+                event.json = Some(serde_json::to_string(&parsed)?);
+                Ok(event)
+            }
+            Err(e) => {
+                println!("Bad influx message: {} => {}", e, event.raw);
+                Err(e)
+            }
+        }
     }
 }
 
 #[derive(PartialEq, Clone, Debug, Serialize)]
 pub struct InfluxDatapoint {
     measurement: String,
-    tag_set: HashMap<String, String>,
-    field_set: HashMap<String, Value>,
+    tags: HashMap<String, String>,
+    fields: HashMap<String, Value>,
     timestamp: u64,
 }
 
 fn parse(data: &str) -> Result<InfluxDatapoint, TSError> {
     let mut data = String::from(data);
+    loop {
+        if let Some(c) = data.pop() {
+            if c != '\n' {
+                data.push(c);
+                break;
+            }
+        } else {
+            return Err(TSError::new("empty event"));
+        }
+    }
+
     let mut chars = data.as_mut_str().chars();
     let (measurement, c) = parse_to_char2(&mut chars, ',', ' ')?;
-    let tag_set = if c == ',' {
+    let tags = if c == ',' {
         parse_tags(&mut chars)?
     } else {
         HashMap::new()
     };
 
-    let field_set = parse_fields(&mut chars)?;
-
+    let fields = parse_fields(&mut chars)?;
     let timestamp = chars.as_str().parse()?;
 
     Ok(InfluxDatapoint {
-        measurement: measurement,
-        tag_set: tag_set,
-        field_set: field_set,
-        timestamp: timestamp,
+        measurement,
+        tags,
+        fields,
+        timestamp,
     })
 }
 
@@ -61,8 +79,8 @@ fn parse_string(chars: &mut Chars) -> Result<(Value, char), TSError> {
     }
 }
 
-fn float_or_bool(s: String) -> Result<Value, TSError> {
-    match s.as_str() {
+fn float_or_bool(s: &str) -> Result<Value, TSError> {
+    match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::Bool(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::Bool(false)),
         _ => Ok(num_f(s.parse()?)),
@@ -77,8 +95,8 @@ fn parse_value(chars: &mut Chars) -> Result<(Value, char), TSError> {
     }
     while let Some(c) = chars.next() {
         match c {
-            ',' => return Ok((float_or_bool(res)?, ',')),
-            ' ' => return Ok((float_or_bool(res)?, ' ')),
+            ',' => return Ok((float_or_bool(&res)?, ',')),
+            ' ' => return Ok((float_or_bool(&res)?, ' ')),
             'i' => match chars.next() {
                 Some(' ') => return Ok((num_i(res.parse()?), ' ')),
                 Some(',') => return Ok((num_i(res.parse()?), ',')),
@@ -208,10 +226,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -224,11 +242,11 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string(),
                 "season".to_string() => "summer".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -242,10 +260,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0),
                 "bug_concentration".to_string() => num_f(98.0)
             },
@@ -260,8 +278,8 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: HashMap::new(),
-            field_set: hashmap!{
+            tags: HashMap::new(),
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -274,8 +292,8 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: HashMap::new(),
-            field_set: hashmap!{
+            tags: HashMap::new(),
+            fields: hashmap!{
                 "temperature".to_string() => num_i(82)
             },
             timestamp: 1465839830100400200,
@@ -288,10 +306,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => Value::String("too warm".to_string())
             },
             timestamp: 1465839830100400200,
@@ -309,10 +327,10 @@ mod tests {
         ];
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "too_hot".to_string() => Value::Bool(true)
             },
             timestamp: 1465839830100400200,
@@ -333,10 +351,10 @@ mod tests {
         ];
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "too_hot".to_string() => Value::Bool(false)
             },
             timestamp: 1465839830100400200,
@@ -353,10 +371,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us,midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -370,10 +388,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temp=rature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -386,10 +404,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location place".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -403,10 +421,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "wea,ther".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -419,10 +437,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "wea ther".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -436,10 +454,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature".to_string() => Value::String("too\"hot\"".to_string())
             },
             timestamp: 1465839830100400200,
@@ -453,10 +471,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot/cold".to_string())
             },
             timestamp: 1465839830100400201,
@@ -470,10 +488,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
             },
             timestamp: 1465839830100400202,
@@ -488,10 +506,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
             },
             timestamp: 1465839830100400203,
@@ -506,10 +524,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
             },
             timestamp: 1465839830100400204,
@@ -522,10 +540,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
             },
             timestamp: 1465839830100400205,
@@ -538,10 +556,10 @@ mod tests {
         println!("{}", s);
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tag_set: hashmap!{
+            tags: hashmap!{
                 "location".to_string() => "us-midwest".to_string()
             },
-            field_set: hashmap!{
+            fields: hashmap!{
                 "temperature_str".to_string() => Value::String("too hot\\\\\\cold".to_string())
             },
             timestamp: 1465839830100400206,
@@ -559,14 +577,35 @@ mod tests {
             serde_json::from_str(serde_json::to_string(&d).unwrap().as_str()).unwrap();
         let e: serde_json::Value = json!({
             "measurement": "weather",
-            "tag_set": hashmap!{"location" => "us-midwest"},
-            "field_set": hashmap!{"temperature" => 82.0},
+            "tags": hashmap!{"location" => "us-midwest"},
+            "fields": hashmap!{"temperature" => 82.0},
             "timestamp": 1465839830100400200i64
         });
         assert_eq!(e, j)
     }
 
-    /* 
+    #[test]
+    fn example_test() {
+        let s ="kafka_BrokerTopicMetrics,agent=jmxtrans,dc=dev,host_name=kafkac3n2_dev_bo1_csnzoo_com,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=elasticTestTable TotalFetchRequestsPerSec=450030046i 1537347064000000000\n\n";
+        println!("{}", s);
+        let r = InfluxDatapoint {
+            measurement: "kafka_BrokerTopicMetrics".to_string(),
+            tags: hashmap!{
+                "agent".to_string() => "jmxtrans".to_string(),
+                "host_name".to_string() => "kafkac3n2_dev_bo1_csnzoo_com".to_string(),
+                "dc".to_string() => "dev".to_string(),
+                "junk".to_string() => "kafka_topic".to_string(),
+                "kafka_type".to_string() => "server".to_string(),
+                "metric_type".to_string() => "counter".to_string(),
+                "topic_name".to_string() => "elasticTestTable".to_string()
+            },
+            fields: hashmap!{
+                "TotalFetchRequestsPerSec".to_string() => num_i(450030046)
+            },
+            timestamp: 1537347064000000000,
+        };
+        assert_eq!(r, parse(s).unwrap())
+    } /* 
 
     #[bench]
     fn parse_bench(b: &mut Bencher) {

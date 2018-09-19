@@ -14,7 +14,7 @@ then
     echo "*         DROP_OFFRAMP is deprecated please use DIVERTED_OFFRAMP instead       *"
     echo "*                          sleeping for 10 seconds                             *"
     echo "********************************************************************************"
-    sleep 10
+    sleep 15
 fi
 
 # Offramp configuration
@@ -26,7 +26,7 @@ then
     echo "* DROP_OFFRAMP_CONFIG is deprecated please use DIVERTED_OFFRAMP_CONFIG instead *"
     echo "*                          sleeping for 10 seconds                             *"
     echo "********************************************************************************"
-    sleep 10
+    sleep 15
 fi
 DROP_OFFRAMP_CONFIG=${DROP_OFFRAMP_CONFIG:-""}
 
@@ -55,7 +55,15 @@ THREADS=${THREADS:-"1"}
 
 SLEEP=${SLEEP:-"0"}
 
-sleep $SLEEP
+sleep "$SLEEP"
+
+PRE_PROCESSOR=${PRE_PROCESSOR:-""}
+
+OPTS=""
+if [ "$PRE_PROCESSOR" = "split-lines" ] 
+then
+    OPTS="--split-lines"
+fi
 
 export RUST_BACKTRACE=1
 ./tremor-runtime --on-ramp "${ONRAMP}" --on-ramp-config "${ONRAMP_CONFIG}" \
@@ -65,5 +73,4 @@ export RUST_BACKTRACE=1
                  --classifier "${CLASSIFIER}" --classifier-config "${CLASSIFIER_CONFIG}" \
                  --grouping "${GROUPING}" --grouping-config "${GROUPING_CONFIG}" \
                  --limiting "${LIMITING}" --limiting-config "${LIMITING_CONFIG}" \
-                 --pipeline-threads "${THREADS}"
-
+                 --pipeline-threads "${THREADS}" $OPTS

@@ -98,7 +98,7 @@ then
     tests=$@
 fi
 
-if [ -z "${tests}"]
+if [ -z "${tests}" ]
 then
     tests=$(ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g")
 fi

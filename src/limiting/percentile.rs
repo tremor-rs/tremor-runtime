@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn keep_all() {
-        let s = Event::new("Example", false, utils::nanotime());
+        let s = Event::new("Example", None, utils::nanotime());
 
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn keep_non() {
-        let s = Event::new("Example", false, utils::nanotime());
+        let s = Event::new("Example", None, utils::nanotime());
 
         let mut p = parser::new("raw", "");
         let mut c = classifier::new("constant", "Classification");

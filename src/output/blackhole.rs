@@ -30,9 +30,9 @@ impl Output {
         match serde_json::from_str(opts) {
             Ok(config @ Config { .. }) => Output {
                 config: config.clone(),
-                delivered: Histogram::new_with_bounds(1, 1000000000, config.significant_figures as u8)
+                delivered: Histogram::new_with_bounds(1, 1_000_000_000, config.significant_figures as u8)
                     .unwrap(),
-                dropped: Histogram::new_with_bounds(1, 1000000000, config.significant_figures as u8).unwrap(),
+                dropped: Histogram::new_with_bounds(1, 1_000_000_000, config.significant_figures as u8).unwrap(),
             },
             e => panic!(
                 "Invalid options for Blackhole output, use `{{\"stop_after_secs\": <secs>, \"significant_figures\": <digits>}}`\n{:?} ({})",
@@ -48,7 +48,11 @@ impl Step for Output {
         let now_ns = utils::nanotime();
         let delta_epoch_ns = now_ns - event.app_epoch_ns;
         let delta_event_ns = now_ns - event.ingest_time_ns;
-        let should_warmup = event.bench_warmup;
+        let should_warmup = if let Some(ctx) = event.ctx {
+            ctx.warmup
+        } else {
+            false
+        };
         let has_stop_limit = self.config.stop_after_secs != 0;
         let stop_after_ns = self.config.stop_after_secs * 1_000_000_000;
 

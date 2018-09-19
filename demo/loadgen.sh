@@ -11,13 +11,13 @@ SLEEP=${SLEEP:-"0"}
 sleep $SLEEP
 
 set +x
-export RUST_BACKTRACE=1
+export RUST_BACKTRACE=full
 while true
 do
 	xzcat $LOAD_FILE
 done | \
 ./tremor-runtime --on-ramp "stdin" \
                  --off-ramp "kafka" --off-ramp-config "${OFFRAMP_CONFIG}" \
-                 --parser "json" \
+                 --parser "raw" \
                  --classifier "constant" --classifier-config "default" \
                  --grouping "bucket" --grouping-config "[{\"class\":\"default\",\"rate\":$MPS}]"

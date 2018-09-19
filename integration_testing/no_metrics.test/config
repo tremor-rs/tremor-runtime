@@ -1,0 +1,2 @@
+MY_BASEDIR=$(dirname "$0")
+run_cmd="${run_cmd} --no-metrics-endpoint"

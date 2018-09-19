@@ -38,12 +38,12 @@ lazy_static! {
 // output connector.
 pub fn new(name: &str, opts: &str) -> Output {
     match name {
-        "blackhole" => Output::Blackhole(blackhole::Output::new(opts)),
+        "blackhole" => Output::Blackhole(Box::new(blackhole::Output::new(opts))),
         "kafka" => Output::Kafka(kafka::Output::new(opts)),
         "stdout" => Output::Stdout(stdout::Output::new(opts)),
         "debug" => Output::Debug(debug::Output::new(opts)),
         "es" => Output::Elastic(Box::new(elastic::Output::new(opts))),
-        "influx" => Output::Influx(influx::Output::new(opts)),
+        "influx" => Output::Influx(Box::new(influx::Output::new(opts))),
         "null" => Output::Null(null::Output::new(opts)),
         "file" => Output::File(file::Output::new(opts)),
 
@@ -64,10 +64,10 @@ pub fn step(event: &Event) -> &'static str {
 /// Enum of all output connectors we have implemented.
 /// New connectors need to be added here.
 pub enum Output {
-    Blackhole(blackhole::Output),
+    Blackhole(Box<blackhole::Output>),
     Kafka(kafka::Output),
     Elastic(Box<elastic::Output>),
-    Influx(influx::Output),
+    Influx(Box<influx::Output>),
     Stdout(stdout::Output),
     Debug(debug::Output),
     Null(null::Output),
