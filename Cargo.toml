@@ -42,7 +42,7 @@ tokio-current-thread = "0.1.1"
 
 window = { path = "window" }
 
-mimir = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", branch = "master" }
+mimir = { git = "https://gitlab+deploy-token-1:ZSysTyvMd8a-w-hVS7mn@git.csnzoo.com/data-engineering/mimir-rs.git", tag = "v0.2.6" }
 # mimir = { path = "../mimir-rs" }
 hdrhistogram = "6.0.6"
 xz2 = "0.1.5"
