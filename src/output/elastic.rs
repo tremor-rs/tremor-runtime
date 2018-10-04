@@ -290,7 +290,7 @@ fn update_send_time(event: Event) -> String {
         .collect();
     let tmap = serde_json::to_string(&Value::Object(tremor_map));
 
-    add_json_kv(event.raw.as_str(), "_tremor", tmap.unwrap().as_str())
+    add_json_kv(event.raw.as_str(), "tremor", tmap.unwrap().as_str())
 }
 
 impl Step for Output {

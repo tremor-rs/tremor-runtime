@@ -1,8 +1,8 @@
 [package]
 name = "tremor-runtime"
-version = "0.2.1"
+version = "0.2.2"
 description = "Tremor Runtime"
-authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>"]
+authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>"]
 
 [[bin]]
 name = "tremor-runtime"
@@ -10,6 +10,9 @@ path = "src/main.rs"
 
 [lib]
 path="src/lib.rs"
+
+[profile.release]
+lto = true
 
 [dependencies]
 reqwest = "0.8"

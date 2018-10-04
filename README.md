@@ -340,3 +340,12 @@ To execute a benchmark, build tremor in **release** mode and run the examples fr
 ```sh
 ./bench2/bench0.sh
 ```
+
+### Local dependencies (mac only - not officially supported)
+
+```bash
+brew install bison
+brew install flex
+export PATH="/usr/local/Cellar/flex/$(brew list --versions flex | tr ' ' '\n' | tail -1)/bin/:$PATH"
+export PATH="/usr/local/Cellar/bison/$(brew list --versions bison | tr ' ' '\n' | tail -1)/bin:$PATH"
+```

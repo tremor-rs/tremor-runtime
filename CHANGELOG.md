@@ -1,8 +1,14 @@
 # Changelog
 
-## 0.2.1
+## 0.2.2
 
-### Action required
+### Changes
+
+* Change injected key for ES from `_tremor` to `tremor`.
+* Added link time optimisation
+* Build with CPU native target
+
+## 0.2.1
 
 ### Action required
 

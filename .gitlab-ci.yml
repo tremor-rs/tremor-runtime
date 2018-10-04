@@ -21,6 +21,7 @@ lint:
   stage: test
   image: rust:1.28
   when: always
+  allow_failure: true
   cache:
     paths:
       - target.clippy/
