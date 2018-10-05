@@ -41,7 +41,7 @@ An example would be:
 
 #### mssql
 
-The mssql plugin executes a query against a mssql database and feeds the rows as JSON into kafka. The query can be executed on a periodic basis. It is confugured using the following config: `{"host": "<sql server host>"[, "port": <sql server port default - 1433>], "username": "<username>", "password": "<password>", "query": "<query to run>"[, "interval_ms": <interval in milliseconds to re-execute the query>]}`
+The mssql plugin executes a query against a mssql database and feeds the rows as JSON into kafka. The query can be executed on a periodic basis. It is configured using the following config: `{"host": "<sql server host>"[, "port": <sql server port default - 1433>], "username": "<username>", "password": "<password>", "query": "<query to run>"[, "interval_ms": <interval in milliseconds to re-execute the query>]}`
 
 Note: As this is JSON encoded some type information will be lost!
 
@@ -63,7 +63,7 @@ The `json` parser parses the input as a JSON and fails if the data is invalid.
 
 #### influx (parser)
 
-The `influx` parser translates InfluxDB line protocl to a nested datastructure. Represented as json it would look like this:
+The `influx` parser translates InfluxDB line protocol to a nested datastructure. Represented as json it would look like this:
 
 InfluxDB:
 
@@ -84,11 +84,11 @@ Nested Representation (JSONesq):
 
 ### Classifier
 
-sClassifiers handle event classification based on rules.
+Classifiers handle event classification based on rules.
 
 #### constant (default)
 
-The `constant` classifier classifies all events with the type passed as it's config.
+The `constant` classifier classifies all events with the type passed as its config.
 
 #### mimir
 
@@ -219,7 +219,7 @@ Writes all data to a file, one event per line. The config is the file to write t
 
 The docker container build takes environment variables for each plugin. The `input` plugin is provided as `INPUT=...` and it's configuration as `INPUT_CONFIG=...`. Plugins and configs may be omitted and will then be replaced with a default, for configurations the default is an empty configuration.
 
-The additional fild `PRE_PROCESSOR` can be specified to do processing steps on an event. Currently supported options are `split-lines` that will split multi line messages into one event per line.
+The additional field `PRE_PROCESSOR` can be specified to do processing steps on an event. Currently supported options are `split-lines` that will split multi line messages into one event per line.
 
 In addition the `RUST_LOG` environment variable can be passed to define the log level of the application.
 
@@ -243,7 +243,7 @@ The demo mode logically follows the flow outlined below. It reads the data from 
 
 ![flow](docs/demo-flow.png)
 
-### Configuraiton
+### Configuration
 
 #### Config file
 
@@ -296,7 +296,7 @@ The base tremor demo can be extended to include Elasticsearch + [kibana](#kibana
 make demo-elastic-run
 ```
 
-This exposes Elasticsearch on localhost port 9200 and [kibana](#kibana) as documented in it's section.
+This exposes Elasticsearch on localhost port 9200 and [kibana](#kibana) as documented in its section.
 
 #### Kitchen Sink demo
 
