@@ -8,6 +8,10 @@ This tool allows to configure a pipeline that moves data from a source to a dest
 
 [Artifactory](https://artifactory.service.bo1.csnzoo.com/artifactory/webapp/#/artifacts/browse/tree/General/docker-wayfair/wayfair/data-engineering/tremor-runtime)
 
+## Dev
+
+You can build and test tremor using docker when installing the [docker dev env](https://git.csnzoo.com/data-engineering/docker-dev-env) and using `dcargo` instead of `cargo`.
+
 ## Plugins
 
 Some plugins require additional configuration to be passed others do not.
