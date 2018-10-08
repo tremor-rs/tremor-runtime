@@ -1,6 +1,6 @@
 test:
   stage: test
-  image: rust:1.28
+  image: rust:1.29
   when: always
   cache:
     paths:
@@ -19,7 +19,7 @@ test:
 
 lint:
   stage: test
-  image: rust:1.28
+  image: rust:1.29
   when: always
   allow_failure: true
   cache:
@@ -33,3 +33,20 @@ lint:
     - apt install -y bison flex cmake automake
     - make clippy-install
     - make clippy
+
+
+bench:
+  stage: test
+  image: rust:1.29
+  when: always
+  allow_failure: true
+  cache:
+    paths:
+      - target
+      - ~/.cargo/
+  tags:
+    - docker
+  script:
+    - apt update 
+    - apt install -y bison flex cmake automake
+    - make publish-bench

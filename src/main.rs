@@ -111,7 +111,7 @@ fn main() {
             hyper::rt::run(server);
         });
     } else {
-        println!("Not spawning metrics endpoint");
+        println_stderr!("Not spawning metrics endpoint");
     }
 
     #[cfg(feature = "try_spmc")]

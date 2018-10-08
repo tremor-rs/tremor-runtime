@@ -47,12 +47,21 @@ use hyper::rt::Future;
 use hyper::service::service_fn;
 use hyper::Server;
 
+use std::io::Write;
 #[cfg(not(feature = "try_spmc"))]
 use std::sync::mpsc;
 use std::thread;
 use utils::nanotime;
 
 use input::Input;
+
+/// println_stderr and run_command_or_fail are copied from rdkafka-sys
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
 
 fn main() {
     env_logger::init();
@@ -71,7 +80,7 @@ fn main() {
             hyper::rt::run(server);
         });
     } else {
-        println!("Not spawning metrics endpoint");
+        println_stderr!("Not spawning metrics endpoint");
     }
 
     let threads = value_t!(matches.value_of("pipeline-threads"), u32).unwrap() as usize;

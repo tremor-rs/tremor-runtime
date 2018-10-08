@@ -70,11 +70,9 @@ it:
 
 
 
-release-bench:
-	cargo build --release
-	echo > bench-results/$(VSN).txt
-	for f in bench2/*.sh; do echo "$$f" >> bench-results/$(VSN).txt; $$f >> bench-results/$(VSN).txt; done
-	git add bench-results/$(VSN).txt
+publish-bench:
+	cargo build --release --examples
+	for f in bench/*.sh; do $$f; done
 
 rpm: force rpm/tremor.spec rpm/Dockerfile
 	docker build . -f rpm/Dockerfile -t tremor-rpm-build

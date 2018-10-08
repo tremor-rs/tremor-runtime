@@ -37,7 +37,7 @@ lazy_static! {
 pub trait Pipelineable {
     fn run(&mut self, event: Event) -> PipeLineResult;
     fn shutdown(&mut self) {
-        println!("Hitting default pipelieable shutdown impl");
+        //println!("Hitting default pipelieable shutdown impl");
     }
 }
 
@@ -255,8 +255,7 @@ impl Pipelineable for MainPipeline {
                         .inc();
                     Ok(r)
                 }
-            })
-            .and_then(|mut r| {
+            }).and_then(|mut r| {
                 r.output_step = OutputStep::Drop;
                 if r.drop {
                     r.drop = false;
