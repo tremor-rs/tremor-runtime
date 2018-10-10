@@ -33,7 +33,8 @@ services:
       - ONRAMP=kafka
       - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - OFFRAMP=debug
-      - DROP_OFFRAMP=debug
+      - PARSER=json
+      - DIVERTED_OFFRAMP=debug
       - CLASSIFIER=mimir
       - GROUPING=bucket
       - 'RULES=[{"class":"info", "rule": "short_message=info OR short_message=INFO", "rate": 10, "dimensions": ["application"]},{"class":"info", "rule": "short_message=ERROR", "rate": 100},{"class":"default","rate":90}]'

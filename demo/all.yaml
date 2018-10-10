@@ -74,6 +74,7 @@ services:
       - 'ONRAMP_CONFIG={"group_id":"demo","topics":["demo"],"brokers":["kafka:9092"]}'
       - OFFRAMP=es
       - 'OFFRAMP_CONFIG={"endpoints":["http://elastic:9200"], "suffix":"_demo_","batch_size":100,"batch_timeout":500, "append_date": true, "prefix_key":"wf_index_type"}'
+      - PARSER=json
       - CLASSIFIER=mimir
       - GROUPING=bucket
       - 'RULES=[{"class":"info", "rule": "short_message=info OR short_message=INFO", "rate": 10, "dimensions": ["application"]}, {"class":"info", "rule": "short_message=ERROR", "rate": 100},{"class":"default","rate":90}]'

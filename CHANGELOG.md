@@ -1,5 +1,12 @@
 # Changelog
 
+
+## 0.2.3
+
+### Changes
+
+* Add kafka client id w/ hostname and thread to the kafka on and offramp
+
 ## 0.2.2
 
 ### Changes

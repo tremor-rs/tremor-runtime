@@ -34,6 +34,7 @@ extern crate tokio_current_thread;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate maplit;
+extern crate hostname;
 extern crate window;
 extern crate xz2;
 

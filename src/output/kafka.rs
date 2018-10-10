@@ -1,5 +1,6 @@
 use error::TSError;
 use futures::Future;
+use hostname::get_hostname;
 use output::{self, OUTPUT_DELIVERED, OUTPUT_ERROR, OUTPUT_SKIPPED};
 use pipeline::{Event, Step};
 use rdkafka::config::ClientConfig;
@@ -19,7 +20,12 @@ impl Output {
         let opts: Vec<&str> = opts.split('|').collect();
         match opts.as_slice() {
             [topic, brokers] => {
+                let hostname = match get_hostname() {
+                    Some(h) => h,
+                    None => "tremor-host.local".to_string(),
+                };
                 let producer = ClientConfig::new()
+                    .set("client.id", &format!("tremor-{}-{}", hostname, 0))
                     .set("bootstrap.servers", brokers)
                     .set("queue.buffering.max.ms", "0")  // Do not buffer
                     .create()

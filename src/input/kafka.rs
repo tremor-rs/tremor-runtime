@@ -1,4 +1,5 @@
 use futures::prelude::*;
+use hostname::get_hostname;
 use input::{Input as InputT, INPUT_ERR, INPUT_OK};
 use pipeline::Msg;
 use rdkafka::client::ClientContext;
@@ -76,24 +77,36 @@ impl InputT for Input {
     fn enter_loop(&mut self, pipelines: Vec<mpsc::SyncSender<Msg>>) {
         let mut idx = 0;
         let mut t: Option<thread::JoinHandle<()>> = None;
-        for _tid in 0..self.config.threads {
+        let hostname = match get_hostname() {
+            Some(h) => h,
+            None => "tremor-host.local".to_string(),
+        };
+        for tid in 0..self.config.threads {
             let config = self.config.clone();
             let pipelines = pipelines.clone();
+            let hostname = hostname.clone();
             let h = thread::spawn(move || {
                 let context = LoggingConsumerContext;
-                let consumer: LoggingConsumer = config.rdkafka_options.iter().fold(&mut ClientConfig::new(), |c: &mut ClientConfig, (k, v)| c.set(k, v))
-                        .set("group.id", &config.group_id)
-                        .set("bootstrap.servers", &config.brokers.join(","))
-                        .set("enable.partition.eof", "false")
-                        .set("session.timeout.ms", "6000")
-                    // Commit automatically every 5 seconds.
-                        .set("enable.auto.commit", "true")
-                        .set("auto.commit.interval.ms", "5000")
-                    // but only commit the offsets explicitly stored via `consumer.store_offset`.
-                        .set("enable.auto.offset.store", "true")
-                        .set_log_level(RDKafkaLogLevel::Debug)
-                        .create_with_context(context)
-                        .expect("Consumer creation failed");
+                let mut consumer = ClientConfig::new();
+                let consumer = consumer.set("group.id", &config.group_id)
+                    .set("client.id", &format!("tremor-{}-{}", hostname, tid))
+                    .set("bootstrap.servers", &config.brokers.join(","))
+                    .set("enable.partition.eof", "false")
+                    .set("session.timeout.ms", "6000")
+                // Commit automatically every 5 seconds.
+                    .set("enable.auto.commit", "true")
+                    .set("auto.commit.interval.ms", "5000")
+                // but only commit the offsets explicitly stored via `consumer.store_offset`.
+                    .set("enable.auto.offset.store", "true")
+                    .set_log_level(RDKafkaLogLevel::Debug);
+
+                let consumer: LoggingConsumer = config
+                    .rdkafka_options
+                    .iter()
+                    .fold(consumer, |c: &mut ClientConfig, (k, v)| c.set(k, v))
+                    .create_with_context(context)
+                    .expect("Consumer creation failed");
+
                 let topics: Vec<&str> = config.topics.iter().map(|topic| topic.as_str()).collect();
                 consumer
                     .subscribe(&topics)
