@@ -2,7 +2,6 @@
 onramps:
   - onramp::blaster:
       source: ./demo/data.json.xz
-      interval: 1
       pipeline: main
 
 pipelines:

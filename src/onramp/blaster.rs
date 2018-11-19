@@ -31,6 +31,10 @@ use xz2::read::XzDecoder;
 #[cfg(feature = "try_spmc")]
 use spmc;
 
+lazy_static! {
+    static ref ONE_NS: Duration = Duration::from_nanos(1);
+}
+
 pub struct Onramp {
     config: Config,
     data: Vec<u8>,
@@ -39,7 +43,7 @@ pub struct Onramp {
 #[derive(Deserialize, Debug, Clone)]
 struct Config {
     source: String,
-    interval: u64,
+    interval: Option<u64>,
     iters: Option<u64>,
 }
 
@@ -65,13 +69,29 @@ impl Onramp {
         }
     }
 }
-pub fn step(data: &[u8], mut next: u64, interval: u64, pipelines: &[PipelineOnrampElem]) {
+pub fn step_ival(data: &[u8], next: u64, interval: u64, pipelines: &[PipelineOnrampElem]) -> u64 {
+    let mut next = next;
     for line in data.lines() {
         if let Ok(line) = line {
             while nanotime() < next {
                 park(Duration::from_nanos(1));
             }
             next += interval;
+            let msg = OnData {
+                reply_channel: None,
+                data: EventValue::Raw(line.into_bytes()),
+                vars: HashMap::new(),
+                ingest_ns: nanotime(),
+            };
+            pipelines[0].do_send(msg);
+        }
+    }
+    next
+}
+
+pub fn step(data: &[u8], pipelines: &[PipelineOnrampElem]) {
+    for line in data.lines() {
+        if let Ok(line) = line {
             let (tx, rx) = channel(0);
             let msg = OnData {
                 reply_channel: Some(tx),
@@ -91,16 +111,31 @@ impl OnrampT for Onramp {
         let interval = self.config.interval;
         let data = self.data.clone();
         thread::spawn(move || {
-            let next;
+            let mut next;
 
-            next = nanotime() + interval;
-            if let Some(iters) = iters {
-                for _ in 0..iters {
-                    step(&data, next, interval, &pipelines);
+            match interval {
+                None => {
+                    if let Some(iters) = iters {
+                        for _ in 0..iters {
+                            step(&data, &pipelines);
+                        }
+                    } else {
+                        loop {
+                            step(&data, &pipelines);
+                        }
+                    }
                 }
-            } else {
-                loop {
-                    step(&data, next, interval, &pipelines);
+                Some(interval) => {
+                    next = nanotime() + interval;
+                    if let Some(iters) = iters {
+                        for _ in 0..iters {
+                            next = step_ival(&data, next, interval, &pipelines);
+                        }
+                    } else {
+                        loop {
+                            next = step_ival(&data, next, interval, &pipelines);
+                        }
+                    }
                 }
             }
             for p in pipelines {
