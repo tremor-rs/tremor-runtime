@@ -15,14 +15,13 @@
 //!
 //! # Tremor file Onramp
 //!
-//! The `file` onramp reads lines from a provided file and enters them into the pipeline as events
+//! The `file` onramp reads lines from a provided file and enters them into the pipeline as events.
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `file` path to the file to read from
-//! ## Variables
-//!
+//! See [Config](struct.Config.html) for details.
 
+use errors::*;
 use futures::sync::mpsc::channel;
 use futures::Stream;
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
@@ -39,13 +38,16 @@ pub struct Onramp {
     file: String,
 }
 
+#[derive(Deserialize)]
+pub struct Config {
+    /// File to read from
+    pub file: String,
+}
+
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Self {
-        if let Ok(r @ Onramp { .. }) = serde_yaml::from_value(opts.clone()) {
-            r
-        } else {
-            panic!("'file' needs to be provided for the file onramp")
-        }
+    pub fn new(opts: &ConfValue) -> Result<Self> {
+        let Config { file } = serde_yaml::from_value(opts.clone())?;
+        Ok(Onramp { file })
     }
 }
 

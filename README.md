@@ -10,6 +10,8 @@ Tremor is based on chaining operations that have inputs, outputs and additional 
 
 The documentation for different operations can be generated (and opened) by running `make doc`. The `onramps` and `op` modules hold the relevant information.
 
+For each operation the `Config` struct defines the parameters that can be passed to configure it and the description holds additional details and examples.
+
 
 ## Configuration file
 
@@ -18,6 +20,7 @@ Tremor uses yaml to configure pipelines, the configuration file has two top leve
 ### `onramps`
 
 A list that define the onramops started in tremor. Each onramp lives in it's own thread. Along with it's own configuration it has the key `pipeline` that defines the pipeline data from that onramp is send to. At least one needs to be present.
+
 
 ```yaml
 onramps:

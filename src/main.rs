@@ -231,7 +231,7 @@ fn run() -> Result<()> {
             println_stderr!("Writing: {}.dot", name);
             r.write_dot(&format!("{}.dot", name));
         } else {
-            let mut onramp = onramp::new(&onramp_cfg.name, &onramp_cfg.config);
+            let mut onramp = onramp::new(&onramp_cfg.name, &onramp_cfg.config)?;
             onramps.push(onramp.enter_loop(onramp_pipelines.clone()));
         }
     }

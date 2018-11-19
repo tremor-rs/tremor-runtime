@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Onramp connectors.
+//! # Onramp connectors
 //!
 //! Onramp connectors are used to get data into the system
 //! to then be processed.
@@ -24,6 +24,7 @@ pub mod kafka;
 pub mod mssql;
 pub mod stdin;
 use actix::prelude::*;
+use errors::*;
 use pipeline::prelude::*;
 use std::thread::JoinHandle;
 
@@ -36,14 +37,14 @@ pub trait Onramp {
     fn enter_loop(&mut self, pipeline: PipelineOnramp) -> EnterReturn;
 }
 
-pub fn new(name: &str, opts: &ConfValue) -> Onramps {
+pub fn new(name: &str, opts: &ConfValue) -> Result<Onramps> {
     match name {
-        "blaster" => Onramps::Blaster(blaster::Onramp::new(opts)),
-        "kafka" => Onramps::Kafka(kafka::Onramp::new(opts)),
-        "file" => Onramps::File(file::Onramp::new(opts)),
-        "mssql" => Onramps::MSSql(mssql::Onramp::new(opts)),
-        "http" => Onramps::HTTP(http::Onramp::new(opts)),
-        "stdin" => Onramps::Stdin(stdin::Onramp::new(opts)),
+        "blaster" => Ok(Onramps::Blaster(blaster::Onramp::new(opts)?)),
+        "file" => Ok(Onramps::File(file::Onramp::new(opts)?)),
+        "http" => Ok(Onramps::HTTP(http::Onramp::new(opts)?)),
+        "kafka" => Ok(Onramps::Kafka(kafka::Onramp::new(opts)?)),
+        "mssql" => Ok(Onramps::MSSql(mssql::Onramp::new(opts)?)),
+        "stdin" => Ok(Onramps::Stdin(stdin::Onramp::new(opts)?)),
         _ => panic!("Unknown classifier: {}", name),
     }
 }

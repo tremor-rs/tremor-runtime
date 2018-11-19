@@ -12,6 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Tremor load generating Onramp
+//!
+//! Load testing onramp that generates continous load based on a given config.
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+//!
+//! ## Example
+//! ```yaml
+//! - onramp::blaster:
+//!     source: ./demo/data.json.xz # file to read
+//!     interval: 100000 # 10 KHz
+//!     pipeline: main # pipeline to send to
+//! ```
+
+use errors::*;
 use futures::sync::mpsc::channel;
 use futures::Future;
 use futures::Stream;
@@ -41,32 +58,38 @@ pub struct Onramp {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct Config {
-    source: String,
-    interval: Option<u64>,
-    iters: Option<u64>,
+pub struct Config {
+    /// source file to read data from, it will be iterated over repeatedly,
+    /// can be xz compressed
+    pub source: String,
+    /// Interval in nanoseconds for coordinated emission testing
+    pub interval: Option<u64>,
+    /// Number of iterations to stop after
+    pub iters: Option<u64>,
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Onramp {
-        match serde_yaml::from_value(opts.clone()) {
-            Ok(config @ Config { .. }) =>{
-                let mut source_data_file = File::open(&config.source).unwrap();
-                {
-                    let ext = Path::new(&config.source).extension().and_then(OsStr::to_str).unwrap();
-                    let mut raw = vec![];
-                    if ext == "xz" {
-                        XzDecoder::new(source_data_file).read_to_end(&mut raw).expect("Neither a readable nor valid XZ compressed file error");
-                    } else {
-                        source_data_file.read_to_end(&mut raw).expect("Unable to read data source file error");
-                    }
-                    Onramp { config: config.clone(), data: raw }
-                }
-            }
-            e => {
-                panic!("Invalid options for Blaster onramp, use `{{\"source\": \"<path/to/file.json|path/to/file.json.xz>\", \"is_coordinated\": [true|false], \"rate\": <rate>}}`\n{:?} ({:?})", e, opts)
-            }
+    pub fn new(opts: &ConfValue) -> Result<Onramp> {
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        let mut source_data_file = File::open(&config.source).unwrap();
+        let ext = Path::new(&config.source)
+            .extension()
+            .and_then(OsStr::to_str)
+            .unwrap();
+        let mut raw = vec![];
+        if ext == "xz" {
+            XzDecoder::new(source_data_file)
+                .read_to_end(&mut raw)
+                .expect("Neither a readable nor valid XZ compressed file error");
+        } else {
+            source_data_file
+                .read_to_end(&mut raw)
+                .expect("Unable to read data source file error");
         }
+        Ok(Onramp {
+            config: config.clone(),
+            data: raw,
+        })
     }
 }
 pub fn step_ival(data: &[u8], next: u64, interval: u64, pipelines: &[PipelineOnrampElem]) -> u64 {

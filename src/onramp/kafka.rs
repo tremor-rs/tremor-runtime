@@ -13,30 +13,16 @@
 // limitations under the License.
 
 //!
-//! # Tremor Kafka Onramp
+//! # Tremor kafka Onramp
 //!
 //! The `kafka` onramp allows receiving events from a kafka queue.
 //!
-//! ## Config:
-//! * `brokers` - an array of brokers
-//! * `topics` - an array of topic to read from
-//! * `group-id` - the group-id to register with
-//! In addition the optional keys are available:
-//! * `threads` - The number of threads reading from kafka (default: 4)
-//! * `rdkafka-options` - A map (string keys and string values) of [librdkafka options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) (default: None) - Note this can overwrite default settings.
+//! ## Configuration
 //!
-//! Default settings for librdkafka:
+//! See [Config](struct.Config.html) for details.
 //!
-//! * `client.id` - `"tremor-<hostname>-<thread id>"`
-//! * `bootstrap.servers` - `brokers` from the config concatinated by `,`
-//! * `enable.partition.eof` - `"false"`
-//! * `session.timeout.ms` - `"6000"`
-//! * `enable.auto.commit` - `"true"`
-//! * `enable.auto.commit` - `"true"`
-//! * `auto.commit.interval.ms"` - `"5000"`
-//! * `enable.auto.offset.store` - `"true"`
 
-//use futures::sync::mpsc::channel;
+use errors::*;
 use futures::prelude::*;
 use hostname::get_hostname;
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
@@ -48,7 +34,7 @@ use rdkafka::consumer::{Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::Message;
 use rdkafka_sys;
-use serde_yaml::Mapping;
+use serde_yaml;
 use std::collections::HashMap;
 use std::thread;
 use utils;
@@ -76,65 +62,32 @@ impl ConsumerContext for LoggingConsumerContext {
 }
 
 #[derive(Clone)]
-struct Config {
-    group_id: String,
-    topics: Vec<String>,
-    brokers: Vec<String>,
-    rdkafka_options: Mapping,
-    threads: usize,
+pub struct Config {
+    /// kafka group ID to register with
+    pub group_id: String,
+    /// List of topics to subscribe to
+    pub topics: Vec<String>,
+    /// List of bootstrap brokers
+    pub brokers: Vec<String>,
+    /// Optional rdkafka configuration
+    ///
+    /// Default settings:
+    /// * `client.id` - `"tremor-<hostname>-<thread id>"`
+    /// * `bootstrap.servers` - `brokers` from the config concatinated by `,`
+    /// * `enable.partition.eof` - `"false"`
+    /// * `session.timeout.ms` - `"6000"`
+    /// * `enable.auto.commit` - `"true"`
+    /// * `enable.auto.commit` - `"true"`
+    /// * `auto.commit.interval.ms"` - `"5000"`
+    /// * `enable.auto.offset.store` - `"true"`
+    pub rdkafka_options: Option<HashMap<String, String>>,
 }
 // Define a new type for convenience
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Self {
-        match (&opts["brokers"], &opts["topics"], &opts["group-id"]) {
-            (
-                ConfValue::Sequence(brokers),
-                ConfValue::Sequence(topics),
-                ConfValue::String(group_id),
-            ) => {
-                let rdkafka_options =
-                    if let Some(ConfValue::Mapping(c)) = opts.get("rdkafka-options") {
-                        c.clone()
-                    } else {
-                        Mapping::new()
-                    };
-                let threads = if let Some(ConfValue::Number(t)) = opts.get("threads") {
-                    t.as_u64().unwrap_or(4) as usize
-                } else {
-                    4
-                };
-
-                let brokers: Vec<String> = brokers
-                    .iter()
-                    .filter_map(|b| {
-                        if let ConfValue::String(s) = b {
-                            Some(s.clone())
-                        } else {
-                            None
-                        }
-                    }).collect();
-                let topics: Vec<String> = topics
-                    .iter()
-                    .filter_map(|b| {
-                        if let ConfValue::String(s) = b {
-                            Some(s.clone())
-                        } else {
-                            None
-                        }
-                    }).collect();
-
-                let config = Config {
-                    group_id: group_id.clone(),
-                    topics,
-                    brokers,
-                    rdkafka_options,
-                    threads,
-                };
-                Self { config }
-            }
-            _ => panic!("brokers, topic and group-id need to be set."),
-        }
+    pub fn new(opts: &ConfValue) -> Result<Self> {
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Self { config })
     }
 }
 

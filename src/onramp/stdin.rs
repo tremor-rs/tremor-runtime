@@ -17,11 +17,12 @@
 //!
 //! The `stdin` onramp reads lines from stdin and enters them into the pipeline as events
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! ## Variables
+//! This OnRamp takes no configuration.
 //!
 
+use errors::*;
 use futures::sync::mpsc::channel;
 use futures::Stream;
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
@@ -35,15 +36,13 @@ use utils;
 pub struct Onramp {}
 
 impl Onramp {
-    pub fn new(_opts: &ConfValue) -> Self {
-        println!("New stdin onramp ...");
-        Self {}
+    pub fn new(_opts: &ConfValue) -> Result<Self> {
+        Ok(Self {})
     }
 }
 
 impl OnrampT for Onramp {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
-        println_stderr!("Entering STDIN loop.");
         let len = pipelines.len();
         thread::spawn(move || {
             let stdin = io::stdin();
@@ -66,7 +65,6 @@ impl OnrampT for Onramp {
                     Err(e) => error!("Onramp error: {}", e),
                 }
             }
-            println_stderr!("STDIN closed loop.");
         })
     }
 }

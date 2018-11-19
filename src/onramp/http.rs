@@ -17,16 +17,19 @@
 //!
 //! The `http` onramp process each POST request
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `host` host to listen on (default: "127.0.0.1")
-//! * `port` port to listen on (default: 8000)
-//! * `tls.cert` tls certificate file to use (default: None)
-//! * `tls.port` tls key file to use (default: None)
+//! See [Config](struct.Config.html) for details.
 //!
-//! ## Variables
+//! ## Example
 //!
-//!
+//! ```yaml
+//!     - onramp::http:
+//!         port: 8081
+//!         host: "127.0.0.1"
+//!         tls_cert: cert.pem
+//!         tls_key: key.pem
+//! ```
 //!
 //! ## Endpoints
 //!
@@ -82,16 +85,20 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
 };
+
 use base64;
+use errors::*;
 use futures::sync::mpsc::channel;
 use futures::{Future, Stream};
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use pipeline::prelude::*;
 use serde::{Deserialize, Deserializer};
+use serde_yaml;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::Write;
+use std::result;
 use std::thread;
 use utils;
 use uuid::Uuid;
@@ -99,33 +106,40 @@ use uuid::Uuid;
 //use std::sync::mpsc::channel;
 pub struct Onramp {
     ssl_data: Option<(String, String)>,
-    host: String,
-    port: u64,
+    config: Config,
+}
+
+#[derive(Deserialize)]
+pub struct Config {
+    /// host to listen to, defaults to "0.0.0.0"
+    #[serde(default = "dflt_host")]
+    pub host: String,
+    /// port to listen to, defaults to 8000
+    #[serde(default = "dflt_port")]
+    pub port: u32,
+    /// Optional TLS certificate, requires `tls_key` to be set as well
+    pub tls_cert: Option<String>,
+    /// Optional TLS key, requires `tls_cert` to be set as well
+    pub tls_key: Option<String>,
+}
+
+fn dflt_host() -> String {
+    String::from("0.0.0.0")
+}
+
+fn dflt_port() -> u32 {
+    8000
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Self {
-        let ssl_data = match (&opts["tls"]["key"], &opts["tls"]["cert"]) {
-            (ConfValue::String(key), ConfValue::String(cert)) => Some((key.clone(), cert.clone())),
+    pub fn new(opts: &ConfValue) -> Result<Self> {
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        let ssl_data = match (config.tls_key.clone(), config.tls_cert.clone()) {
+            (Some(key), Some(cert)) => Some((key, cert)),
             _ => None,
         };
-        let port = if let Some(ConfValue::Number(port)) = opts.get("port") {
-            port.as_u64().unwrap_or(8000)
-        } else {
-            8000
-        };
 
-        let host = if let Some(ConfValue::String(host)) = opts.get("host") {
-            host.clone()
-        } else {
-            String::from("127.0.0.1")
-        };
-
-        Self {
-            ssl_data,
-            host,
-            port,
-        }
+        Ok(Self { config, ssl_data })
     }
 }
 
@@ -152,7 +166,7 @@ struct EventHeader {
     parent_uuid: Option<Uuid>,
 }
 
-pub fn perhaps_uuid_from_base64<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+pub fn perhaps_uuid_from_base64<'de, D>(deserializer: D) -> result::Result<Option<Uuid>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -169,7 +183,7 @@ where
     }
 }
 
-pub fn uuid_from_base64<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+pub fn uuid_from_base64<'de, D>(deserializer: D) -> result::Result<Uuid, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -185,7 +199,7 @@ struct EventWrapper {
     #[serde(deserialize_with = "vec_u8_from_base64")]
     body: Vec<u8>,
 }
-pub fn vec_u8_from_base64<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+pub fn vec_u8_from_base64<'de, D>(deserializer: D) -> result::Result<Vec<u8>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -259,8 +273,8 @@ struct OnrampState {
 }
 impl OnrampT for Onramp {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
-        let host = self.host.clone();
-        let port = self.port;
+        let host = self.config.host.clone();
+        let port = self.config.port;
         let ssl_data = self.ssl_data.clone();
         thread::spawn(move || {
             let s = server::new(move || {

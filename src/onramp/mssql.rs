@@ -12,7 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//!
+//! # Tremor MSSQL Onramo
+//!
+//! The `mssql` onramp processes each line of a query as a event. It is possible
+//! to re-run queries in a periodic basis.
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+
 use chrono;
+use errors::*;
 use futures::future::{loop_fn, Future, Loop};
 use futures::sync::mpsc::channel;
 use futures::Stream;
@@ -44,27 +55,30 @@ fn dflt_port() -> u32 {
 
 #[derive(Deserialize, Debug, Clone)]
 struct Config {
-    host: String,
+    /// Host to connect to
+    pub host: String,
+    /// Port to connect to
     #[serde(default = "dflt_port")]
-    port: u32,
-    username: String,
-    password: String,
-    query: String,
-    interval_ms: Option<u64>,
+    pub port: u32,
+    /// Username to register with
+    pub username: String,
+    /// Password to register with
+    pub password: String,
+    /// Query to execute
+    pub query: String,
+    /// Interval in which the query is executed, if not provided the query
+    /// will execute once and then terminate
+    pub interval_ms: Option<u64>,
+    /// Automatically trust the server certificate even if it can not be
+    /// validated
     #[serde(default = "dflt_false")]
-    trust_server_certificate: bool,
+    pub trust_server_certificate: bool,
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Self {
-        match serde_yaml::from_value(opts.clone()) {
-            Ok(config @ Config { .. }) => {
-                Onramp { config }
-            }
-            Err(e) => {
-                panic!("Invalid options for Kafka onramp, use `{{\"host\": \"<host>\", \"port\": <port>, \"username\": \"<username>\", \"password\": \"<password>\", \"query\": \"<query>\"}}` {:?}", e)
-            }
-        }
+    pub fn new(opts: &ConfValue) -> Result<Self> {
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Onramp { config })
     }
 }
 
