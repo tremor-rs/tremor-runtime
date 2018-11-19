@@ -12,8 +12,8 @@ pipelines:
           val: test
       - op::into_vars:
           keys:
-            - 'log_level'
-            - 'logstash_l1'
+            - 'type'
+            - 'application'
           var: 'dimensions'
       - grouper::bucket:
           buckets:
