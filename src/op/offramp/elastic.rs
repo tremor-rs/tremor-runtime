@@ -331,7 +331,7 @@ impl Opable for Offramp {
         if !event.var_is_type(&"index", &MetaValueType::String) {
             return EventResult::Error(
                 event,
-                Some(TSError::new(&"Variable `event` not set but required")),
+                Some(TSError::new(&"Variable `index` not set but required")),
             );
         };
         if !event.var_is_type(&"doc-type", &MetaValueType::String) {

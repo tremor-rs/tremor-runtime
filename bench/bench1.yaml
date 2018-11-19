@@ -11,34 +11,34 @@ pipelines:
       - name: done
         steps:
           - op::into_var:
-              key: wf_index_type
+              key: index_type
               var: index
           - render::json
           - grouper::bucket:
               buckets:
-                applog_recsvc:
+                applog_app1:
                   rate: 1250
-                applog_sayl:
+                applog_app2:
                   rate: 2500
-                applog_purest:
+                applog_app3:
                   rate: 18750
-                applog_admin:
+                applog_app4:
                   rate: 750
-                applog_supply_chain_services:
+                applog_app5:
                   rate: 18750
-                applog_logs:
+                applog_app6:
                   rate: 4500
-                syslog_haproxy:
+                syslog_app1:
                   rate: 2500
-                syslog_cisco:
+                syslog_app2:
                   rate: 125
-                syslog_logs:
+                syslog_app3:
                   rate: 1750
-                syslog_influxdb:
+                syslog_app4:
                   rate: 1750
-                syslog_ftpd:
+                syslog_app5:
                   rate: 7500
-                syslog_hypernova:
+                syslog_app6:
                   rate: 125
                 edilog:
                   rate: 3750
@@ -82,33 +82,33 @@ pipelines:
       - parse::json
       - classifier::json:
           rules:
-            - rule: application="recsvc"
-              class: applog_recsvc
-            - rule: application="sayl"
-              class: applog_sayl
-            - rule: wf_index_type="applog_purest"
-              class: applog_purest
-            - rule: wf_index_type="applog_admin"
-              class: applog_admin
-            - rule: wf_index_type="applog_supply_chain_services"
-              class: applog_supply_chain_services
-            - rule: wf_index_type="applog_logs"
-              class: applog_logs
-            - rule: wf_index_type="syslog_haproxy"
-              class: syslog_haproxy
-            - rule: tags:"cisco"
-              class: syslog_cisco
-            - rule: wf_index_type="syslog_logs"
-              class: syslog_logs
-            - rule: wf_index_type="syslog_influxdb"
-              class: syslog_influxdb
-            - rule: wf_index_type="syslog_ftpd"
-              class: syslog_ftpd
-            - rule: wf_index_type="syslog_hypernova"
-              class: syslog_hypernova
-            - rule: wf_index_type="edilog"
+            - rule: application="app1"
+              class: applog_app1
+            - rule: application="app2"
+              class: applog_app2
+            - rule: index_type="applog_app3"
+              class: applog_app3
+            - rule: index_type="applog_app4"
+              class: applog_app4
+            - rule: index_type="applog_app5"
+              class: applog_app5
+            - rule: index_type="applog_app6"
+              class: applog_app6
+            - rule: index_type="syslog_app1"
+              class: syslog_app1
+            - rule: tags:"tag1"
+              class: syslog_app2
+            - rule: index_type="syslog_app3"
+              class: syslog_app3
+            - rule: index_type="syslog_app4"
+              class: syslog_app4
+            - rule: index_type="syslog_app5"
+              class: syslog_app5
+            - rule: index_type="syslog_app6"
+              class: syslog_app6
+            - rule: index_type="edilog"
               class: edilog
-            - rule: wf_index_type="sqlserverlog"
+            - rule: index_type="sqlserverlog"
               class: sqlserverlog
             - rule: type="applog"
               class: applog

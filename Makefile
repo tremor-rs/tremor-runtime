@@ -14,6 +14,9 @@ loadgen-image: tremor-image
 	docker build -f demo/loadgen.dockerfile . -t loadgen
 demo-images: loadgen-image
 
+tremor-image:
+	docker build . -t tremor-runtime
+
 demo-run:
 	-docker-compose -f demo/demo.yaml rm -fsv
 	-docker-compose -f demo/demo.yaml up

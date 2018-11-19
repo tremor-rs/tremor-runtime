@@ -32,11 +32,13 @@ pipelines:
             default:
               rate: 90
       - op::into_var:
-          key: wf_index_type
+          key: index_type
           var: 'index'
+          required: true
       - op::into_var:
-          key: type
+          key: index_type
           var: 'doc-type'
+          required: true
       - render::json
       - offramp::elastic:
           endpoints:
@@ -44,5 +46,6 @@ pipelines:
           batch_size: 1100
           concurrency: 5
           outputs:
-            - offramp::stdout:
-		prefix: '[OVERLOAD] '
+            -
+              - offramp::stdout:
+                  prefix: '[OVERLOAD] '
