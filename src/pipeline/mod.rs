@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 pub mod error;
 mod graph;
 mod messages;
@@ -308,6 +307,7 @@ mod test {
     use super::prelude::*;
     use actix::prelude::*;
     use futures::{future, Future};
+    use serde_yaml;
     use uuid::Uuid;
     #[test]
     fn simple_test() {
@@ -316,7 +316,7 @@ mod test {
             OpSpec::new(
                 OpType::Offramp,
                 "stdout".to_string(),
-                ConfValue::Null,
+                serde_yaml::from_str("prefix: ''").unwrap(),
                 Uuid::new_v4(),
             ),
             leaf.clone(),

@@ -53,6 +53,7 @@ pub struct Config {
     pub upper_limit: f64,
     /// If adjustment is set and the return is below the lower limit the
     /// number of events passed will be raised (default: 0)
+    #[serde(default = "dflt::d_0")]
     pub lower_limit: f64,
     /// Optional adjustment to be used to keep returns between the upper
     /// and lower limit
