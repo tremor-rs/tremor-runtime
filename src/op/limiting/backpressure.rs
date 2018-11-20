@@ -12,58 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Growing Backoff limiter
+//! # Incremental backoff limiter
 //!
 //! The Backoff limiter will start backing off based on the maximum allowed time for results
 //!
-//! ## Config
-//!   * timeout - maximum allowed time for a batch write, overstepping this will cause back pressure (required)
-//!   * steps - list of backoff steps in milliseconds (default: [50, 100, 250, 500, 1000, 5000, 10000])
+//! ## Configuration
 //!
-//! ## Variables
-//!   * index - index to write to
-//!   * doc-type - document type for the event
-//!   * pipeline - pipeline to use
+//! See [Config](struct.Config.html) for details.
 //!
+//! ## Outputs
 //!
-//! ## Details
-//!
-//! The algoritm is as follows:
-//!
-//! Variables:
-//!   * backoff - additional delay after timed out send.
-//!
-//! Pseudo variables:
-//!   * batch - collection of messages.
-//!   * queue - a queue of fugure sends.
-//!
-//! Pseudocode:
-//! ```pseudo,no_run
-//! for m in messages {
-//!   if now() - last_done > backoff {
-//!     batch.add(m)
-//!     if batch.size >= batch_size {
-//!       if queue.size < concurrency {
-//!         queue.push(batch.send())
-//!       } else {
-//!         future = queue.first
-//!         if future.is_done {
-//!           queue.pop()
-//!           if future.execution_time < timeout {
-//!             backoff = 0;
-//!           } else {
-//!             backoff = grow_backoff(backoff) // backoff increase logic
-//!           }
-//!           last_done = now();
-//!           queue.push(batch.send())
-//!         } else {
-//!           batch.drop();
-//!         }
-//!       }
-//!     }
-//!   }
-//! }
-//! ```
+//! The 1st additional output is used to route data that was decided to
+//! be discarded.
 
 use errors::*;
 use pipeline::prelude::*;
@@ -84,10 +44,15 @@ pub struct Limiter {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct Config {
-    timeout: f64,
+pub struct Config {
+    /// The maximum allowed timeout before backoff is applied
+    pub timeout: f64,
+    /// A list of backoff steps in ms , wich are progressed through as long
+    /// as the maximum timeout is exceeded
+    ///
+    /// defulat: `[50, 100, 250, 500, 1000, 5000, 10000]`
     #[serde(default = "d_steps")]
-    steps: Vec<u64>,
+    pub steps: Vec<u64>,
 }
 
 fn d_steps() -> Vec<u64> {

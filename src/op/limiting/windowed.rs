@@ -12,6 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Sliding window based limiting
+//!
+//!
+//! A rate limited sliding window to keep the returned value from downstream
+//! operations between upper and lower limit.
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+//!
+//! ## Outputs
+//!
+//! The 1st additional output is used to route data that was decided to
+//! be discarded.
 use dflt;
 use errors::*;
 use pipeline::prelude::*;
@@ -26,16 +40,23 @@ lazy_static! {
 
 /// A Limitier algorith that just lets trough a percentage of messages
 #[derive(Deserialize)]
-struct Config {
-    time_range: u64,
-    windows: usize,
-    rate: u64,
-    #[serde(default = "dflt::d_0")]
-    upper_limit: f64,
+pub struct Config {
+    /// Initial rate that can be passed during each sliding window
+    pub rate: u64,
+    /// Window size in milliseconds (1000 means 1 second)
+    pub time_range: u64,
+    /// Number of slices to subdivide the window into
+    pub windows: usize,
+    /// If adjustment is set and the upper limit is exceeded the number
+    /// of events passed will be lowered (default: infinity)
     #[serde(default = "dflt::d_inf")]
-    lower_limit: f64,
-    #[serde(default = "dflt::d_0")]
-    adjustment: u64,
+    pub upper_limit: f64,
+    /// If adjustment is set and the return is below the lower limit the
+    /// number of events passed will be raised (default: 0)
+    pub lower_limit: f64,
+    /// Optional adjustment to be used to keep returns between the upper
+    /// and lower limit
+    pub adjustment: Option<u64>,
 }
 
 pub struct Limiter {
@@ -67,22 +88,21 @@ impl Opable for Limiter {
         }
     }
     fn result(&mut self, result: EventReturn) -> EventReturn {
-        match result {
-            Ok(Some(f)) if f > self.config.upper_limit => {
+        match (&result, self.config.adjustment) {
+            (Ok(Some(f)), Some(adjustment)) if f > &self.config.upper_limit => {
                 let m = self.window.max();
-                self.window
-                    .set_max(max(self.config.adjustment, m - self.config.adjustment));
+                self.window.set_max(max(adjustment, m - adjustment));
                 let m = self.window.max();
                 RATE_GAUGE.set(m as i64);
                 debug!("v {} ({})", m, f);
             }
-            Ok(Some(f)) if f < self.config.lower_limit => {
+            (Ok(Some(f)), Some(adjustment)) if f < &self.config.lower_limit => {
                 let m = self.window.max();
                 let c = self.window.count();
                 // Only allow max 20% buffer on growth so we do not increase
                 // the maximum indefinetly
                 if m < (c as f64 * 1.2) as u64 {
-                    self.window.set_max(m + self.config.adjustment);
+                    self.window.set_max(m + adjustment);
                     let m = self.window.max();
                     RATE_GAUGE.set(m as i64);
                 }

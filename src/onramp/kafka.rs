@@ -61,7 +61,7 @@ impl ConsumerContext for LoggingConsumerContext {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// kafka group ID to register with
     pub group_id: String,
@@ -119,18 +119,17 @@ impl OnrampT for Onramp {
                 .set("enable.auto.offset.store", "true")
                 .set_log_level(RDKafkaLogLevel::Debug);
 
-            let consumer: LoggingConsumer = config
-                .rdkafka_options
-                .iter()
-                .fold(consumer, |c: &mut ClientConfig, (k, v)| {
-                    if let (ConfValue::String(k), ConfValue::String(v)) = (k, v) {
-                        c.set(k, v)
-                    } else {
-                        c
-                    }
-                }).create_with_context(context)
-                .expect("Consumer creation failed");
-
+            let consumer: LoggingConsumer = if let Some(options) = config.rdkafka_options {
+                options
+                    .iter()
+                    .fold(consumer, |c: &mut ClientConfig, (k, v)| c.set(k, v))
+                    .create_with_context(context)
+                    .expect("Consumer creation failed")
+            } else {
+                consumer
+                    .create_with_context(context)
+                    .expect("Consumer creation failed")
+            };
             let topics: Vec<&str> = config.topics.iter().map(|topic| topic.as_str()).collect();
             consumer
                 .subscribe(&topics)

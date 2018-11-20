@@ -26,15 +26,12 @@
 //!
 //! * `<var>` (only enforced if `required` is set to true)
 
+use dflt;
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
 use serde_json;
 use std::fmt;
-
-fn d_false() -> bool {
-    false
-}
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -43,7 +40,8 @@ pub struct Config {
     /// the key to get the variable from
     pub key: String,
     /// if set to true the event will be send to the error output if the key
-    /// is not in the event. (default: false)    #[serde(default = "d_false")]
+    /// is not in the event. (default: false)
+    #[serde(default = "dflt::d_false")]
     pub required: bool,
 }
 
@@ -55,15 +53,15 @@ impl fmt::Debug for Op {
         write!(
             f,
             "IntoVar(key: '{:?}', variable: '{}')",
-            self.key, self.var
+            self.config.key, self.config.var
         )
     }
 }
 
 impl Op {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        let o: Self = serde_yaml::from_value(opts.clone())?;
-        Ok(o)
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Self { config })
     }
 }
 
@@ -83,7 +81,7 @@ impl Opable for Op {
 
         let val: Option<MetaValue> = {
             if let EventValue::JSON(ref val) = event.value {
-                match val.get(&self.key) {
+                match val.get(&self.config.key) {
                     Some(serde_json::Value::String(v)) => Some(v.into()),
                     _ => None,
                 }
@@ -94,11 +92,11 @@ impl Opable for Op {
 
         match val {
             Some(val) => {
-                event.set_var(&self.var, val);
+                event.set_var(&self.config.var, val);
                 EventResult::Next(event)
             }
-            None => if self.required {
-                EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.key, self.var))))
+            None => if self.config.required {
+                EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.config.key, self.config.var))))
             } else {
                 EventResult::Next(event)
             },
@@ -107,8 +105,8 @@ impl Opable for Op {
 
     fn output_vars(&self) -> HashSet<String> {
         let mut h = HashSet::new();
-        if self.required {
-            h.insert(self.var.clone());
+        if self.config.required {
+            h.insert(self.config.var.clone());
         };
         h
     }

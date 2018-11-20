@@ -12,6 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Percentile based sampling limiter
+//!
+//! If `adjustment` is set this limiter will move the sampling
+//! percentage to keep the returned value from downstream operations
+//! between upper and lower limit.
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+//!
+//! ## Outputs
+//!
+//! The 1st additional output is used to route data that was decided to
+//! be discarded.
+
 use dflt;
 use errors::*;
 use pipeline::prelude::*;
@@ -26,21 +41,36 @@ lazy_static! {
 
 /// A Limitier algorith that just lets trough a percentage of messages
 #[derive(Deserialize)]
-pub struct Limiter {
-    percentile: f64,
-    #[serde(default = "dflt::d_0")]
-    upper_limit: f64,
+pub struct Config {
+    /// Percentage of events passed through (initial if adjustment is set)
+    /// `1.0` means 100% of events will be passed
+    pub percentile: f64,
+    /// If adjustment is set and the upper limit is exceeded the percentage
+    /// of events passed will be lowered (default: infinity)
     #[serde(default = "dflt::d_inf")]
-    lower_limit: f64,
+    pub upper_limit: f64,
+    /// If adjustment is set and the return is below the lower limit the
+    /// percentage of events passed will be raised (default: 0)
     #[serde(default = "dflt::d_0")]
-    adjustment: f64,
+    pub lower_limit: f64,
+    /// Optional adjustment to be used to keep returns between the upper
+    /// and lower limit
+    pub adjustment: Option<f64>,
+}
+
+pub struct Limiter {
+    config: Config,
+    percentile: f64,
 }
 
 impl Limiter {
     pub fn new(opts: ConfValue) -> Result<Self> {
-        let l: Limiter = serde_yaml::from_value(opts)?;
-        PERCENTILE_GAUGE.set(l.percentile);
-        Ok(l)
+        let config: Config = serde_yaml::from_value(opts)?;
+        PERCENTILE_GAUGE.set(config.percentile);
+        Ok(Self {
+            percentile: config.percentile,
+            config,
+        })
     }
 }
 
@@ -70,14 +100,14 @@ impl Opable for Limiter {
         }
     }
     fn result(&mut self, result: EventReturn) -> EventReturn {
-        match result {
-            Ok(Some(f)) if f > self.upper_limit => {
-                self.percentile = max(self.adjustment, self.percentile - self.adjustment);
+        match (&result, self.config.adjustment) {
+            (Ok(Some(f)), Some(adjustment)) if f > &self.config.upper_limit => {
+                self.percentile = max(adjustment, self.percentile - adjustment);
                 PERCENTILE_GAUGE.set(self.percentile);
                 debug!("v {} ({})", self.percentile, f);
             }
-            Ok(Some(f)) if f < self.lower_limit => {
-                self.percentile = min(1.0, self.percentile + self.adjustment);
+            (Ok(Some(f)), Some(adjustment)) if f < &self.config.lower_limit => {
+                self.percentile = min(1.0, self.percentile + adjustment);
                 PERCENTILE_GAUGE.set(self.percentile);
                 debug!("^ {} ({})", self.percentile, f);
             }

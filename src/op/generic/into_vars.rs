@@ -25,15 +25,13 @@
 //!
 //! * `<var>`  if required is set to true
 
+use dflt;
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
 use serde_json;
 use std::fmt;
 
-fn d_false() -> bool {
-    false
-}
 #[derive(Deserialize)]
 pub struct Config {
     /// name of the variable to set
@@ -41,7 +39,7 @@ pub struct Config {
     /// The keys to read from, read in order
     pub keys: Vec<String>,
     // if set to true the event will be send to the error output if any of the keys is not in the document. (default: false)
-    #[serde(default = "d_false")]
+    #[serde(default = "dflt::d_false")]
     pub required: bool,
 }
 
@@ -54,7 +52,7 @@ impl fmt::Debug for Op {
         write!(
             f,
             "IntoVar(key: '{:?}', variable: '{}')",
-            self.keys, self.var
+            self.config.keys, self.config.var
         )
     }
 }
@@ -82,7 +80,7 @@ impl Opable for Op {
 
         let val: Option<MetaValue> = {
             if let EventValue::JSON(ref val) = event.value {
-                let ks = &self.keys;
+                let ks = &self.config.keys;
                 let vs: Vec<String> = ks
                     .iter()
                     .filter_map(|k| match val.get(&k) {
@@ -102,11 +100,11 @@ impl Opable for Op {
 
         match val {
             Some(val) => {
-                event.set_var(&self.var, val);
+                event.set_var(&self.config.var, val);
                 EventResult::Next(event)
             }
-            None => if self.required {
-                EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.keys, self.var))))
+            None => if self.config.required {
+                EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.config.keys, self.config.var))))
             } else {
                 EventResult::Next(event)
             },
@@ -115,8 +113,8 @@ impl Opable for Op {
 
     fn output_vars(&self) -> HashSet<String> {
         let mut h = HashSet::new();
-        if self.required {
-            h.insert(self.var.clone());
+        if self.config.required {
+            h.insert(self.config.var.clone());
         };
         h
     }

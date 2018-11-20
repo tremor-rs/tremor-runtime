@@ -28,7 +28,6 @@ use futures::Stream;
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
 use pipeline::prelude::*;
 use std::collections::HashMap;
-use std::io::Write;
 use std::io::{self, BufRead, BufReader};
 use std::thread;
 use utils;

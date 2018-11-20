@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Rate limiting operators.
+//! # Rate limiting operators
 //!
 //! Rate limiting operators can be used to limit the number of
 //! events that are allowed to pass through them.

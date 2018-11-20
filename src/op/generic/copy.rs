@@ -57,7 +57,7 @@ impl Opable for Op {
     }
     fn output_vars(&self) -> HashSet<String> {
         let mut h = HashSet::new();
-        h.insert(self.to.clone());
+        h.insert(self.config.to.clone());
         h
     }
 

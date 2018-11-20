@@ -38,6 +38,7 @@ pub struct Config {
 }
 
 /// Set operator
+#[derive(Debug, Clone)]
 pub struct Op {
     config: Config,
 }
@@ -51,12 +52,12 @@ impl Op {
 impl Opable for Op {
     fn exec(&mut self, event: EventData) -> EventResult {
         let mut event = event;
-        event.set_var(&self.var, self.val.clone());
+        event.set_var(&self.config.var, self.config.val.clone());
         EventResult::Next(event)
     }
     fn output_vars(&self) -> HashSet<String> {
         let mut h = HashSet::new();
-        h.insert(self.var.clone());
+        h.insert(self.config.var.clone());
         h
     }
 

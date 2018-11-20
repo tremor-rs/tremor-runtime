@@ -15,6 +15,7 @@
 //! # Generic operators
 //!
 //! Generic operators to control flow and manipulate event metadata
+
 pub mod copy;
 pub mod count;
 pub mod into_var;
