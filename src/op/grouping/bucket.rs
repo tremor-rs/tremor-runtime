@@ -12,38 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A This grouper is configred with a number of buckets and their alotted
-/// throughput on a persecond basis.
-///
-/// Messages are not combined by key and the alottment is applied in a sliding
-/// window fashion with a window granularity of 10ms.
-///
-/// There is no 'magical' default bucket but one can be configured if desired
-/// along with a default rule.
-///
-/// Metrics are kept on a per rule basis per key for both drops and passes along with
-/// a counter for messages dropped due to non matching rules.
-///
-///
-
-/// buckets - buckets by classification
-/// bucket.keys - keys for the dimensions
-/// bucket.limit - limit for the bicket
-/// bucket.windows - windows in the bucket
-///
-/// for m in messages {
-///   if let bucket = buckets.get(m.classification) {
-///      dimension = bucket.keys.map(|key| {m.data.get(key)});
-///      if let window bucket.windows(dimension) {
-///        if window.inc() { pass } else { drop }
-///      } else {
-///        bucket.windows[dimension] = Window::new(bucket.limit)
-///        if bucket.windows[dimension].inc() { pass } else { drop }
-///      }
-///   } else {
-///     return drop
-///   }
-/// }
+//! # Dimension based grouping with sliding windows
+//!
+//! A This grouper is configred with a number of buckets and their alotted
+//! throughput on a time basis.
+//!
+//! Messages are not combined by key and the alottment is applied in a sliding
+//! window fashion with a window granularity (a default of 10ms).
+//!
+//! There is no 'magical' default bucket but one can be configured if desired
+//! along with a default rule.
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+//!
+//! ## Outputs
+//!
+//! The 1st additional output is used to route data that was decided to
+//! be discarded to.
+//!
+//! # Example
+//!
+//! ```yaml
+//! - grouper::bucket:
+//!     class1: # 1k messages per seconds on second granularity
+//!       rate: 1000
+//!     class2: # 500 messages per seconds on 10 second granularity
+//!       rate: 5000
+//!       time_range: 10000
+//! ```
+//!
+//! ## Pseudocode
+//!
+//! ```pseudocode
+//! for e in events {
+//!   if let bucket = buckets.get(e.classification) {
+//!      dimension = bucket.keys.map(|key| e.data.get(key));
+//!      if let window bucket.windows(dimension) {
+//!        if window.inc() { pass } else { drop }
+//!      } else {
+//!        bucket.windows[dimension] = Window::new(bucket.limit)
+//!        if bucket.windows[dimension].inc() { pass } else { drop }
+//!      }
+//!   } else {
+//!     return drop
+//!   }
+//! }
+//! ```
 use dflt;
 use error::TSError;
 use errors::*;
@@ -57,21 +73,27 @@ use window::TimeWindow;
 
 static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
 
+/// Single bucket specification
 #[derive(Deserialize, Debug)]
-struct Rate {
+pub struct Rate {
+    /// the maximum number of events per time range
+    pub rate: u64,
+    /// time range in milliseconds, (default: 1000 - 1 second)
     #[serde(default = "dflt::d_1000")]
-    time_range: u64,
+    pub time_range: u64,
+    /// numbers of window in the time_range (default: 100)
     #[serde(default = "dflt::d_100")]
-    windows: usize,
-    rate: u64,
+    pub windows: usize,
 }
 
 #[derive(Deserialize, Debug)]
-struct Config {
-    buckets: HashMap<String, Rate>,
+pub struct Config {
+    /// the buckets to limit against, based on the `classification`
+    /// metadata variable
+    pub buckets: HashMap<String, Rate>,
 }
 
-/// A grouper either drops or keeps all messages.
+/// Window based grouping
 #[derive(Debug)]
 pub struct Grouper {
     buckets: HashMap<String, Bucket>,

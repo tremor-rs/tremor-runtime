@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Grouping and static limiting
+//!
 //! This model handles grouping messages given on ther classification and
 //! the first level of traffic shaping.
 
-mod bucket;
+pub mod bucket;
 
 use errors::*;
 use pipeline::prelude::*;
