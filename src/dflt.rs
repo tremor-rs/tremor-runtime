@@ -57,3 +57,7 @@ where
 {
     HashMap::new()
 }
+
+pub fn d_empty() -> String {
+    String::from("")
+}

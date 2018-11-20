@@ -12,25 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor Kafka Offramp
+//! # Kafka Offramp
 //!
 //! The `kafka` offramp allows persisting events to a kafka queue.
 //!
-//! ## Config
-//! * `brokers` - an array of brokers
-//! * `topic` - the topic to send to
-//! In addition the optional keys are available:
-//! * `key` - The key for the events (default: None)
-//! * `threads` - The number of threads in the async worker pool handling writing to kafka (default: 4)
-//! * `rdkafka_options` - A map (string keys and string values) of [librdkafka options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) (default: None) - Note this can overwrite default settings.
+//! ## Configuration
 //!
-//! Default settings for librdkafka:
-//!
-//! * `client.id` - `"tremor-<hostname>-0"`
-//! * `bootstrap.servers` - `brokers` from the config concatinated by `,`
-//! * `message.timeout.ms` - `"5000"`
-//! * `queue.buffering.max.ms` - `"0"` - don't buffer for lower latency (high)
+//! See [Config](struct.Config.html) for details.
 
 use dflt;
 use error::TSError;
@@ -46,15 +34,27 @@ use std::fmt;
 use tokio_threadpool as thread_pool;
 
 #[derive(Deserialize)]
-struct Config {
-    brokers: Vec<String>,
-    topic: String,
-    #[serde(default = "dflt::d_hashmap")]
-    rdkafka_options: HashMap<String, String>,
+pub struct Config {
+    /// list of brokers
+    pub brokers: Vec<String>,
+    /// the topic to send to
+    pub topic: String,
+    /// the number of threads in the async worker pool handling writing to kafka (default: 4)
     #[serde(default = "dflt::d_4")]
-    threads: usize,
+    pub threads: usize,
+    /// a map (string keys and string values) of [librdkafka options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) (default: None) - Note this can overwrite default settings.
+    ///
+    /// Default settings for librdkafka:
+    ///
+    /// * `client.id` - `"tremor-<hostname>-0"`
+    /// * `bootstrap.servers` - `brokers` from the config concatinated by `,`
+    /// * `message.timeout.ms` - `"5000"`
+    /// * `queue.buffering.max.ms` - `"0"` - don't buffer for lower latency (high)
+    #[serde(default = "dflt::d_hashmap")]
+    pub rdkafka_options: HashMap<String, String>,
+    /// hostname to use, defaults to the hostname of the system
     #[serde(default = "d_host")]
-    hostname: String,
+    pub hostname: String,
 }
 
 fn d_host() -> String {

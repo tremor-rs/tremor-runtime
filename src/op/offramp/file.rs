@@ -12,6 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # File Offramp
+//!
+//! Writes events to a file, one event per line
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
@@ -20,15 +28,17 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::result;
-/// An offramp that write to stdout
+
+/// An offramp that write a given file
 #[derive(Debug)]
 pub struct Offramp {
     file: File,
 }
 
 #[derive(Deserialize)]
-struct Config {
-    file: String,
+pub struct Config {
+    /// Filename to write to
+    pub file: String,
 }
 
 impl Offramp {

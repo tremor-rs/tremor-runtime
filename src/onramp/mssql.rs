@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor MSSQL Onramo
+//! # MSSQL Onramo
 //!
 //! The `mssql` onramp processes each line of a query as a event. It is possible
 //! to re-run queries in a periodic basis.

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Offramps are the modules that tremor uses to send data out of its pipeline.
+//! # Offramps to send data to external systems
 
 pub mod blackhole;
 pub mod debug;

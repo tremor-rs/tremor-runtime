@@ -12,6 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Blackhole benchmarking offramp
+//!
+//! Offramp used for benchmarking to generate latency histograms
+//!
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
+
 use errors::*;
 use hdrhistogram::serialization::Serializer;
 use hdrhistogram::serialization::V2Serializer;
@@ -34,10 +42,14 @@ pub struct Offramp {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct Config {
-    stop_after_secs: u64,
-    significant_figures: u64,
-    warmup_secs: u64,
+pub struct Config {
+    /// Number of seconds to collect data before the system is stopped.
+    pub stop_after_secs: u64,
+    /// Significant figures for the histogram
+    pub significant_figures: u64,
+    /// Number of seconds to warmup, events during this time are not
+    /// accounted for in the latency measurements
+    pub warmup_secs: u64,
 }
 
 impl Offramp {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Tremor load generating Onramp
+//! # Load generating Onramp
 //!
 //! Load testing onramp that generates continous load based on a given config.
 //!

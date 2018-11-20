@@ -14,16 +14,15 @@
 
 //! # InfluxDB Offramp
 //!
-//! The InfluxDB Offramp uses batch writes to send data to elastic search
+//! The InfluxDB Offramp uses batch writes to send data to InfluxDB search
 //!
-//! ## Config
-//!   * endpoints - list of endpoint urls (required)
-//!   * database - influx database to write to to  (required)
-//!   * batch_size - number of messages in each batch. (required)
-//!   * concurrency - maximum number of paralel batches (default: 4).
+//! ## Configuration
 //!
+//! See [Config](struct.Config.html) for details.
 //! ## Outputs
-//!  * 3 (1st additional output) - divert messages that can not be enqueued due to overload
+//!
+//! The 1st additional output is used to send divert messages that can not be
+//! enqueued due to overload
 
 use async_sink::{AsyncSink, SinkDequeueError};
 use dflt;
@@ -58,12 +57,16 @@ lazy_static! {
 }
 
 #[derive(Debug, Deserialize)]
-struct Config {
-    endpoints: Vec<String>,
-    batch_size: usize,
-    database: String,
+pub struct Config {
+    /// list of endpoint urls
+    pub endpoints: Vec<String>,
+    /// number of events in each batch
+    pub batch_size: usize,
+    /// database to write to
+    pub database: String,
+    /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "dflt::d_4")]
-    concurrency: usize,
+    pub concurrency: usize,
 }
 
 #[derive(Clone)]

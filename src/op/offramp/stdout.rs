@@ -12,38 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # StdOut Offramp
 //!
-//! # Tremor stdout Offramp
+//! The `stdout` offramp writes events to the standard output (conse).
 //!
-//! The `stdout` offramp writes events to the standard output (conse). It can be configured with:
+//! ## Configuration
 //!
-//! ## Config
-//! * `prefix` - string a prepend to a message
+//! See [Config](struct.Config.html) for details.
 //!
-//! ## Variables
+//! ## Input Variables
 //!
 //! * `prefix` - sets the prefix (overrides the configuration)
 
+use dflt;
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
 use serde_yaml;
-/// An offramp that write to stdout
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    /// string a prepend to a message (default: '')
+    #[serde(default = "dflt::d_empty")]
+    pub prefix: String,
+}
+
+/// An offramp that write to stdout
+#[derive(Debug, Clone)]
 pub struct Offramp {
-    prefix: String,
+    config: Config,
 }
 
 impl Offramp {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        if opts.is_null() {
-            Ok(Offramp {
-                prefix: String::from(""),
-            })
-        } else {
-            Ok(serde_yaml::from_value(opts.clone())?)
-        }
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Self { config })
     }
 }
 impl Opable for Offramp {
@@ -53,7 +56,7 @@ impl Opable for Offramp {
         let pfx = if let Some(MetaValue::String(ref pfx)) = event.var(&"prefix") {
             pfx.clone()
         } else {
-            self.prefix.clone()
+            self.config.prefix.clone()
         };
 
         if let (ret, EventValue::Raw(raw)) = event.make_return_and_value(Ok(None)) {

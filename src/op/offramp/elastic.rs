@@ -16,21 +16,19 @@
 //!
 //! The Elastic Search Offramp uses batch writes to send data to elastic search
 //!
-//! ## Config
-//!   * endpoints - list of endpoint urls (required)
-//!   * batch_size - number of messages in each batch. (required)
-//!   * concurrency - maximum number of paralel batches (default: 4).
+//! ## Configuration
 //!
-//! ## Variables
-//!   * index - index to write to
-//!   * doc-type - document type for the event
-//!   * pipeline - pipeline to use
+//! See [Config](struct.Config.html) for details.
+//!
+//! ## Input Variables
+//!   * `index` - index to write to (required)
+//!   * `doc-type` - document type for the event (required)
+//!   * `pipeline` - pipeline to use
 //!
 //! ## Outputs
-//!  * 3 (1st additional output) - divert messages that can not be enqueued due to overload
-
-//   * index.suffix - static string to add at the end of the index (default: `""`) (depricate?)
-//   * index.append-date - if the date should be added at the end of the index. (default: false) (depricate?)
+//!
+//! The 1st additional output is used to send divert messages that can not be
+//! enqueued due to overload
 
 use async_sink::{AsyncSink, SinkDequeueError};
 use dflt;
@@ -74,11 +72,14 @@ lazy_static! {
 
 //[endpoints, index, batch_size, batch_timeout]
 #[derive(Debug, Deserialize)]
-struct Config {
-    endpoints: Vec<String>,
-    batch_size: usize,
+pub struct Config {
+    /// list of endpoint urls
+    pub endpoints: Vec<String>,
+    /// number of events in each batch
+    pub batch_size: usize,
+    /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "dflt::d_4")]
-    concurrency: usize,
+    pub concurrency: usize,
 }
 
 #[derive(Clone)]

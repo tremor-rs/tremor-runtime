@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor http Onramp
+//! # HTTP/REST Onramp
 //!
 //! The `http` onramp process each POST request
 //!

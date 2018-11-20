@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor stdin Onramp
+//! # StdIn Onramp
 //!
 //! The `stdin` onramp reads lines from stdin and enters them into the pipeline as events
 //!

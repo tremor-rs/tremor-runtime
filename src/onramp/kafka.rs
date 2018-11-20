@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor kafka Onramp
+//! # Kafka Onramp
 //!
 //! The `kafka` onramp allows receiving events from a kafka queue.
 //!

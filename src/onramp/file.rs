@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //!
-//! # Tremor file Onramp
+//! # File Onramp
 //!
 //! The `file` onramp reads lines from a provided file and enters them into the pipeline as events.
 //!

@@ -12,6 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # Debug offramp reporting classification statistics.
+//!
+//! The debug offramp periodically reports on the number of events
+//! per classification.
+//!
+//! ## Configuration
+//!
+//! This operator takes no configuration
+
 use errors::*;
 use pipeline::prelude::*;
 use std::collections::HashMap;

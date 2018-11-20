@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! # Tremor null Offramp
+//! # Null Offramp
 //!
 //! The `null` offramp simply discards every event it receives
+//!
+//! ## Configuration
+//!
+//! This operator takes no configuration
 
 use errors::*;
 use pipeline::prelude::*;
