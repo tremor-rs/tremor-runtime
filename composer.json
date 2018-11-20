@@ -1,0 +1,33 @@
+{
+    "name": "wayfair/tremor-client",
+    "description": "A PHP client for tremor",
+    "keywords": [
+        "tremor", "api", "client"
+    ],
+    "license": "APL",
+    "authors": [
+        {
+            "name": "Heinz Gies",
+            "email": "hgies@wayfair.com"
+        }
+    ],
+    "require": {
+        "php" : ">=7.0.0",
+        "guzzlehttp/guzzle": "~6.0",
+        "ramsey/uuid": "^3.8",
+        "google/protobuf": "^3.6",
+        "rybakit/msgpack": "^0.5.3"
+
+    },
+    "require-dev": {
+        "phpdocumentor/phpdocumentor": "2.*",
+        "phpunit/phpunit" : "7.*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Wayfair\\Tremor\\": "tremor-php-client/src/Wayfair/Tremor",
+
+            "GPBMetadata\\": "tremor-php-client/src/GPBMetadata"
+        }
+    }
+}
