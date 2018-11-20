@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains the definition of different parsers
+//! # Format specific parsers
 
-mod influx;
-mod json;
+pub mod influx;
+pub mod json;
 
 use errors::*;
 use pipeline::prelude::*;

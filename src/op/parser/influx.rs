@@ -12,6 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! # InfluxDB line protocol parser
+//!
+//! Parses the InfluxDB Line protocol into a nested data structure.
+//!
+//!
+//! The line
+//!
+//! ```text
+//! weather,location=us-midwest temperature=82 1465839830100400200
+//! ```
+//! will be translated to the nested structure:
+//!
+//! ```json
+//! {
+//!     "measurement": "weather",
+//!     "tags": {"location": "us-midwest"},
+//!     "fields": {"temperature": 82.0},
+//!     "timestamp": 1465839830100400200
+//! }
+//! ```
+//! ## Configuration
+//!
+//! This operator takes no configuration
+
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
@@ -20,6 +44,7 @@ use std::collections::HashMap;
 use std::f64;
 use std::result;
 use std::str::{self, Chars};
+
 /// The Raw Parser is a simple parser that performs no action on the
 /// data and just hands on `raw`
 
@@ -607,7 +632,7 @@ mod tests {
         assert_eq!(e, j)
     }
 
-/*
+    /*
     #[bench]
     fn parse_bench(b: &mut Bencher) {
         let sarr = &[
