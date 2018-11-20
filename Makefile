@@ -56,9 +56,6 @@ publish-bench:
 	cargo build --release --examples
 	for f in bench/*.sh; do $$f; done
 
-check-vsn:
-	[ "$(DOCKER_VSN)" = "$(CARGO_VSN)" ]
-
 force:
 	true
 

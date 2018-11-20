@@ -9,7 +9,6 @@ test:
   tags:
     - docker
   script:
-    - make check-vsn
     - apt update 
     - apt install -y bison flex cmake automake
     - cargo test
