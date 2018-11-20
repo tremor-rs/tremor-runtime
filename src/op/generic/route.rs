@@ -13,18 +13,22 @@
 // limitations under the License.
 
 //!
-//! # Tremor set Operation
+//! # Route event based on a key
 //!
-//! Sets a variable to a static value
+//! Use a variable to route the event to different outputs
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `var` - name of the variable to set
-//! * `val` - the value to set the variable to
+//! See [Config](struct.Config.html) for details.
 //!
-//! ## Output Variables
+//! ## Outputs
 //!
-//! * `<var>`
+//! The route operation takes a number of outputs equal to the
+//! elements in the `vals` vector.
+//!
+//! If the nth value is matched the nth output is used.
+//!
+//! If no value matches the default output (next step) is used.
 
 use errors::*;
 use pipeline::prelude::*;
@@ -32,10 +36,15 @@ use serde_yaml;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize)]
-struct Config {
-    var: String,
-    vals: Vec<ConfValue>,
+pub struct Config {
+    /// variable to route against
+    pub var: String,
+    /// list of values to matched against for a route
+    /// the first match will win
+    pub vals: Vec<ConfValue>,
 }
+
+/// Route operator
 #[derive(Debug, Clone)]
 pub struct Op {
     config: Config,

@@ -13,14 +13,13 @@
 // limitations under the License.
 
 //!
-//! # Tremor set Operation
+//! # Sets a metadata variable
 //!
 //! Sets a variable to a static value
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `var` - name of the variable to set
-//! * `val` - the value to set the variable to
+//! See [Config](struct.Config.html) for details.
 //!
 //! ## Output Variables
 //!
@@ -29,16 +28,23 @@
 use errors::*;
 use pipeline::prelude::*;
 use serde_yaml;
-/// An offramp that write to stdout
+
 #[derive(Deserialize, Debug, Clone)]
-pub struct Op {
-    var: String,
-    val: String,
+pub struct Config {
+    /// the variable to set
+    pub var: String,
+    /// the value to set it to
+    pub val: String,
 }
 
+/// Set operator
+pub struct Op {
+    config: Config,
+}
 impl Op {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        Ok(serde_yaml::from_value(opts.clone())?)
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Self { config })
     }
 }
 

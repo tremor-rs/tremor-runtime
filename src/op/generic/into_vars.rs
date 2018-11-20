@@ -1,14 +1,25 @@
+// Copyright 2018, Wayfair GmbH
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //!
-//! # Tremor into_var Operation
+//! # Combine a number of event keys into a single metadata array
 //!
-//! Sets a variable to the value from a key of a document.
+//! Creates an array from multiple variables of the event
 //!
+//! ## Configuration
 //!
-//! ## Config
-//!
-//! * `var` - name of the variable to set
-//! * `key` - the key to get the variable from
-//! * `required` - boolean, if set to true the event will be send to the error output if the key is not in the document. (default: false)
+//! See [Config](struct.Config.html) for details.
 //!
 //! ## Output Variables
 //!
@@ -24,12 +35,20 @@ fn d_false() -> bool {
     false
 }
 #[derive(Deserialize)]
-pub struct Op {
-    var: String,
-    keys: Vec<String>,
+pub struct Config {
+    /// name of the variable to set
+    pub var: String,
+    /// The keys to read from, read in order
+    pub keys: Vec<String>,
+    // if set to true the event will be send to the error output if any of the keys is not in the document. (default: false)
     #[serde(default = "d_false")]
-    required: bool,
+    pub required: bool,
 }
+
+pub struct Op {
+    config: Config,
+}
+
 impl fmt::Debug for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -42,8 +61,8 @@ impl fmt::Debug for Op {
 
 impl Op {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        let o: Self = serde_yaml::from_value(opts.clone())?;
-        Ok(o)
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Self { config })
     }
 }
 

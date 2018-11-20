@@ -13,16 +13,13 @@
 // limitations under the License.
 
 //!
-//! # Event counter
+//! # Count events passing through
 //!
 //! The `count` operation allows counting event flow at a specific point in the pipeline.
 //!
-//! ## Config
-//! * `metric` - the metric name (String)
-//! * `desc` - description of the metric (String)
-//! * `labels` - labels to add to the metric (object String: String)
-//! * `count_results` - if returns on this operation should be counted to indicate
-//!                     success or failure of the downstream pipeline. (default: false)
+//! ## Configuration
+//!
+//! See [Config](struct.Config.html) for details.
 //!
 //! The metric is prefixed with `tremor` as a system, so a metric of `events` will be published
 //! as `tremor_events`. The label `instance` is added to every counter with the `instance`
@@ -42,12 +39,17 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Deserialize)]
-struct Config {
-    metric: String,
-    desc: String,
-    labels: HashMap<String, String>,
+pub struct Config {
+    /// the metric name
+    pub metric: String,
+    /// description of the metric
+    pub desc: String,
+    /// labels to add to the metric
+    pub labels: HashMap<String, String>,
+    /// if returns on this operation should be counted to indicate
+    /// success or failure of the downstream pipeline. (default: false)
     #[serde(default = "dflt::d_false")]
-    count_results: bool,
+    pub count_results: bool,
 }
 
 pub struct Op {

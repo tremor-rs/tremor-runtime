@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Generic operations for logic or metadata modifications.
+//! # Generic operators
+//!
+//! Generic operators to control flow and manipulate event metadata
 pub mod copy;
 pub mod count;
 pub mod into_var;

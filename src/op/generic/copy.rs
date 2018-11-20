@@ -13,14 +13,13 @@
 // limitations under the License.
 
 //!
-//! # Tremor copy Operation
+//! # Copy between two metadata variables
 //!
-//! copies the content from one variable to another
+//! Copies the content from one metadata variable to another
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `from` - name of the variable source variable
-//! * `to` - name of the variable destination variable
+//! See [Config](struct.Config.html) for details.
 //!
 //! ## Output Variables
 //!
@@ -30,22 +29,30 @@ use errors::*;
 use pipeline::prelude::*;
 use serde_yaml;
 
-/// An offramp that write to stdout
+/// Copy data from one meta variable to another
 #[derive(Debug, Clone, Deserialize)]
 pub struct Op {
-    from: String,
-    to: String,
+    config: Config,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    /// Source variable to copy from
+    pub from: String,
+    /// Destination variable to copy to
+    pub to: String,
 }
 
 impl Op {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        Ok(serde_yaml::from_value(opts.clone())?)
+        let config: Config = serde_yaml::from_value(opts.clone())?;
+        Ok(Op { config })
     }
 }
 
 impl Opable for Op {
     fn exec(&mut self, mut event: EventData) -> EventResult {
-        event.copy_var(&self.from, &self.to);
+        event.copy_var(&self.config.from, &self.config.to);
         EventResult::Next(event)
     }
     fn output_vars(&self) -> HashSet<String> {

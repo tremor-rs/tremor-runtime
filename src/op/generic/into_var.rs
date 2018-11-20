@@ -1,18 +1,30 @@
+// Copyright 2018, Wayfair GmbH
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! # Store data into metadata variable
 //!
-//! # Tremor into_var Operation
-//!
-//! Sets a variable to the value from a key of a document.
+//! Takes a value out of the event and stores it into a metadata variable
 //!
 //!
-//! ## Config
+//! ## Configuration
 //!
-//! * `var` - name of the variable to set
-//! * `key` - the key to get the variable from
-//! * `required` - boolean, if set to true the event will be send to the error output if the key is not in the document. (default: false)
+//! See [Config](struct.Config.html) for details.
+//!
 //!
 //! ## Output Variables
 //!
-//! * `<var>`  if required is set to true
+//! * `<var>` (only enforced if `required` is set to true)
 
 use error::TSError;
 use errors::*;
@@ -23,12 +35,20 @@ use std::fmt;
 fn d_false() -> bool {
     false
 }
+
 #[derive(Deserialize)]
+pub struct Config {
+    /// name of the variable to set
+    pub var: String,
+    /// the key to get the variable from
+    pub key: String,
+    /// if set to true the event will be send to the error output if the key
+    /// is not in the event. (default: false)    #[serde(default = "d_false")]
+    pub required: bool,
+}
+
 pub struct Op {
-    var: String,
-    key: String,
-    #[serde(default = "d_false")]
-    required: bool,
+    config: Config,
 }
 impl fmt::Debug for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

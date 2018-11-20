@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Operations to use to build pipelines.
+//! # Operators to use to build pipelines.
 //!
-//! To make it more managable they're split into namsapces.
+//! Each namespace contains operations for their respective domain. The
+//! [generic](generic/index.html) namespace holds more generic flow control operations.
 
 pub mod classifier;
 pub mod generic;

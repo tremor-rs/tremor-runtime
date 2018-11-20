@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains code used to classify messages based on
-//! the rule based language.
+//! # Classifiers used to classify events
+//!
+//! Classifiers are used to classify events so that decisions can be
+//! derived from this classification.
 
 pub mod json;
 use errors::*;
