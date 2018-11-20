@@ -23,6 +23,7 @@
 
 use errors::*;
 use futures::prelude::*;
+use futures::sync::mpsc::channel;
 use hostname::get_hostname;
 use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
 use pipeline::prelude::*;
@@ -149,9 +150,11 @@ impl OnrampT for Onramp {
                             if let Some(key) = m.key_view::<str>() {
                                 vars.insert("key".to_string(), key.unwrap().into());
                             };
+                            let (tx, rx) = channel(0);
+
                             // TODO: How do we track success on finished events?
                             let msg = OnData {
-                                reply_channel: None,
+                                reply_channel: Some(tx),
                                 data: EventValue::Raw(p.to_vec()),
                                 vars,
                                 ingest_ns: utils::nanotime(),
@@ -159,6 +162,7 @@ impl OnrampT for Onramp {
 
                             let i = i + 1 % len;
                             pipelines[i].do_send(msg);
+                            for _r in rx.wait() {}
                         }
                     }
                 }
