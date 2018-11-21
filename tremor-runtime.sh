@@ -16,4 +16,4 @@ then
     CONFIG_FILE=tremor.yaml
 fi
 
-./tremor-runtime --config "${CONFIG_FILE}"
+exec ./tremor-runtime --config "${CONFIG_FILE}"
