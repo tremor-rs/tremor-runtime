@@ -5,7 +5,7 @@ description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>"]
 
 [profile.release]
-lto = false
+lto = true
 
 [dependencies]
 reqwest = "0.8"

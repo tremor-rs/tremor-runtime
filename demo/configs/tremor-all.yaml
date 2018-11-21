@@ -2,7 +2,7 @@ onramps:
   - onramp::kafka:
       name: kafka
       pipeline: main
-      group-id: demo
+      group_id: demo
       topics:
         - demo
       brokers:

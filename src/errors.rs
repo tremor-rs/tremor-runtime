@@ -21,7 +21,7 @@ use std;
 error_chain!{
 
     foreign_links {
-        YAML(serde_yaml::Error) #[doc = "Error during yalm parsing"];
+        YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
         Io(std::io::Error) #[cfg(unix)];
         Prometheus(prometheus::Error);
         Standard(error::TSError);

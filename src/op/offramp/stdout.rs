@@ -24,7 +24,6 @@
 //!
 //! * `prefix` - sets the prefix (overrides the configuration)
 
-use dflt;
 use error::TSError;
 use errors::*;
 use pipeline::prelude::*;
@@ -33,8 +32,7 @@ use serde_yaml;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// string a prepend to a message (default: '')
-    #[serde(default = "dflt::d_empty")]
-    pub prefix: String,
+    pub prefix: Option<String>,
 }
 
 /// An offramp that write to stdout
@@ -45,8 +43,14 @@ pub struct Offramp {
 
 impl Offramp {
     pub fn new(opts: &ConfValue) -> Result<Self> {
-        let config: Config = serde_yaml::from_value(opts.clone())?;
-        Ok(Self { config })
+        if opts == &ConfValue::Null {
+            Ok(Self {
+                config: Config { prefix: None },
+            })
+        } else {
+            let config: Config = serde_yaml::from_value(opts.clone())?;
+            Ok(Self { config })
+        }
     }
 }
 impl Opable for Offramp {
@@ -56,7 +60,11 @@ impl Opable for Offramp {
         let pfx = if let Some(MetaValue::String(ref pfx)) = event.var(&"prefix") {
             pfx.clone()
         } else {
-            self.config.prefix.clone()
+            if let Some(ref pfx) = self.config.prefix {
+                pfx.clone()
+            } else {
+                "".to_string()
+            }
         };
 
         if let (ret, EventValue::Raw(raw)) = event.make_return_and_value(Ok(None)) {
