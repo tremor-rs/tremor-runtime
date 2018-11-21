@@ -77,6 +77,10 @@ A list of subpipelines that can be called form the main pipeline. Be aware that 
 
 ## Docker
 
+### Dependencies
+
+`tremor-runtime` required `rust 1.30.1`
+
 ### Building
 
 You can build the tremor docker container (`tremor-runtime`) using `make tremor-image`.
