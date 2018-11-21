@@ -19,11 +19,11 @@ pipelines:
               rule: 'short_message:"ERROR"'
       - grouper::bucket:
            buckets:
-            - class: 'info'
-              rate: 10
-            - class: 'error'
-              rate: 100
-            - class: 'default'
-              rate: 90
+             info:
+               rate: 10
+             error:
+               rate: 100
+             default:
+               rate: 90
       - render::json
       - offramp::debug
