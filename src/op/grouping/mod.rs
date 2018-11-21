@@ -14,7 +14,7 @@
 
 //! # Grouping and static limiting
 //!
-//! This model handles grouping messages given on ther classification and
+//! This model handles grouping messages given on their classification and
 //! the first level of traffic shaping.
 
 pub mod bucket;
