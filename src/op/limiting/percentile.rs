@@ -39,7 +39,7 @@ lazy_static! {
         prom_gauge!("ts_limiting_percentile", "Current limiting percentile.");
 }
 
-/// A Limitier algorith that just lets trough a percentage of messages
+/// A Limiter algorithm that just lets trough a percentage of messages
 #[derive(Deserialize)]
 pub struct Config {
     /// Percentage of events passed through (initial if adjustment is set)

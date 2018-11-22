@@ -85,12 +85,12 @@ impl Classifier {
                         cmp: Cmp::Contains(v),
                     }),
                     _ => {
-                        println_stderr!("invlaid rule: {}", r.rule);
+                        println_stderr!("invalid rule: {}", r.rule);
                         None
                     }
                 },
                 _ => {
-                    println_stderr!("invlaid rule: {}", r.rule);
+                    println_stderr!("invalid rule: {}", r.rule);
                     None
                 }
             }).collect();

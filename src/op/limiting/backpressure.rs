@@ -47,10 +47,10 @@ pub struct Limiter {
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied
     pub timeout: f64,
-    /// A list of backoff steps in ms , wich are progressed through as long
+    /// A list of backoff steps in ms, wich are progressed through as long
     /// as the maximum timeout is exceeded
     ///
-    /// defulat: `[50, 100, 250, 500, 1000, 5000, 10000]`
+    /// default: `[50, 100, 250, 500, 1000, 5000, 10000]`
     #[serde(default = "d_steps")]
     pub steps: Vec<u64>,
 }

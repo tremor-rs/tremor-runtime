@@ -113,7 +113,7 @@ fn make_pipeline(
         }
     // Second look at other pipelines we reference to
     } else if step.namespace == "pipeline" {
-        // The clones here are ugly but since all elements are referece counted
+        // The clones here are ugly but since all elements are reference counted
         // and this is an one time startup cost it's going to be fine!
         if let Some(p) = pipelines.get(&step.name.clone()) {
             Ok(p.clone())
@@ -122,7 +122,7 @@ fn make_pipeline(
         }
     // Otherwise we'll referencing a known step
     } else {
-        // Treat on-error pipelein first, if it's set link it
+        // Treat on-error pipeline first, if it's set link it
         // otherwise just drop the error stuff
         let on_error = match step.config.get("on-error") {
             None => end.clone(),

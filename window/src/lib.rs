@@ -238,7 +238,7 @@ mod tests {
         assert_eq!(sw.count(), 10);
     }
 
-    // This test is rather hidious but since we are testing
+    // This test is rather hideous but since we are testing
     // a time based implementaiton we got to sleep a little.
     //
     // Perhaps some time in the future there is time to

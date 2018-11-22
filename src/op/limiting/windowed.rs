@@ -38,7 +38,7 @@ lazy_static! {
     static ref RATE_GAUGE: IntGauge = prom_int_gauge!("limiting_rate", "Current limiting rate.");
 }
 
-/// A Limitier algorith that just lets trough a percentage of messages
+/// A Limiter algorithm that just lets through a percentage of messages
 #[derive(Deserialize)]
 pub struct Config {
     /// Initial rate that can be passed during each sliding window
