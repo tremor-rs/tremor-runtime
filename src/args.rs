@@ -43,7 +43,7 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
             Arg::with_name("render")
                 .long("render")
                 .short("r")
-                .help("renders the pipeline and quites")
+                .help("renders the pipeline and quits")
                 .required(false),
         )
 }
