@@ -7,7 +7,7 @@ pipelines:
   - name: main
     steps:
       - parse::json
-      - classifier::json
+      - classifier::mimir
       - grouper::bucket
       - render::json
       - offramp::file:

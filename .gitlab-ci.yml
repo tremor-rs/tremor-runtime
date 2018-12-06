@@ -18,7 +18,7 @@ test:
 
 lint:
   stage: test
-  image: rust:1.29
+  image: rust:1.30
   when: always
   allow_failure: true
   cache:
@@ -36,7 +36,7 @@ lint:
 
 bench:
   stage: test
-  image: rust:1.29
+  image: rust:1.30
   when: always
   allow_failure: true
   cache:
@@ -49,3 +49,51 @@ bench:
     - apt update 
     - apt install -y bison flex cmake automake
     - make publish-bench
+
+
+mimir-test:
+  stage: test
+  image: rust:1.30
+  when: always
+  cache:
+    paths:
+      - target/
+      - ~/.cargo/
+  tags:
+    - docker
+  script:
+    - cd mimir
+    - cargo test
+
+mimir-lint:
+  stage: test
+  image: rust:1.30
+  when: always
+  cache:
+    paths:
+      - target/
+      - ~/.cargo/
+  tags:
+    - docker
+  script:
+    - cd mimir
+    - rustup update
+    - rustup install nightly
+    - rustup component add clippy-preview --toolchain=nightly
+    - CARGO_TARGET_DIR=target.clippy cargo +nightly clippy
+
+mimir-bench:
+  stage: test
+  image: rust:1.30
+  when: always
+  cache:
+    paths:
+      - target/
+      - ~/.cargo/
+  tags:
+    - docker
+  script:
+    - cd mimir
+    - apt update
+    - apt-get -y install gnuplot
+    - cargo bench

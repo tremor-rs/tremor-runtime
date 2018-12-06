@@ -1,0 +1,22 @@
+[package]
+build = "build.rs"
+name = "mimir"
+version = "0.1.0"
+authors = ["Ivan Monov <imonov@wayfair.com>"]
+
+[build-dependencies]
+lalrpop = "0.16.1"
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "mimir_benchmark"
+harness = false
+
+[dependencies]
+lalrpop-util = "0.16.1"
+regex = "0.2.1"
+serde_json = "1.0"
+pcre2 = "0.1.1"
+glob = "0.2.11"

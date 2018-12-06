@@ -43,6 +43,7 @@ actix = "0.7"
 actix-web = { version = "0.7", features = ["alpn"] }
 bytes = "0.4"
 window = { path = "window" }
+mimir = { path = "mimir" }
 hdrhistogram = "6.0.6"
 xz2 = "0.1.5"
 libc = "0.2.43"

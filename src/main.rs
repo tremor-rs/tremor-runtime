@@ -27,6 +27,7 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 extern crate actix;
+extern crate mimir;
 extern crate actix_web;
 extern crate base64;
 extern crate bytes;

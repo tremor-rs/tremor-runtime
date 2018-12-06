@@ -17,6 +17,7 @@ use pipeline::types::ValueType;
 use prometheus;
 use serde_yaml;
 use std;
+use mimir;
 
 error_chain!{
 
@@ -25,6 +26,7 @@ error_chain!{
         Io(std::io::Error) #[cfg(unix)];
         Prometheus(prometheus::Error);
         Standard(error::TSError);
+        Mimir(mimir::ErrorCode);
     }
 
     errors {

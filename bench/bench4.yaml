@@ -80,7 +80,7 @@ pipelines:
           - sub::done
     steps:
       - parse::json
-      - classifier::json:
+      - classifier::mimir:
           rules:
             - rule: application="app1"
               class: applog_app1

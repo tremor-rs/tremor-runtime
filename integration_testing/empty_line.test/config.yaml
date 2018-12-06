@@ -7,7 +7,7 @@ pipelines:
   - name: main
     steps:
       - parse::json
-      - classifier::json:
+      - classifier::mimir:
           rules:
             - rule: 'a:"b"'
               class: default

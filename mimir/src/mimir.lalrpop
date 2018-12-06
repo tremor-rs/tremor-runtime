@@ -1,0 +1,165 @@
+// Copyright 2018, Wayfair GmbH
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::str::FromStr;
+use super::{Node, Operator};
+use pcre2::bytes::RegexBuilder;
+use glob::Pattern;
+use serde_json::Value;
+
+grammar;
+
+pub Items: Box<Node> = {
+    <i1:Items> <i2:Item> => Box::new(Node::Op(i1, Operator::And, i2)),
+    Items OpLog Item => Box::new(Node::Op(<>)),
+    Item,
+};
+
+Enclosed: Box<Node> = {
+    "(" <Items> ")",
+    Not Enclosed => Box::new(Node::Neg(<>)),
+}
+
+Item: Box<Node> = {
+    <Compare>,
+    <Enclosed>,
+};
+
+Compare: Box<Node> = {
+    Dfield OpFn Sfield => Box::new(Node::Op(<>)),
+    Dfield OpFn Intdat => Box::new(Node::Op(<>)),
+    Dfield OpFn Floatdat => Box::new(Node::Op(<>)),
+    Dfield OpFn Rfield => Box::new(Node::Op(<>)),
+    Dfield OpFn Listofstr => Box::new(Node::Op(<>)),
+    Dfield OpFn Listofint => Box::new(Node::Op(<>)),
+    Dfield OpFn Listofdbl => Box::new(Node::Op(<>)),
+    Dfield OpFn Gfield => Box::new(Node::Op(<>)),
+    Not Compare => Box::new(Node::Neg(<>)),
+};
+
+Listofstr: Box<Node> = {"[" <Valueliststr> "]" => Box::new(Node::List(<>)) };
+
+Listofint: Box<Node> = {"[" <Valuelistint> "]" => Box::new(Node::List(<>)) };
+
+Listofdbl: Box<Node> = {"[" <Valuelistfloat> "]" => Box::new(Node::List(<>)) };
+
+Rfield: Box<Node> = { <Regexstr> => Box::new(Node::Rex(RegexBuilder::new().jit(true).jit_if_available(true).build(&<>.trim_matches('/').to_string()).unwrap()))};
+
+Sfield: Box<Node> = { "\"" <Plainstr> "\"" => Box::new(Node::Ruleval(<>))};
+
+Gfield: Box<Node> = { <Glob> => Box::new(Node::Glob(Pattern::new(&<>.trim_matches('g').trim_matches('"').to_string()).unwrap()))};
+
+Quotedstr: Value = { "\"" <Plainstr> "\"" };
+
+Intdat: Box<Node> = { <Intnum> => Box::new(Node::Ruleval(<>)) };
+
+Floatdat: Box<Node> = { <Dblnum> => Box::new(Node::Ruleval(<>)) };
+
+Dfield: Box<Node> = {
+    Dfield Dot Skeystr => Box::new(Node::Op(<>)),
+    Skeystr,
+};
+
+OpFn: Operator = {
+    CON => Operator::Con,
+    EQ => Operator::Eq,
+    GT => Operator::Gt,
+    LT => Operator::Lt,
+    GTOE => Operator::Gtoe,
+    LTOE => Operator::Ltoe,
+};
+
+OpLog: Operator = {
+    AND => Operator::And,
+    OR => Operator::Or,
+};
+
+Valueliststr: Vec<Value> = {
+    <sl:Valueliststr> COMMA <s:Quotedstr> => {
+        let mut msl: Vec<Value> = sl;
+        msl.push(s);
+        msl
+    },
+    Quotedstr => {
+        let mut v: Vec<Value> = Vec::new();
+        v.push(<>);
+        v
+    }
+};
+
+Valuelistint: Vec<Value> = {
+    <il:Valuelistint> COMMA <i:Intnum> => {
+        let mut mi: Vec<Value> = il;
+        mi.push(i);
+        mi
+    },
+    Intnum => {
+        let mut v: Vec<Value> = Vec::new();
+        v.push(<>);
+        v
+    }
+};
+
+Valuelistfloat: Vec<Value> = {
+    <fl:Valuelistfloat> COMMA <f:Dblnum> => {
+        let mut mf: Vec<Value> = fl;
+        mf.push(f);
+        mf
+    },
+    Dblnum => {
+        let mut v: Vec<Value> = Vec::new();
+        v.push(json!(<>));
+        v
+    }
+};
+
+Not: Operator = NOT => Operator::Not;
+
+Dot: Operator = DOT => Operator::Dot;
+
+Skeystr: Box<Node> = { Str => Box::new(Node::Lastkey(<>.to_string()))};
+
+Dblnum: Value = DOUBLE => json!(f64::from_str(<>).unwrap());
+
+Intnum: Value = LONG => json!(i64::from_str(<>).unwrap());
+
+Regexstr: String = REGEX => <>.to_string();
+
+Plainstr: Value = TEXT => json!(<>.to_string());
+
+Str: String = TEXT => <>.to_string();
+
+Glob: String = { GLOB => <>.to_string() };
+
+match {
+    r"[+-]?[0-9]+" => LONG,
+    r"[+-]?[0-9]+\.[0-9]+" => DOUBLE,
+    r"((?i)and)|(\&\&)" => AND,
+    r"((?i)or)|(\|\|)" => OR,
+    r"((?i)not)|(!)" => NOT,
+    ":" => CON,
+    "=" => EQ,
+    ">" => GT,
+    "<" => LT,
+    ">=" => GTOE,
+    "<=" => LTOE,
+    "." => DOT,
+    "," => COMMA,
+} else {
+    r"[a-zA-Z0-9_]+" => TEXT,
+    r"[/](([\\][/])|[^/])+[/]" => REGEX,
+    r####"[g]["](([\\]["])|[^"])+["]"#### => GLOB,
+     _
+}
+

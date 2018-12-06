@@ -17,21 +17,23 @@
 //! Classifiers are used to classify events so that decisions can be
 //! derived from this classification.
 
-pub mod json;
+pub mod mimir;
+
 use errors::*;
 use pipeline::prelude::*;
 
+
 #[derive(Debug)]
 pub enum Classifier {
-    JSON(json::Classifier),
+    Mimir(mimir::Classifier),
 }
 impl Classifier {
     pub fn new(name: &str, opts: &ConfValue) -> Result<Classifier> {
         match name {
-            "json" => Ok(Classifier::JSON(json::Classifier::new(opts)?)),
+            "mimir" => Ok(Classifier::Mimir(mimir::Classifier::new(opts)?)),
             _ => Err(ErrorKind::UnknownOp("classifier".into(), name.into()).into()),
         }
     }
 }
 
-opable!(Classifier, JSON);
+opable!(Classifier, Mimir);

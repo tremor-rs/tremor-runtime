@@ -4,3 +4,4 @@
 .rpm
 /window/target*
 local-examples
+.#*
