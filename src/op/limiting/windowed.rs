@@ -26,9 +26,9 @@
 //!
 //! The 1st additional output is used to route data that was decided to
 //! be discarded.
-use dflt;
-use errors::*;
-use pipeline::prelude::*;
+use crate::dflt;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use prometheus::IntGauge; // w/ instance
 use serde_yaml;
 use std::cmp::max;
@@ -66,7 +66,7 @@ pub struct Limiter {
 }
 
 impl Limiter {
-    pub fn new(opts: ConfValue) -> Result<Self> {
+    pub fn create(opts: ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts)?;
 
         RATE_GAUGE.set(config.rate as i64);
@@ -120,26 +120,27 @@ impl Opable for Limiter {
 mod tests {
 
     use super::super::Limiter;
-    use pipeline::prelude::*;
+    use crate::pipeline::prelude::*;
+    use crate::utils::*;
     use serde_yaml::Mapping;
     use std::iter::FromIterator;
     use std::thread::sleep;
     use std::time::Duration;
-    use utils::*;
 
     fn conf(rate: u64) -> ConfValue {
         ConfValue::Mapping(Mapping::from_iter(
-            hashmap!{
+            hashmap! {
                 vs("time_range") => vi(1000),
                 vs("windows") => vi(100),
                 vs("rate") => vi(rate),
-            }.into_iter(),
+            }
+            .into_iter(),
         ))
     }
     #[test]
     fn no_capacity() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let mut c = Limiter::new("windowed", conf(0)).unwrap();
+        let mut c = Limiter::create("windowed", conf(0)).unwrap();
         let r = c.exec(e);
 
         assert_matches!(r, EventResult::NextID(3, _));
@@ -148,7 +149,7 @@ mod tests {
     #[test]
     fn grouping_test_fail() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let mut c = Limiter::new("windowed", conf(1)).unwrap();
+        let mut c = Limiter::create("windowed", conf(1)).unwrap();
         let r = c.exec(e);
 
         assert_matches!(r, EventResult::Next(_));
@@ -157,7 +158,7 @@ mod tests {
     #[test]
     fn grouping_time_refresh() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let mut c = Limiter::new("windowed", conf(1)).unwrap();
+        let mut c = Limiter::create("windowed", conf(1)).unwrap();
         let r1 = c.exec(e);
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let r2 = c.exec(e);

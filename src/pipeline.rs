@@ -26,8 +26,9 @@ use self::graph::{Graph, GraphLink};
 use self::onramp::OnRampActor;
 use self::op::{OpSpec, StepConfig};
 use self::types::ConfValue;
+use crate::errors::*;
+use actix;
 use actix::prelude::*;
-use errors::*;
 use std::collections::HashMap;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
@@ -60,24 +61,27 @@ type SubPipelines = HashMap<String, GraphLink>;
 pub fn value_to_conf(step: ConfValue) -> Result<StepConfig> {
     let (name, config) = match step {
         ConfValue::String(s) => (s, ConfValue::Null),
-        ConfValue::Mapping(m) => if m.len() != 1 {
-            return Err(ErrorKind::BadOpConfig("Need to have exactly 1 element".into()).into());
-        } else {
-            let mut name: String = "".to_string();
-            let mut config: ConfValue = ConfValue::Null;
-            for (k, v) in m {
-                match k {
-                    ConfValue::String(k) => name = k,
-                    _ => {
-                        return Err(
-                            ErrorKind::BadOpConfig("Op name needs to be a string".into()).into(),
-                        )
-                    }
-                };
-                config = v;
+        ConfValue::Mapping(m) => {
+            if m.len() != 1 {
+                return Err(ErrorKind::BadOpConfig("Need to have exactly 1 element".into()).into());
+            } else {
+                let mut name: String = "".to_string();
+                let mut config: ConfValue = ConfValue::Null;
+                for (k, v) in m {
+                    match k {
+                        ConfValue::String(k) => name = k,
+                        _ => {
+                            return Err(ErrorKind::BadOpConfig(
+                                "Op name needs to be a string".into(),
+                            )
+                            .into())
+                        }
+                    };
+                    config = v;
+                }
+                (name, config)
             }
-            (name, config)
-        },
+        }
         _ => return Err(ErrorKind::BadOpConfig("Config needs to be a string or map".into()).into()),
     };
     let name_parts: Vec<&str> = name.split("::").collect();
@@ -136,14 +140,16 @@ fn make_pipeline(
                     return Err(ErrorKind::BadOpConfig(format!(
                         "on-error for step '{}' contains no steps",
                         step.name
-                    )).into());
+                    ))
+                    .into());
                 }
             }
             _ => {
                 return Err(ErrorKind::BadOpConfig(format!(
                     "on-error for step '{}' contains no steps",
                     step.name
-                )).into());
+                ))
+                .into());
             }
         };
         // Now connect the remaining outputs
@@ -173,14 +179,16 @@ fn make_pipeline(
                             return Err(ErrorKind::BadOpConfig(format!(
                                 "additional outputs for step '{}' contains no steps",
                                 step.name
-                            )).into());
+                            ))
+                            .into());
                         }
                     }
                     _ => {
                         return Err(ErrorKind::BadOpConfig(format!(
                             "Additional outputs for {} need to be strings or lists",
                             step.name
-                        )).into())
+                        ))
+                        .into())
                     }
                 }
             }
@@ -324,6 +332,7 @@ fn start_pipeline(p: PipelineConfig, pipelines: &Pipelines) -> Result<GraphLink>
 #[cfg(test)]
 mod test {
     use super::prelude::*;
+    use actix;
     use actix::prelude::*;
     use futures::{future, Future};
     use serde_yaml;

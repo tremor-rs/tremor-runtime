@@ -20,11 +20,11 @@
 //!
 //! This operator has no configuration
 
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
-use serde_yaml;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use mimir::Rules;
+use serde_yaml;
 
 #[derive(Debug)]
 pub struct Classifier {
@@ -43,21 +43,21 @@ struct Config {
 }
 
 impl Classifier {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
-        let mut rules: Rules<String> = Rules::new();
+        let mut rules: Rules<String> = Rules::default();
 
         for r in config.rules.iter() {
             // clone OK here as this is on init
             rules.add_rule(r.class.clone(), &r.rule)?;
         }
 
-        Ok(Classifier{rules})
+        Ok(Classifier { rules })
     }
 }
 
 impl Opable for Classifier {
-opable_types!(ValueType::JSON, ValueType::JSON);
+    opable_types!(ValueType::JSON, ValueType::JSON);
     fn exec(&mut self, mut event: EventData) -> EventResult {
         if !event.is_type(ValueType::JSON) {
             let t = event.value.t();
@@ -82,7 +82,7 @@ opable_types!(ValueType::JSON, ValueType::JSON);
             Ok(Some(id)) => {
                 event.set_var(&"classification", id);
                 EventResult::Next(event)
-            },
+            }
             _ => {
                 event.set_var(&"classification", "default");
                 EventResult::Next(event)

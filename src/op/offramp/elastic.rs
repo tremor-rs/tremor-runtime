@@ -30,17 +30,18 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use async_sink::{AsyncSink, SinkDequeueError};
-use dflt;
+use crate::async_sink::{AsyncSink, SinkDequeueError};
+use crate::dflt;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::metrics;
+use crate::pipeline::prelude::*;
+use crate::utils::{duration_to_millis, nanos_to_millis, nanotime};
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
-use error::TSError;
-use errors::*;
 use hostname::get_hostname;
-use metrics;
-use pipeline::prelude::*;
 use prometheus::{exponential_buckets, HistogramVec}; // w/ instance
 use serde_yaml;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
@@ -51,7 +52,6 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::Instant;
 use std::{f64, fmt, str};
 use threadpool::ThreadPool;
-use utils::{duration_to_millis, nanos_to_millis, nanotime};
 
 //#[cfg(test)]
 //use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -106,7 +106,7 @@ pub struct Offramp {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let clients: Vec<Destination> = config
             .endpoints
@@ -117,7 +117,8 @@ impl Offramp {
                     .build()
                     .unwrap(),
                 url: s.clone(),
-            }).collect();
+            })
+            .collect();
 
         let pool = ThreadPool::new(config.concurrency);
         let queue = AsyncSink::new(config.concurrency);
@@ -162,7 +163,8 @@ impl Offramp {
                     {
                         "_index": index,
                         "_type": doc_type
-                    }}).to_string()
+                    }})
+                    .to_string()
                     .as_str(),
                 ),
                 Some(ref pipeline) => payload.push_str(
@@ -172,7 +174,8 @@ impl Offramp {
                         "_index": index,
                         "_type": doc_type,
                         "pipeline": pipeline
-                    }}).to_string()
+                    }})
+                    .to_string()
                     .as_str(),
                 ),
             };
@@ -228,15 +231,17 @@ impl Offramp {
             let dst = destination.url.as_str();
             let r = flush(&destination.client, dst, payload.as_str());
             match r.clone() {
-                Ok(r) => for (dst, ids) in returns.iter() {
-                    let ret = Return {
-                        source: dst.source.to_owned(),
-                        chain: dst.chain.to_owned(),
-                        ids: ids.to_owned(),
-                        v: Ok(r),
-                    };
-                    ret.send();
-                },
+                Ok(r) => {
+                    for (dst, ids) in returns.iter() {
+                        let ret = Return {
+                            source: dst.source.to_owned(),
+                            chain: dst.chain.to_owned(),
+                            ids: ids.to_owned(),
+                            v: Ok(r),
+                        };
+                        ret.send();
+                    }
+                }
                 Err(e) => {
                     for (dst, ids) in returns.iter() {
                         let ret = Return {

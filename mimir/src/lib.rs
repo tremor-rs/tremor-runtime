@@ -18,7 +18,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":"data"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:/d.*/").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -28,7 +28,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":"data"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:/e.*/").unwrap();
 //! assert_eq!(false, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -46,7 +46,7 @@
 //!                 "key3": "data3"
 //!             }"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "!(key1.subkey1:\"data1\" NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -58,7 +58,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":"data"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, r#"key:["foo", "data", "bar"]"#).unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -68,7 +68,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":4}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:[3, 4, 5]").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -78,7 +78,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":4.1}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:[3.1, 4.1, 5.1]").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -91,7 +91,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":["v1", "v2", "v3"]}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:\"v2\"").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -101,7 +101,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":[3, 4, 5]}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:4").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -111,7 +111,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:4.1").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -121,7 +121,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":"data"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:g\"da?a\"").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -131,7 +131,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":"data"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key:g\"daa?a\"").unwrap();
 //! assert_eq!(false, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -141,7 +141,7 @@
 //! use mimir::*;
 //! let json = r#"{"key1": "this is a glob blahblah"}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key1:g\"this is a glob*\"").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -151,7 +151,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key=5").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -163,7 +163,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key>1").unwrap();
 //! r.add_rule(1, "key>4").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -176,7 +176,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key>-6").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
 //! ```
@@ -188,7 +188,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key<10").unwrap();
 //! r.add_rule(1, "key<9").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -201,7 +201,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5.0}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key<10.0").unwrap();
 //! r.add_rule(1, "key<9.0").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -214,7 +214,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key<=5").unwrap();
 //! r.add_rule(1, "key<=11").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -227,7 +227,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key >= 3").unwrap();
 //! r.add_rule(1, "key >= 4").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -240,7 +240,7 @@
 //! use mimir::*;
 //! let json = r#"{"key":5.0}"#;
 //! let vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::new();
+//! let mut r = Rules::default();
 //! r.add_rule(0, "key >= 3.5").unwrap();
 //! r.add_rule(1, "key >= 4.5").unwrap();
 //! assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -248,24 +248,20 @@
 
 #[macro_use]
 extern crate lalrpop_util;
-
-lalrpop_mod!(#[cfg_attr(feature = "cargo-clippy", allow(clippy::all))] pub mimir);
-
-extern crate pcre2;
-
-use pcre2::bytes::Regex;
-
 #[macro_use]
 extern crate serde_json;
 
-extern crate glob;
-
 use glob::Pattern;
+use pcre2::bytes::Regex;
+use serde_json::Value;
+use std::error::Error;
+
+lalrpop_mod!(
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::all))]
+    parser
+);
 
 pub type MimirValue = serde_json::Value;
-use serde_json::Value;
-
-use std::error::Error;
 
 #[derive(Debug)]
 pub enum Node {
@@ -315,11 +311,8 @@ pub struct Rules<T> {
 }
 
 impl<T> Rules<T> {
-    pub fn new() -> Self {
-        Rules { rules: Vec::new() }
-    }
     pub fn add_rule(&mut self, id: T, rule: &str) -> Result<usize, ErrorCode> {
-        let res = mimir::ItemsParser::new().parse(rule);
+        let res = parser::ItemsParser::new().parse(rule);
 
         match res {
             Ok(n) => {
@@ -663,7 +656,7 @@ mod tests {
     fn test_glob() {
         let json = r#"{"key1": "data"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1:g\"da?a\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -672,7 +665,7 @@ mod tests {
     fn test_contains() {
         let json = r#"{"key1": "data3"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1:\"data\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -681,7 +674,7 @@ mod tests {
     fn test_equals() {
         let json = r#"{"key1": "data1"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1=\"data1\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -690,7 +683,7 @@ mod tests {
     fn test_subkey_equals() {
         let json = r#"{"key1": {"sub1": "data1"}}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1.sub1=\"data1\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -699,7 +692,7 @@ mod tests {
     fn test_subkey_contains() {
         let json = r#"{"key1": {"sub1": "data1"}}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1.sub1:\"dat\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -716,7 +709,7 @@ mod tests {
                 "key3": "data3"
              }"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key1.subkey1:\"data1\" key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -725,7 +718,7 @@ mod tests {
     fn test_int_eq() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key=5").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -734,7 +727,7 @@ mod tests {
     fn test_int_gt() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key>1").unwrap();
         r.add_rule(1, "key>4").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -744,7 +737,7 @@ mod tests {
     fn test_negint_gt() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key>-6").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -753,7 +746,7 @@ mod tests {
     fn test_int_lt() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key<10").unwrap();
         r.add_rule(1, "key<9").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -763,7 +756,7 @@ mod tests {
     fn test_double_lt() {
         let json = r#"{"key":5.0}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key<10.0").unwrap();
         r.add_rule(1, "key<9.0").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -773,7 +766,7 @@ mod tests {
     fn test_int_ltoe() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key<=5").unwrap();
         r.add_rule(1, "key<=11").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -783,7 +776,7 @@ mod tests {
     fn test_int_gtoe() {
         let json = r#"{"key":5}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key >= 3").unwrap();
         r.add_rule(1, "key >= 4").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -793,7 +786,7 @@ mod tests {
     fn test_int_gtoe_double() {
         let json = r#"{"key":5.0}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key >= 3.5").unwrap();
         r.add_rule(1, "key >= 4.5").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
@@ -803,7 +796,7 @@ mod tests {
     fn test_regex() {
         let json = r#"{"key":"data"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:/d.*/").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -812,7 +805,7 @@ mod tests {
     fn test_regex_false() {
         let json = r#"{"key":"data"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:/e.*/").unwrap();
         assert_eq!(false, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -821,7 +814,7 @@ mod tests {
     fn test_negregex() {
         let json = r#"{"key":"data"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "NOT key:/d.*/").unwrap();
         assert_eq!(false, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -830,7 +823,7 @@ mod tests {
     fn test_regex_bug() {
         let json = r#"{"key":"\\/"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, r#"key:/\\//"#).unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -847,7 +840,7 @@ mod tests {
                 "key3": "data3"
              }"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "!(key1.subkey1:\"data1\" NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -856,7 +849,7 @@ mod tests {
     fn test_list_contains_str() {
         let json = r#"{"key":"data"}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:[\"foo\", \"data\", \"bar\"]").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -865,7 +858,7 @@ mod tests {
     fn test_list_contains_int() {
         let json = r#"{"key":4}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:[3, 4, 5]").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -874,7 +867,7 @@ mod tests {
     fn test_list_contains_float() {
         let json = r#"{"key":4.1}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:[3.1, 4.1, 5.1]").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -883,7 +876,7 @@ mod tests {
     fn test_jsonlist_contains_str() {
         let json = r#"{"key":["v1", "v2", "v3"]}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:\"v2\"").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -892,7 +885,7 @@ mod tests {
     fn test_jsonlist_contains_int() {
         let json = r#"{"key":[3, 4, 5]}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:4").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
@@ -901,14 +894,14 @@ mod tests {
     fn test_jsonlist_contains_float() {
         let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
         let vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         r.add_rule(0, "key:4.1").unwrap();
         assert_eq!(true, r.eval_first_wins(&vals).unwrap().is_some());
     }
 
     #[test]
     fn test_bad_rule_syntax() {
-        let mut r = Rules::new();
+        let mut r = Rules::default();
         assert_eq!(true, r.add_rule(0, "\"key").is_err());
     }
 }

@@ -98,16 +98,18 @@ macro_rules! s {
 macro_rules! prom_int_gauge {
     ($name:expr, $desc:expr) => {
         register_int_gauge!(opts!($name, $desc).namespace("tremor").const_labels(
-            hashmap!{"instance".to_string() => unsafe{::metrics::INSTANCE.to_string()}}
-        )).unwrap()
+            hashmap! {"instance".to_string() => unsafe{crate::metrics::INSTANCE.to_string()}}
+        ))
+        .unwrap()
     };
 }
 
 macro_rules! prom_gauge {
     ($name:expr, $desc:expr) => {
         register_gauge!(opts!($name, $desc).namespace("tremor").const_labels(
-            hashmap!{"instance".to_string() => unsafe{::metrics::INSTANCE.to_string()}}
-        )).unwrap()
+            hashmap! {"instance".to_string() => unsafe{crate::metrics::INSTANCE.to_string()}}
+        ))
+        .unwrap()
     };
 }
 

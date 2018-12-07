@@ -20,8 +20,8 @@
 pub mod backpressure;
 pub mod percentile;
 pub mod windowed;
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 
 pub enum Limiter {
     Backpressure(backpressure::Limiter),
@@ -30,11 +30,11 @@ pub enum Limiter {
 }
 
 impl Limiter {
-    pub fn new(name: &str, opts: ConfValue) -> Result<Limiter> {
+    pub fn create(name: &str, opts: ConfValue) -> Result<Limiter> {
         match name {
-            "windowed" => Ok(Limiter::Windowed(windowed::Limiter::new(opts)?)),
-            "percentile" => Ok(Limiter::Percentile(percentile::Limiter::new(opts)?)),
-            "backpressure" => Ok(Limiter::Backpressure(backpressure::Limiter::new(opts)?)),
+            "windowed" => Ok(Limiter::Windowed(windowed::Limiter::create(opts)?)),
+            "percentile" => Ok(Limiter::Percentile(percentile::Limiter::create(opts)?)),
+            "backpressure" => Ok(Limiter::Backpressure(backpressure::Limiter::create(opts)?)),
         _ => panic!(
             "Unknown limiting plugin: {} valid options are 'percentile', 'backpressure', 'windowed'",
             name

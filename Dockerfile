@@ -1,6 +1,6 @@
 FROM centos:7 as builder
 
-ARG rust_version=1.30.1
+ARG rust_version=1.31
 RUN yum install git make gcc clang openssl-static libstdc++-static bison  autoconf -y
 RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 

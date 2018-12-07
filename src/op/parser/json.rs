@@ -20,15 +20,15 @@
 //!
 //! This operator takes no configuration
 
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_json;
 
 #[derive(Debug)]
 pub struct Parser {}
 impl Parser {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Parser {})
     }
 }
@@ -58,7 +58,7 @@ impl Opable for Parser {
 #[derive(Debug)]
 pub struct Renderer {}
 impl Renderer {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Self {})
     }
 }

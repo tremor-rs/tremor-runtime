@@ -21,20 +21,20 @@
 //! This OnRamp takes no configuration.
 //!
 
-use errors::*;
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
+use crate::pipeline::prelude::*;
+use crate::utils;
 use futures::sync::mpsc::channel;
 use futures::Stream;
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
-use pipeline::prelude::*;
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader};
 use std::thread;
-use utils;
 
 pub struct Onramp {}
 
 impl Onramp {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Self {})
     }
 }

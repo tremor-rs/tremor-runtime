@@ -21,14 +21,15 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
+use crate::pipeline::prelude::*;
+use crate::utils;
 use chrono;
-use errors::*;
 use futures::future::{loop_fn, Future, Loop};
 use futures::sync::mpsc::channel;
 use futures::Stream;
 use futures_state_stream::StateStream;
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
-use pipeline::prelude::*;
 use serde_json;
 use serde_yaml;
 use std::collections::HashMap;
@@ -36,7 +37,6 @@ use std::{boxed, f64, str, thread, time};
 use tiberius::ty::{ColumnData, FromColumnData};
 use tiberius::{self, SqlConnection};
 use tokio_current_thread::block_on_all;
-use utils;
 
 pub struct Onramp {
     config: Config,
@@ -75,7 +75,7 @@ struct Config {
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         Ok(Onramp { config })
     }
@@ -105,9 +105,9 @@ fn row_to_json(row: &tiberius::query::QueryRow) -> serde_json::Value {
             }
             ColumnData::Guid(g) => serde_json::Value::String(format!("{}", g)),
             ColumnData::Time(t) => json!({
-                                        "increments": t.increments,
-                                        "scale": t.scale
-                                    }),
+                "increments": t.increments,
+                "scale": t.scale
+            }),
             date @ ColumnData::Date(_) => {
                 let date: chrono::NaiveDate = chrono::NaiveDate::from_column_data(date).unwrap();
                 let s = format!("{}", date.format(DATE_FORMAT));
@@ -192,7 +192,8 @@ impl OnrampT for Onramp {
                                 .for_each(|row| {
                                     send_row(&pipelines, &row, 0, len);
                                     Ok(())
-                                }).and_then(move |conn| {
+                                })
+                                .and_then(move |conn| {
                                     thread::sleep(ival - now.elapsed());
                                     Ok(Loop::Continue(conn))
                                 })

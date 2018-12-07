@@ -325,7 +325,7 @@ mod properties {
     proptest! {
         #[test]
         fn always(size in 10..200,
-                  max in 10..1000,
+                  _max in 10..1000,
                   ref s in a_window()) {
             let mut s = s.clone();
             let max = 1000;

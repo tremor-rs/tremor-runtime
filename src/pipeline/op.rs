@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use super::types::{ConfValue, EventData, EventResult, EventReturn, ValueType};
-use errors::*;
-use op::classifier::Classifier;
-use op::generic::Generic;
-use op::grouping::Grouper;
-use op::offramp::Offramp;
-use op::parser::{Parser, Renderer};
-use op::runtime::Runtime;
+use crate::errors::*;
+use crate::op::classifier::Classifier;
+use crate::op::generic::Generic;
+use crate::op::grouping::Grouper;
+use crate::op::offramp::Offramp;
+use crate::op::parser::{Parser, Renderer};
+use crate::op::runtime::Runtime;
 use std::collections::HashSet;
 use std::fmt;
 use uuid::Uuid;
@@ -136,31 +136,31 @@ impl OpSpec {
     pub fn to_op(&self) -> Result<Op> {
         match self.optype {
             OpType::Offramp => Ok(Op {
-                op: OpE::Offramp(Offramp::new(&self.name, &self.opts)?),
+                op: OpE::Offramp(Offramp::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Op => Ok(Op {
-                op: OpE::Op(Generic::new(&self.name, &self.opts)?),
+                op: OpE::Op(Generic::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Parse => Ok(Op {
-                op: OpE::Parse(Parser::new(&self.name, &self.opts)?),
+                op: OpE::Parse(Parser::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Render => Ok(Op {
-                op: OpE::Render(Renderer::new(&self.name, &self.opts)?),
+                op: OpE::Render(Renderer::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Classifier => Ok(Op {
-                op: OpE::Classifier(Classifier::new(&self.name, &self.opts)?),
+                op: OpE::Classifier(Classifier::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Grouper => Ok(Op {
-                op: OpE::Grouper(Grouper::new(&self.name, &self.opts)?),
+                op: OpE::Grouper(Grouper::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
             OpType::Runtime => Ok(Op {
-                op: OpE::Runtime(Runtime::new(&self.name, &self.opts)?),
+                op: OpE::Runtime(Runtime::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
         }

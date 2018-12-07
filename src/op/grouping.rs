@@ -19,8 +19,8 @@
 
 pub mod bucket;
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 
 #[derive(Debug)]
 pub enum Grouper {
@@ -28,9 +28,9 @@ pub enum Grouper {
 }
 
 impl Grouper {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Grouper> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Grouper> {
         match name {
-            "bucket" => Ok(Grouper::Bucket(bucket::Grouper::new(opts)?)),
+            "bucket" => Ok(Grouper::Bucket(bucket::Grouper::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("grouper".into(), name.into()).into()),
         }
     }

@@ -30,8 +30,8 @@
 //!
 //! If no value matches the default output (next step) is used.
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_yaml;
 use std::collections::HashMap;
 
@@ -52,7 +52,7 @@ pub struct Op {
 }
 
 impl Op {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
 
         let mut vals = HashMap::new();
@@ -61,10 +61,12 @@ impl Op {
         let mut i = 3;
         for v in config.vals.clone() {
             match v {
-                ConfValue::Number(ref n) => if let Some(n) = n.as_u64() {
-                    vals.insert(MetaValue::U64(n), i);
-                    i += 1;
-                },
+                ConfValue::Number(ref n) => {
+                    if let Some(n) = n.as_u64() {
+                        vals.insert(MetaValue::U64(n), i);
+                        i += 1;
+                    }
+                }
                 ConfValue::String(ref s) => {
                     vals.insert(MetaValue::String(s.clone()), i);
                     i += 1;

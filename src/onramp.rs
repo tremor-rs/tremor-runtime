@@ -25,9 +25,11 @@ pub mod kafka;
 #[cfg(feature = "mssql")]
 pub mod mssql;
 pub mod stdin;
+
+use crate::errors::*;
+use crate::pipeline::prelude::*;
+use actix;
 use actix::prelude::*;
-use errors::*;
-use pipeline::prelude::*;
 use std::thread::JoinHandle;
 
 type PipelineOnrampElem = Addr<OnRampActor>;
@@ -39,16 +41,16 @@ pub trait Onramp {
     fn enter_loop(&mut self, pipeline: PipelineOnramp) -> EnterReturn;
 }
 
-pub fn new(name: &str, opts: &ConfValue) -> Result<Onramps> {
+pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
     match name {
-        "blaster" => Ok(Onramps::Blaster(blaster::Onramp::new(opts)?)),
-        "file" => Ok(Onramps::File(file::Onramp::new(opts)?)),
-        "http" => Ok(Onramps::HTTP(http::Onramp::new(opts)?)),
+        "blaster" => Ok(Onramps::Blaster(blaster::Onramp::create(opts)?)),
+        "file" => Ok(Onramps::File(file::Onramp::create(opts)?)),
+        "http" => Ok(Onramps::HTTP(http::Onramp::create(opts)?)),
         #[cfg(feature = "kafka")]
-        "kafka" => Ok(Onramps::Kafka(kafka::Onramp::new(opts)?)),
+        "kafka" => Ok(Onramps::Kafka(kafka::Onramp::create(opts)?)),
         #[cfg(feature = "mssql")]
-        "mssql" => Ok(Onramps::MSSql(mssql::Onramp::new(opts)?)),
-        "stdin" => Ok(Onramps::Stdin(stdin::Onramp::new(opts)?)),
+        "mssql" => Ok(Onramps::MSSql(mssql::Onramp::create(opts)?)),
+        "stdin" => Ok(Onramps::Stdin(stdin::Onramp::create(opts)?)),
         _ => panic!("Unknown classifier: {}", name),
     }
 }

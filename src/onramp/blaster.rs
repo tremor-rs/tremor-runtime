@@ -28,12 +28,13 @@
 //!     pipeline: main # pipeline to send to
 //! ```
 
-use errors::*;
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp, PipelineOnrampElem};
+use crate::pipeline::prelude::*;
+use crate::utils::{nanotime, park};
 use futures::sync::mpsc::channel;
 use futures::Future;
 use futures::Stream;
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp, PipelineOnrampElem};
-use pipeline::prelude::*;
 use serde_yaml;
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -42,7 +43,6 @@ use std::io::{BufRead, Read};
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use utils::{nanotime, park};
 use xz2::read::XzDecoder;
 
 lazy_static! {
@@ -66,7 +66,7 @@ pub struct Config {
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Result<Onramp> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let mut source_data_file = File::open(&config.source).unwrap();
         let ext = Path::new(&config.source)

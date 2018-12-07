@@ -26,10 +26,10 @@
 //!
 //! * `<var>` (only enforced if `required` is set to true)
 
-use dflt;
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::dflt;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_json;
 use std::fmt;
 
@@ -59,7 +59,7 @@ impl fmt::Debug for Op {
 }
 
 impl Op {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         Ok(Self { config })
     }
@@ -95,11 +95,13 @@ impl Opable for Op {
                 event.set_var(&self.config.var, val);
                 EventResult::Next(event)
             }
-            None => if self.config.required {
-                EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.config.key, self.config.var))))
-            } else {
-                EventResult::Next(event)
-            },
+            None => {
+                if self.config.required {
+                    EventResult::Error(event, Some(TSError::new(&format!("Key `{:?}` needs to be present but was not. So the variable `{}` can not be set.", self.config.key, self.config.var))))
+                } else {
+                    EventResult::Next(event)
+                }
+            }
         }
     }
 

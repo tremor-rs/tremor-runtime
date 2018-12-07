@@ -24,8 +24,8 @@ pub mod kafka;
 pub mod null;
 pub mod stdout;
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use std::boxed::Box;
 
 /// Enum of all offramp connectors we have implemented.
@@ -50,17 +50,19 @@ pub enum Offramp {
 opable!(Offramp, Blackhole, Kafka, Elastic, Influx, Stdout, Debug, Null, File);
 
 impl Offramp {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Offramp> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Offramp> {
         match name {
-            "blackhole" => Ok(Offramp::Blackhole(Box::new(blackhole::Offramp::new(opts)?))),
-            "debug" => Ok(Offramp::Debug(debug::Offramp::new(opts)?)),
-            "elastic" => Ok(Offramp::Elastic(Box::new(elastic::Offramp::new(opts)?))),
-            "file" => Ok(Offramp::File(file::Offramp::new(opts)?)),
-            "influx" => Ok(Offramp::Influx(Box::new(influx::Offramp::new(opts)?))),
+            "blackhole" => Ok(Offramp::Blackhole(Box::new(blackhole::Offramp::create(
+                opts,
+            )?))),
+            "debug" => Ok(Offramp::Debug(debug::Offramp::create(opts)?)),
+            "elastic" => Ok(Offramp::Elastic(Box::new(elastic::Offramp::create(opts)?))),
+            "file" => Ok(Offramp::File(file::Offramp::create(opts)?)),
+            "influx" => Ok(Offramp::Influx(Box::new(influx::Offramp::create(opts)?))),
             #[cfg(feature = "kafka")]
-            "kafka" => Ok(Offramp::Kafka(kafka::Offramp::new(opts)?)),
-            "null" => Ok(Offramp::Null(null::Offramp::new(opts)?)),
-            "stdout" => Ok(Offramp::Stdout(stdout::Offramp::new(opts)?)),
+            "kafka" => Ok(Offramp::Kafka(kafka::Offramp::create(opts)?)),
+            "null" => Ok(Offramp::Null(null::Offramp::create(opts)?)),
+            "stdout" => Ok(Offramp::Stdout(stdout::Offramp::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("offramp".into(), name.into()).into()),
         }
     }

@@ -24,12 +24,13 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use async_sink::{AsyncSink, SinkDequeueError};
-use dflt;
-use error::TSError;
-use errors::*;
-use metrics;
-use pipeline::prelude::*;
+use crate::async_sink::{AsyncSink, SinkDequeueError};
+use crate::dflt;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::metrics;
+use crate::pipeline::prelude::*;
+use crate::utils::duration_to_millis;
 use prometheus::{exponential_buckets, HistogramVec}; // w/ instance
 use reqwest;
 use serde_yaml;
@@ -41,7 +42,6 @@ use std::fmt;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Instant;
 use threadpool::ThreadPool;
-use utils::duration_to_millis;
 
 lazy_static! {
     // Histogram of the duration it takes between getting a message and
@@ -93,7 +93,7 @@ pub struct Offramp {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let clients = config
             .endpoints
@@ -101,7 +101,8 @@ impl Offramp {
             .map(|client| Destination {
                 client: reqwest::Client::new(),
                 url: format!("{}/write?db={}", client, config.database),
-            }).collect();
+            })
+            .collect();
 
         let pool = ThreadPool::new(config.concurrency);
         let queue = AsyncSink::new(config.concurrency);
@@ -162,15 +163,17 @@ impl Offramp {
             let dst = destination.url.as_str();
             let r = flush(&destination.client, dst, payload.as_str());
             match r.clone() {
-                Ok(r) => for (dst, ids) in returns.iter() {
-                    let ret = Return {
-                        source: dst.source.to_owned(),
-                        chain: dst.chain.to_owned(),
-                        ids: ids.to_owned(),
-                        v: Ok(r),
-                    };
-                    ret.send();
-                },
+                Ok(r) => {
+                    for (dst, ids) in returns.iter() {
+                        let ret = Return {
+                            source: dst.source.to_owned(),
+                            chain: dst.chain.to_owned(),
+                            ids: ids.to_owned(),
+                            v: Ok(r),
+                        };
+                        ret.send();
+                    }
+                }
                 Err(e) => {
                     for (dst, ids) in returns.iter() {
                         let ret = Return {

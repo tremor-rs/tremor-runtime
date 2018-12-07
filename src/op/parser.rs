@@ -17,8 +17,8 @@
 pub mod influx;
 pub mod json;
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 
 #[derive(Debug)]
 pub enum Parser {
@@ -26,10 +26,10 @@ pub enum Parser {
     Influx(influx::Parser),
 }
 impl Parser {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Parser> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Parser> {
         match name {
-            "json" => Ok(Parser::JSON(json::Parser::new(opts)?)),
-            "influx" => Ok(Parser::Influx(influx::Parser::new(opts)?)),
+            "json" => Ok(Parser::JSON(json::Parser::create(opts)?)),
+            "influx" => Ok(Parser::Influx(influx::Parser::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("parse".into(), name.into()).into()),
         }
     }
@@ -42,9 +42,9 @@ pub enum Renderer {
     //Influx(influx::Renderer),
 }
 impl Renderer {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Renderer> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Renderer> {
         match name {
-            "json" => Ok(Renderer::JSON(json::Renderer::new(opts)?)),
+            "json" => Ok(Renderer::JSON(json::Renderer::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("render".into(), name.into()).into()),
         }
     }

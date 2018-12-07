@@ -15,8 +15,9 @@
 use super::messages::{Event, Return, Shutdown};
 use super::op::{Op, Opable};
 use super::types::EventResult;
+use crate::error::TSError;
+use actix;
 use actix::prelude::*;
-use error::TSError;
 use futures::Future;
 #[derive(Debug)]
 pub struct Step {
@@ -57,17 +58,19 @@ impl Handler<Event> for Step {
         // Vectors (the way we store outputs) are indexed by 0, this means we have
         // to subtract 1 for every
         match self.op.exec(event.data) {
-            EventResult::Next(result) => if let Some(Some(ref out)) = self.out.get(0) {
-                out.do_send(Event {
-                    data: result.add_to_chain(ctx.address()),
-                })
-            } else {
-                warn!("Aborting pipeline as output 'standard' (1) does not exist!");
-                result
-                    .add_to_chain(ctx.address())
-                    .make_return(Err(TSError::new(&"No standard output provided")))
-                    .send()
-            },
+            EventResult::Next(result) => {
+                if let Some(Some(ref out)) = self.out.get(0) {
+                    out.do_send(Event {
+                        data: result.add_to_chain(ctx.address()),
+                    })
+                } else {
+                    warn!("Aborting pipeline as output 'standard' (1) does not exist!");
+                    result
+                        .add_to_chain(ctx.address())
+                        .make_return(Err(TSError::new(&"No standard output provided")))
+                        .send()
+                }
+            }
             EventResult::Error(mut event, err) => {
                 if let Some(Some(ref err_actor)) = self.out.get(1) {
                     if let Some(ref e) = err {
@@ -103,7 +106,8 @@ impl Handler<Event> for Step {
                     .add_to_chain(ctx.address())
                     .make_return(Err(TSError::new(
                         &"Aborting pipeline as output -1 does not exist!",
-                    ))).send()
+                    )))
+                    .send()
             }
             EventResult::NextID(id, result) => {
                 if let Some(Some(ref out)) = self.out.get(id - 1) {
@@ -117,7 +121,8 @@ impl Handler<Event> for Step {
                         .make_return(Err(TSError::new(&format!(
                             "No output output provided for id: {}",
                             id
-                        )))).send()
+                        ))))
+                        .send()
                 }
             }
 
@@ -136,9 +141,11 @@ impl Handler<Return> for Step {
         let v1 = self.op.result(ret.v);
         ret.v = v1;
         match ret.chain.pop() {
-            None => if let Some(src) = ret.source.clone() {
-                src.do_send(ret)
-            },
+            None => {
+                if let Some(src) = ret.source.clone() {
+                    src.do_send(ret)
+                }
+            }
             Some(prev) => prev.do_send(ret),
         }
     }

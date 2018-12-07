@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::pipeline::error::TypeError;
 use elastic;
-use pipeline::error::TypeError;
 use reqwest;
 use serde_json;
 use std::error::Error;

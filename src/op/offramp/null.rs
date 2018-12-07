@@ -20,14 +20,14 @@
 //!
 //! This operator takes no configuration
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 /// An offramp that write to stdout
 #[derive(Debug, Clone)]
 pub struct Offramp {}
 
 impl Offramp {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Offramp {})
     }
 }

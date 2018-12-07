@@ -21,17 +21,17 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use errors::*;
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
+use crate::pipeline::prelude::*;
+use crate::utils;
 use futures::sync::mpsc::channel;
 use futures::Stream;
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
-use pipeline::prelude::*;
 use serde_yaml;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::thread;
-use utils;
 
 #[derive(Deserialize)]
 pub struct Onramp {
@@ -45,7 +45,7 @@ pub struct Config {
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let Config { file } = serde_yaml::from_value(opts.clone())?;
         Ok(Onramp { file })
     }

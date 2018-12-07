@@ -10,33 +10,20 @@ test:
     - docker
   script:
     - yum install git make gcc clang openssl-static libstdc++-static autoconf bison  -y
-    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.30.1 -y
+    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.31.0 -y
     - source $HOME/.cargo/env
+    - rustup component add clippy
     - cargo build
     - cp target/debug/native/php-src/libs/* /lib64
+    - cargo clippy
     - cargo test
     - make it
     - cd window
+    - cargo clippy
     - cargo test
-
-lint:
-  stage: test
-  image: centos:7
-  when: always
-  cache:
-    paths:
-      - target.clippy/
-      - ~/.cargo/
-  tags:
-    - docker
-  script:
-    - yum install git make gcc clang openssl-static libstdc++-static autoconf bison -y
-    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly -y
-    - source $HOME/.cargo/env
-    - cargo build
-    - cp target/debug/native/php-src/libs/* /lib64
-    - make clippy-install
-    - make clippy
+    - cd ../mimir
+    - cargo clippy
+    - cargo test
 
 bench:
   stage: test
@@ -51,47 +38,15 @@ bench:
     - docker
   script:
     - yum install git make gcc clang openssl-static libstdc++-static autoconf bison  -y
-    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.30.1 -y
+    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.31.0 -y
     - source $HOME/.cargo/env
     - cargo build --release
     - cp target/release/native/php-src/libs/* /lib64
     - make bench
 
-
-mimir-test:
-  stage: test
-  image: rust:1.30
-  when: always
-  cache:
-    paths:
-      - target/
-      - ~/.cargo/
-  tags:
-    - docker
-  script:
-    - cd mimir
-    - cargo test
-
-mimir-lint:
-  stage: test
-  image: rust:1.30
-  when: always
-  cache:
-    paths:
-      - target/
-      - ~/.cargo/
-  tags:
-    - docker
-  script:
-    - cd mimir
-    - rustup update
-    - rustup install nightly
-    - rustup component add clippy-preview --toolchain=nightly
-    - CARGO_TARGET_DIR=target.clippy cargo +nightly clippy
-
 mimir-bench:
   stage: test
-  image: rust:1.30
+  image: centos:7
   when: always
   cache:
     paths:
@@ -100,7 +55,9 @@ mimir-bench:
   tags:
     - docker
   script:
+    - yum install git make gcc clang openssl-static libstdc++-static autoconf bison  -y
+    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.31.0 -y
+    - source $HOME/.cargo/env
     - cd mimir
-    - apt update
-    - apt-get -y install gnuplot
+    - yum install gnuplot -y
     - cargo bench

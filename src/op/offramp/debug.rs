@@ -21,8 +21,8 @@
 //!
 //! This operator takes no configuration
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -40,7 +40,7 @@ pub struct Offramp {
 }
 
 impl Offramp {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Offramp {
             last: Instant::now(),
             update_time: Duration::from_secs(1),

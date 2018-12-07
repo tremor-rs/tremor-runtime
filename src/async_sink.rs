@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error::TSError;
+use crate::error::TSError;
 use std::collections::VecDeque;
 use std::sync::mpsc::Receiver;
 

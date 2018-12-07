@@ -20,12 +20,12 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use dflt;
-use error::TSError;
-use errors::*;
+use crate::dflt;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use futures::Future;
 use hostname::get_hostname;
-use pipeline::prelude::*;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde_yaml;
@@ -79,7 +79,7 @@ impl fmt::Debug for Offramp {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let mut producer_config = ClientConfig::new();
         let producer_config = producer_config

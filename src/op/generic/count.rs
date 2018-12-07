@@ -29,10 +29,10 @@
 //! * `return_ok` - for counting successful returns. (of `count_results` is set to true)
 //! * `return_error` - for counting error returns. (of `count_results` is set to true)
 
-use dflt;
-use errors::*;
-use metrics::INSTANCE;
-use pipeline::prelude::*;
+use crate::dflt;
+use crate::errors::*;
+use crate::metrics::INSTANCE;
+use crate::pipeline::prelude::*;
 use prometheus::IntCounterVec; // w/ instance
 use serde_yaml;
 use std::collections::HashMap;
@@ -64,7 +64,7 @@ impl fmt::Debug for Op {
 }
 
 impl Op {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let conf: Config = serde_yaml::from_value(opts.clone())?;
 
         let mut labels = conf.labels.clone();

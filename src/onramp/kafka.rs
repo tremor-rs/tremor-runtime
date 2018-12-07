@@ -21,13 +21,14 @@
 //! See [Config](struct.Config.html) for details.
 //!
 
-use dflt;
-use errors::*;
+use crate::dflt;
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
+use crate::pipeline::prelude::*;
+use crate::utils;
 use futures::prelude::*;
 use futures::sync::mpsc::channel;
 use hostname::get_hostname;
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
-use pipeline::prelude::*;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::stream_consumer::StreamConsumer;
@@ -38,7 +39,6 @@ use rdkafka_sys;
 use serde_yaml;
 use std::collections::HashMap;
 use std::thread;
-use utils;
 
 pub struct Onramp {
     config: Config,
@@ -90,7 +90,7 @@ pub struct Config {
 // Define a new type for convenience
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         Ok(Self { config })
     }

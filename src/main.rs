@@ -27,47 +27,29 @@ extern crate lazy_static;
 extern crate error_chain;
 #[macro_use]
 extern crate log;
-extern crate actix;
-extern crate mimir;
-extern crate actix_web;
-extern crate base64;
-extern crate bytes;
-extern crate chrono;
-extern crate clap;
-extern crate dot;
-extern crate elastic;
-extern crate env_logger;
-extern crate futures;
-#[cfg(feature = "mssql")]
-extern crate futures_state_stream;
-extern crate hdrhistogram;
-extern crate hostname;
-extern crate libc;
-extern crate openssl;
-extern crate php;
-extern crate rand;
-#[cfg(feature = "kafka")]
-extern crate rdkafka;
 #[cfg(feature = "kafka")]
 extern crate rdkafka_sys;
-extern crate reqwest;
-extern crate serde;
-extern crate serde_yaml;
-extern crate threadpool;
 #[cfg(feature = "mssql")]
 extern crate tiberius;
-#[cfg(feature = "mssql")]
-extern crate tokio_current_thread;
 #[cfg(feature = "kafka")]
 extern crate tokio_threadpool;
-extern crate uuid;
-extern crate window;
-extern crate xz2;
 #[macro_use]
 extern crate maplit;
 #[cfg(test)]
 #[macro_use]
 extern crate matches;
+
+use actix;
+use base64;
+use chrono;
+use dot;
+use elastic;
+use env_logger;
+use libc;
+use mimir;
+use reqwest;
+use serde_yaml;
+use uuid;
 
 #[macro_use]
 mod macros;
@@ -83,9 +65,9 @@ mod pipeline;
 mod utils;
 mod version;
 
-use errors::*;
-use onramp::Onramp;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::onramp::Onramp;
+use crate::pipeline::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -178,7 +160,8 @@ fn run() -> Result<()> {
             return Err(format!(
                 "ERROR: first step needs to be an onramp not {}",
                 onramp_cfg.namespace
-            ).into());
+            )
+            .into());
         }
 
         // Find pipelines that it connects to
@@ -195,7 +178,8 @@ fn run() -> Result<()> {
                     } else {
                         None
                     }
-                }).collect(),
+                })
+                .collect(),
             _ => return Err(ErrorKind::OnrampMissingPipeline(onramp_cfg.namespace).into()),
         };
 
@@ -237,7 +221,7 @@ fn run() -> Result<()> {
             println_stderr!("Writing: {}.dot", name);
             r.write_dot(&format!("{}.dot", name));
         } else {
-            let mut onramp = onramp::new(&onramp_cfg.name, &onramp_cfg.config)?;
+            let mut onramp = onramp::create(&onramp_cfg.name, &onramp_cfg.config)?;
             onramps.push(onramp.enter_loop(onramp_pipelines.clone()));
         }
     }

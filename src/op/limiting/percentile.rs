@@ -27,9 +27,9 @@
 //! The 1st additional output is used to route data that was decided to
 //! be discarded.
 
-use dflt;
-use errors::*;
-use pipeline::prelude::*;
+use crate::dflt;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use prometheus::Gauge; // w/ instance
 use rand::prelude::*;
 use serde_yaml;
@@ -64,7 +64,7 @@ pub struct Limiter {
 }
 
 impl Limiter {
-    pub fn new(opts: ConfValue) -> Result<Self> {
+    pub fn create(opts: ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts)?;
         PERCENTILE_GAUGE.set(config.percentile);
         Ok(Self {
@@ -122,21 +122,22 @@ impl Opable for Limiter {
 mod tests {
 
     use super::super::Limiter;
-    use pipeline::prelude::*;
+    use crate::pipeline::prelude::*;
+    use crate::utils::*;
     use serde_yaml::Mapping;
     use std::iter::FromIterator;
-    use utils::*;
 
     #[test]
     fn keep_all() {
         let conf = ConfValue::Mapping(Mapping::from_iter(
-            hashmap!{
+            hashmap! {
                 vs("percentile") => vf(1.0),
-            }.into_iter(),
+            }
+            .into_iter(),
         ));
 
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let mut c = Limiter::new("percentile", conf).unwrap();
+        let mut c = Limiter::create("percentile", conf).unwrap();
 
         let r = c.exec(e);
 
@@ -146,13 +147,14 @@ mod tests {
     #[test]
     fn keep_none() {
         let conf = ConfValue::Mapping(Mapping::from_iter(
-            hashmap!{
+            hashmap! {
                 vs("percentile") => vf(0.0),
-            }.into_iter(),
+            }
+            .into_iter(),
         ));
 
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let mut c = Limiter::new("percentile", conf).unwrap();
+        let mut c = Limiter::create("percentile", conf).unwrap();
 
         let r = c.exec(e);
 

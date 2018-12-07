@@ -23,8 +23,8 @@ pub mod into_vars;
 pub mod route;
 pub mod set;
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 
 /// Enum of all offramp connectors we have implemented.
 /// New connectors need to be added here.
@@ -41,14 +41,14 @@ pub enum Generic {
 opable!(Generic, Count, Set, Copy, Route, IntoVar, IntoVars);
 
 impl Generic {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Generic> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Generic> {
         match name {
-            "copy" => Ok(Generic::Copy(copy::Op::new(opts)?)),
-            "count" => Ok(Generic::Count(count::Op::new(opts)?)),
-            "into_var" => Ok(Generic::IntoVar(into_var::Op::new(opts)?)),
-            "into_vars" => Ok(Generic::IntoVars(into_vars::Op::new(opts)?)),
-            "set" => Ok(Generic::Set(set::Op::new(opts)?)),
-            "route" => Ok(Generic::Route(route::Op::new(opts)?)),
+            "copy" => Ok(Generic::Copy(copy::Op::create(opts)?)),
+            "count" => Ok(Generic::Count(count::Op::create(opts)?)),
+            "into_var" => Ok(Generic::IntoVar(into_var::Op::create(opts)?)),
+            "into_vars" => Ok(Generic::IntoVars(into_vars::Op::create(opts)?)),
+            "set" => Ok(Generic::Set(set::Op::create(opts)?)),
+            "route" => Ok(Generic::Route(route::Op::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("op".into(), name.into()).into()),
         }
     }

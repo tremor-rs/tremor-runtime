@@ -20,9 +20,9 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_yaml;
 use std::fs::File;
 use std::io;
@@ -42,7 +42,7 @@ pub struct Config {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let file = File::create(config.file)?;
         Ok(Offramp { file })

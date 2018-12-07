@@ -15,6 +15,7 @@
 use super::messages::{Event, OnData, Return, Shutdown};
 use super::step::Step;
 use super::types::EventData;
+use actix;
 use actix::prelude::*;
 use futures::sync::mpsc;
 use futures::Future;

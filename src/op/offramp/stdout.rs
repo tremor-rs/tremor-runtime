@@ -24,9 +24,9 @@
 //!
 //! * `prefix` - sets the prefix (overrides the configuration)
 
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_yaml;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,7 +42,7 @@ pub struct Offramp {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         if opts == &ConfValue::Null {
             Ok(Self {
                 config: Config { prefix: None },

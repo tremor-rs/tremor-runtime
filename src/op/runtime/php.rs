@@ -1,7 +1,7 @@
-use error::TSError;
-use errors::*;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use php::{IOContext, Runtime as PHPRuntime};
-use pipeline::prelude::*;
 use serde_yaml;
 use std::fmt;
 
@@ -22,7 +22,7 @@ impl fmt::Debug for Runtime {
 }
 
 impl Runtime {
-    pub fn new(opts: &ConfValue) -> Result<Runtime> {
+    pub fn create(opts: &ConfValue) -> Result<Runtime> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let runtime =
             IOContext::add_to_builder(PHPRuntime::new("tremor-php", "Tremor PHP runtime", 1))

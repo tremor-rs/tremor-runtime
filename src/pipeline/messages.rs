@@ -15,6 +15,7 @@
 use super::onramp::{OnRampActor, OnRampActorReplyChannel};
 use super::step::Step;
 use super::types::*;
+use actix;
 use actix::prelude::*;
 use std::fmt;
 pub struct Event {
@@ -64,9 +65,11 @@ impl Message for Return {
 impl Return {
     pub fn send(mut self) {
         match self.chain.pop() {
-            None => if let Some(src) = self.source.clone() {
-                src.do_send(self)
-            },
+            None => {
+                if let Some(src) = self.source.clone() {
+                    src.do_send(self)
+                }
+            }
             Some(prev) => prev.do_send(self),
         }
     }

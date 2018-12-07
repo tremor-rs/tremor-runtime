@@ -20,16 +20,16 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use errors::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
+use crate::utils;
 use hdrhistogram::serialization::Serializer;
 use hdrhistogram::serialization::V2Serializer;
 use hdrhistogram::Histogram;
-use pipeline::prelude::*;
 use serde_yaml;
 use std::io::stdout;
 use std::process;
 use std::str;
-use utils;
 
 /// A null offramp that records histograms
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ pub struct Config {
 }
 
 impl Offramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let now_ns = utils::nanotime();
         Ok(Offramp {
@@ -65,7 +65,8 @@ impl Offramp {
                 1,
                 1_000_000_000,
                 config.significant_figures as u8,
-            ).unwrap(),
+            )
+            .unwrap(),
         })
     }
 }

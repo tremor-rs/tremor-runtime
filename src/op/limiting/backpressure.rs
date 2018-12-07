@@ -25,12 +25,12 @@
 //! The 1st additional output is used to route data that was decided to
 //! be discarded.
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
+use crate::utils::duration_to_millis;
 use prometheus::IntGauge; // w/ instance
 use serde_yaml;
 use std::time::Instant;
-use utils::duration_to_millis;
 
 lazy_static! {
     static ref BACKOFF_GAUGE: IntGauge =
@@ -60,7 +60,7 @@ fn d_steps() -> Vec<u64> {
 }
 
 impl Limiter {
-    pub fn new(opts: serde_yaml::Value) -> Result<Self> {
+    pub fn create(opts: serde_yaml::Value) -> Result<Self> {
         Ok(Limiter {
             config: serde_yaml::from_value(opts)?,
             backoff: 0,

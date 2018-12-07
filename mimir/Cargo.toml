@@ -3,6 +3,7 @@ build = "build.rs"
 name = "mimir"
 version = "0.1.0"
 authors = ["Ivan Monov <imonov@wayfair.com>"]
+edition = "2018"
 
 [build-dependencies]
 lalrpop = "0.16.1"

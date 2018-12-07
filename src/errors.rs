@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error;
-use pipeline::types::ValueType;
+use crate::error;
+use crate::pipeline::types::ValueType;
+use mimir;
 use prometheus;
 use serde_yaml;
 use std;
-use mimir;
 
-error_chain!{
+error_chain! {
 
     foreign_links {
         YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];

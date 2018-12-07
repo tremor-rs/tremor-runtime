@@ -25,8 +25,8 @@
 //!
 //! * `<var>`
 
-use errors::*;
-use pipeline::prelude::*;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_yaml;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -43,7 +43,7 @@ pub struct Op {
     config: Config,
 }
 impl Op {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         Ok(Self { config })
     }

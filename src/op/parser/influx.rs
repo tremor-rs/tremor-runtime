@@ -36,9 +36,9 @@
 //!
 //! This operator takes no configuration
 
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_json::{Number, Value};
 use std::collections::HashMap;
 use std::f64;
@@ -51,7 +51,7 @@ use std::str::{self, Chars};
 #[derive(Debug, Clone)]
 pub struct Parser {}
 impl Parser {
-    pub fn new(_opts: &ConfValue) -> Result<Self> {
+    pub fn create(_opts: &ConfValue) -> Result<Self> {
         Ok(Self {})
     }
 }
@@ -293,10 +293,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -308,11 +308,11 @@ mod tests {
         let s = "weather,location=us-midwest,season=summer temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string(),
                 "season".to_string() => "summer".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -325,10 +325,10 @@ mod tests {
             "weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0),
                 "bug_concentration".to_string() => num_f(98.0)
             },
@@ -343,7 +343,7 @@ mod tests {
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
             tags: HashMap::new(),
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -356,7 +356,7 @@ mod tests {
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
             tags: HashMap::new(),
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_i(82)
             },
             timestamp: 1465839830100400200,
@@ -368,10 +368,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature=\"too warm\" 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => Value::String("too warm".to_string())
             },
             timestamp: 1465839830100400200,
@@ -389,10 +389,10 @@ mod tests {
         ];
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "too_hot".to_string() => Value::Bool(true)
             },
             timestamp: 1465839830100400200,
@@ -412,10 +412,10 @@ mod tests {
         ];
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "too_hot".to_string() => Value::Bool(false)
             },
             timestamp: 1465839830100400200,
@@ -430,10 +430,10 @@ mod tests {
         let s = "weather,location=us\\,midwest temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us,midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -446,10 +446,10 @@ mod tests {
         let s = "weather,location=us-midwest temp\\=rature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temp=rature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -461,10 +461,10 @@ mod tests {
         let s = "weather,location\\ place=us-midwest temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location place".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -477,10 +477,10 @@ mod tests {
         let s = "wea\\,ther,location=us-midwest temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "wea,ther".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -492,10 +492,10 @@ mod tests {
         let s = "wea\\ ther,location=us-midwest temperature=82 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "wea ther".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => num_f(82.0)
             },
             timestamp: 1465839830100400200,
@@ -508,10 +508,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature=\"too\\\"hot\\\"\" 1465839830100400200";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature".to_string() => Value::String("too\"hot\"".to_string())
             },
             timestamp: 1465839830100400200,
@@ -524,10 +524,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400201";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot/cold".to_string())
             },
             timestamp: 1465839830100400201,
@@ -540,10 +540,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\cold\" 1465839830100400202";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
             },
             timestamp: 1465839830100400202,
@@ -557,10 +557,10 @@ mod tests {
             "weather,location=us-midwest temperature_str=\"too hot\\\\cold\" 1465839830100400203";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
             },
             timestamp: 1465839830100400203,
@@ -574,10 +574,10 @@ mod tests {
             "weather,location=us-midwest temperature_str=\"too hot\\\\\\cold\" 1465839830100400204";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
             },
             timestamp: 1465839830100400204,
@@ -589,10 +589,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\cold\" 1465839830100400205";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
             },
             timestamp: 1465839830100400205,
@@ -604,10 +604,10 @@ mod tests {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\\\cold\" 1465839830100400206";
         let r = InfluxDatapoint {
             measurement: "weather".to_string(),
-            tags: hashmap!{
+            tags: hashmap! {
                 "location".to_string() => "us-midwest".to_string()
             },
-            fields: hashmap!{
+            fields: hashmap! {
                 "temperature_str".to_string() => Value::String("too hot\\\\\\cold".to_string())
             },
             timestamp: 1465839830100400206,

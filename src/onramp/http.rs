@@ -85,14 +85,15 @@ use actix_web::{
     HttpResponse,
 };
 
+use crate::dflt;
+use crate::errors::*;
+use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
+use crate::pipeline::prelude::*;
+use crate::utils;
 use base64;
-use dflt;
-use errors::*;
 use futures::sync::mpsc::channel;
 use futures::{Future, Stream};
-use onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use pipeline::prelude::*;
 use serde::{Deserialize, Deserializer};
 use serde_yaml;
 use std::cell::Cell;
@@ -100,7 +101,6 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::result;
 use std::thread;
-use utils;
 use uuid::Uuid;
 
 //use std::sync::mpsc::channel;
@@ -132,7 +132,7 @@ fn dflt_port() -> u32 {
 }
 
 impl Onramp {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let ssl_data = match (config.tls_key.clone(), config.tls_cert.clone()) {
             (Some(key), Some(cert)) => Some((key, cert)),
@@ -236,7 +236,8 @@ fn data_v1(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Er
                     }
                     Err(_e) => Ok(HttpResponse::new(http::StatusCode::INTERNAL_SERVER_ERROR)),
                 })
-        }).responder()
+        })
+        .responder()
 }
 
 fn raw(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Error = Error>> {
@@ -265,7 +266,8 @@ fn raw(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Error 
                     }
                     Err(_e) => Ok(HttpResponse::new(http::StatusCode::INTERNAL_SERVER_ERROR)),
                 })
-        }).responder()
+        })
+        .responder()
 }
 struct OnrampState {
     pipeline: PipelineOnramp,
@@ -283,7 +285,8 @@ impl OnrampT for Onramp {
                     pipeline: pipelines.clone(),
                     idx: Cell::new(0),
                     len: pipelines.len(),
-                }).middleware(middleware::Logger::default())
+                })
+                .middleware(middleware::Logger::default())
                 .resource("/v1", |r| r.method(http::Method::PUT).f(data_v1))
                 .resource("/raw", |r| r.method(http::Method::PUT).f(raw))
             });

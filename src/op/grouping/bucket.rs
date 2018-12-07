@@ -60,10 +60,10 @@
 //!   }
 //! }
 //! ```
-use dflt;
-use error::TSError;
-use errors::*;
-use pipeline::prelude::*;
+use crate::dflt;
+use crate::error::TSError;
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 use serde_json;
 use serde_yaml;
 use std::collections::hash_map::Entry;
@@ -116,8 +116,8 @@ impl Grouper {
     /// would create 3 buckets:
     /// * `important` that gets 10k msgs/s
     /// * `unimportant` that gets 100 msgs/s
-    /// * `default` thet gets 10 msgs/s    pub fn new(opts: &str) -> Self {
-    pub fn new(opts: &ConfValue) -> Result<Self> {
+    /// * `default` thet gets 10 msgs/s    pub fn create(opts: &str) -> Self {
+    pub fn create(opts: &ConfValue) -> Result<Self> {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let mut buckets = HashMap::new();
         for (name, spec) in config.buckets {
@@ -188,12 +188,12 @@ impl Opable for Grouper {
 
 #[cfg(test)]
 mod tests {
-    use op::grouping::Grouper;
-    use pipeline::prelude::*;
+    use crate::op::grouping::Grouper;
+    use crate::pipeline::prelude::*;
+    use crate::utils::*;
     use serde_yaml::{Mapping, Value};
     use std::collections::HashMap;
     use std::iter::FromIterator;
-    use utils::*;
 
     fn event(vars: HashMap<String, MetaValue>, now: u64) -> EventData {
         EventData::new_with_vars(0, now, None, EventValue::Raw(vec![]), vars)
@@ -201,48 +201,49 @@ mod tests {
 
     fn conf() -> Value {
         let buckets = Value::Mapping(Mapping::from_iter(
-            hashmap!{
+            hashmap! {
             vs("a") => Value::Mapping(Mapping::from_iter(
                 hashmap!{
                     vs("rate") => vi(1)
-                }.into_iter()))}.into_iter(),
+                }.into_iter()))}
+            .into_iter(),
         ));
-        let conf = hashmap!{
+        let conf = hashmap! {
             vs("buckets") => buckets,
         };
         Value::Mapping(Mapping::from_iter(conf.into_iter()))
     }
     #[test]
     fn grouping_test_pass() {
-        let e = event(hashmap!{"classification".to_string() => "a".into()}, 0);
+        let e = event(hashmap! {"classification".to_string() => "a".into()}, 0);
 
-        let mut g = Grouper::new("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf()).unwrap();
         let r = g.exec(e);
         assert_matches!(r, EventResult::Next(_));
     }
 
     #[test]
     fn grouping_test_fail() {
-        let e = event(hashmap!{"classification".to_string() => "b".into()}, 0);
+        let e = event(hashmap! {"classification".to_string() => "b".into()}, 0);
 
-        let mut g = Grouper::new("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf()).unwrap();
         let r = g.exec(e);
         assert_matches!(r, EventResult::NextID(3, _));
     }
     #[test]
     fn grouping_test_timed() {
-        let e = event(hashmap!{"classification".to_string() => "a".into()}, 0);
+        let e = event(hashmap! {"classification".to_string() => "a".into()}, 0);
         // the second message arrives 100ms later
         let e1 = event(
-            hashmap!{"classification".to_string() => "a".into()},
+            hashmap! {"classification".to_string() => "a".into()},
             ms!(100),
         );
         let e2 = event(
-            hashmap!{"classification".to_string() => "a".into()},
+            hashmap! {"classification".to_string() => "a".into()},
             s!(1) + ms!(200),
         );
 
-        let mut g = Grouper::new("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf()).unwrap();
         let r = g.exec(e);
         assert_matches!(r, EventResult::Next(_));
 

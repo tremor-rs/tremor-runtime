@@ -19,18 +19,17 @@
 
 pub mod mimir;
 
-use errors::*;
-use pipeline::prelude::*;
-
+use crate::errors::*;
+use crate::pipeline::prelude::*;
 
 #[derive(Debug)]
 pub enum Classifier {
     Mimir(mimir::Classifier),
 }
 impl Classifier {
-    pub fn new(name: &str, opts: &ConfValue) -> Result<Classifier> {
+    pub fn create(name: &str, opts: &ConfValue) -> Result<Classifier> {
         match name {
-            "mimir" => Ok(Classifier::Mimir(mimir::Classifier::new(opts)?)),
+            "mimir" => Ok(Classifier::Mimir(mimir::Classifier::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("classifier".into(), name.into()).into()),
         }
     }
