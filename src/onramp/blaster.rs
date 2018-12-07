@@ -45,9 +45,6 @@ use std::time::Duration;
 use utils::{nanotime, park};
 use xz2::read::XzDecoder;
 
-#[cfg(feature = "try_spmc")]
-use spmc;
-
 lazy_static! {
     static ref ONE_NS: Duration = Duration::from_nanos(1);
 }

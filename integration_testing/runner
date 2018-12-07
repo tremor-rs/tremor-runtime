@@ -105,42 +105,43 @@ fi
 
 for test in $tests
 do
-    config_file="${BASEDIR}/${test}.test/config"
-    data_file="${BASEDIR}/${test}.test/in.json"
-
-    gen_file="${BASEDIR}/${test}.test/gen.json"
-    exp_file="${BASEDIR}/${test}.test/exp.json"
-    log_file="${BASEDIR}/${test}.test/log.txt"
-
     TEST_DIR="${BASEDIR}/${test}.test"
+
+    config_file="${TEST_DIR}/config"
+    data_file="${TEST_DIR}/in.json"
+
+    gen_file="${TEST_DIR}/gen.json"
+    exp_file="${TEST_DIR}/exp.json"
+    log_file="${TEST_DIR}/log.txt"
+
     if [ ! -d "${TEST_DIR}" ]
     then
         error "${test}: directory '${TEST_DIR}' not found"
         exit 1
     fi
 
-    in_file="${BASEDIR}/${test}.test/in.json.xz"
+    in_file="${TEST_DIR}/in.json.xz"
     if [ ! -f "${in_file}" ]
     then
         error "${test}: file '${in_file}' not found"
         exit 1
     fi
 
-    yaml_file="${BASEDIR}/${test}.test/config.yaml"
+    yaml_file="${TEST_DIR}/config.yaml"
     if [ ! -f "${yaml_file}" ]
     then
         error "${test}: file '${yaml_file}' not found"
         exit 1
     fi
 
-    out_file="${BASEDIR}/${test}.test/out.json.xz"
+    out_file="${TEST_DIR}/out.json.xz"
     if [ ! -f "${out_file}" ]
     then
         error "${test}: file '${out_file}' not found"
         exit 1
     fi
 
-    readme_file="${BASEDIR}/${test}.test/README.md"
+    readme_file="${TEST_DIR}/README.md"
     if [ ! -f "${readme_file}" ]
     then
         error "${test}: file '${readme_file}' not found"
@@ -159,7 +160,7 @@ do
         exit 1
     fi
 
-    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" $yaml_file > "${yaml_file}.out"
+    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" -e "s;{dir};${TEST_DIR};" $yaml_file > "${yaml_file}.out"
 
     # Limiting Configuration
 

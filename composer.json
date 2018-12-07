@@ -13,7 +13,7 @@
     ],
     "require": {
         "php" : ">=7.0.0",
-        "guzzlehttp/guzzle": "~6.0",
+        "guzzlehttp/guzzle": "~5.3|~6.0",
         "ramsey/uuid": "^3.8",
         "google/protobuf": "^3.6",
         "rybakit/msgpack": "^0.5.3"
@@ -25,9 +25,9 @@
     },
     "autoload": {
         "psr-4": {
-            "Wayfair\\Tremor\\": "tremor-php-client/src/Wayfair/Tremor",
+            "Wayfair\\Tremor\\": "clients/php/src/Wayfair/Tremor",
 
-            "GPBMetadata\\": "tremor-php-client/src/GPBMetadata"
+            "GPBMetadata\\": "clients/php/src/GPBMetadata"
         }
     }
 }

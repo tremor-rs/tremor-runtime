@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["InfluxDatapoint",""],["Parser","The Raw Parser is a simple parser that performs no action on the data and just hands on `raw`"]]});

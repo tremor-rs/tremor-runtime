@@ -1,0 +1,10 @@
+onramps:
+  - onramp::stdin:
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - runtime::php:
+          file: examples/test.php
+      - offramp::stdout

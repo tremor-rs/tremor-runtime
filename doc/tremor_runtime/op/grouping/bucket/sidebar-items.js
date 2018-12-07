@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Config",""],["Grouper","Window based grouping"],["Rate","Single bucket specification"]]});

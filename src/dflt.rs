@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::{convert, f64};
@@ -60,4 +61,8 @@ where
 
 pub fn d_empty() -> String {
     String::from("")
+}
+
+pub fn d_none<T>() -> Option<T> {
+    None
 }

@@ -19,6 +19,7 @@ use op::generic::Generic;
 use op::grouping::Grouper;
 use op::offramp::Offramp;
 use op::parser::{Parser, Renderer};
+use op::runtime::Runtime;
 use std::collections::HashSet;
 use std::fmt;
 use uuid::Uuid;
@@ -47,6 +48,7 @@ pub enum OpType {
     Render,
     Classifier,
     Grouper,
+    Runtime,
 }
 impl fmt::Display for OpType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -57,6 +59,7 @@ impl fmt::Display for OpType {
             OpType::Render => write!(f, "render"),
             OpType::Classifier => write!(f, "classifier"),
             OpType::Grouper => write!(f, "grouper"),
+            OpType::Runtime => write!(f, "runtime"),
         }
     }
 }
@@ -110,6 +113,12 @@ impl OpSpec {
                 step.config,
                 step.uuid,
             )),
+            "runtime" => Ok(OpSpec::new(
+                OpType::Runtime,
+                step.name,
+                step.config,
+                step.uuid,
+            )),
 
             _ => Err(ErrorKind::UnknownNamespace(step.namespace).into()),
         }
@@ -150,6 +159,10 @@ impl OpSpec {
                 op: OpE::Grouper(Grouper::new(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
+            OpType::Runtime => Ok(Op {
+                op: OpE::Runtime(Runtime::new(&self.name, &self.opts)?),
+                spec: self.clone(),
+            }),
         }
     }
 }
@@ -161,9 +174,10 @@ enum OpE {
     Render(Renderer),
     Classifier(Classifier),
     Grouper(Grouper),
+    Runtime(Runtime),
 }
 
-opable!(OpE, Op, Parse, Offramp, Render, Classifier, Grouper);
+opable!(OpE, Op, Parse, Offramp, Render, Classifier, Grouper, Runtime);
 
 #[derive(Debug)]
 pub struct Op {

@@ -5,41 +5,21 @@ VSN=$(DOCKER_VSN)
 
 help:
 	@echo "This docker files wraps the tasks:"
-	@echo "  build - builds the container using two stage builds"
-	@echo "  all - meta task to execute lint, build and goss"
+	@echo "  image - builds the image"
+	@echo "  demo - runs a simple demp"
+	@echo "  clippy-install - install nightly and clippy"
+	@echo "  clippy - runs clippy"
+	@echo "  bench - runs benchmarks"
+	@echo "  it - runs integration tests"
+	@echo "  doc - creates and opens documentation"
 
-all: lint build goss
+image:
+	docker-compose build
 
-loadgen-image: tremor-image
-	docker build -f demo/loadgen.dockerfile . -t loadgen
-demo-images: loadgen-image
-
-tremor-image:
-	docker build . -t tremor-runtime
-
-demo-run:
+demo: image
 	-docker-compose -f demo/demo.yaml rm -fsv
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
-
-demo-influx-run:
-	-docker-compose -f demo/influx.yaml rm -fsv
-	-docker-compose -f demo/influx.yaml up
-	-docker-compose -f demo/influx.yaml rm -fsv
-
-demo-mssql-run:
-	-docker-compose -f demo/mssql.yaml rm -fsv
-	-docker-compose -f demo/mssql.yaml up
-	-docker-compose -f demo/mssql.yaml rm -fsv
-
-demo-all-run:
-	-docker-compose -f demo/all.yaml rm -fsv
-	-docker-compose -f demo/all.yaml up
-	-docker-compose -f demo/all.yaml rm -fsv
-
-demo-all-bootstrap:
-	cd demo && ./grafana-bootstrap.sh
-	telegraf -config demo/telegraf.conf
 
 clippy-install:
 	rustup update
@@ -52,12 +32,14 @@ clippy:
 it:
 	integration_testing/runner
 
-publish-bench:
+doc: force
+	cargo doc --open --no-deps
+	rm -r doc
+	cp -r target/doc .
+
+bench: force
 	cargo build --release --examples
 	for f in bench/*.sh; do $$f; done
 
 force:
 	true
-
-doc:
-	cargo doc --open --no-deps

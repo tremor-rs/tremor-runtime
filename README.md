@@ -1,25 +1,72 @@
-# tremor-runtime
+# Tremor
 
-This tool allows to configure a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
+This tool allows configuring a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 
 
+## Audience
 
-## Operations
+Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with Kafka, other message systems should be easily pluggable.
 
-Tremor is based on chaining operations that have inputs, outputs and additional configuration. Onramps - the operations that ingest data - take a special role in this.
+## Usecases
 
-The documentation for different operations can be generated (and opened) by running `make doc`. The `onramps` and `op` modules hold the relevant information.
+### Elastic Search data ingress and rate limiting
 
-For each operation the `Config` struct defines the parameters that can be passed to configure it and the description holds additional details and examples.
+Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify and rate limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes. 
 
+### HTTP to Kafka brodge
+
+Kafkas optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime this can be a disadvantage, such as PHP,  or tools that only run for a  short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead only relying on HTTP as its transport.
+
+### PHP Execution
+
+Executing short-lived code, such as PHP scripts, against events from a queue can be challenging. It quickly results in either a poll loop or other problematic patterns. Tremor can embed runtimes, such as the PHP and then only execute the short-lived code when an event arrives.
+
+
+### When to use Tremor
+
+* You are currently using Logstash
+* You have a high volume of events to handle
+* You want to protect a downstream system from overload
+* You have short running code, microservices or FaaS based code that you wish to connect to a queue
+* **<more suggestions please, I sure have overlooked something>**
+
+### When not to use Tremor
+
+Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reallity your contributions are more then welcome.
+
+* You require complex or advanced scripting on your events such as ruby shellouts in Logstash.
+* Your events are neither JSON nor Influx line protocol encoded. (this might not an intentional limitation just the most used formats so far.)
+* Your onramps or offramps are not supported. (Again this might not an intended limitation, contribution of more on or offramps are more then welcome.)
+
+## Building
+
+### Docker
+
+Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
+
+### Local builds
+
+If you are not comfortable with managing library packages on your system or don't have experience with , please use the Docker image provided above. Local builds are not supported and purely at your own risk.
+
+For local builds, tremor requires rust of version `1.30.1` or later, along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `clang`, `openssl-static`, and  `libstdc++-static` are required, for different distributions or operating systems, please install packages accordingly.
 
 ## Configuration file
 
-Tremor uses yaml to configure pipelines, the configuration file has two top level nodes:
+Tremor uses YAML to configure pipelines.
 
-### `onramps`
+### Operations
 
-A list that define the onramops started in tremor. Each onramp lives in it's own thread. Along with it's own configuration it has the key `pipeline` that defines the pipeline data from that onramp is send to. At least one needs to be present.
+Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
+
+The documentation for different operations can found in in the [docs](doc/tremor_runtime/index.html). The `onramps` and `op` modules hold the relevant information.
+
+For each operation, the `Config` struct defines the parameters that can be passed to configure it and the description holds additional details and examples.
+
+### file sections
+
+#### `onramps`
+
+A list that defines the OnRamps started in tremor. Each onramp lives in a separate thread. Along with its configuration, it has the key `pipeline` that defines the pipeline data from that onramp is sent to. At least one needs to be present.
 
 
 ```yaml
@@ -29,104 +76,120 @@ onramps:
       pipeline: main
 ```
 
-### `pipelines`
+#### `pipelines`
 
-A list of pipelines started in tremor. Each pipeline lives in it's own thread. It consists of a `name` string, that is used to identify the pipeline. A list  of `steps`, which are operations - where each steps default output is the next step in the list. Along with a set of `subpipelines` which act as named pipeline that runs in the same thread as the main pipeline.
+A list of pipelines started in tremor. Each pipeline lives in its thread. It consists of a `name` string, that is used to identify the pipeline. A list of `steps`, which are operations - where each steps default output is the next step in the list. Along with a set of `subpipelines` which act as a named pipeline that runs in the same thread as the main pipeline.
 
 ```yaml
 # ...
 pipelines:
   - name: main
-    steps:
-      - ...
-    subpipelines:
-      - ...
+      steps:
+        - ...
+      subpipelines:
+        - ...
 ```
 
-### `step`
+#### `step`
 
-A step is a single operation within the pipeline. The list of possible operations and their configuration can be find in the generated documentation. In addition two parameters can passed to the step: `on-error`, the step to perform if an error occurs in the step, and `outputs` a list of additional outputs - commonly used for routing.
+A step is a single operation within the pipeline. The list of possible operations and their configuration can be found in the generated documentation. Also, two parameters can be passed to the step: `on-error`, the step to perform if an error occurs in step, and `outputs` a list of additional outputs - commonly used for routing.
 
 There are two special steps:
-- `pipeline:<pipeline name>` sends the event to a given pipeline
-- `sub:<pipeline name>` sends the event to a given subpipeline of the current pipeline
+- `pipeline::<pipeline name>` sends the event to a given pipeline
+- `sub::<pipeline name>` sends the event to a given subpipeline of the current pipeline
 
 ```yaml
 # ...
+steps:
+  - classifier::json:
+    rules:
+      - class: 'info'
+        rule: 'short_message:"INFO"'
+      - class: 'error'
+        rule: 'short_message:"ERROR"'
+# ...
+```
+
+#### `subpipelines`
+
+A list of subpipelines that can be called form the main pipeline. Be aware that a subpipeline can only call subpipelines that were defined before it. It has a `name` with which it can be called. Along with `steps` which follow the same rule as `steps` in a pipeline.
+
+```yaml
+# ...
+subpipelines:
+  - name: done
     steps:
-      - classifier::json:
-          rules:
-            - class: 'info'
-              rule: 'short_message:"INFO"'
-            - class: 'error'
-              rule: 'short_message:"ERROR"'
+      - offramp::stdout
 # ...
 ```
 
-### `subpipelines`
+### Example
 
-A list of subpipelines that can be called form the main pipeline. Be aware that a subpipeline can only call sub pipelines that were defined before it. It has a `name` with which it can be called. Along with `steps` which follow the same rule as `steps` in a pipeline.
-```yaml
-# ...
-    subpipelines:
-      - name: done
-        steps:
-          - offramp::stdout
-# ...
-```
+Please look at the [demo](demo/configs/tremor-demo.yaml) for a fully documented example
 
-## Docker
+### Configuration file usage in the docker container
 
-### Dependencies
-
-`tremor-runtime` required `rust 1.30.1`
-
-### Building
-
-You can build the tremor docker container (`tremor-runtime`) using `make tremor-image`.
-
-### Configuration
-To run the docker container you can either provide a `CONFIG_FILE` and mount the provided file to configure tremor or pass `CONFIG` which then will be written to `tremor.yaml` (the default config_file).
+To use the configuration file as part of the Docker container, you can either mount the file and point the `CONFIG_FILE` to its location or define the `CONFIG` environment variable with the content of the file, and it will be created from this on startup. Note: If `CONFIG` is set `CONFIG_FILE` will be ignored.
 
 
 ## Local demo mode
 
-Docker needs to have at least 4GB of memory.
+**Note**: Docker should run with at least 4GB of memory!
 
-You need to be connected to the VPN.
-
-To demo run `make demo-images`  to build the demo containers and then `make demo-run` to run the demo containers.
-
-To [demo with Elasticsearch and kibana](#elastic-demo) 'make demo-elastic-run'. The 'demo-run' target does not run elsticsearch or kibana. In addition a full [kitchen sink demo](#kitchen-sink-demo) that also off-ramps data to influx and provides a  .
+To demo run `make demo`, this requires the tremor-runtime image to exist on your machine.
 
 ### Design
 
 The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on Kafka and from there reads it into the tremor container to apply classification and bucketing. Finally it off-ramps statistics of the data based on those steps.
 
-![flow](docs/demo-flow.png)
+```
+╔════════════════════╗   ╔════════════════════╗   ╔════════════════════╗
+║      loadgen       ║   ║       Kafka        ║   ║       tremor       ║
+║ ╔════════════════╗ ║   ║ ┌────────────────┐ ║   ║ ┌────────────────┐ ║
+║ ║ tremor-runtime ║─╬───╬▶│  bucket: demo  │─╬───╬▶│ tremor-runtime │ ║
+║ ╚════════════════╝ ║   ║ └────────────────┘ ║   ║ └────────────────┘ ║
+║          ▲         ║   ╚════════════════════╝   ║          │         ║
+║          │         ║                            ║          │         ║
+║          │         ║                            ║          ▼         ║
+║ ┌────────────────┐ ║                            ║ ┌────────────────┐ ║
+║ │  data.josn.xz  │ ║                            ║ │     mimir      │ ║
+║ └────────────────┘ ║                            ║ └────────────────┘ ║
+╚════════════════════╝                            ║          │         ║
+                                                  ║          │         ║
+                                                  ║          ▼         ║
+                                                  ║ ┌────────────────┐ ║
+                                                  ║ │    grouping    │ ║
+                                                  ║ └────────────────┘ ║
+                                                  ║          │         ║
+                                                  ║          │         ║
+                                                  ║          ▼         ║
+                                                  ║ ┌────────────────┐ ║
+                                                  ║ │  stats output  │ ║
+                                                  ║ └────────────────┘ ║
+                                                  ╚════════════════════╝
+```
 
 ### Configuration
 
 #### Config file
 
-The demo con be configured in (for example) the `demo/demo.yaml` file. A abbreviated version (with the critical elements) can be seen below. In the following sections we'll quickly discuss each of the configuration options available to customize the demo.
+The demo can be configured in (for example) the `demo/demo.yaml` file. An abbreviated version (with the critical elements) can be seen below. In the following sections, we'll quickly discuss each of the configuration options available to customize the demo.
 
 ```yaml
 version: '3.3'
 services:
-  # ...
+# ...
   loadgen:
-    # ...
+# ...
     environment:
       - CONFIG_FILE=/configs/loadgen-250.yaml
-    # ...
+# ...
   tremor:
-    # ...
+# ...
     environment:
-      - CONFIG_FILE=/configs/tremor-all.yaml
-    # ...
+      - CONFIG_FILE=/configs/tremor-demo.yaml
+# ...
 ```
-
 
 #### Tremor
 
@@ -134,61 +197,16 @@ Configuration lives in `demo/config`.
 
 #### Test data
 
-The test data is read from the `demo/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`. Changing this document requires re-running `make demo-images`!
-
-
-#### Kitchen Sink demo
-
-The kitchen sink adds InfluxDb, Telegraf and Grafana to the base tremor demo with Elasticsearch and Kibana
-
-```sh
-make demo-all-run
-```
-
-To inject Grafana dashboards and configure InfluxDb for monitoring bootstrap Grafana and influx
-once the system stabilizes. Make sure to install the [Demo Tools](#demo-tools)  first!
-
-```sh
-make demo-all-bootstrap
-```
-
-##### Grafana
-
-You can access [Grafana](http://localhost:3000/login) with the credentials `admin`/`tremor`. Navigate to the `Tremor Demo` dashboard.
-
-##### Kibana
-
-You can access [Kibana](http://localhost:5601/app/kibana). To use it first set up a new index under *Management* -> *Index Patterns*. The pattern should be `demo` and the time filter should be set to `I don't want to use the Time Filter`. After saving navigate to *Discover*.
-
-#### Demo tools
-
-The influx client and Telegraf can be installed locally for dev insights into the demo experience as follows:
-
-```sh
-brew install jq
-brew install influxdb
-brew install telegraf
-```
-
-Only Telegraf and jq is required to run the demos, the influx cli is optional (and ships with influxdb on OS X in homebrew)
+The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`. 
 
 #### Benchmark Framework
 
 The tremor-runtime supports a micro-benchmarking framework via specialized on-ramp ( blaster ) and off-ramp ( blackhole )
-tremor input and output adapters. Benchmarks ( via blackhole ) output high dynamic range histogram latency reports to
-standard output that are compatible with HDR Histogram's plot files [service](https://hdrhistogram.github.io/HdrHistogram/plotFiles.html)
+Tremor input and output adapters. Benchmarks ( via blackhole ) output high dynamic range histogram latency reports to
+standard output that is compatible with HDR Histogram's plot files [service](https://hdrhistogram.github.io/HdrHistogram/plotFiles.html)
 
 To execute a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
 
 ```sh
-./bench2/bench0.sh
-```
-
-### Local dependencies (mac only - not officially supported)
-
-```bash
-brew install bison
-brew install flex
-export PATH="/usr/local/Cellar/flex/$(brew list --versions flex | tr ' ' '\n' | tail -1)/bin/:$PATH"
-export PATH="/usr/local/Cellar/bison/$(brew list --versions bison | tr ' ' '\n' | tail -1)/bin:$PATH"
+./bench/bench0.sh
 ```

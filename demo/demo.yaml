@@ -15,7 +15,7 @@ services:
       KAFKA_CREATE_TOPICS: "demo:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
   loadgen:
-    image: loadgen
+    image: tremor-runtime
     depends_on:
       - kafka
     environment:
@@ -23,6 +23,7 @@ services:
       - CONFIG_FILE=/configs/loadgen-250.yaml
     volumes:
       - ./configs:/configs:ro
+      - ./data:/data:ro
   tremor:
     image: tremor-runtime
     depends_on:

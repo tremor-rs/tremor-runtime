@@ -59,12 +59,10 @@ impl Opable for Offramp {
 
         let pfx = if let Some(MetaValue::String(ref pfx)) = event.var(&"prefix") {
             pfx.clone()
+        } else if let Some(ref pfx) = self.config.prefix {
+            pfx.clone()
         } else {
-            if let Some(ref pfx) = self.config.prefix {
-                pfx.clone()
-            } else {
-                "".to_string()
-            }
+            "".to_string()
         };
 
         if let (ret, EventValue::Raw(raw)) = event.make_return_and_value(Ok(None)) {

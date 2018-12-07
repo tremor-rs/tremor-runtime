@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `http` mod in crate `tremor_runtime`."><meta name="keywords" content="rust, rustlang, rust-lang, http"><title>tremor_runtime::onramp::http - Rust</title><link rel="stylesheet" type="text/css" href="../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../dark.css"><link rel="stylesheet" type="text/css" href="../../../light.css" id="themeStyle"><script src="../../../storage.js"></script></head><body class="rustdoc mod"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><p class='location'>Module http</p><div class="sidebar-elems"><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#functions">Functions</a></li></ul></div><p class='location'><a href='../../index.html'>tremor_runtime</a>::<wbr><a href='../index.html'>onramp</a></p><script>window.sidebarCurrent = {name: 'http', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../../theme.js"></script><nav class="sub"><form class="search-form js-only"><div class="search-container"><input class="search-input" name="search" autocomplete="off" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><a id="settings-menu" href="../../../settings.html"><img src="../../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class='fqn'><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../../../src/tremor_runtime/onramp/http.rs.html#15-309' title='goto source code'>[src]</a></span><span class='in-band'>Module <a href='../../index.html'>tremor_runtime</a>::<wbr><a href='../index.html'>onramp</a>::<wbr><a class="mod" href=''>http</a></span></h1><div class='docblock'><h1 id="httprest-onramp" class="section-header"><a href="#httprest-onramp">HTTP/REST Onramp</a></h1>
+<p>The <code>http</code> onramp process each POST request</p>
+<h2 id="configuration" class="section-header"><a href="#configuration">Configuration</a></h2>
+<p>See <a href="struct.Config.html">Config</a> for details.</p>
+<h2 id="example" class="section-header"><a href="#example">Example</a></h2>
+<pre><code class="language-yaml">    - onramp::http:
+        port: 8081
+        host: &quot;127.0.0.1&quot;
+        tls_cert: cert.pem
+        tls_key: key.pem
+</code></pre>
+<h2 id="endpoints" class="section-header"><a href="#endpoints">Endpoints</a></h2><h3 id="put-raw" class="section-header"><a href="#put-raw">PUT <code>/raw</code></a></h3>
+<p>Takes the PUT body and puts it into the pipeline</p>
+<h3 id="put-v1" class="section-header"><a href="#put-v1">PUT <code>/v1</code></a></h3>
+<p>Takes the PUT body as a Tremor wrapped message and puts it on the
+pipeline.</p>
+<h4 id="content-format" class="section-header"><a href="#content-format">Content Format</a></h4>
+<p>Tremor expects a <code>PUT</code> request with the <code>Content-Type</code> header set to
+<code>application-json</code>. Envelop encoding is, as the content type suggests
+a JSON.</p>
+<p>The envelop has the structure:</p>
+<pre><code class="language-json">{
+  &quot;header&quot;: {
+    &quot;uuid&quot;: &quot;&lt;base64 encoded raw uuid&gt;&quot;,
+    &quot;parentUuid&quot;: &quot;&lt;base64 encoded raw uuid&gt;&quot; | null, // optional
+    &quot;contentType&quot;: &quot;JSON&quot; // other formats may be added.
+  },
+  &quot;body&quot;: &quot;&lt;base64 encoded raw message&gt;&quot;
+}
+</code></pre>
+<p>An example would be:</p>
+<pre><code class="language-json">{
+  &quot;header&quot;: {
+    &quot;contentType&quot;:&quot;JSON&quot;,
+    &quot;uuid&quot;:&quot;gqB1SNkkEei6oAJCrBEAAg==&quot;,
+    &quot;parentUuid&quot;: null
+  },
+  &quot;body&quot;:&quot;eyJrZXkiOjQyfQ==&quot;
+}
+</code></pre>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Config.html"
+                                  title='struct tremor_runtime::onramp::http::Config'>Config</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Onramp.html"
+                                  title='struct tremor_runtime::onramp::http::Onramp'>Onramp</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="fn" href="fn.perhaps_uuid_from_base64.html"
+                                  title='fn tremor_runtime::onramp::http::perhaps_uuid_from_base64'>perhaps_uuid_from_base64</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="fn" href="fn.uuid_from_base64.html"
+                                  title='fn tremor_runtime::onramp::http::uuid_from_base64'>uuid_from_base64</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="fn" href="fn.vec_u8_from_base64.html"
+                                  title='fn tremor_runtime::onramp::http::vec_u8_from_base64'>vec_u8_from_base64</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table></section><section id="search" class="content hidden"></section><section class="footer"></section><aside id="help" class="hidden"><div><h1 class="hidden">Help</h1><div class="shortcuts"><h2>Keyboard Shortcuts</h2><dl><dt><kbd>?</kbd></dt><dd>Show this help dialog</dd><dt><kbd>S</kbd></dt><dd>Focus the search field</dd><dt><kbd>↑</kbd></dt><dd>Move up in search results</dd><dt><kbd>↓</kbd></dt><dd>Move down in search results</dd><dt><kbd>↹</kbd></dt><dd>Switch tab</dd><dt><kbd>&#9166;</kbd></dt><dd>Go to active search result</dd><dt><kbd>+</kbd></dt><dd>Expand all sections</dd><dt><kbd>-</kbd></dt><dd>Collapse all sections</dd></dl></div><div class="infos"><h2>Search Tricks</h2><p>Prefix searches with a type followed by a colon (e.g. <code>fn:</code>) to restrict the search to a given type.</p><p>Accepted types are: <code>fn</code>, <code>mod</code>, <code>struct</code>, <code>enum</code>, <code>trait</code>, <code>type</code>, <code>macro</code>, and <code>const</code>.</p><p>Search functions by type signature (e.g. <code>vec -> usize</code> or <code>* -> vec</code>)</p><p>Search multiple things at once by splitting your query with comma (e.g. <code>str,u8</code> or <code>String,struct:Vec,test</code>)</p></div></div></aside><script>window.rootPath = "../../../";window.currentCrate = "tremor_runtime";</script><script src="../../../aliases.js"></script><script src="../../../main.js"></script><script defer src="../../../search-index.js"></script></body></html>

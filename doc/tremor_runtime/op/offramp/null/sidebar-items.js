@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Offramp","An offramp that write to stdout"]]});

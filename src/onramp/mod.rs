@@ -20,7 +20,9 @@
 pub mod blaster;
 pub mod file;
 pub mod http;
+#[cfg(feature = "kafka")]
 pub mod kafka;
+#[cfg(feature = "mssql")]
 pub mod mssql;
 pub mod stdin;
 use actix::prelude::*;
@@ -42,7 +44,9 @@ pub fn new(name: &str, opts: &ConfValue) -> Result<Onramps> {
         "blaster" => Ok(Onramps::Blaster(blaster::Onramp::new(opts)?)),
         "file" => Ok(Onramps::File(file::Onramp::new(opts)?)),
         "http" => Ok(Onramps::HTTP(http::Onramp::new(opts)?)),
+        #[cfg(feature = "kafka")]
         "kafka" => Ok(Onramps::Kafka(kafka::Onramp::new(opts)?)),
+        #[cfg(feature = "mssql")]
         "mssql" => Ok(Onramps::MSSql(mssql::Onramp::new(opts)?)),
         "stdin" => Ok(Onramps::Stdin(stdin::Onramp::new(opts)?)),
         _ => panic!("Unknown classifier: {}", name),
@@ -51,7 +55,9 @@ pub fn new(name: &str, opts: &ConfValue) -> Result<Onramps> {
 
 pub enum Onramps {
     Blaster(blaster::Onramp),
+    #[cfg(feature = "kafka")]
     Kafka(kafka::Onramp),
+    #[cfg(feature = "mssql")]
     MSSql(mssql::Onramp),
     File(file::Onramp),
     HTTP(http::Onramp),
@@ -62,8 +68,10 @@ impl Onramp for Onramps {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
         match self {
             Onramps::Blaster(i) => i.enter_loop(pipelines),
+            #[cfg(feature = "kafka")]
             Onramps::Kafka(i) => i.enter_loop(pipelines),
             Onramps::File(i) => i.enter_loop(pipelines),
+            #[cfg(feature = "mssql")]
             Onramps::MSSql(i) => i.enter_loop(pipelines),
             Onramps::HTTP(i) => i.enter_loop(pipelines),
             Onramps::Stdin(i) => i.enter_loop(pipelines),

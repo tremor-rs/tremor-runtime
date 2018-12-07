@@ -35,17 +35,7 @@ impl Parser {
 
 impl Opable for Parser {
     fn exec(&mut self, event: EventData) -> EventResult {
-        if !event.is_type(ValueType::Raw) {
-            let t = event.value.t();
-            return EventResult::Error(
-                event,
-                Some(TSError::from(TypeError::with_location(
-                    &"parse::json",
-                    t,
-                    ValueType::Raw,
-                ))),
-            );
-        };
+        ensure_type!(event, "parse::json", ValueType::Raw);
         let res = event.replace_value(|val| {
             if let EventValue::Raw(raw) = val {
                 match serde_json::from_slice(raw) {
@@ -75,17 +65,8 @@ impl Renderer {
 
 impl Opable for Renderer {
     fn exec(&mut self, event: EventData) -> EventResult {
-        if !event.is_type(ValueType::JSON) {
-            let t = event.value.t();
-            return EventResult::Error(
-                event,
-                Some(TSError::from(TypeError::with_location(
-                    &"render::json",
-                    t,
-                    ValueType::JSON,
-                ))),
-            );
-        };
+        ensure_type!(event, "render::json", ValueType::JSON);
+
         let res = event.replace_value(|val| {
             if let EventValue::JSON(ref val) = val {
                 if let Ok(json) = serde_json::to_vec(val) {

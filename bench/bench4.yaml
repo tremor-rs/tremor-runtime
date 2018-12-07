@@ -1,7 +1,7 @@
 ---
 onramps:
   - onramp::blaster:
-      source: ./demo/data.json.xz
+      source: ./demo/data/data.json.xz
       interval: 100000 # 10 KHz
       pipeline: main
 

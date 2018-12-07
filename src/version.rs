@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate rdkafka;
-
+#[cfg(feature = "kafka")]
 use rdkafka::util::get_rdkafka_version;
 use std::io::Write;
 
@@ -29,6 +28,9 @@ macro_rules! println_stderr(
 
 pub fn print() {
     println_stderr!("tremor version: {}", VERSION);
-    let (version_n, version_s) = get_rdkafka_version();
-    println_stderr!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    #[cfg(feature = "kafka")]
+    {
+        let (version_n, version_s) = get_rdkafka_version();
+        println_stderr!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    }
 }

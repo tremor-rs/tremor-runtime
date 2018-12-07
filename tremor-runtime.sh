@@ -9,11 +9,12 @@ fi
 if [ ! -z ${CONFIG+x} ]
 then
     echo "${CONFIG}" > tremor.yaml
-fi
-
-if [ -z ${CONFIG_FILE+x} ]
-then
     CONFIG_FILE=tremor.yaml
+else
+    if [ -z ${CONFIG_FILE+x} ]
+    then
+        CONFIG_FILE=tremor.yaml
+    fi
 fi
 
 exec ./tremor-runtime --config "${CONFIG_FILE}"

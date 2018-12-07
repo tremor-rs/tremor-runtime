@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Config",""],["Offramp","A null offramp that records histograms"]]});

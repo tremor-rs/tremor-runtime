@@ -86,6 +86,7 @@ use actix_web::{
 };
 
 use base64;
+use dflt;
 use errors::*;
 use futures::sync::mpsc::channel;
 use futures::{Future, Stream};
@@ -160,6 +161,7 @@ struct EventHeader {
     uuid: Uuid,
     #[serde(
         rename = "parentUuid",
+        default = "dflt::d_none",
         deserialize_with = "perhaps_uuid_from_base64"
     )]
     parent_uuid: Option<Uuid>,
@@ -306,4 +308,13 @@ impl OnrampT for Onramp {
     }
 }
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use serde_json;
+    #[test]
+    fn decode_test() {
+        let data = r#"{"header":{"contentType":"JSON","uuid":"dpsQpvkwEeiiHAJCTXQTiQ=="},"body":"eyJoYW5kbGluZ191bml0X2lkIjoiU1BYRDVCRTMxRjk3MTJCNjEiLCJpc19mb3JjZV9sb2FkIjpmYWxzZSwib3JkZXJfbnVtYmVyIjoiMTM1OTMzOTgxIiwic2xtX2lkIjozMDk5MDI3Mywid2FyZWhvdXNlX2lkIjoiMjIifQ=="}"#;
+        let _r: EventWrapper = serde_json::from_str(data).unwrap();
+    }
+
+}

@@ -1,29 +1,33 @@
-onramps:
-  - onramp::kafka:
-      pipeline: main
-      group_id: demo
-      topics:
-        - demo
-      brokers:
-        - kafka:9092
+# Demo file that will read events from kafka, classify them into two categories
+# and print statistics on the console  
+---
 
-pipelines:
-  - name: main
-    steps:
-      - parse::json
-      - classifier::json:
+onramps:                                          # First we define our datasources or onramps
+  - onramp::kafka:                                # In this example we only have a single kafka onramp
+      group_id: demo                              # The kafka consumer group is `demo`
+      topics:                                     # We consume form a single topic `demo`, but it would
+        - demo                                    # be possible to add additional topics below this line 
+      brokers:                                    # We define our broker `kafka:9092`, but again it would
+        - kafka:9092                              # be possible to add additional topics below this line
+      pipeline: main                              # Finally we define the pipeline this onramp sends to as `main`
+
+pipelines:                                        # Second we define the pipelines this instance will start
+  - name: main                                    # We only define one pipeline named `main`
+    steps:                                        # The pipeline is going to have the following steps
+      - parse::json                               # Parse the event as a JSON to work on it's content
+      - classifier::json:                         # We run a classifier with two rules on it
           rules:
-            - class: 'info'
-              rule: 'short_message:"info"'
-            - class: 'error'
-              rule: 'short_message:"ERROR"'
-      - grouper::bucket:
+            - class: 'info'                       # The first class we define is named `info`, it matches
+              rule: 'short_message:"info"'        # if `short_message`  contains the string `"info"`
+            - class: 'error'                      # The second class we define is `error`, it matches
+              rule: 'short_message:"ERROR"'       # if  `short_message` contains the string `"ERROR`
+      - grouper::bucket:                          # Now we limit how much each class is allowed to send per second
            buckets:
-             info:
+             info:                                # the class `info` is allowed to send 10 events / s
                rate: 10
-             error:
+             error:                               # the class `error` is allowed to send 100 events / s
                rate: 100
-             default:
-               rate: 90
-      - render::json
-      - offramp::debug
+             default:                             # the `default` class contains all elements that didn't 
+               rate: 90                           # match any of the rules, it is allowed to send 90 events / s
+      - render::json                              # Once the bucketing is applied we render the json back to a blob
+      - offramp::debug                            # Finally we use the `debug` output to print the data to the console

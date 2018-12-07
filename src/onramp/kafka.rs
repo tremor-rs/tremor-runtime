@@ -21,6 +21,7 @@
 //! See [Config](struct.Config.html) for details.
 //!
 
+use dflt;
 use errors::*;
 use futures::prelude::*;
 use futures::sync::mpsc::channel;
@@ -69,6 +70,11 @@ pub struct Config {
     pub topics: Vec<String>,
     /// List of bootstrap brokers
     pub brokers: Vec<String>,
+    /// If sync is set to true the kafka onramp will wait for an event
+    /// to be fully acknowledged before fetching the next one. Defaults
+    /// to `false`. Do not use in combination with batching offramps!
+    #[serde(default = "dflt::d_false")]
+    pub sync: bool,
     /// Optional rdkafka configuration
     ///
     /// Default settings:
@@ -76,7 +82,6 @@ pub struct Config {
     /// * `bootstrap.servers` - `brokers` from the config concatinated by `,`
     /// * `enable.partition.eof` - `"false"`
     /// * `session.timeout.ms` - `"6000"`
-    /// * `enable.auto.commit` - `"true"`
     /// * `enable.auto.commit` - `"true"`
     /// * `auto.commit.interval.ms"` - `"5000"`
     /// * `enable.auto.offset.store` - `"true"`
@@ -150,19 +155,34 @@ impl OnrampT for Onramp {
                             if let Some(key) = m.key_view::<str>() {
                                 vars.insert("key".to_string(), key.unwrap().into());
                             };
-                            let (tx, rx) = channel(0);
-
-                            // TODO: How do we track success on finished events?
-                            let msg = OnData {
-                                reply_channel: Some(tx),
-                                data: EventValue::Raw(p.to_vec()),
-                                vars,
-                                ingest_ns: utils::nanotime(),
-                            };
-
                             let i = i + 1 % len;
-                            pipelines[i].do_send(msg);
-                            for _r in rx.wait() {}
+
+                            if config.sync {
+                                // In sync mode we create a channel to wait for a reply
+                                // until we get this reply we will block!
+                                let (tx, rx) = channel(0);
+                                // TODO: How do we track success on finished events?
+                                let msg = OnData {
+                                    reply_channel: Some(tx),
+                                    data: EventValue::Raw(p.to_vec()),
+                                    vars,
+                                    ingest_ns: utils::nanotime(),
+                                };
+
+                                pipelines[i].do_send(msg);
+                                for _r in rx.wait() {}
+                            } else {
+                                // In async mode we just eat through the data without waiting
+                                // for any replies from the pipeline
+                                let msg = OnData {
+                                    reply_channel: None,
+                                    data: EventValue::Raw(p.to_vec()),
+                                    vars,
+                                    ingest_ns: utils::nanotime(),
+                                };
+
+                                pipelines[i].do_send(msg);
+                            }
                         }
                     }
                 }

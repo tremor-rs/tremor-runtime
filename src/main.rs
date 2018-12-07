@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![warn(unused_extern_crates)]
 #![recursion_limit = "1024"]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 #[macro_use]
@@ -37,23 +38,27 @@ extern crate dot;
 extern crate elastic;
 extern crate env_logger;
 extern crate futures;
+#[cfg(feature = "mssql")]
 extern crate futures_state_stream;
 extern crate hdrhistogram;
 extern crate hostname;
 extern crate libc;
 extern crate openssl;
+extern crate php;
 extern crate rand;
+#[cfg(feature = "kafka")]
 extern crate rdkafka;
+#[cfg(feature = "kafka")]
 extern crate rdkafka_sys;
-extern crate regex;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_yaml;
-extern crate spmc;
 extern crate threadpool;
+#[cfg(feature = "mssql")]
 extern crate tiberius;
-extern crate tokio;
+#[cfg(feature = "mssql")]
 extern crate tokio_current_thread;
+#[cfg(feature = "kafka")]
 extern crate tokio_threadpool;
 extern crate uuid;
 extern crate window;

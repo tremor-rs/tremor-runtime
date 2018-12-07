@@ -260,13 +260,19 @@ fn start_pipeline(p: PipelineConfig, pipelines: &Pipelines) -> Result<GraphLink>
         };
         subs.reverse();
         let subs = if let Some(sub) = subs.pop() {
-            make_sub_pipelines(
+            match make_sub_pipelines(
                 sub.clone(),
                 subs,
                 leaf.clone(),
                 pipelines.clone(),
                 HashMap::new(),
-            ).unwrap()
+            ) {
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                    return;
+                }
+                Ok(subs) => subs,
+            }
         } else {
             HashMap::new()
         };
@@ -274,21 +280,33 @@ fn start_pipeline(p: PipelineConfig, pipelines: &Pipelines) -> Result<GraphLink>
         // Now generate the pipeline itself
         let mut steps = p.steps;
         steps.reverse();
-        let pipeline = make_pipeline(steps.pop().unwrap(), steps, leaf, pipelines, subs).unwrap();
-        actix::System::run(move || {
-            let (pipeline_actor, types) = pipeline.lock().unwrap().make_actor().unwrap();
-            let p1 = pipeline_actor.clone().unwrap();
-            let onramp = OnRampActor::create(|_ctx| OnRampActor {
-                pipeline: p1,
-                id: 0,
-                replies: HashMap::new(),
-            });
+        match make_pipeline(steps.pop().unwrap(), steps, leaf, pipelines, subs) {
+            Err(e) => {
+                let _ = tx.send(Err(e));
+            }
+            Ok(pipeline) => {
+                actix::System::run(move || {
+                    let (pipeline_actor, types) = match pipeline.lock().unwrap().make_actor() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let _ = tx.send(Err(e));
+                            return;
+                        }
+                    };
+                    let p1 = pipeline_actor.clone().unwrap();
+                    let onramp = OnRampActor::create(|_ctx| OnRampActor {
+                        pipeline: p1,
+                        id: 0,
+                        replies: HashMap::new(),
+                    });
 
-            let _ = tx.send((onramp, pipeline, pipeline_actor, types));
-        })
+                    let _ = tx.send(Ok((onramp, pipeline, pipeline_actor, types)));
+                });
+            }
+        };
     });
     match rx.recv() {
-        Ok((onramp, head, addr, types)) => Ok(Arc::new(Mutex::new(Graph::Pipeline {
+        Ok(Ok((onramp, head, addr, types))) => Ok(Arc::new(Mutex::new(Graph::Pipeline {
             name,
             uuid: Uuid::new_v4(),
             onramp,
@@ -296,6 +314,7 @@ fn start_pipeline(p: PipelineConfig, pipelines: &Pipelines) -> Result<GraphLink>
             types,
             head,
         }))),
+        Ok(Err(e)) => Err(e),
         Err(_) => Err(ErrorKind::PipelineStartError(name).into()),
     }
 }

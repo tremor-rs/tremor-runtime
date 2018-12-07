@@ -1,17 +1,12 @@
 onramps:
-  - onramp::stdin:
+  - onramp::blaster:
+      source: ./data/data.json.xz
+      interval: 4000000 # 250 events/s
       pipeline: main
 
 pipelines:
   - name: main
     steps:
-      - op::set:
-          var: classification
-          val: default
-      - grouper::bucket:
-           buckets:
-            default:
-              rate: 250
       - offramp::kafka:
           brokers:
             - kafka:9092

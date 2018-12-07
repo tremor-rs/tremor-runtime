@@ -19,6 +19,7 @@ pub mod debug;
 pub mod elastic;
 pub mod file;
 pub mod influx;
+#[cfg(feature = "kafka")]
 pub mod kafka;
 pub mod null;
 pub mod stdout;
@@ -32,7 +33,12 @@ use std::boxed::Box;
 #[derive(Debug)]
 pub enum Offramp {
     Blackhole(Box<blackhole::Offramp>),
+    #[cfg(feature = "kafka")]
     Kafka(kafka::Offramp),
+    // We have to cheat a little here since the opable macro can't
+    // have dependable compilation
+    #[cfg(not(feature = "kafka"))]
+    Kafka(null::Offramp),
     Elastic(Box<elastic::Offramp>),
     Influx(Box<influx::Offramp>),
     Stdout(stdout::Offramp),
@@ -51,6 +57,7 @@ impl Offramp {
             "elastic" => Ok(Offramp::Elastic(Box::new(elastic::Offramp::new(opts)?))),
             "file" => Ok(Offramp::File(file::Offramp::new(opts)?)),
             "influx" => Ok(Offramp::Influx(Box::new(influx::Offramp::new(opts)?))),
+            #[cfg(feature = "kafka")]
             "kafka" => Ok(Offramp::Kafka(kafka::Offramp::new(opts)?)),
             "null" => Ok(Offramp::Null(null::Offramp::new(opts)?)),
             "stdout" => Ok(Offramp::Stdout(stdout::Offramp::new(opts)?)),
