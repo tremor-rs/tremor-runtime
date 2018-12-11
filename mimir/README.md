@@ -60,6 +60,18 @@ WARNING: unsupported
 cargo build
 ```
 
+In case of errors try:
+
+Make sure you are using latest rust and have bison >= 3.0.5 installed and on your path
+
+```shell
+rustup update stable
+export PATH=/usr/local/Cellar/flex/2.6.4/bin/:/usr/local/Cellar/bison/3.0.5/bin:$PATH
+cargo clean
+cargo build
+```
+
+
 ---
 
 Running tests
