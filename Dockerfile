@@ -1,12 +1,13 @@
 FROM centos:7 as builder
 
-ARG rust_version=1.31
+ARG rust_version=stable
 RUN yum install git make gcc clang openssl-static libstdc++-static bison  autoconf -y
 RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 
 COPY Cargo.* ./
 COPY src ./src
 COPY window ./window
+COPY mimir ./mimir
 
 RUN source $HOME/.cargo/env &&\
   cargo build --release
