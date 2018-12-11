@@ -54,8 +54,6 @@ dcargo test
 
 Building on OS X
 ----------------
-WARNING: unsupported
-
 ```shell
 cargo build
 ```
