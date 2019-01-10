@@ -1,0 +1,24 @@
+onramps:
+  - onramp::file:
+      file: {in}
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - classifier::mimir:
+          rules:
+            - class: 'info'
+              rule: 'short_message:"INFO" { tremor.class := "info"; }'
+            - class: 'error'
+              rule: 'short_message:"ERROR"'
+      - render::json
+      - grouper::bucket:
+          buckets:
+            info:
+              rate: 2
+            error:
+              rate: 3
+      - offramp::file:
+          file: {out}

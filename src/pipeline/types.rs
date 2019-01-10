@@ -142,6 +142,17 @@ impl EventData {
         //Err(EventResult::Error(self, Some(e)))
     }
 
+    pub fn mutate_value<F: FnOnce(&mut EventValue) -> Result<(), TSError>>(
+        &mut self,
+        f: F,
+    ) -> Result<(), TSError> {
+        match f(&mut self.value) {
+            Ok(_v) => Ok(()),
+            Err(e) => Err(e),
+        }
+        //Err(EventResult::Error(self, Some(e)))
+    }
+
     pub fn maybe_extract<T, F: FnOnce(&EventValue) -> Result<(T, EventReturn), TSError>>(
         self,
         f: F,

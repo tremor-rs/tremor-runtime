@@ -12,135 +12,243 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use regex;
 use std::str::FromStr;
-use super::{Node, Operator};
-use pcre2::bytes::RegexBuilder;
+use super::{Item, Stmt, Cmp, Filter, CIDR, Action, MimirValue};
+use pcre2::bytes::{RegexBuilder, Regex};
 use glob::Pattern;
-use serde_json::Value;
 
 grammar;
 
-pub Items: Box<Node> = {
-    <i1:Items> <i2:Item> => Box::new(Node::Op(i1, Operator::And, i2)),
-    Items OpLog Item => Box::new(Node::Op(<>)),
-    Item,
-};
-
-Enclosed: Box<Node> = {
-    "(" <Items> ")",
-    Not Enclosed => Box::new(Node::Neg(<>)),
+pub Stmt: Stmt = {
+    Item => Stmt{item: <>, actions: Vec::new()},
+    <item:Item> CBOpen <actions: Actions> ";" CBClose => Stmt{item, actions},
 }
 
-Item: Box<Node> = {
-    <Compare>,
-    <Enclosed>,
-};
+// Filter related
 
-Compare: Box<Node> = {
-    Dfield OpFn Sfield => Box::new(Node::Op(<>)),
-    Dfield OpFn Intdat => Box::new(Node::Op(<>)),
-    Dfield OpFn Floatdat => Box::new(Node::Op(<>)),
-    Dfield OpFn Rfield => Box::new(Node::Op(<>)),
-    Dfield OpFn Listofstr => Box::new(Node::Op(<>)),
-    Dfield OpFn Listofint => Box::new(Node::Op(<>)),
-    Dfield OpFn Listofdbl => Box::new(Node::Op(<>)),
-    Dfield OpFn Gfield => Box::new(Node::Op(<>)),
-    Not Compare => Box::new(Node::Neg(<>)),
-};
+// An item can be a filter expression, a parenthesized expression, or a
+// predicate expression.
+Item: Item = {
+    MaybeNegatedFilter => <>,
+    Enclosed => <>,
+    <l: Item> AND <r: MaybeNegatedFilter> => Item::And(Box::new(l), Box::new(r)),
+    <l: Item> OR <r: MaybeNegatedFilter> => Item::Or(Box::new(l), Box::new(r)),
+    <l: Item> AND <r: Enclosed> => Item::And(Box::new(l), Box::new(r)),
+    <l: Item> OR <r: Enclosed> => Item::Or(Box::new(l), Box::new(r)),
+}
 
-Listofstr: Box<Node> = {"[" <Valueliststr> "]" => Box::new(Node::List(<>)) };
+// An enclosed expression is a parenthesized sub-expression or a negated
+// sub-expression.
+Enclosed: Item = {
+    NOT <Enclosed> => Item::Not(Box::new(<>)),
+    BOpen <Item> BClose => <>,
+}
 
-Listofint: Box<Node> = {"[" <Valuelistint> "]" => Box::new(Node::List(<>)) };
 
-Listofdbl: Box<Node> = {"[" <Valuelistfloat> "]" => Box::new(Node::List(<>)) };
+// A maybe negated filter can either be a filter expression or a negated
+// filter expression
+MaybeNegatedFilter: Item = {
+    Filter => Item::Filter(<>),
+    NOT <Filter> => Item::Not(Box::new(Item::Filter(<>))),
+}
 
-Rfield: Box<Node> = { <Regexstr> => Box::new(Node::Rex(RegexBuilder::new().jit(true).jit_if_available(true).build(&<>.trim_matches('/').to_string()).unwrap()))};
-
-Sfield: Box<Node> = { "\"" <Plainstr> "\"" => Box::new(Node::Ruleval(<>))};
-
-Gfield: Box<Node> = { <Glob> => Box::new(Node::Glob(Pattern::new(&<>.trim_matches('g').trim_matches('"').to_string()).unwrap()))};
-
-Quotedstr: Value = { "\"" <Plainstr> "\"" };
-
-Intdat: Box<Node> = { <Intnum> => Box::new(Node::Ruleval(<>)) };
-
-Floatdat: Box<Node> = { <Dblnum> => Box::new(Node::Ruleval(<>)) };
-
-Dfield: Box<Node> = {
-    Dfield Dot Skeystr => Box::new(Node::Op(<>)),
-    Skeystr,
-};
-
-OpFn: Operator = {
-    CON => Operator::Con,
-    EQ => Operator::Eq,
-    GT => Operator::Gt,
-    LT => Operator::Lt,
-    GTOE => Operator::Gtoe,
-    LTOE => Operator::Ltoe,
-};
-
-OpLog: Operator = {
-    AND => Operator::And,
-    OR => Operator::Or,
-};
-
-Valueliststr: Vec<Value> = {
-    <sl:Valueliststr> COMMA <s:Quotedstr> => {
-        let mut msl: Vec<Value> = sl;
-        msl.push(s);
-        msl
+// A filter expression is one of: An IPV4 address An list reference A regular
+// expression A wildcard ( glob-like ) expression A term A number Or a negated
+// sub-filter
+Filter: Filter = {
+    <path:Path> => Filter{
+        cmp: Cmp::Exists, path
     },
-    Quotedstr => {
-        let mut v: Vec<Value> = Vec::new();
-        v.push(<>);
-        v
-    }
-};
+    ListContainFilter => <>,
+    StrFilter => <>,
+    IntFilter => <>,
+    DblFilter => <>,
+    CIDRFilter => <>,
+    ListIncludesFilter => <>
+}
 
-Valuelistint: Vec<Value> = {
-    <il:Valuelistint> COMMA <i:Intnum> => {
-        let mut mi: Vec<Value> = il;
-        mi.push(i);
-        mi
+// An CIDR filter filters based on CIDR subnet matche
+CIDRFilter: Filter = {
+    <path:Path> CON <value:CIDRLit> => Filter{
+        cmp: Cmp::CIDRMatch(value), path
     },
-    Intnum => {
-        let mut v: Vec<Value> = Vec::new();
-        v.push(<>);
-        v
-    }
-};
 
-Valuelistfloat: Vec<Value> = {
-    <fl:Valuelistfloat> COMMA <f:Dblnum> => {
-        let mut mf: Vec<Value> = fl;
-        mf.push(f);
-        mf
+}
+
+// String filters allow for various types of filtering
+// of strings.
+StrFilter: Filter = {
+    <path:Path> EQ <value:StrLit> => Filter{
+        cmp: Cmp::Eq(value), path
     },
-    Dblnum => {
-        let mut v: Vec<Value> = Vec::new();
-        v.push(json!(<>));
-        v
+    <path:Path> GT <value:StrLit> => Filter{
+        cmp: Cmp::Gt(value), path
+    },
+    <path:Path> CON <regex:RegexLit> => Filter{
+        cmp: Cmp::Regex(regex), path
+    },
+    <path:Path> CON <glob:GlobLit> => Filter{
+        cmp: Cmp::Glob(glob), path
+    },
+}
+
+// Integer filters allow for various types of filtering
+// of integers.
+IntFilter: Filter = {
+    <path:Path> EQ <value:IntLit> => Filter{
+        cmp: Cmp::Eq(value), path
+    },
+    <path:Path> GT <value:IntLit> => Filter{
+        cmp: Cmp::Gt(value), path
+    },
+    <path:Path> LT <value:IntLit> => Filter{
+        cmp: Cmp::Lt(value), path
+    },
+    <path:Path> GTE <value:IntLit> => Filter{
+        cmp: Cmp::Gte(value), path
+    },
+    <path:Path> LTE <value:IntLit> => Filter{
+        cmp: Cmp::Lte(value), path
+    },
+}
+
+// The contains filter test if a string
+// is contained in a substring as well as
+// if a value is in a event-list
+//
+// TODO: This overlaps with string contains
+// we should fix this?th
+ListContainFilter: Filter = {
+    <path:Path> CON <value:DblLit> => Filter{
+        cmp: Cmp::Contains(value), path
+    },
+    <path:Path> CON <value:IntLit> => Filter{
+        cmp: Cmp::Contains(value), path
+    },
+    <path:Path> CON <value:StrLit> => Filter{
+        cmp: Cmp::Contains(value), path
+    },
+}
+
+// The includes filter tests if a event value
+// is included in the given list literal.
+ListIncludesFilter: Filter = {
+    <path:Path> CON <value:ListLit> => Filter{
+        cmp: Cmp::IsInList(value), path
+    },
+}
+
+/// Various filters comparing double values.
+DblFilter: Filter = {
+    <path:Path> EQ <value:DblLit> => Filter{
+        cmp: Cmp::Eq(value), path
+    },
+    <path:Path> GT <value:DblLit> => Filter{
+        cmp: Cmp::Gt(value), path
+    },
+    <path:Path> LT <value:DblLit> => Filter{
+        cmp: Cmp::Lt(value), path
+    },
+    <path:Path> GTE <value:DblLit> => Filter{
+        cmp: Cmp::Gte(value), path
+    },
+    <path:Path> LTE <value:DblLit> => Filter{
+        cmp: Cmp::Lte(value), path
+    },
+}
+
+// Action Blocks are used to execute actions
+// based on matched filters
+Actions: Vec<Action> = {
+    <actions: Actions> ";" <action: Action> => {
+        let mut actions: Vec<Action> = actions;
+        actions.push(action);
+        actions
+    },
+    <Action> => vec![<>],
+}
+
+Action: Action = {
+    <path:Path> STO <value:MimirValueLit> => Action::Set{
+        path, value
     }
-};
+}
 
-Not: Operator = NOT => Operator::Not;
+// A path used to access nested json values
+// it uses a dot notation.
+// TODO: Add array index support?
+Path: Vec<String> = {
+    <path:Path> DOT <key:PathKey> => {
+      let mut path: Vec<String> = path;
+        path.push(key);
+        path
+    },
+    PathKey => vec![<>],
+}
 
-Dot: Operator = DOT => Operator::Dot;
+PathKey: String = { Str => <>.to_string() }
 
-Skeystr: Box<Node> = { Str => Box::new(Node::Lastkey(<>.to_string()))};
+// LITERALS
 
-Dblnum: Value = DOUBLE => json!(f64::from_str(<>).unwrap());
+// A CIDR or  IP, where a plain IP (i.e. 10.5.8.20) is treated as the CIDR 10.5.8.20/32
+CIDRLit: CIDR = {
+    IP =>
+    {
+        let re = regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?").unwrap();
+        let caps = re.captures(<>).unwrap();
+        let a = u8::from_str(caps.get(1).map_or("", |m| m.as_str())).unwrap();
+        let b = u8::from_str(caps.get(2).map_or("", |m| m.as_str())).unwrap();
+        let c = u8::from_str(caps.get(3).map_or("", |m| m.as_str())).unwrap();
+        let d = u8::from_str(caps.get(4).map_or("", |m| m.as_str())).unwrap();
+        let e = u8::from_str(caps.get(5).map_or("32", |m| m.as_str())).unwrap();
+        CIDR::new(a, b, c, d, e)
+    },
+}
 
-Intnum: Value = LONG => json!(i64::from_str(<>).unwrap());
+// A list literal [ lsit-item, list-item, ... ]
+// that can contain mixed values
+ListLit: Vec<MimirValue> = {
+    "[" <ListLitItems> "]" => <>
+}
 
+ListLitItems: Vec<MimirValue> = {
+    <list:ListLitItems> COMMA <item:MimirValueLit> => {
+        let mut list: Vec<MimirValue> = list;
+        list.push(item);
+        list
+    },
+    MimirValueLit => vec![<>]
+}
+
+MimirValueLit: MimirValue = {
+    DblLit => <>,
+    IntLit => <>,
+    StrLit => <>,
+}
+
+// A string literal
+StrLit: MimirValue = {
+    "\"" <Plainstr> "\"" => <>
+}
+
+// A double literal
+DblLit: MimirValue = DOUBLE => json!(f64::from_str(<>).unwrap());
+
+// An integer literal
+IntLit: MimirValue = LONG => json!(i64::from_str(<>).unwrap());
+
+// A regular expression
+RegexLit: Regex = { <Regexstr> => RegexBuilder::new().jit(true).jit_if_available(true).build(&<>.trim_matches('/').to_string()).unwrap()};
+
+// A glob
+GlobLit: Pattern = { <Globstr> => Pattern::new(&<>.trim_matches('g').trim_matches('"').to_string()).unwrap()};
+
+// Helpers
 Regexstr: String = REGEX => <>.to_string();
-
-Plainstr: Value = TEXT => json!(<>.to_string());
-
+Globstr: String =  GLOB => <>.to_string() ;
+Plainstr: MimirValue = TEXT => json!(<>.to_string());
 Str: String = TEXT => <>.to_string();
-
-Glob: String = { GLOB => <>.to_string() };
 
 match {
     r"[+-]?[0-9]+" => LONG,
@@ -148,18 +256,23 @@ match {
     r"((?i)and)|(\&\&)" => AND,
     r"((?i)or)|(\|\|)" => OR,
     r"((?i)not)|(!)" => NOT,
+    r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/?(\d{1,2})?" => IP,
     ":" => CON,
     "=" => EQ,
     ">" => GT,
     "<" => LT,
-    ">=" => GTOE,
-    "<=" => LTOE,
+    ">=" => GTE,
+    "<=" => LTE,
     "." => DOT,
+    ":=" => STO,
     "," => COMMA,
+    "{" => CBOpen,
+    "}" => CBClose,
+    "(" => BOpen,
+    ")" => BClose,
 } else {
     r"[a-zA-Z0-9_]+" => TEXT,
     r"[/](([\\][/])|[^/])+[/]" => REGEX,
     r####"[g]["](([\\]["])|[^"])+["]"#### => GLOB,
      _
 }
-

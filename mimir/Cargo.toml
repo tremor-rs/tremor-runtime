@@ -1,12 +1,12 @@
 [package]
 build = "build.rs"
 name = "mimir"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Ivan Monov <imonov@wayfair.com>"]
 edition = "2018"
 
 [build-dependencies]
-lalrpop = "0.16.1"
+lalrpop = "0.16"
 
 [dev-dependencies]
 criterion = "0.2"
@@ -21,3 +21,4 @@ regex = "0.2.1"
 serde_json = "1.0"
 pcre2 = "0.1.1"
 glob = "0.2.11"
+lazy_static = "1.2.0"

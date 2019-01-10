@@ -70,23 +70,31 @@ impl Opable for Classifier {
                 ))),
             );
         };
-        let c;
-
-        if let EventValue::JSON(ref val) = event.value {
-            c = self.rules.eval_first_wins(val);
-        } else {
-            unreachable!()
-        };
-
-        match c {
-            Ok(Some(id)) => {
-                event.set_var(&"classification", id);
-                EventResult::Next(event)
+        let mut class = None;
+        let r = event.mutate_value(|mut json| match &mut json {
+            EventValue::JSON(ref mut val) => {
+                if let Ok(c) = self.rules.eval_first_wins(val) {
+                    class = c;
+                    Ok(())
+                } else {
+                    Err(TSError::new(&"Mimir error"))
+                }
             }
-            _ => {
-                event.set_var(&"classification", "default");
-                EventResult::Next(event)
-            }
+            _ => unreachable!(),
+        });
+        match r {
+            Ok(_) => match class {
+                Some(id) => {
+                    event.set_var(&"classification", id);
+                    EventResult::Next(event)
+                }
+                _ => {
+                    event.set_var(&"classification", "default");
+                    EventResult::Next(event)
+                }
+            },
+
+            Err(e) => EventResult::Error(event, Some(e)),
         }
     }
 }

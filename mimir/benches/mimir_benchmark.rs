@@ -16,8 +16,8 @@ use serde_json::Value;
     It is not meant to be a reflection of the execution in the tremor pipeline.
 */
 fn bench(r: &Rules<u32>, json: &str) {
-    let vals: Value = serde_json::from_str(json).unwrap();
-    let _ = r.eval_first_wins(&vals);
+    let mut vals: Value = serde_json::from_str(json).unwrap();
+    let _ = r.eval_first_wins(&mut vals);
 }
 
 fn bm1(c: &mut Criterion) {
@@ -31,9 +31,9 @@ fn bm1_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     r.add_rule(0, "key1:g\"da?a\"").unwrap();
     let json = r#"{"key1": "data"}"#;
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("glob da?a nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -48,9 +48,9 @@ fn bm2_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     r.add_rule(0, "key1:\"data\"").unwrap();
     let json = r#"{"key1": "data3"}"#;
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("contains data nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -65,9 +65,9 @@ fn bm3_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     r.add_rule(0, "key1:\"data\"").unwrap();
     let json = r#"{"key1": "data3"}"#;
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("contains data nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -82,9 +82,9 @@ fn bm4_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key1": "data1"}"#;
     r.add_rule(0, "key1=\"data1\"").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("equals data1 nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -99,9 +99,9 @@ fn bm5_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key1": {"sub1": "data1"}}"#;
     r.add_rule(0, "key1.sub1=\"data1\"").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("equals subkey data1 nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -116,9 +116,9 @@ fn bm6_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key1": {"sub1": "data1"}}"#;
     r.add_rule(0, "key1.sub1:\"dat\"").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("contains subkey dat nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -133,7 +133,7 @@ fn bm7(c: &mut Criterion) {
                  },
                 "key3": "data3"
              }"#;
-    r.add_rule(0, "key1.subkey1:\"data1\" key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
+    r.add_rule(0, "key1.subkey1:\"data1\" or key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
     c.bench_function("multi-component", move |b| b.iter(|| bench(&r, json)));
 }
 
@@ -148,10 +148,10 @@ fn bm7_nojsonparse(c: &mut Criterion) {
                  },
                 "key3": "data3"
              }"#;
-    r.add_rule(0, "key1.subkey1:\"data1\" key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    r.add_rule(0, "key1.subkey1:\"data1\"or  key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("multi-component", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -166,9 +166,9 @@ fn bm8_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key=5").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("equals int nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -185,8 +185,8 @@ fn bm9_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key>1").unwrap();
     r.add_rule(1, "key>4").unwrap();
-    let val = serde_json::from_str(json).unwrap();
-    c.bench_function("gt int", move |b| b.iter(|| r.eval_first_wins(&val)));
+    let mut val = serde_json::from_str(json).unwrap();
+    c.bench_function("gt int", move |b| b.iter(|| r.eval_first_wins(&mut val)));
 }
 
 fn bm10(c: &mut Criterion) {
@@ -200,9 +200,9 @@ fn bm10_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key>-6").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("gt neg int nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -219,9 +219,9 @@ fn bm11_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key<10").unwrap();
     r.add_rule(1, "key<9").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("lt int nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -238,9 +238,9 @@ fn bm12_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5.0}"#;
     r.add_rule(0, "key<10.0").unwrap();
     r.add_rule(1, "key<9.0").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("lt float nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -257,9 +257,9 @@ fn bm13_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key<=5").unwrap();
     r.add_rule(1, "key<=11").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("ltoe int nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -276,9 +276,9 @@ fn bm14_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5}"#;
     r.add_rule(0, "key >= 3").unwrap();
     r.add_rule(1, "key >= 4").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("gtoe int nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -295,9 +295,9 @@ fn bm15_nojsonparse(c: &mut Criterion) {
     let json = r#"{"key":5.0}"#;
     r.add_rule(0, "key >= 3.5").unwrap();
     r.add_rule(1, "key >= 4.5").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("gtoe float nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -312,9 +312,9 @@ fn bm16_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":"data"}"#;
     r.add_rule(0, "key:/d.*/").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("regex d.* nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -329,9 +329,9 @@ fn bm17_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":"data"}"#;
     r.add_rule(0, "key:/e.*/").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("regex e.* false nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -346,9 +346,9 @@ fn bm18_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":"data"}"#;
     r.add_rule(0, "NOT key:/d.*/").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("regex not d.* nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -363,9 +363,9 @@ fn bm19_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":"\\/"}"#;
     r.add_rule(0, r#"key:/\\//"#).unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("regex \\ parse nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -396,8 +396,8 @@ fn bm20_nojsonparse(c: &mut Criterion) {
                 "key3": "data3"
              }"#;
     r.add_rule(0, "!(key1.subkey1:\"data1\" NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
-    let val = serde_json::from_str(json).unwrap();
-    c.bench_function("compound", move |b| b.iter(|| r.eval_first_wins(&val)));
+    let mut val = serde_json::from_str(json).unwrap();
+    c.bench_function("compound", move |b| b.iter(|| r.eval_first_wins(&mut val)));
 }
 
 fn bm21(c: &mut Criterion) {
@@ -411,9 +411,9 @@ fn bm21_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":"data"}"#;
     r.add_rule(0, "key:[\"foo\", \"data\", \"bar\"]").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("inline str list nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -428,9 +428,9 @@ fn bm22_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":4}"#;
     r.add_rule(0, "key:[3, 4, 5]").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("inline int list nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -445,9 +445,9 @@ fn bm23_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":4.1}"#;
     r.add_rule(0, "key:[3.1, 4.1, 5.1]").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("inline float list", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -462,9 +462,9 @@ fn bm24_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":["v1", "v2", "v3"]}"#;
     r.add_rule(0, "key:\"v2\"").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("array str json", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -479,9 +479,9 @@ fn bm25_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":[3, 4, 5]}"#;
     r.add_rule(0, "key:4").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("array int json", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
@@ -496,9 +496,9 @@ fn bm26_nojsonparse(c: &mut Criterion) {
     let mut r = Rules::default();
     let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
     r.add_rule(0, "key:4.1").unwrap();
-    let val = serde_json::from_str(json).unwrap();
+    let mut val = serde_json::from_str(json).unwrap();
     c.bench_function("array float json nojsonparse", move |b| {
-        b.iter(|| r.eval_first_wins(&val))
+        b.iter(|| r.eval_first_wins(&mut val))
     });
 }
 
