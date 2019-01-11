@@ -22,6 +22,7 @@ pub mod file;
 pub mod http;
 #[cfg(feature = "kafka")]
 pub mod kafka;
+pub mod metronome;
 #[cfg(feature = "mssql")]
 pub mod mssql;
 pub mod stdin;
@@ -51,6 +52,7 @@ pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
         #[cfg(feature = "mssql")]
         "mssql" => Ok(Onramps::MSSql(mssql::Onramp::create(opts)?)),
         "stdin" => Ok(Onramps::Stdin(stdin::Onramp::create(opts)?)),
+        "metronome" => Ok(Onramps::Metronome(metronome::Onramp::create(opts)?)),
         _ => panic!("Unknown classifier: {}", name),
     }
 }
@@ -64,6 +66,7 @@ pub enum Onramps {
     File(file::Onramp),
     HTTP(http::Onramp),
     Stdin(stdin::Onramp),
+    Metronome(metronome::Onramp),
 }
 
 impl Onramp for Onramps {
@@ -77,6 +80,7 @@ impl Onramp for Onramps {
             Onramps::MSSql(i) => i.enter_loop(pipelines),
             Onramps::HTTP(i) => i.enter_loop(pipelines),
             Onramps::Stdin(i) => i.enter_loop(pipelines),
+            Onramps::Metronome(i) => i.enter_loop(pipelines),
         }
     }
 }

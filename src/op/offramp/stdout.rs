@@ -22,9 +22,8 @@
 //!
 //! ## Input Variables
 //!
-//! * `prefix` - sets the prefix (overrides the configuration)
+//! * `prefix` - sets the prefix (overrides the configuration) for raw and is ignored for JSON
 
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_yaml;
@@ -53,10 +52,9 @@ impl Offramp {
         }
     }
 }
+
 impl Opable for Offramp {
     fn exec(&mut self, event: EventData) -> EventResult {
-        ensure_type!(event, "offramp::stdout", ValueType::Raw);
-
         let pfx = if let Some(MetaValue::String(ref pfx)) = event.var(&"prefix") {
             pfx.clone()
         } else if let Some(ref pfx) = self.config.prefix {
@@ -65,15 +63,20 @@ impl Opable for Offramp {
             "".to_string()
         };
 
-        if let (ret, EventValue::Raw(raw)) = event.make_return_and_value(Ok(None)) {
-            match String::from_utf8(raw.to_vec()) {
-                Ok(s) => println!("{}{}", pfx, s),
-                Err(e) => println!("{}{:?}", pfx, e),
+        match event.make_return_and_value(Ok(None)) {
+            (ret, EventValue::Raw(raw)) => {
+                match String::from_utf8(raw.to_vec()) {
+                    Ok(s) => println!("{}{}", pfx, s),
+                    Err(e) => println!("{}{:?}", pfx, e),
+                }
+                EventResult::Return(ret)
             }
-            EventResult::Return(ret)
-        } else {
-            unreachable!()
+            (ret, EventValue::JSON(json)) => {
+                println!("{}", json.to_string());
+                EventResult::Return(ret)
+            }
         }
     }
-    opable_types!(ValueType::Raw, ValueType::Raw);
+
+    opable_types!(ValueType::Any, ValueType::Any);
 }
