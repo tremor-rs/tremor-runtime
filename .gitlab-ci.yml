@@ -1,45 +1,37 @@
 test:
   stage: test
-  image: centos:7
+  image: wayfair/data-engineering/dataeng-rust:1.31.1d
   when: always
-  cache:
-    paths:
-      - target/
-      - ~/.cargo/
+  # cache:
+  #   paths:
+  #     - target
+  #     - .cargo
   tags:
     - docker
   script:
-    - yum install git make gcc clang openssl-static libstdc++-static autoconf bison  -y
-    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.31.0 -y
     - source $HOME/.cargo/env
-    - rustup component add clippy
-    - cargo build
+    - export CARGO_HOME=.cargo
+    - cargo test
+    - cargo test -p mimir -p window
+    - cargo clippy
     - cp target/debug/native/php-src/libs/* /lib64
-    - cargo clippy
-    - cargo test
     - make it
-    - cd window
-    - cargo clippy
-    - cargo test
-    - cd ../mimir
-    - cargo clippy
-    - cargo test
 
-bench:
-  stage: test
-  image: centos:7
-  when: always
-  allow_failure: true
-  cache:
-    paths:
-      - target
-      - ~/.cargo/
-  tags:
-    - docker
-  script:
-    - yum install git make gcc clang openssl-static libstdc++-static autoconf bison  -y
-    - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.31.0 -y
-    - source $HOME/.cargo/env
-    - cargo build --release
-    - cp target/release/native/php-src/libs/* /lib64
-    - make bench
+# The bench server got claimed for something else :(
+# doesn't make sense to run bench any more this way.
+#
+# bench:
+#   stage: test
+#   image: wayfair/data-engineering/dataeng-rust:1.31.1a
+#   when: always
+#   allow_failure: true
+#   cache:
+#     paths:
+#       - target/
+#   tags:
+#     - docker
+#   script:
+#     - source $HOME/.cargo/env
+#     - cargo build --release
+#     - cp target/release/native/php-src/libs/* /lib64
+#     - make bench
