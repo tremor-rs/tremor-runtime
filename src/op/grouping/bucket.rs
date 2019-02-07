@@ -14,10 +14,10 @@
 
 //! # Dimension based grouping with sliding windows
 //!
-//! A This grouper is configred with a number of buckets and their alotted
+//! grouper is configured with a number of buckets and their alloted
 //! throughput on a time basis.
 //!
-//! Messages are not combined by key and the alottment is applied in a sliding
+//! Messages are not combined by key and the allotment is applied in a sliding
 //! window fashion with a window granularity (a default of 10ms).
 //!
 //! There is no 'magical' default bucket but one can be configured if desired
@@ -66,10 +66,10 @@ use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_json;
 use serde_yaml;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::iter::Iterator;
 use window::TimeWindow;
+use lru::LruCache;
 
 static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
 
@@ -84,6 +84,9 @@ pub struct Rate {
     /// numbers of window in the time_range (default: 100)
     #[serde(default = "dflt::d_100")]
     pub windows: usize,
+    /// the cardinality of the dimension of the bucket to support (default: 1000)
+    #[serde(default = "dflt::d_1000")]
+    pub cardinality: u64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -99,11 +102,11 @@ pub struct Grouper {
     buckets: HashMap<String, Bucket>,
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 struct Bucket {
     class: String,
     config: Rate,
-    groups: HashMap<String, TimeWindow>,
+    groups: LruCache<String, TimeWindow>,
 }
 
 impl Grouper {
@@ -121,14 +124,22 @@ impl Grouper {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let mut buckets = HashMap::new();
         for (name, spec) in config.buckets {
+            let Rate{cardinality: c, rate: _r, time_range: _t, windows: _w} = spec;
             let bkt = Bucket {
                 class: name.clone(),
                 config: spec,
-                groups: HashMap::new(),
+                groups: LruCache::new(c as usize),
             };
             buckets.insert(name, bkt);
         }
         Ok(Grouper { buckets })
+    }
+}
+
+impl std::fmt::Debug for Bucket {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Bucket: {} with config: {:?} - the lru_cache cannot be printed",
+            self.class, self.config)
     }
 }
 
@@ -163,13 +174,18 @@ impl Opable for Grouper {
                             )
                         }
                     };
-                    let window = match groups.entry(dimensions) {
-                        Entry::Occupied(o) => o.into_mut(),
-                        Entry::Vacant(v) => v.insert(TimeWindow::new(
+                    let window = match groups.get_mut(&dimensions) {
+                        None => {
+                            groups.put(dimensions.clone(), TimeWindow::new(
                             config.windows,
                             config.time_range / (config.windows as u64),
-                            config.rate,
-                        )),
+                            config.rate
+                        ));
+                            groups.get_mut(&dimensions).unwrap()
+                        },
+                        Some(m) => {
+                            m
+                        }
                     };
                     if window.inc_t(event.ingest_ns).is_ok() {
                         EventResult::Next(event)
