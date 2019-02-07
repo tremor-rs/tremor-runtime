@@ -23,7 +23,7 @@ use chrono::Utc;
 /// buffer and a sum counter to prevent the requirement of iterating over
 /// the entire buffer for each time the total count is required.
 ///
-/// This sliding window implementaiton is not aware of the window movement
+/// This sliding window implementation is not aware of the window movement
 /// it keeps track of the windows and can be triggered to `tick` over.
 #[derive(Debug)]
 pub struct SlidingWindow<T> {
@@ -70,7 +70,7 @@ where
     }
 
     /// Tries to increment the window by one, this equals `add(1)`. See `add`
-    /// for a description of retrun values.
+    /// for a description of return values.
     pub fn inc(&mut self) -> Result<T, T> {
         self.add(T::from(1))
     }
