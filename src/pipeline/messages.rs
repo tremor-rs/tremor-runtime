@@ -18,6 +18,16 @@ use super::types::*;
 use actix;
 use actix::prelude::*;
 use std::fmt;
+
+#[derive(Clone)]
+pub enum Signal {
+    Default,
+}
+
+impl Message for Signal {
+    type Result = ();
+}
+
 pub struct Event {
     pub data: EventData,
 }
@@ -79,7 +89,13 @@ impl Return {
     }
 }
 
+#[derive(Clone)]
 pub struct Shutdown;
 impl Message for Shutdown {
+    type Result = ();
+}
+
+pub struct Timeout {}
+impl Message for Timeout {
     type Result = ();
 }

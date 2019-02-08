@@ -7,10 +7,10 @@ pipelines:
   - name: main
     steps:
       - parse::json
-      - classifier::mimir:
-          rules:
-            - rule: 'a:"b"'
-              class: default
+      - runtime::mimir:
+          script: |
+            export classification;
+            _ { $classification := "default"; }
       - grouper::bucket:
           buckets:
             default:

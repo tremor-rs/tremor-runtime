@@ -10,14 +10,15 @@ COPY window ./window
 COPY mimir ./mimir
 
 RUN source $HOME/.cargo/env &&\
-  cargo build --release
+  cargo build --features "bench" --release
 
 FROM centos:7
 
 COPY --from=builder target/release/tremor-runtime /tremor-runtime
-COPY --from=builder target/release/native/php-src/libs/libphp7.la /lib64
-COPY --from=builder target/release/native/php-src/libs/libphp7.so /lib64
+# COPY --from=builder target/release/native/php-src/libs/libphp7.la /lib64
+# COPY --from=builder target/release/native/php-src/libs/libphp7.so /lib64
 COPY tremor-runtime.sh /tremor-runtime.sh
-COPY tremor.yaml /tremor.yaml
+COPY examples/tremor.yaml /tremor.yaml
+COPY examples/logger.yaml /logger.yaml
 
 ENTRYPOINT ["/tremor-runtime.sh"]

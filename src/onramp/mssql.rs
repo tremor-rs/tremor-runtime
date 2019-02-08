@@ -27,7 +27,7 @@ use crate::pipeline::prelude::*;
 use crate::utils;
 use chrono;
 use futures::future::{loop_fn, Future, Loop};
-use futures::sync::mpsc::channel;
+use futures::sync::mpsc::{channel, Receiver};
 use futures::Stream;
 use futures_state_stream::StateStream;
 use serde_json;
@@ -148,11 +148,11 @@ fn send_row(
     row: &tiberius::query::QueryRow,
     idx: usize,
     len: usize,
-) -> usize {
+) -> (usize, Receiver<Return>) {
     let mut idx = (idx + 1) % len;
     let json = row_to_json(&row);
     let json = serde_json::to_string(&json).unwrap();
-    let (tx, rx) = channel(0);
+    let (tx, rx) = channel(1);
     let msg = OnData {
         reply_channel: Some(tx),
         data: EventValue::Raw(json.into_bytes()),
@@ -162,8 +162,7 @@ fn send_row(
 
     idx = (idx + 1) % len;
     pipelines[idx].do_send(msg);
-    for _r in rx.wait() {}
-    idx
+    (idx, rx)
 }
 impl OnrampT for Onramp {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
@@ -181,7 +180,6 @@ impl OnrampT for Onramp {
             let query = config.query.as_str();
             if let Some(ival) = config.interval_ms {
                 let conn = SqlConnection::connect(conn_str.as_str());
-                //let conn = block_on_all(conn).unwrap();
                 let ival = time::Duration::from_millis(ival);
                 let f = conn.and_then(|conn| {
                     loop_fn::<_, SqlConnection<boxed::Box<tiberius::BoxableIo>>, _, _>(
@@ -203,15 +201,26 @@ impl OnrampT for Onramp {
                 block_on_all(f).unwrap();
             } else {
                 let mut idx = 0;
+                let mut i = 0;
                 let conn = SqlConnection::connect(conn_str.as_str());
+                let mut rxs = Vec::new();
                 let future = conn.and_then(|conn| {
                     conn.simple_query(query).for_each(|row| {
-                        idx = send_row(&pipelines, &row, idx, len);
+                        i += 1;
+                        let (idx1, rx) = send_row(&pipelines, &row, idx, len);
+                        rxs.push(rx);
+                        idx = idx1;
                         Ok(())
                     })
                 });
                 block_on_all(future).unwrap();
-            }
+                for p in pipelines {
+                    p.do_send(Shutdown);
+                }
+                for rx in rxs {
+                    for _ in rx.wait() {}
+                }
+            };
         })
     }
 }

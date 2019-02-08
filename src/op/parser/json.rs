@@ -20,7 +20,6 @@
 //!
 //! This operator takes no configuration
 
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_json;
@@ -34,21 +33,19 @@ impl Parser {
 }
 
 impl Opable for Parser {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         ensure_type!(event, "parse::json", ValueType::Raw);
         let res = event.replace_value(|val| {
             if let EventValue::Raw(raw) = val {
-                match serde_json::from_slice(raw) {
-                    Err(_) => Err(TSError::new(&"Bad JSON")),
-                    Ok(doc) => Ok(EventValue::JSON(doc)),
-                }
+                let doc = serde_json::from_slice(raw)?;
+                Ok(EventValue::JSON(doc))
             } else {
                 unreachable!()
             }
         });
 
         match res {
-            Ok(n) => EventResult::Next(n),
+            Ok(n) => next!(n),
             Err(e) => e,
         }
     }
@@ -64,22 +61,19 @@ impl Renderer {
 }
 
 impl Opable for Renderer {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         ensure_type!(event, "render::json", ValueType::JSON);
 
         let res = event.replace_value(|val| {
             if let EventValue::JSON(ref val) = val {
-                if let Ok(json) = serde_json::to_vec(val) {
-                    Ok(EventValue::Raw(json))
-                } else {
-                    Err(TSError::new(&"Bad JSON"))
-                }
+                let json = serde_json::to_vec(val)?;
+                Ok(EventValue::Raw(json))
             } else {
                 unreachable!()
             }
         });
         match res {
-            Ok(n) => EventResult::Next(n),
+            Ok(n) => next!(n),
             Err(e) => e,
         }
     }

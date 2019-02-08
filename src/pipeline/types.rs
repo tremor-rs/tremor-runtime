@@ -15,31 +15,37 @@
 use super::messages::Return;
 use super::onramp::OnRampActor;
 use super::step::Step;
-use crate::error::TSError;
+use crate::errors::*;
 use actix;
 use actix::prelude::*;
+use serde_json;
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
+use std::result;
 
 //use futures::Future;
-pub type EventReturn = Result<Option<f64>, TSError>;
+pub type EventReturn = Result<Option<f64>>;
 pub use serde_yaml::Value as ConfValue;
+pub type MetaValue = serde_json::Value;
 
 #[derive(Debug)]
 pub enum EventResult {
-    /// Moves the event to the 'normal' output (same as NextID(1))
-    Next(EventData),
-    /// Moves the event to the error output (same as NextID(2))
-    Error(EventData, Option<TSError>),
     /// Moves the event to a given step, or error if the step is not configured. (3 is the first custom output)
-    NextID(usize, EventData),
+    NextID(usize, Box<EventData>),
+
+    /// Moves the event to the error output (same as NextID(2))
+    Error(Box<EventData>, Option<Error>),
 
     // Ends the pipeline and triggers a return event with the given value
-    Return(Return),
+    Return(Box<Return>),
     // Ends the pipeline without triggering a return event for async processing
     Done,
     // A error happened at step level that is not related to the event itself.
-    StepError(TSError),
+    StepError(Error),
+    Timeout {
+        timeout_millis: u64,
+        result: Box<EventResult>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -58,14 +64,6 @@ impl Display for ValueType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MetaValue {
-    String(String),
-    U64(u64),
-    Bool(bool),
-    VecS(Vec<String>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MetaValueType {
     String,
     U64,
@@ -73,51 +71,15 @@ pub enum MetaValueType {
     VecS,
 }
 
-impl MetaValue {
-    pub fn as_u64(&self) -> Option<u64> {
-        match self {
-            MetaValue::U64(v) => Some(*v),
-            _ => None,
-        }
-    }
-    pub fn is_type(&self, t: &MetaValueType) -> bool {
-        match self {
-            MetaValue::String(_) => *t == MetaValueType::String,
-            MetaValue::U64(_) => *t == MetaValueType::U64,
-            MetaValue::Bool(_) => *t == MetaValueType::Bool,
-            MetaValue::VecS(_) => *t == MetaValueType::VecS,
-        }
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            MetaValue::Bool(v) => Some(*v),
-            _ => None,
-        }
-    }
-}
-
 pub type VarMap = HashMap<String, MetaValue>;
 
-impl<T: ToString> From<T> for MetaValue {
-    fn from(s: T) -> MetaValue {
-        MetaValue::String(s.to_string())
-    }
-}
-
-impl<'a> From<&'a MetaValue> for MetaValue {
-    fn from(m: &'a MetaValue) -> MetaValue {
-        m.clone()
-    }
-}
-
-//#[derive(Clone)]
+#[derive(Clone)]
 pub struct EventData {
     pub id: u64,
     pub vars: VarMap,
     pub value: EventValue,
     pub ingest_ns: u64,
-    last_error: Option<TSError>,
+    last_error: Option<Error>,
     chain: Vec<Addr<Step>>,
     source: Option<Addr<OnRampActor>>,
 }
@@ -128,24 +90,21 @@ impl Debug for EventData {
 }
 
 impl EventData {
-    pub fn replace_value<F: FnOnce(&EventValue) -> Result<EventValue, TSError>>(
+    pub fn replace_value<F: FnOnce(&EventValue) -> Result<EventValue>>(
         mut self,
         f: F,
-    ) -> Result<Self, EventResult> {
+    ) -> result::Result<Self, EventResult> {
         match f(&self.value) {
             Ok(v) => {
                 self.value = v;
                 Ok(self)
             }
-            Err(e) => Err(EventResult::Error(self, Some(e))),
+            Err(e) => Err(error_result!(self, e)),
         }
         //Err(EventResult::Error(self, Some(e)))
     }
 
-    pub fn mutate_value<F: FnOnce(&mut EventValue) -> Result<(), TSError>>(
-        &mut self,
-        f: F,
-    ) -> Result<(), TSError> {
+    pub fn mutate_value<F: FnOnce(&mut EventValue) -> Result<()>>(&mut self, f: F) -> Result<()> {
         match f(&mut self.value) {
             Ok(_v) => Ok(()),
             Err(e) => Err(e),
@@ -153,10 +112,10 @@ impl EventData {
         //Err(EventResult::Error(self, Some(e)))
     }
 
-    pub fn maybe_extract<T, F: FnOnce(&EventValue) -> Result<(T, EventReturn), TSError>>(
+    pub fn maybe_extract<T, F: FnOnce(&EventValue) -> Result<(T, EventReturn)>>(
         self,
         f: F,
-    ) -> Result<(T, Return), EventResult> {
+    ) -> result::Result<(T, Return), EventResult> {
         match f(&self.value) {
             Ok((val, ret)) => Ok((
                 val,
@@ -167,7 +126,7 @@ impl EventData {
                     chain: self.chain,
                 },
             )),
-            Err(e) => Err(EventResult::Error(self, Some(e))),
+            Err(e) => Err(error_result!(self, e)),
         }
     }
 
@@ -182,7 +141,7 @@ impl EventData {
             last_error: None,
         }
     }
-    pub fn set_error(mut self, error: Option<TSError>) -> Self {
+    pub fn set_error(mut self, error: Option<Error>) -> Self {
         self.last_error = error;
         self
     }
@@ -256,19 +215,12 @@ impl EventData {
             None => None,
         }
     }
-    pub fn var_is_type<T: ToString>(&self, k: &T, t: &MetaValueType) -> bool {
-        if let Some(v) = self.vars.get(&k.to_string()) {
-            v.is_type(t)
-        } else {
-            false
-        }
-    }
     pub fn is_type(&self, t: ValueType) -> bool {
         self.value.t() == t
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EventValue {
     Raw(Vec<u8>),
     JSON(serde_json::Value),

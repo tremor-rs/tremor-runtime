@@ -51,9 +51,9 @@ impl Op {
 }
 
 impl Opable for Op {
-    fn exec(&mut self, mut event: EventData) -> EventResult {
+    fn on_event(&mut self, mut event: EventData) -> EventResult {
         event.copy_var(&self.config.from, &self.config.to);
-        EventResult::Next(event)
+        next!(event)
     }
     fn output_vars(&self) -> HashSet<String> {
         let mut h = HashSet::new();

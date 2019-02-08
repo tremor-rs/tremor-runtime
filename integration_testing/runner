@@ -58,12 +58,14 @@ then
     build_target=debug
 fi
 
+set -e
 case $build_target in
     debug)
-        cargo build
+        cargo build --features php-runtime
+	
         ;;
     release)
-        cargo build --release
+        cargo build --release --features php-runtime
         ;;
     none)
         ;;
@@ -72,6 +74,7 @@ case $build_target in
         exit 1
         ;;
 esac
+set +e
 
 shift "$((OPTIND-1))"
 
@@ -151,6 +154,7 @@ do
     # reset config
     should_crash=0
     threads=1
+    skip=0
 
     if [ -f "${config_file}" ]
     then
@@ -164,48 +168,54 @@ do
 
     # Limiting Configuration
 
-
-    xzcat $in_file > $data_file
     cat ${readme_file}
-    if $run_cmd -m --config "${yaml_file}.out" 2> ${log_file}
+    if [ "${skip}" -eq 1 ]
     then
-        if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
-        then
-            xzcat ${out_file} > ${exp_file}
-            rm ${data_file}
-            cat ${gen_file} | jq -S -c '.' > ${gen_file}.jq
-            cat ${exp_file} | jq -S -c '.' > ${exp_file}.jq
-            if diff ${gen_file}.jq ${exp_file}.jq > /dev/null
-            then
-                rm ${gen_file} ${exp_file} ${log_file} "${yaml_file}.out"
-                ok "${test}: passed"
-                PASSED_TESTS="${PASSED_TESTS}$test "
-            else
-                error "${test}: failed"
-                FAILED_TESTS="${FAILED_TESTS}$test "
-            fi
-        else
-            error "${test}: execution failure expected but success received"
-            FAILED_TESTS="${FAILED_TESTS}$test "
-        fi
+        warn "${test}:  skipped"
     else
-        exit_code=$?
-        rm ${data_file}
-        if [ ${exit_code} -eq 139 ]
+        xzcat $in_file > $data_file
+        if $run_cmd -m --config "${yaml_file}.out" 2> ${log_file}
         then
-            error "${test}: SEGFAULT"
-            FAILED_TESTS="${FAILED_TESTS}$test "
-        else
-            if [ "${should_crash}" -eq 0 ]
+            if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
             then
-                error "${test}: execution failed"
+                xzcat ${out_file} > ${exp_file}
+                rm ${data_file}
+                cat ${gen_file} | jq -S -c '.' > ${gen_file}.jq
+                cat ${exp_file} | jq -S -c '.' > ${exp_file}.jq
+                if diff ${gen_file}.jq ${exp_file}.jq > /dev/null
+                then
+                    rm ${gen_file} ${exp_file} ${log_file} "${yaml_file}.out"
+                    ok "${test}: passed"
+                    PASSED_TESTS="${PASSED_TESTS}$test "
+                else
+                    error "${test}: failed"
+                    FAILED_TESTS="${FAILED_TESTS}$test "
+                fi
+            else
+                error "${test}: execution failure expected but success received"
+                FAILED_TESTS="${FAILED_TESTS}$test "
+            fi
+        else
+            exit_code=$?
+            rm ${data_file}
+            if [ ${exit_code} -eq 139 ]
+            then
+                error "${test}: SEGFAULT"
                 FAILED_TESTS="${FAILED_TESTS}$test "
             else
-                ok "${test}: expected failure"
-                PASSED_TESTS="${PASSED_TESTS}$test "
+                if [ "${should_crash}" -eq 0 ]
+                then
+                    error "${test}: execution failed"
+                    cat ${log_file}
+                    echo
+                    echo
+                    FAILED_TESTS="${FAILED_TESTS}$test "
+                else
+                    ok "${test}: execution failure"
+                    PASSED_TESTS="${PASSED_TESTS}$test "
+                fi
             fi
         fi
-
     fi
 done
 

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::messages::Signal;
 use super::types::{ConfValue, EventData, EventResult, EventReturn, ValueType};
 use crate::errors::*;
-use crate::op::classifier::Classifier;
 use crate::op::generic::Generic;
 use crate::op::grouping::Grouper;
 use crate::op::offramp::Offramp;
@@ -25,10 +25,14 @@ use std::fmt;
 use uuid::Uuid;
 
 pub trait Opable {
-    fn exec(&mut self, event: EventData) -> EventResult;
-    fn result(&mut self, result: EventReturn) -> EventReturn {
+    fn on_event(&mut self, event: EventData) -> EventResult;
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
         result
     }
+    fn on_timeout(&mut self) -> EventResult {
+        EventResult::Done
+    }
+    fn on_signal(&mut self, _signal: &Signal) {}
     fn input_type(&self) -> ValueType;
     fn output_type(&self) -> ValueType;
     fn shutdown(&mut self) {}
@@ -46,7 +50,6 @@ pub enum OpType {
     Op,
     Parse,
     Render,
-    Classifier,
     Grouper,
     Runtime,
 }
@@ -57,7 +60,6 @@ impl fmt::Display for OpType {
             OpType::Op => write!(f, "op"),
             OpType::Parse => write!(f, "parse"),
             OpType::Render => write!(f, "render"),
-            OpType::Classifier => write!(f, "classifier"),
             OpType::Grouper => write!(f, "grouper"),
             OpType::Runtime => write!(f, "runtime"),
         }
@@ -97,12 +99,6 @@ impl OpSpec {
             )),
             "render" => Ok(OpSpec::new(
                 OpType::Render,
-                step.name,
-                step.config,
-                step.uuid,
-            )),
-            "classifier" => Ok(OpSpec::new(
-                OpType::Classifier,
                 step.name,
                 step.config,
                 step.uuid,
@@ -151,10 +147,6 @@ impl OpSpec {
                 op: OpE::Render(Renderer::create(&self.name, &self.opts)?),
                 spec: self.clone(),
             }),
-            OpType::Classifier => Ok(Op {
-                op: OpE::Classifier(Classifier::create(&self.name, &self.opts)?),
-                spec: self.clone(),
-            }),
             OpType::Grouper => Ok(Op {
                 op: OpE::Grouper(Grouper::create(&self.name, &self.opts)?),
                 spec: self.clone(),
@@ -172,12 +164,11 @@ enum OpE {
     Op(Generic),
     Parse(Parser),
     Render(Renderer),
-    Classifier(Classifier),
     Grouper(Grouper),
     Runtime(Runtime),
 }
 
-opable!(OpE, Op, Parse, Offramp, Render, Classifier, Grouper, Runtime);
+opable!(OpE, Op, Parse, Offramp, Render, Grouper, Runtime);
 
 #[derive(Debug)]
 pub struct Op {
@@ -186,11 +177,17 @@ pub struct Op {
 }
 
 impl Opable for Op {
-    fn exec(&mut self, event: EventData) -> EventResult {
-        self.op.exec(event)
+    fn on_timeout(&mut self) -> EventResult {
+        self.op.on_timeout()
     }
-    fn result(&mut self, result: EventReturn) -> EventReturn {
-        self.op.result(result)
+    fn on_event(&mut self, event: EventData) -> EventResult {
+        self.op.on_event(event)
+    }
+    fn on_signal(&mut self, signal: &Signal) {
+        self.op.on_signal(signal)
+    }
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
+        self.op.on_result(result)
     }
     fn input_type(&self) -> ValueType {
         self.op.input_type()

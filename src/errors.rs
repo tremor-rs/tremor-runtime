@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,24 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error;
+use crate::async_sink;
 use crate::pipeline::types::ValueType;
-use mimir;
+use elastic;
+use log4rs;
 use prometheus;
+use rdkafka;
+use serde_json;
 use serde_yaml;
 use std;
 
-error_chain! {
+impl Clone for Error {
+    fn clone(&self) -> Self {
+        ErrorKind::ClonedError(format!("{}", self)).into()
+    }
+}
 
+error_chain! {
+    links {
+        Mimir(mimir::errors::Error, mimir::errors::ErrorKind);
+    }
     foreign_links {
         YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
+        JSONError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
         Prometheus(prometheus::Error);
-        Standard(error::TSError);
-        Mimir(mimir::ErrorCode);
+        SinkDequeueError(async_sink::SinkDequeueError);
+        SinkEnqueueError(async_sink::SinkEnqueueError);
+        HTTPClientError(reqwest::Error);
+        FromUTF8Error(std::string::FromUtf8Error);
+        UTF8Error(std::str::Utf8Error);
+        ElasticError(elastic::Error);
+        KafkaError(rdkafka::error::KafkaError);
+        ParseIntError(std::num::ParseIntError);
+        ParseFloatError(std::num::ParseFloatError);
+        LoggerError(log4rs::Error);
     }
 
     errors {
+        ClonedError(t: String) {
+            description("This is a cloned error we need to get rod of this")
+                display("Cloned error: {}", t)
+        }
         MissingSteps(t: String) {
             description("missing steps")
                 display("missing steps in: '{}'", t)
@@ -78,6 +102,14 @@ error_chain! {
         OnrampMissingPipeline(o: String) {
             description("Onramp is missing a pipeline")
                 display("The onramp '{}' is missing a pipeline", o)
+        }
+        InvalidInfluxData(s: String) {
+            description("Invalid Influx Line Protocol data")
+                display("Invalid Influx Line Protocol data: {}", s)
+        }
+        BadOutputid(i: usize) {
+            description("Bad output pipeline id.")
+                display("Bad output pipeline id {}", i - 1)
         }
     }
 }

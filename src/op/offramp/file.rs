@@ -20,14 +20,11 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_yaml;
 use std::fs::File;
-use std::io;
 use std::io::prelude::*;
-use std::result;
 
 /// An offramp that write a given file
 #[derive(Debug)]
@@ -48,35 +45,29 @@ impl Offramp {
         Ok(Offramp { file })
     }
 
-    fn write_event(&mut self, event: &EventData) -> result::Result<(), TSError> {
+    fn write_event(&mut self, event: &EventData) -> Result<()> {
         if let EventValue::Raw(ref raw) = event.value {
             self.file.write_all(&raw)?;
             self.file.write_all(b"\n")?;
             Ok(())
         } else {
-            Err(TypeError::with_location(&"offramp::file", event.value.t(), ValueType::Raw).into())
+            type_error!("offramp::file", event.value.t(), ValueType::Raw)
         }
     }
 }
 
 impl Opable for Offramp {
     // TODO
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         let r = self.write_event(&event);
 
         match r {
-            Ok(_) => EventResult::Return(event.make_return(Ok(None))),
-            Err(e) => EventResult::Return(event.make_return(Err(e))),
+            Ok(_) => return_result!(event.make_return(Ok(None))),
+            Err(e) => return_result!(event.make_return(Err(e))),
         }
     }
     fn shutdown(&mut self) {
         let _ = self.file.flush();
     }
     opable_types!(ValueType::Raw, ValueType::Raw);
-}
-
-impl From<io::Error> for TSError {
-    fn from(from: io::Error) -> TSError {
-        TSError::new(&format!("IO Error: {}", from).as_str())
-    }
 }

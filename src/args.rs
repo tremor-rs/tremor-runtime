@@ -26,20 +26,31 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .short("c")
                 .help("config file to load")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
+            Arg::with_name("logger")
+                .long("logger-config")
+                .short("l")
+                .help("log4rs configuration file")
+                .takes_value(true)
+                .required(false),
+        )
+        .arg(
             Arg::with_name("instance")
                 .long("instance")
                 .short("i")
                 .help("instance id")
                 .takes_value(true)
                 .default_value("tremor"),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("no-metrics-endpoint")
                 .long("no-metrics-endpoint")
                 .short("m")
                 .help("disables the prometheus API metrics endpoint.")
                 .required(false),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("render")
                 .long("render")
                 .short("r")

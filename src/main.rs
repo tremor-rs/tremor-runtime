@@ -39,15 +39,8 @@ extern crate maplit;
 #[macro_use]
 extern crate matches;
 
-use actix;
-use base64;
-use chrono;
-use dot;
-use elastic;
+
 use env_logger;
-use libc;
-use mimir;
-use reqwest;
 use serde_yaml;
 use uuid;
 
@@ -56,12 +49,16 @@ mod macros;
 mod args;
 mod async_sink;
 mod dflt;
-mod error;
+
+mod config;
+mod dynamic;
 mod errors;
+mod google;
 mod metrics;
 pub mod onramp;
 pub mod op;
 mod pipeline;
+pub mod stream;
 mod utils;
 mod version;
 
@@ -85,6 +82,17 @@ use actix_web::{
 
 fn run() -> Result<()> {
     let matches = args::parse().get_matches();
+
+    // Logging
+
+    if let Some(logger_config) = matches.value_of("logger") {
+        println!("Load logger");
+        log4rs::init_file(logger_config, Default::default())?;
+    } else {
+        println!("console logger");
+        env_logger::init();
+    }
+    version::log();
 
     let config_file = matches.value_of("config").unwrap();
     unsafe {
@@ -196,7 +204,9 @@ fn run() -> Result<()> {
                     match *p {
                         Graph::Pipeline { ref onramp, .. } => onramp.clone(),
                         _ => {
-                            return Err(ErrorKind::OnrampMissingPipeline(onramp_cfg.namespace).into())
+                            return Err(
+                                ErrorKind::OnrampMissingPipeline(onramp_cfg.namespace).into()
+                            );
                         }
                     }
                 }
@@ -237,8 +247,6 @@ fn run() -> Result<()> {
 }
 
 fn main() {
-    env_logger::init();
-
     version::print();
     if let Err(ref e) = run() {
         use std::io::Write;

@@ -52,7 +52,7 @@ impl Offramp {
 impl Opable for Offramp {
     opable_types!(ValueType::Raw, ValueType::Raw);
     // TODO
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         if self.last.elapsed() > self.update_time {
             self.last = Instant::now();
             println!();
@@ -65,7 +65,7 @@ impl Opable for Offramp {
             println!();
             self.buckets.clear();
         }
-        let c = if let Some(MetaValue::String(s)) = event.var(&"classification") {
+        let c = if let Some(serde_json::Value::String(s)) = event.var(&"classification") {
             s.clone()
         } else {
             "<unclassified>".into()
@@ -73,6 +73,6 @@ impl Opable for Offramp {
         let entry = self.buckets.entry(c).or_insert(DebugBucket { cnt: 0 });
         entry.cnt += 1;
         self.cnt += 1;
-        EventResult::Next(event)
+        next!(event)
     }
 }

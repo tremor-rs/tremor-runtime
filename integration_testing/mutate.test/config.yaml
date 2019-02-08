@@ -7,12 +7,11 @@ pipelines:
   - name: main
     steps:
       - parse::json
-      - classifier::mimir:
-          rules:
-            - class: 'info'
-              rule: 'short_message:"INFO" { tremor.class := "info"; }'
-            - class: 'error'
-              rule: 'short_message:"ERROR"'
+      - runtime::mimir:
+          script: |
+            export classification;
+            short_message:"INFO" { tremor.class := "info"; $classification := "info"; return; }
+            short_message:"ERROR" { $classification := "error"; return; }
       - render::json
       - grouper::bucket:
           buckets:

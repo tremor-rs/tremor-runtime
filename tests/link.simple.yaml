@@ -1,0 +1,6 @@
+---
+bindings:
+  - id: default
+    links:
+      /ramps/bench-001/blaster: /pipelines/main/in
+      /pipelines/main/out: /ramps/bench-001/out

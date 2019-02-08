@@ -31,7 +31,6 @@
 
 use crate::dflt;
 use crate::errors::*;
-use crate::metrics::INSTANCE;
 use crate::pipeline::prelude::*;
 use prometheus::IntCounterVec; // w/ instance
 use serde_yaml;
@@ -70,7 +69,7 @@ impl Op {
         let mut labels = conf.labels.clone();
         // We know this only gets set at the very start of our program
         // by the time this code gets executed it willnot change any more
-        labels.insert("instance".into(), unsafe { INSTANCE.to_string() });
+        labels.insert("instance".into(), instance!());
         // Counter for messages going through this.
         let opts = opts!(conf.metric.clone(), conf.desc.clone());
         let counter =
@@ -81,12 +80,12 @@ impl Op {
 }
 
 impl Opable for Op {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         self.counter.with_label_values(&["send"]).inc();
-        EventResult::Next(event)
+        next!(event)
     }
 
-    fn result(&mut self, result: EventReturn) -> EventReturn {
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
         if self.conf.count_results {
             if result.is_ok() {
                 self.counter.with_label_values(&["return_ok"]).inc();

@@ -1,0 +1,11 @@
+onramps:
+  - onramp::gsub:
+      service_account: "./examples/gps_pubsub_secret.json"   # Service Account
+      subscription: projects/wf-us-dataeng-sandbox/subscriptions/wf-dataeng-test-sub
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - offramp::stdout:
+          prefix: "GSUB "

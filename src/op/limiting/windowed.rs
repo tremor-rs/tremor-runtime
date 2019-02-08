@@ -34,6 +34,8 @@ use serde_yaml;
 use std::cmp::max;
 use window::TimeWindow;
 
+static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
+
 lazy_static! {
     static ref RATE_GAUGE: IntGauge = prom_int_gauge!("limiting_rate", "Current limiting rate.");
 }
@@ -82,13 +84,13 @@ impl Limiter {
 }
 
 impl Opable for Limiter {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         match self.window.inc() {
-            Ok(_) => EventResult::Next(event),
-            Err(_) => EventResult::NextID(3, event),
+            Ok(_) => next!(event),
+            Err(_) => next_id!(DROP_OUTPUT_ID, event),
         }
     }
-    fn result(&mut self, result: EventReturn) -> EventReturn {
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
         match (&result, self.config.adjustment) {
             (Ok(Some(f)), Some(adjustment)) if f > &self.config.upper_limit => {
                 let m = self.window.max();
@@ -141,7 +143,7 @@ mod tests {
     fn no_capacity() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let mut c = Limiter::create("windowed", conf(0)).unwrap();
-        let r = c.exec(e);
+        let r = c.on_event(e);
 
         assert_matches!(r, EventResult::NextID(3, _));
     }
@@ -150,24 +152,24 @@ mod tests {
     fn grouping_test_fail() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let mut c = Limiter::create("windowed", conf(1)).unwrap();
-        let r = c.exec(e);
+        let r = c.on_event(e);
 
-        assert_matches!(r, EventResult::Next(_));
+        assert_matches!(r, EventResult::NextID(1, _));
     }
 
     #[test]
     fn grouping_time_refresh() {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let mut c = Limiter::create("windowed", conf(1)).unwrap();
-        let r1 = c.exec(e);
+        let r1 = c.on_event(e);
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let r2 = c.exec(e);
+        let r2 = c.on_event(e);
         // we sleep for 1.1s as this should refresh our bucket
         sleep(Duration::new(1, 200_000_000));
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
-        let r3 = c.exec(e);
-        assert_matches!(r1, EventResult::Next(_));
+        let r3 = c.on_event(e);
+        assert_matches!(r1, EventResult::NextID(1, _));
         assert_matches!(r2, EventResult::NextID(3, _));
-        assert_matches!(r3, EventResult::Next(_));
+        assert_matches!(r3, EventResult::NextID(1, _));
     }
 }

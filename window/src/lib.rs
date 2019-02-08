@@ -320,7 +320,8 @@ mod properties {
                     step: WindowAction::Inc
                 })
             ]
-        }).boxed()
+        })
+        .boxed()
     }
     proptest! {
         #[test]

@@ -14,16 +14,18 @@
 
 //! # Offramps to send data to external systems
 
+#[cfg(feature = "bench")]
 pub mod blackhole;
 pub mod debug;
 pub mod elastic;
 pub mod file;
+pub mod gcs;
+pub mod gpub;
 pub mod influx;
 #[cfg(feature = "kafka")]
 pub mod kafka;
 pub mod null;
 pub mod stdout;
-
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use std::boxed::Box;
@@ -32,7 +34,10 @@ use std::boxed::Box;
 /// New connectors need to be added here.
 #[derive(Debug)]
 pub enum Offramp {
+    #[cfg(feature = "bench")]
     Blackhole(Box<blackhole::Offramp>),
+    #[cfg(not(feature = "bench"))]
+    Blackhole(null::Offramp),
     #[cfg(feature = "kafka")]
     Kafka(kafka::Offramp),
     // We have to cheat a little here since the opable macro can't
@@ -45,24 +50,29 @@ pub enum Offramp {
     Debug(debug::Offramp),
     Null(null::Offramp),
     File(file::Offramp),
+    GCS(Box<gcs::Offramp>),
+    Gpub(Box<gpub::Offramp>),
 }
 
-opable!(Offramp, Blackhole, Kafka, Elastic, Influx, Stdout, Debug, Null, File);
+opable!(Offramp, Blackhole, Kafka, Elastic, Influx, Stdout, Debug, Null, File, GCS, Gpub);
 
 impl Offramp {
     pub fn create(name: &str, opts: &ConfValue) -> Result<Offramp> {
         match name {
+            #[cfg(feature = "bench")]
             "blackhole" => Ok(Offramp::Blackhole(Box::new(blackhole::Offramp::create(
                 opts,
             )?))),
             "debug" => Ok(Offramp::Debug(debug::Offramp::create(opts)?)),
             "elastic" => Ok(Offramp::Elastic(Box::new(elastic::Offramp::create(opts)?))),
             "file" => Ok(Offramp::File(file::Offramp::create(opts)?)),
+            "gcs" => Ok(Offramp::GCS(Box::new(gcs::Offramp::create(opts)?))),
             "influx" => Ok(Offramp::Influx(Box::new(influx::Offramp::create(opts)?))),
-            #[cfg(feature = "kafka")]
             "kafka" => Ok(Offramp::Kafka(kafka::Offramp::create(opts)?)),
             "null" => Ok(Offramp::Null(null::Offramp::create(opts)?)),
             "stdout" => Ok(Offramp::Stdout(stdout::Offramp::create(opts)?)),
+            "gpub" => Ok(Offramp::Gpub(Box::new(gpub::Offramp::create(opts)?))),
+            #[cfg(feature = "kafka")]
             _ => Err(ErrorKind::UnknownOp("offramp".into(), name.into()).into()),
         }
     }

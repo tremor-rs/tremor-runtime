@@ -15,13 +15,43 @@
 macro_rules! opable {
     ( $e:ident, $( $i:ident ),* ) => {
         impl Opable for $e {
-            fn exec(&mut self, input: EventData) -> EventResult {
+            fn on_timeout(&mut self) -> EventResult {
                 match self {
                     $(
-                        $e::$i(ref mut op) => op.exec(input),
+                        $e::$i(ref mut op) => op.on_timeout(),
                     )*
                 }
             }
+            fn on_event(&mut self, input: EventData) -> EventResult {
+                match self {
+                    $(
+                        $e::$i(ref mut op) => op.on_event(input),
+                    )*
+                }
+            }
+
+            fn on_signal(&mut self, signal: &crate::pipeline::prelude::Signal) {
+                match self {
+                    $(
+                        $e::$i(ref mut op) => op.on_signal(signal),
+                    )*
+                }
+            }
+            fn shutdown(&mut self) {
+                match self {
+                    $(
+                        $e::$i(ref mut op) => op.shutdown(),
+                    )*
+                }
+            }
+            fn on_result(&mut self, result: EventReturn) -> EventReturn {
+                match self {
+                    $(
+                        $e::$i(op) => op.on_result(result),
+                    )*
+                }
+            }
+
             fn input_type(&self) -> ValueType {
                 match self {
                     $(
@@ -48,13 +78,6 @@ macro_rules! opable {
                 match self {
                     $(
                         $e::$i(op) => op.output_vars(),
-                    )*
-                }
-            }
-            fn result(&mut self, result: EventReturn) -> EventReturn {
-                match self {
-                    $(
-                        $e::$i(op) => op.result(result),
                     )*
                 }
             }
@@ -95,20 +118,27 @@ macro_rules! s {
     };
 }
 
+macro_rules! instance {
+    // crate::metrics::INSTANCE is never muated after the initial setting
+    // in main::run() so we can use this safely.
+    () => {
+        unsafe { crate::metrics::INSTANCE.to_string() }
+    };
+}
 macro_rules! prom_int_gauge {
     ($name:expr, $desc:expr) => {
-        register_int_gauge!(opts!($name, $desc).namespace("tremor").const_labels(
-            hashmap! {"instance".to_string() => unsafe{crate::metrics::INSTANCE.to_string()}}
-        ))
+        register_int_gauge!(opts!($name, $desc)
+            .namespace("tremor")
+            .const_labels(hashmap! {"instance".to_string() => instance!()}))
         .unwrap()
     };
 }
 
 macro_rules! prom_gauge {
     ($name:expr, $desc:expr) => {
-        register_gauge!(opts!($name, $desc).namespace("tremor").const_labels(
-            hashmap! {"instance".to_string() => unsafe{crate::metrics::INSTANCE.to_string()}}
-        ))
+        register_gauge!(opts!($name, $desc)
+            .namespace("tremor")
+            .const_labels(hashmap! {"instance".to_string() => instance!()}))
         .unwrap()
     };
 }
@@ -119,16 +149,35 @@ macro_rules! type_error {
     };
 }
 
+macro_rules! error_result {
+    ($event:expr, $error:expr) => {
+        EventResult::Error(Box::new($event), Some($error.into()))
+    };
+}
+macro_rules! next_id {
+    ($id:expr, $event:expr) => {
+        crate::pipeline::types::EventResult::NextID($id, Box::new($event))
+    };
+}
+
+macro_rules! next {
+    ($event:expr) => {
+        EventResult::NextID(1, Box::new($event))
+    };
+}
+
+macro_rules! return_result {
+    ($event:expr) => {
+        EventResult::Return(Box::new($event))
+    };
+}
+
 macro_rules! ensure_type {
-    ($input:expr, $location:expr, $type:expr) => {
-        if !$input.is_type($type) {
-            let t = $input.value.t();
-            return EventResult::Error(
-                $input,
-                Some(TSError::from(TypeError::with_location(
-                    &$location, t, $type,
-                ))),
-            );
+    ($event:expr, $location:expr, $type:expr) => {
+        if !$event.is_type($type) {
+            use crate::errors::ErrorKind;
+            let t = $event.value.t();
+            return error_result!($event, ErrorKind::TypeError($location.into(), t, $type));
         }
     };
 }

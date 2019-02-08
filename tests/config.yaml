@@ -1,0 +1,102 @@
+---
+ramps:
+  - id: logging
+    description: Filtering of applog and syslog streams
+    onramps:
+      - id: blaster
+        type: onramp::blaster
+        config:
+          source: ./demo/data/data.json.xz
+    offramps:
+      - id: blackhole
+        type: offramp::blackhole
+        config:
+          warmup_secs: 10
+          stop_after_secs: 40
+          significant_figures: 2
+
+bindings:
+  - id: default
+    description: Default connection strategy for benchmarking
+    links:
+      /ramps/logging/blaster: /pipelines/main/in
+      /pipelines/main/out: /ramps/logging/out
+
+pipelines:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - outliers
+    nodes:
+      - id: parse
+        type: parse::json
+      - id: classify
+        type: runtime::mimir
+        config:
+          script: |
+
+            import imported_var;
+            export classification, dimension, rate, index_type, below, timeframe;
+
+            _ { $index_type := index; $below := 5; $timeframe := 10000; }
+
+            application="app1" { $classification := "applog_app1"; $rate := 1250; }
+            application="app2" { $classification := "applog_app2"; $rate := 2500; $below := 10; }
+            application="app3" { $classification := "applog_app3"; $rate := 18750; }
+            application="app4" { $classification := "applog_app4"; $rate := 750; $below := 10;   }
+            application="app5" { $classification := "applog_app5"; $rate := 18750; }
+            $classification { $dimension := application; return; }
+            application { $dimension := application; return; }
+
+            index_type="applog_app6" { $dimension := logger_name; $classification := "applog_app6"; $rate := 4500; return; }
+
+            index_type="syslog_app1" { $classification := "syslog_app1"; $rate := 2500; }
+            tags:"tag1" { $classification := "syslog_app2"; $rate := 125; }
+            index_type="syslog_app2" { $classification := "syslog_app2"; $rate := 125; }
+            index_type="syslog_app3" { $classification := "syslog_app3"; $rate := 1750; }
+            index_type="syslog_app4" { $classification := "syslog_app4"; $rate := 1750; }
+            index_type="syslog_app5" { $classification := "syslog_app5"; $rate := 7500; }
+            index_type="syslog_app6" { $classification := "syslog_app6"; $rate := 125; }
+            $classification { $dimension := syslog_hostname; return; }
+
+            index_type="edilog" { $classification := "edilog"; $dimension := syslog_hostname; $rate := 3750; return; }
+            index_type="sqlserverlog" { $classification := "sqlserverlog"; $dimension := [src_ip, dst_ip]; $rate := 125; return; }
+            type="applog" { $classification := "applog"; $dimension := [src_ip, dst_ip]; $rate := 75; return; }
+
+            _ { $classification := "default"; $rate := 250; }
+      - id: bucket
+        type: grouper::bucket
+        config:
+          class_key: classification
+          mappings:
+            dimension: dimension
+            rate: rate
+      - id: outlier
+        type: filter:outlier
+        config:
+          class_key: classification
+          mappings:
+            time_frame: timeframe
+            below: below
+      - id: render
+        type: render::json
+      - id: render-outlier
+        type: render::json
+    links:
+      parse: [ classify ]
+      classify: [ bucket ]
+      bucket: [ outlier ]
+      bucket/drop: [ outlier ]
+      outlier/normal: [ render ]
+      outlier/outlier: [ render-outlier ]
+    imports:
+      in:
+        parse/in
+    exports:
+      out:
+        - render/out
+      outliers:
+        - render-outlier/out

@@ -32,6 +32,7 @@
 
 use crate::errors::*;
 use crate::pipeline::prelude::*;
+use serde_json::Value;
 use serde_yaml;
 use std::collections::HashMap;
 
@@ -48,7 +49,7 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct Op {
     config: Config,
-    vals: HashMap<MetaValue, usize>,
+    vals: HashMap<String, usize>,
 }
 
 impl Op {
@@ -60,18 +61,9 @@ impl Op {
         // standard is used if no case match as a default case
         let mut i = 3;
         for v in config.vals.clone() {
-            match v {
-                ConfValue::Number(ref n) => {
-                    if let Some(n) = n.as_u64() {
-                        vals.insert(MetaValue::U64(n), i);
-                        i += 1;
-                    }
-                }
-                ConfValue::String(ref s) => {
-                    vals.insert(MetaValue::String(s.clone()), i);
-                    i += 1;
-                }
-                _ => (),
+            if let serde_yaml::Value::String(ref s) = v {
+                vals.insert(s.clone(), i);
+                i += 1;
             }
         }
         Ok(Op { config, vals })
@@ -79,14 +71,14 @@ impl Op {
 }
 
 impl Opable for Op {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         let r = match event.vars.get(&self.config.var) {
-            Some(ref v) => self.vals.get(v),
-            None => None,
+            Some(Value::String(ref v)) => self.vals.get(v),
+            _ => None,
         };
         match r {
-            Some(i) => EventResult::NextID(*i, event),
-            None => EventResult::Next(event),
+            Some(i) => next_id!(*i, event),
+            None => next!(event),
         }
     }
     opable_types!(ValueType::Same, ValueType::Same);

@@ -17,7 +17,6 @@
 //! Each namespace contains operations for their respective domain. The
 //! [generic](generic/index.html) namespace holds more generic flow control operations.
 
-pub mod classifier;
 pub mod generic;
 pub mod grouping;
 pub mod limiting;

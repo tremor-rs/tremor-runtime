@@ -33,8 +33,8 @@ impl Offramp {
 }
 
 impl Opable for Offramp {
-    fn exec(&mut self, input: EventData) -> EventResult {
-        EventResult::Return(input.make_return(Ok(None)))
+    fn on_event(&mut self, input: EventData) -> EventResult {
+        return_result!(input.make_return(Ok(None)))
     }
     opable_types!(ValueType::Any, ValueType::None);
 }

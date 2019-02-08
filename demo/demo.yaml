@@ -21,6 +21,7 @@ services:
     environment:
       - SLEEP=30
       - CONFIG_FILE=/configs/loadgen-250.yaml
+      - LOGGER_FILE=/configs/logger.yaml
     volumes:
       - ./configs:/configs:ro
       - ./data:/data:ro
@@ -33,5 +34,7 @@ services:
     environment:
       - SLEEP=20
       - CONFIG_FILE=/configs/tremor-demo.yaml
+      - LOGGER_FILE=/configs/logger.yaml
     volumes:
       - ./configs:/configs:ro
+      - ./logs:/logs:rw

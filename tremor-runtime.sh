@@ -17,4 +17,9 @@ else
     fi
 fi
 
-exec ./tremor-runtime --config "${CONFIG_FILE}"
+if [ -z ${LOGGER_FILE+x} ]
+then
+   LOGGER_FILE="logger.yaml"
+fi
+
+exec ./tremor-runtime --config "${CONFIG_FILE}" --logger-config "${LOGGER_FILE}"

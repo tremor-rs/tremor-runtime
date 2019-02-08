@@ -9,138 +9,68 @@ pipelines:
     subpipelines:
       - name: done
         steps:
-          - op::into_var:
-              key: index_type
-              var: index
-          - render::json
-          - grouper::bucket:
-              buckets:
-                applog_app1:
-                  rate: 1250
-                applog_app2:
-                  rate: 2500
-                applog_app3:
-                  rate: 18750
-                applog_app4:
-                  rate: 750
-                applog_app5:
-                  rate: 18750
-                applog_app6:
-                  rate: 4500
-                syslog_app1:
-                  rate: 2500
-                syslog_app2:
-                  rate: 125
-                syslog_app3:
-                  rate: 1750
-                syslog_app4:
-                  rate: 1750
-                syslog_app5:
-                  rate: 7500
-                syslog_app6:
-                  rate: 125
-                edilog:
-                  rate: 3750
-                sqlserverlog:
-                  rate: 125
-                applog:
-                  rate: 75
-                default:
-                  rate: 250
-          - offramp::blackhole:
-              warmup_secs: 10
-              stop_after_secs: 40
-              significant_figures: 2
-      - name: application
-        steps:
-          - op::into_var:
-              var: dimensions
-              key: application
-          - sub::done
-      - name: logger_name
-        steps:
-          - op::into_var:
-              var: dimensions
-              key: logger_name
-          - sub::done
-      - name: syslog_hostname
-        steps:
-          - op::into_var:
-              var: dimensions
-              key: syslog_hostname
-          - sub::done
-      - name: ips
-        steps:
-          - op::into_vars:
-              var: dimensions
-              keys:
-                - src_ip
-                - dst_ip
-          - sub::done
     steps:
       - parse::json
-      - classifier::mimir:
-          rules:
-            - rule: application="app1"
-              class: applog_app1
-            - rule: application="app2"
-              class: applog_app2
-            - rule: index_type="applog_app3"
-              class: applog_app3
-            - rule: index_type="applog_app4"
-              class: applog_app4
-            - rule: index_type="applog_app5"
-              class: applog_app5
-            - rule: index_type="applog_app6"
-              class: applog_app6
-            - rule: index_type="syslog_app1"
-              class: syslog_app1
-            - rule: tags:"tag1"
-              class: syslog_app2
-            - rule: index_type="syslog_app3"
-              class: syslog_app3
-            - rule: index_type="syslog_app4"
-              class: syslog_app4
-            - rule: index_type="syslog_app5"
-              class: syslog_app5
-            - rule: index_type="syslog_app6"
-              class: syslog_app6
-            - rule: index_type="edilog"
-              class: edilog
-            - rule: index_type="sqlserverlog"
-              class: sqlserverlog
-            - rule: type="applog"
-              class: applog
-      - op::route:
-          var: classification
-          vals:
-            - applog_recsvc
-            - applog_sayl
-            - applog_logs
-            - applog
+      - runtime::mimir:
+          script: |
+            export classification, dimension, rate, index_type, below, timeframe;
 
-            - applog_purest
-            - applog_admin
+            _ { $index_type := index; $below := 5; $timeframe := 10000; }
 
-            - syslog_haproxy
-            - syslog_logs
-            - syslog_ftpd
-            - syslog_hypernova
+            application="app1" { $classification := "applog_app1"; $rate := 1250; }
+            application="app2" { $classification := "applog_app2"; $rate := 2500; $below := 10; }
+            application="app3" { $classification := "applog_app3"; $rate := 18750; }
+            application="app4" { $classification := "applog_app4"; $rate := 750; $below := 10;   }
+            application="app5" { $classification := "applog_app5"; $rate := 18750; }
+            $classification { $dimension := application; return; }
 
-            - syslog_cisco
-          outputs:
-            - sub::application
-            - sub::application
-            - sub::application
-            - sub::application
+            index_type="applog_app6" { $dimension := logger_name; $classification := "applog_app6"; $rate := 4500; return; }
 
-            - sub::logger_name
-            - sub::logger_name
+            index_type="syslog_app1" { $classification := "syslog_app1"; $rate := 2500; }
+            tags:"tag1" { $classification := "syslog_app2"; $rate := 125; }
+            index_type="syslog_app3" { $classification := "syslog_app3"; $rate := 1750; }
+            index_type="syslog_app4" { $classification := "syslog_app4"; $rate := 1750; }
+            index_type="syslog_app5" { $classification := "syslog_app5"; $rate := 7500; }
+            index_type="syslog_app6" { $classification := "syslog_app6"; $rate := 125; }
+            $classification { $dimension := syslog_hostname; return; }
 
-            - sub::syslog_hostname
-            - sub::syslog_hostname
-            - sub::syslog_hostname
-            - sub::syslog_hostname
-
-            - sub::ips
-      - sub::done
+            _ { $classification := "default"; $rate := 250; }
+      - render::json
+      - grouper::bucket:
+          buckets:
+            applog_app1:
+              rate: 1250
+            applog_app2:
+              rate: 2500
+            applog_app3:
+              rate: 18750
+            applog_app4:
+              rate: 750
+            applog_app5:
+              rate: 18750
+            applog_app6:
+              rate: 4500
+            syslog_app1:
+              rate: 2500
+            syslog_app2:
+              rate: 125
+            syslog_app3:
+              rate: 1750
+            syslog_app4:
+              rate: 1750
+            syslog_app5:
+              rate: 7500
+            syslog_app6:
+              rate: 125
+            edilog:
+              rate: 3750
+            sqlserverlog:
+              rate: 125
+            applog:
+              rate: 75
+            default:
+              rate: 250
+      - offramp::blackhole:
+          warmup_secs: 10
+          stop_after_secs: 40
+          significant_figures: 2

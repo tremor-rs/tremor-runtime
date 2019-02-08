@@ -18,6 +18,7 @@ mod graph;
 mod messages;
 mod onramp;
 mod op;
+pub mod pool;
 pub mod prelude;
 mod step;
 pub mod types;
@@ -52,6 +53,7 @@ pub struct PipelineConfig {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub onramps: Vec<ConfValue>,
+    //    pub offramps: Vec<ConfValue>,
     pub pipelines: Vec<PipelineConfig>,
 }
 

@@ -17,6 +17,7 @@
 //! Onramp connectors are used to get data into the system
 //! to then be processed.
 
+#[cfg(feature = "bench")]
 pub mod blaster;
 pub mod file;
 pub mod http;
@@ -26,6 +27,7 @@ pub mod metronome;
 #[cfg(feature = "mssql")]
 pub mod mssql;
 pub mod stdin;
+pub mod gsub;
 
 use crate::errors::*;
 use crate::pipeline::prelude::*;
@@ -44,6 +46,7 @@ pub trait Onramp {
 
 pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
     match name {
+        #[cfg(feature = "bench")]
         "blaster" => Ok(Onramps::Blaster(blaster::Onramp::create(opts)?)),
         "file" => Ok(Onramps::File(file::Onramp::create(opts)?)),
         "http" => Ok(Onramps::HTTP(http::Onramp::create(opts)?)),
@@ -52,12 +55,14 @@ pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
         #[cfg(feature = "mssql")]
         "mssql" => Ok(Onramps::MSSql(mssql::Onramp::create(opts)?)),
         "stdin" => Ok(Onramps::Stdin(stdin::Onramp::create(opts)?)),
+        "gsub" => Ok(Onramps::Gsub(gsub::Onramp::create(opts)?)),
         "metronome" => Ok(Onramps::Metronome(metronome::Onramp::create(opts)?)),
-        _ => panic!("Unknown classifier: {}", name),
+        _ => panic!("Unknown onramp: {}", name),
     }
 }
 
 pub enum Onramps {
+    #[cfg(feature = "bench")]
     Blaster(blaster::Onramp),
     #[cfg(feature = "kafka")]
     Kafka(kafka::Onramp),
@@ -67,11 +72,13 @@ pub enum Onramps {
     HTTP(http::Onramp),
     Stdin(stdin::Onramp),
     Metronome(metronome::Onramp),
+    Gsub(gsub::Onramp),
 }
 
 impl Onramp for Onramps {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
         match self {
+            #[cfg(feature = "bench")]
             Onramps::Blaster(i) => i.enter_loop(pipelines),
             #[cfg(feature = "kafka")]
             Onramps::Kafka(i) => i.enter_loop(pipelines),
@@ -81,6 +88,7 @@ impl Onramp for Onramps {
             Onramps::HTTP(i) => i.enter_loop(pipelines),
             Onramps::Stdin(i) => i.enter_loop(pipelines),
             Onramps::Metronome(i) => i.enter_loop(pipelines),
+            Onramps::Gsub(i) => i.enter_loop(pipelines),
         }
     }
 }

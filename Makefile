@@ -24,7 +24,7 @@ demo: image
 clippy-install:
 	rustup update
 	rustup install nightly
-	rustup component add clippy-preview --toolchain=nightly
+	rustup component add clippy
 
 clippy:
 	CARGO_TARGET_DIR=target.clippy cargo +nightly clippy
@@ -38,7 +38,7 @@ doc: force
 	cp -r target/doc .
 
 bench: force
-	cargo build --release --examples
+	cargo build --release --features bench
 	for f in bench/*.sh; do $$f; done
 
 force:

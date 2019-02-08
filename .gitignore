@@ -5,3 +5,5 @@
 /window/target*
 local-examples
 .#*
+secrets
+log

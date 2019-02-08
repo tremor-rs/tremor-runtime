@@ -21,7 +21,6 @@
 //! See [Config](struct.Config.html) for details.
 
 use crate::dflt;
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use futures::Future;
@@ -115,12 +114,10 @@ impl Offramp {
 
 impl Opable for Offramp {
     // TODO
-    fn exec(&mut self, input: EventData) -> EventResult {
-        if input.is_type(ValueType::Raw) {
-            let (ret, raw) = match input.make_return_and_value(Ok(None)) {
-                (ret, EventValue::Raw(raw)) => (ret, raw),
-                _ => unreachable!(),
-            };
+    fn on_event(&mut self, event: EventData) -> EventResult {
+        ensure_type!(event, "offramp::kafka", ValueType::Raw);
+
+        if let (ret, EventValue::Raw(raw)) = event.make_return_and_value(Ok(None)) {
             let mut record = FutureRecord::to(&self.topic);
             record = record.payload(&raw);
             //TODO: Key
@@ -132,27 +129,15 @@ impl Opable for Offramp {
             let producer_future = r.then(|result| {
                 match result {
                     Ok(Ok(_delivery)) => ret.send(),
-                    Ok(Err((e, _))) => ret
-                        .with_value(Err(TSError::new(&format!("Error: {:?}", e))))
-                        .send(),
-                    Err(_) => ret
-                        .with_value(Err(TSError::new(&"Future cancelled")))
-                        .send(),
+                    Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
+                    Err(_) => ret.with_value(Err("Future cancled".into())).send(),
                 }
                 Ok(())
             });
             self.pool.spawn(producer_future);
             EventResult::Done
         } else {
-            let t = input.value.t();
-            EventResult::Error(
-                input,
-                Some(TSError::from(TypeError::with_location(
-                    &"offramp::kafka",
-                    t,
-                    ValueType::Raw,
-                ))),
-            )
+            unreachable!()
         }
     }
     opable_types!(ValueType::Raw, ValueType::Raw);

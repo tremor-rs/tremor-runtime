@@ -61,7 +61,6 @@
 //! }
 //! ```
 use crate::dflt;
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_json;
@@ -144,8 +143,8 @@ impl std::fmt::Debug for Bucket {
 }
 
 impl Opable for Grouper {
-    fn exec(&mut self, event: EventData) -> EventResult {
-        if let Some(MetaValue::String(class)) = event.var_clone(&"classification") {
+    fn on_event(&mut self, event: EventData) -> EventResult {
+        if let Some(serde_json::Value::String(class)) = event.var_clone(&"classification") {
             match self.buckets.get_mut(&class) {
                 Some(Bucket {
                     class: _class,
@@ -153,8 +152,14 @@ impl Opable for Grouper {
                     groups,
                 }) => {
                     let dimensions = match event.var_clone(&"dimensions") {
-                        Some(MetaValue::String(dimension)) => vec![dimension],
-                        Some(MetaValue::VecS(dimensions)) => dimensions,
+                        Some(serde_json::Value::String(dimension)) => vec![dimension],
+                        Some(serde_json::Value::Array(dimensions)) => dimensions
+                            .iter()
+                            .filter_map(|e| match e {
+                                serde_json::Value::String(s) => Some(s.clone()),
+                                _ => None,
+                            })
+                            .collect(),
                         _ => vec![],
                     };
                     let dimensions: Vec<serde_json::Value> = dimensions
@@ -165,13 +170,8 @@ impl Opable for Grouper {
                     let dimensions = match dimensions {
                         Ok(d) => d,
                         Err(e) => {
-                            return EventResult::Error(
-                                event,
-                                Some(TSError::new(&format!(
-                                    "Failed to create dimensions: {}.",
-                                    e
-                                ))),
-                            )
+                            let e = format!("Failed to create dimensions: {}.", e);
+                            return error_result!(event, e);
                         }
                     };
                     let window = match groups.get_mut(&dimensions) {
@@ -188,15 +188,15 @@ impl Opable for Grouper {
                         }
                     };
                     if window.inc_t(event.ingest_ns).is_ok() {
-                        EventResult::Next(event)
+                        next!(event)
                     } else {
-                        EventResult::NextID(DROP_OUTPUT_ID, event)
+                        next_id!(DROP_OUTPUT_ID, event)
                     }
                 }
-                None => EventResult::NextID(DROP_OUTPUT_ID, event),
+                None => next_id!(DROP_OUTPUT_ID, event),
             }
         } else {
-            EventResult::NextID(DROP_OUTPUT_ID, event)
+            next_id!(DROP_OUTPUT_ID, event)
         }
     }
     opable_types!(ValueType::Same, ValueType::Same);
@@ -234,8 +234,8 @@ mod tests {
         let e = event(hashmap! {"classification".to_string() => "a".into()}, 0);
 
         let mut g = Grouper::create("bucket", &conf()).unwrap();
-        let r = g.exec(e);
-        assert_matches!(r, EventResult::Next(_));
+        let r = g.on_event(e);
+        assert_matches!(r, EventResult::NextID(1, _));
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
         let e = event(hashmap! {"classification".to_string() => "b".into()}, 0);
 
         let mut g = Grouper::create("bucket", &conf()).unwrap();
-        let r = g.exec(e);
+        let r = g.on_event(e);
         assert_matches!(r, EventResult::NextID(3, _));
     }
     #[test]
@@ -260,14 +260,14 @@ mod tests {
         );
 
         let mut g = Grouper::create("bucket", &conf()).unwrap();
-        let r = g.exec(e);
-        assert_matches!(r, EventResult::Next(_));
+        let r = g.on_event(e);
+        assert_matches!(r, EventResult::NextID(1, _));
 
-        let r = g.exec(e1);
+        let r = g.on_event(e1);
         assert_matches!(r, EventResult::NextID(3, _));
 
-        let r = g.exec(e2);
-        assert_matches!(r, EventResult::Next(_));
+        let r = g.on_event(e2);
+        assert_matches!(r, EventResult::NextID(1, _));
     }
 
 }

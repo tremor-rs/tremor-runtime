@@ -32,9 +32,9 @@
 
 use crate::async_sink::{AsyncSink, SinkDequeueError};
 use crate::dflt;
-use crate::error::TSError;
 use crate::errors::*;
 use crate::metrics;
+use crate::pipeline::pool::WorkerPoolStep;
 use crate::pipeline::prelude::*;
 use crate::utils::{duration_to_millis, nanos_to_millis, nanotime};
 use elastic::client::prelude::BulkErrorsResponse;
@@ -48,13 +48,10 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::convert::From;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::time::Instant;
 use std::{f64, fmt, str};
 use threadpool::ThreadPool;
-
-//#[cfg(test)]
-//use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 
 lazy_static! {
     // Histogram of the duration it takes between getting a message and
@@ -64,13 +61,12 @@ lazy_static! {
             "latency",
             "Latency for Elastic Search offramp.",
             exponential_buckets(0.0005, 1.1, 20).unwrap()
-        ).namespace("tremor").subsystem("es").const_labels(hashmap!{"instance".into() => unsafe{ metrics::INSTANCE.to_string() }});
+        ).namespace("tremor").subsystem("es").const_labels(hashmap!{"instance".into() => instance!()});
         register_histogram_vec!(opts, &["dest"]).unwrap()
     };
 
 }
 
-//[endpoints, index, batch_size, batch_timeout]
 #[derive(Debug, Deserialize)]
 pub struct Config {
     /// list of endpoint urls
@@ -80,6 +76,9 @@ pub struct Config {
     /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "dflt::d_4")]
     pub concurrency: usize,
+    /// Timeout before a batch is always send
+    #[serde(default = "dflt::d_0")]
+    pub timeout: u64,
 }
 
 #[derive(Clone)]
@@ -141,21 +140,23 @@ impl Offramp {
         let mut payload = String::from("");
         let mut returns = HashMap::new();
         while let Some(event) = self.payload.pop_front() {
-            let index = if let Some(MetaValue::String(index)) = event.var_clone(&"index") {
+            let index = if let Some(serde_json::Value::String(index)) = event.var_clone(&"index") {
                 index
             } else {
                 unreachable!();
             };
-            let doc_type = if let Some(MetaValue::String(doc_type)) = event.var_clone(&"doc-type") {
-                doc_type
-            } else {
-                unreachable!();
-            };
-            let pipeline = if let Some(MetaValue::String(pipeline)) = event.var_clone(&"pipeline") {
-                Some(pipeline)
-            } else {
-                None
-            };
+            let doc_type =
+                if let Some(serde_json::Value::String(doc_type)) = event.var_clone(&"doc-type") {
+                    doc_type
+                } else {
+                    unreachable!();
+                };
+            let pipeline =
+                if let Some(serde_json::Value::String(pipeline)) = event.var_clone(&"pipeline") {
+                    Some(pipeline)
+                } else {
+                    None
+                };
             match pipeline {
                 None => payload.push_str(
                     json!({
@@ -185,11 +186,8 @@ impl Offramp {
             let class = event.var_clone(&"classification");
             let res = event.maybe_extract(|val| {
                 if let EventValue::Raw(raw) = val {
-                    if let Ok(raw) = String::from_utf8(raw.to_vec()) {
-                        Ok((raw, Ok(None)))
-                    } else {
-                        Err(TSError::new(&"Bad UTF8"))
-                    }
+                    let raw = String::from_utf8(raw.to_vec())?;
+                    Ok((raw, Ok(None)))
                 } else {
                     unreachable!()
                 }
@@ -222,42 +220,6 @@ impl Offramp {
         (payload, returns)
     }
 
-    fn send_future(&mut self) -> Receiver<EventReturn> {
-        self.client_idx = (self.client_idx + 1) % self.clients.len();
-        let (payload, returns) = self.render_payload();
-        let destination = self.clients[self.client_idx].clone();
-        let (tx, rx) = channel();
-        self.pool.execute(move || {
-            let dst = destination.url.as_str();
-            let r = flush(&destination.client, dst, payload.as_str());
-            match r.clone() {
-                Ok(r) => {
-                    for (dst, ids) in returns.iter() {
-                        let ret = Return {
-                            source: dst.source.to_owned(),
-                            chain: dst.chain.to_owned(),
-                            ids: ids.to_owned(),
-                            v: Ok(r),
-                        };
-                        ret.send();
-                    }
-                }
-                Err(e) => {
-                    for (dst, ids) in returns.iter() {
-                        let ret = Return {
-                            source: dst.source.to_owned(),
-                            chain: dst.chain.to_owned(),
-                            ids: ids.to_owned(),
-                            v: Err(e.clone()),
-                        };
-                        ret.send();
-                    }
-                }
-            };
-            let _ = tx.send(r);
-        });
-        rx
-    }
     fn update_send_time(
         &self,
         raw: String,
@@ -280,7 +242,7 @@ impl Offramp {
                 serde_json::Value::String(hostname.to_string()),
             ),
         ];
-        if let Some(MetaValue::String(class)) = class {
+        if let Some(serde_json::Value::String(class)) = class {
             map_vec.push((
                 String::from("classification"),
                 serde_json::Value::String(class),
@@ -294,21 +256,67 @@ impl Offramp {
     }
 }
 
+impl WorkerPoolStep for Offramp {
+    fn dequeue(&mut self) -> std::result::Result<Result<Option<f64>>, SinkDequeueError> {
+        self.queue.dequeue()
+    }
+    fn has_capacity(&self) -> bool {
+        self.queue.has_capacity()
+    }
+    fn pop_payload(&mut self) -> Option<EventData> {
+        self.payload.pop_front()
+    }
+    fn push_payload(&mut self, event: EventData) {
+        self.payload.push_back(event)
+    }
+    fn batch_size(&self) -> usize {
+        self.config.batch_size
+    }
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+    fn empty(&mut self) {
+        self.queue.empty()
+    }
+    fn timeout(&self) -> u64 {
+        self.config.timeout
+    }
+    fn enqueue_send_future(&mut self) -> Result<()> {
+        self.client_idx = (self.client_idx + 1) % self.clients.len();
+        let (payload, returns) = self.render_payload();
+        let destination = self.clients[self.client_idx].clone();
+        let (tx, rx) = channel();
+        self.pool.execute(move || {
+            let dst = destination.url.as_str();
+            let r = flush(&destination.client, dst, payload.as_str());
+            Self::handle_return(&r, returns);
+            let _ = tx.send(r);
+        });
+        self.queue.enqueue(rx)?;
+        Ok(())
+    }
+
+    fn event_errors(&self, event: &EventData) -> Option<String> {
+        match event.vars.get("index") {
+            Some(serde_json::Value::String(_)) => (),
+            Some(_) => return Some("Variable `index` not set but required".into()),
+            _ => (),
+        };
+        match event.vars.get("doc-type") {
+            Some(serde_json::Value::String(_)) => (),
+            Some(_) => return Some("Variable `index` not set but required".into()),
+            _ => (),
+        };
+        None
+    }
+}
+
 fn flush(client: &Client<SyncSender>, url: &str, payload: &str) -> EventReturn {
     let start = Instant::now();
     let timer = SEND_HISTOGRAM.with_label_values(&[url]).start_timer();
     let req = BulkRequest::new(payload.to_owned());
-    let res = client.request(req).send();
-    if let Err(e) = res {
-        error!("Elastic Search request error: {:?}", e);
-        return Err(TSError::from(e));
-    }
-    let response = res.unwrap().into_response::<BulkErrorsResponse>();
-    if let Err(e) = response {
-        error!("Elastic Search response error: {:?}", e);
-        return Err(TSError::from(e));
-    }
-    for item in response.unwrap() {
+    let res = client.request(req).send()?;
+    for item in res.into_response::<BulkErrorsResponse>()? {
         error!("Elastic Search item error: {:?}", item);
     }
     timer.observe_duration();
@@ -328,59 +336,17 @@ impl Opable for Offramp {
         h
     }
 
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         ensure_type!(event, "offramp::elastic", ValueType::Raw);
-
-        //EventResult::Next(event)
-        // We only add the message if it is not already dropped and
-        // we are not in backoff time.
-        if !event.var_is_type(&"index", &MetaValueType::String) {
-            return EventResult::Error(
-                event,
-                Some(TSError::new(&"Variable `index` not set but required")),
-            );
-        };
-        if !event.var_is_type(&"doc-type", &MetaValueType::String) {
-            return EventResult::Error(
-                event,
-                Some(TSError::new(&"Variable `doc-type` not set but required")),
-            );
-        };
-
-        self.payload.push_back(event);
-        if self.config.batch_size > self.payload.len() {
-            EventResult::Done
-        } else {
-            match self.queue.dequeue() {
-                Err(SinkDequeueError::NotReady) => {
-                    if self.queue.has_capacity() {
-                        let rx = self.send_future();
-                        if self.queue.enqueue(rx).is_ok() {
-                            EventResult::Done
-                        } else {
-                            EventResult::StepError(TSError::new(&"Could not enqueue event"))
-                        }
-                    } else if let Some(e_out) = self.payload.pop_front() {
-                        EventResult::NextID(3, e_out)
-                    } else {
-                        EventResult::StepError(TSError::new(&"No capacity in queue"))
-                    }
-                }
-                _ => {
-                    let rx = self.send_future();
-                    if self.queue.enqueue(rx).is_ok() {
-                        EventResult::Done
-                    } else {
-                        EventResult::StepError(TSError::new(&"Could not enqueue event"))
-                    }
-                }
-            }
-        }
+        self.handle_event(event)
     }
+
+    fn on_timeout(&mut self) -> EventResult {
+        self.maybe_enque()
+    }
+
     fn shutdown(&mut self) {
-        self.queue.empty();
-        let rx = self.send_future();
-        let _ = rx.recv();
+        <Offramp as WorkerPoolStep>::shutdown(self)
     }
 }
 fn add_json_kv(json: String, key: &str, val: &str) -> String {
@@ -394,63 +360,9 @@ fn add_json_kv(json: String, key: &str, val: &str) -> String {
     s
 }
 
-/*
-TODO: We have to decide on how indexes are handled
-#[test]
-fn index_test() {
-    let s = Event::new("{\"key\":\"value\"}", None, nanotime());
-    let mut p = ::parser::new("json", "");
-    let o = Offramp::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500}");
-
-    let r = p.apply(s).expect("couldn't parse data");
-    let idx = o.index(&r);
-    assert_eq!(idx, "demo");
-}
-
-#[test]
-fn index_prefix_test() {
-    let mut e = Event::new("{\"key\":\"value\"}", None, nanotime());
-    e.index = Some(String::from("value"));
-    let o = Offramp::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500}");
-
-    let idx = o.index(&e);
-    assert_eq!(idx, "value_demo");
-}
-
-#[test]
-fn index_suffix_test() {
-    println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let e = Event::new("{\"key\":\"value\"}", None, nanotime());
-    let o = Offramp::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
-
-    let idx = o.index(&e);
-    let utc: DateTime<Utc> = Utc::now();
-    assert_eq!(
-        idx,
-        format!("demo-{}", utc.format("%Y.%m.%d").to_string().as_str())
-    );
-}
-
-#[test]
-fn index_prefix_suffix_test() {
-    println!("This test could be a false positive if it ran exactly at midnight, but that's OK.");
-    let mut e = Event::new("{\"key\":\"value\"}", None, nanotime());
-    e.index = Some(String::from("value"));
-    let o = Offramp::new("{\"endpoints\":[\"http://elastic:9200\"], \"suffix\":\"_demo\",\"batch_size\":100,\"batch_timeout\":500, \"append_date\": true}");
-
-    let idx = o.index(&e);
-    let utc: DateTime<Utc> = Utc::now();
-    assert_eq!(
-        idx,
-        format!("value_demo-{}", utc.format("%Y.%m.%d").to_string().as_str())
-    );
-}
-
 #[test]
 fn test_add_json_kv() {
-    let json = "{\"k1\": 1}";
+    let json = "{\"k1\": 1}".to_string();
     let res = add_json_kv(json, "k2", "2");
     assert_eq!(res, "{\"k1\": 1,\"k2\":2}");
 }
-
- */

@@ -1,0 +1,119 @@
+---
+deployments:
+  - id: logging
+    description: Filtering of applog and syslog streams
+    bindings:
+      onramps:
+        - onramp::blaster:
+            id: blaster
+            source: ./demo/data/data.json.xz
+      offramps:
+        - offramp::blackhole:
+            id: blackhole
+            warmup_secs: 10
+            stop_after_secs: 40
+            significant_figures: 2
+            
+links:
+  /deployments/logging/blaster: /pipelines/main/in
+  /pipelines/main/out: /deployments/logging/out
+
+pipelines:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - parse:
+          type: parse::json
+      - classify:
+          type: classifier::mimir
+          rules:
+            - rule: application="app1" { $dimension := application }
+              class: applog_app1
+            - rule: application="app2" { $dimension := application }
+              class: applog_app2
+            - rule: index_type="applog_app3" { $dimension := application }
+              class: applog_app3
+            - rule: index_type="applog_app4" { $dimension := application }
+              class: applog_app4
+            - rule: index_type="applog_app5" { $dimension := application }
+              class: applog_app5
+            - rule: index_type="applog_app6" { $dimension := logger_name }
+              class: applog_app6
+            - rule: index_type="syslog_app1" { $dimension := syslog_hostname }
+              class: syslog_app1
+            - rule: tags:"tag1" { $dimension := syslog_hostname }
+              class: syslog_app2
+            - rule: index_type="syslog_app3" { $dimension := syslog_hostname }
+              class: syslog_app3
+            - rule: index_type="syslog_app4" { $dimension := syslog_hostname }
+              class: syslog_app4
+            - rule: index_type="syslog_app5" { $dimension := syslog_hostname }
+              class: syslog_app5
+            - rule: index_type="syslog_app6" { $dimension := syslog_hostname }
+              class: syslog_app6
+            - rule: index_type="edilog" { $dimension := syslog_hostname }
+              class: edilog
+            - rule: index_type="sqlserverlog" { $dimension := [src_ip, dst_ip] }
+              class: sqlserverlog
+            - rule: type="applog" { $dimension := [src_ip, dst_ip] }
+              class: applog
+      - done:
+          type: op::into_var
+          key: index_type
+          var: index
+      - bucket:
+          type: grouper::bucket
+          buckets:
+            applog_app1:
+              rate: 1250
+            applog_app2:
+              rate: 2500
+            applog_app3:
+              rate: 18750
+            applog_app4:
+              rate: 750
+            applog_app5:
+              rate: 18750
+            applog_app6:
+              rate: 4500
+            syslog_app1:
+              rate: 2500
+            syslog_app2:
+              rate: 125
+            syslog_app3:
+              rate: 1750
+            syslog_app4:
+              rate: 1750
+            syslog_app5:
+              rate: 7500
+            syslog_app6:
+              rate: 125
+            edilog:
+              rate: 3750
+            sqlserverlog:
+              rate: 125
+            applog:
+              rate: 75
+            default:
+              rate: 250
+      - render:
+        type: render::json
+    links:
+      parse: classify
+      classify: done
+      route/default: done
+      application/out: done
+      logger_name/out: done
+      syslog_hostname/out: done
+      ips/out: done
+      done/out: bucket
+      bucket/out: render
+    imports:
+      in: parse/in
+    exports:
+      out:
+        - render/out

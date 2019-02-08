@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["Config",""],["Op","Copy data from one meta variable to another"]]});

@@ -1,4 +1,3 @@
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use php::{IOContext, Runtime as PHPRuntime};
@@ -33,26 +32,24 @@ impl Runtime {
 
 impl Opable for Runtime {
     opable_types!(ValueType::Raw, ValueType::Raw);
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         ensure_type!(event, "runtime::php", ValueType::Raw);
-
         let res = event.replace_value(|val| {
             if let EventValue::Raw(raw) = val {
-                let ctx = IOContext {
+                let mut ctx = IOContext {
                     body: raw.clone().into_boxed_slice(),
                     buffer: Vec::with_capacity(1028),
                 };
-                if let Ok(result) = self.runtime.execute(&self.config.file, ctx) {
-                    Ok(EventValue::Raw(result.buffer.to_vec()))
-                } else {
-                    Err(TSError::new(&"Failed to execute php"))
-                }
+                self.runtime
+                    .execute(&self.config.file, &mut ctx)
+                    .map_err(|_| Error::from("PHP execution error"))?;
+                Ok(EventValue::Raw(ctx.buffer.to_vec()))
             } else {
                 unreachable!()
             }
         });
         match res {
-            Ok(n) => EventResult::Next(n),
+            Ok(n) => next!(n),
             Err(e) => e,
         }
     }

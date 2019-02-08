@@ -7,14 +7,10 @@ pipelines:
   - name: main
     steps:
       - parse::json
-      - op::set:
-          var: classification
-          val: test
-      - op::into_vars:
-          keys:
-            - 'type'
-            - 'application'
-          var: 'dimensions'
+      - runtime::mimir:
+          script: |
+            export classification, dimensions;
+            _ { $classification := "test"; $dimensions := [type, application]; }
       - grouper::bucket:
           buckets:
             test:

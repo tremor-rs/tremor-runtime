@@ -14,16 +14,60 @@
 
 use regex;
 use std::str::FromStr;
-use super::{Item, Stmt, Cmp, Filter, CIDR, Action, MimirValue};
+use serde_json::Value;
+use super::{Item, Stmt, Cmp, Filter, CIDR, Action, Script, RHSValue, Path, Interface, Id};
 use pcre2::bytes::{RegexBuilder, Regex};
 use glob::Pattern;
 
 grammar;
 
-pub Stmt: Stmt = {
+pub Script: Script = {
+    <interface:Interface> <statements:Stmts> => Script{interface, statements},
+    <Stmts> => Script{interface: Interface::default(), statements: <>},
+}
+
+Import: Vec<Id> = {
+    IMPORT <VarList> ";" => <>,
+}
+
+Export: Vec<Id> = {
+    EXPORT <VarList> ";" => <>
+}
+
+Interface: Interface = {
+    <imports:Import> <exports:Export> => Interface{imports, exports},
+    <exports:Export> <imports:Import> => Interface{imports, exports},
+    <imports:Import> => Interface{imports, exports: Vec::new()},
+    <exports:Export> => Interface{imports: Vec::new(), exports},
+}
+
+VarList: Vec<Id> = {
+    <list:VarList> COMMA <item:Id> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    Id => vec![<>]
+}
+
+Stmts: Vec<Stmt> = {
+    <stmts: Stmts> <stmt: Stmt> => {
+        let mut stmts: Vec<Stmt> = stmts;
+        stmts.push(stmt);
+        stmts
+    },
+    <Stmt> => vec![<>],
+    <Stmts> SLC => <>,
+    SLC => vec![],
+
+}
+
+Stmt: Stmt = {
     Item => Stmt{item: <>, actions: Vec::new()},
     <item:Item> CBOpen <actions: Actions> ";" CBClose => Stmt{item, actions},
 }
+
+
 
 // Filter related
 
@@ -45,7 +89,6 @@ Enclosed: Item = {
     BOpen <Item> BClose => <>,
 }
 
-
 // A maybe negated filter can either be a filter expression or a negated
 // filter expression
 MaybeNegatedFilter: Item = {
@@ -53,110 +96,76 @@ MaybeNegatedFilter: Item = {
     NOT <Filter> => Item::Not(Box::new(Item::Filter(<>))),
 }
 
+
+LHS: Path = {
+    Path => <>
+}
+
+RHS: RHSValue = {
+    ValueLit => RHSValue::Literal(<>),
+    Path => RHSValue::Lookup(<>),
+    RHSList => RHSValue::List(<>)
+}
+
+
+RHSList: Vec<RHSValue> = {
+    "[" <RHSListItems> "]" => <>
+}
+
+RHSListItems: Vec<RHSValue> = {
+    <list:RHSListItems> COMMA <item:RHSValue> => {
+        let mut list: Vec<RHSValue> = list;
+        list.push(item);
+        list
+    },
+    RHSValue => vec![<>]
+}
+
+
 // A filter expression is one of: An IPV4 address An list reference A regular
 // expression A wildcard ( glob-like ) expression A term A number Or a negated
 // sub-filter
 Filter: Filter = {
-    <path:Path> => Filter{
-        cmp: Cmp::Exists, path
+    <lhs:LHS> => Filter{
+        lhs, rhs: Cmp::Exists
     },
-    ListContainFilter => <>,
-    StrFilter => <>,
-    IntFilter => <>,
-    DblFilter => <>,
-    CIDRFilter => <>,
-    ListIncludesFilter => <>
-}
-
-// An CIDR filter filters based on CIDR subnet matche
-CIDRFilter: Filter = {
-    <path:Path> CON <value:CIDRLit> => Filter{
-        cmp: Cmp::CIDRMatch(value), path
+    // `_` will always match, we test if the top level object exists, wich is always true
+    USCORE => Filter{ rhs: Cmp::Exists, lhs: Path::DataPath(Vec::new()) },
+    <lhs:LHS> EQ <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Eq(rhs)
     },
-
-}
-
-// String filters allow for various types of filtering
-// of strings.
-StrFilter: Filter = {
-    <path:Path> EQ <value:StrLit> => Filter{
-        cmp: Cmp::Eq(value), path
+    <lhs:LHS> GT <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Gt(rhs)
     },
-    <path:Path> GT <value:StrLit> => Filter{
-        cmp: Cmp::Gt(value), path
+    <lhs:LHS> LT <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Lt(rhs)
     },
-    <path:Path> CON <regex:RegexLit> => Filter{
-        cmp: Cmp::Regex(regex), path
+    <lhs:LHS> GTE <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Gte(rhs)
     },
-    <path:Path> CON <glob:GlobLit> => Filter{
-        cmp: Cmp::Glob(glob), path
+    <lhs:LHS> LTE <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Lte(rhs)
     },
-}
-
-// Integer filters allow for various types of filtering
-// of integers.
-IntFilter: Filter = {
-    <path:Path> EQ <value:IntLit> => Filter{
-        cmp: Cmp::Eq(value), path
+    <lhs:LHS> CON <rhs:CIDRLit> => Filter{
+        lhs, rhs: Cmp::CIDRMatch(rhs)
     },
-    <path:Path> GT <value:IntLit> => Filter{
-        cmp: Cmp::Gt(value), path
+    <lhs:LHS> CON <rhs:GlobLit> => Filter{
+        lhs, rhs: Cmp::Glob(rhs)
     },
-    <path:Path> LT <value:IntLit> => Filter{
-        cmp: Cmp::Lt(value), path
+    <lhs:LHS> CON <rhs:RegexLit> => Filter{
+        lhs, rhs: Cmp::Regex(rhs)
     },
-    <path:Path> GTE <value:IntLit> => Filter{
-        cmp: Cmp::Gte(value), path
-    },
-    <path:Path> LTE <value:IntLit> => Filter{
-        cmp: Cmp::Lte(value), path
+    // The contains filter test if a string
+    // is contained in a substring as well as
+    // if a value is in a event-list
+    //
+    // TODO: This overlaps with string contains
+    // we should fix this
+    <lhs:LHS> CON <rhs:RHS> => Filter{
+        lhs, rhs: Cmp::Contains(rhs)
     },
 }
 
-// The contains filter test if a string
-// is contained in a substring as well as
-// if a value is in a event-list
-//
-// TODO: This overlaps with string contains
-// we should fix this?th
-ListContainFilter: Filter = {
-    <path:Path> CON <value:DblLit> => Filter{
-        cmp: Cmp::Contains(value), path
-    },
-    <path:Path> CON <value:IntLit> => Filter{
-        cmp: Cmp::Contains(value), path
-    },
-    <path:Path> CON <value:StrLit> => Filter{
-        cmp: Cmp::Contains(value), path
-    },
-}
-
-// The includes filter tests if a event value
-// is included in the given list literal.
-ListIncludesFilter: Filter = {
-    <path:Path> CON <value:ListLit> => Filter{
-        cmp: Cmp::IsInList(value), path
-    },
-}
-
-/// Various filters comparing double values.
-DblFilter: Filter = {
-    <path:Path> EQ <value:DblLit> => Filter{
-        cmp: Cmp::Eq(value), path
-    },
-    <path:Path> GT <value:DblLit> => Filter{
-        cmp: Cmp::Gt(value), path
-    },
-    <path:Path> LT <value:DblLit> => Filter{
-        cmp: Cmp::Lt(value), path
-    },
-    <path:Path> GTE <value:DblLit> => Filter{
-        cmp: Cmp::Gte(value), path
-    },
-    <path:Path> LTE <value:DblLit> => Filter{
-        cmp: Cmp::Lte(value), path
-    },
-}
 
 // Action Blocks are used to execute actions
 // based on matched filters
@@ -170,24 +179,34 @@ Actions: Vec<Action> = {
 }
 
 Action: Action = {
-    <path:Path> STO <value:MimirValueLit> => Action::Set{
-        path, value
-    }
+    <lhs:LHS> STO <rhs:RHS> => Action::Set{
+        lhs, rhs
+    },
+    RETURN => Action::Return,
+}
+
+RHSValue: RHSValue = {
+    ValueLit => RHSValue::Literal(<>),
+    Path => RHSValue::Lookup(<>),
 }
 
 // A path used to access nested json values
 // it uses a dot notation.
 // TODO: Add array index support?
-Path: Vec<String> = {
-    <path:Path> DOT <key:PathKey> => {
-      let mut path: Vec<String> = path;
+DataPath: Vec<Id> = {
+    <path:DataPath> DOT <key:Id> => {
+      let mut path = path;
         path.push(key);
         path
     },
-    PathKey => vec![<>],
+    Id => vec![<>],
 }
 
-PathKey: String = { Str => <>.to_string() }
+Path: Path = {
+    DataPath => Path::DataPath(<>),
+    DOLLAR <Id> => Path::Var(<>)
+}
+
 
 // LITERALS
 
@@ -206,37 +225,32 @@ CIDRLit: CIDR = {
     },
 }
 
-// A list literal [ lsit-item, list-item, ... ]
-// that can contain mixed values
-ListLit: Vec<MimirValue> = {
-    "[" <ListLitItems> "]" => <>
-}
 
-ListLitItems: Vec<MimirValue> = {
-    <list:ListLitItems> COMMA <item:MimirValueLit> => {
-        let mut list: Vec<MimirValue> = list;
-        list.push(item);
-        list
-    },
-    MimirValueLit => vec![<>]
-}
-
-MimirValueLit: MimirValue = {
+ValueLit: Value = {
     DblLit => <>,
     IntLit => <>,
     StrLit => <>,
+    BoolLit => <>,
+}
+
+BoolLit: Value = {
+    TRUE => Value::Bool(true),
+    FALSE => Value::Bool(false),
 }
 
 // A string literal
-StrLit: MimirValue = {
-    "\"" <Plainstr> "\"" => <>
+StrLit: Value = {
+    STRING => Value::String(<>.trim_matches('"').to_string())
 }
 
+Id: Id = {
+    IDTOKEN => Id::new(<>),
+}
 // A double literal
-DblLit: MimirValue = DOUBLE => json!(f64::from_str(<>).unwrap());
+DblLit: Value = DOUBLE => json!(f64::from_str(<>).unwrap());
 
 // An integer literal
-IntLit: MimirValue = LONG => json!(i64::from_str(<>).unwrap());
+IntLit: Value = LONG => json!(i64::from_str(<>).unwrap());
 
 // A regular expression
 RegexLit: Regex = { <Regexstr> => RegexBuilder::new().jit(true).jit_if_available(true).build(&<>.trim_matches('/').to_string()).unwrap()};
@@ -247,16 +261,17 @@ GlobLit: Pattern = { <Globstr> => Pattern::new(&<>.trim_matches('g').trim_matche
 // Helpers
 Regexstr: String = REGEX => <>.to_string();
 Globstr: String =  GLOB => <>.to_string() ;
-Plainstr: MimirValue = TEXT => json!(<>.to_string());
-Str: String = TEXT => <>.to_string();
 
 match {
-    r"[+-]?[0-9]+" => LONG,
-    r"[+-]?[0-9]+\.[0-9]+" => DOUBLE,
     r"((?i)and)|(\&\&)" => AND,
     r"((?i)or)|(\|\|)" => OR,
     r"((?i)not)|(!)" => NOT,
-    r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/?(\d{1,2})?" => IP,
+    "import" => IMPORT,
+    "true" => TRUE,
+    "false" => FALSE,
+    "export" => EXPORT,
+    "return" => RETURN,
+} else {
     ":" => CON,
     "=" => EQ,
     ">" => GT,
@@ -264,6 +279,8 @@ match {
     ">=" => GTE,
     "<=" => LTE,
     "." => DOT,
+    "_" => USCORE,
+    "$" => DOLLAR,
     ":=" => STO,
     "," => COMMA,
     "{" => CBOpen,
@@ -271,8 +288,14 @@ match {
     "(" => BOpen,
     ")" => BClose,
 } else {
-    r"[a-zA-Z0-9_]+" => TEXT,
+    r"[+-]?[0-9]+" => LONG,
+    r"[+-]?[0-9]+\.[0-9]+" => DOUBLE,
+    r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/?(\d{1,2})?" => IP,
+    r#""([\\].|[^"])*""# => STRING,
+    r"[a-zA-Z][a-zA-Z0-9_-]*|'[a-zA-Z][a-zA-Z0-9_-]*'" => IDTOKEN,
+} else {
+    r"#[^\n]*" => SLC,
     r"[/](([\\][/])|[^/])+[/]" => REGEX,
-    r####"[g]["](([\\]["])|[^"])+["]"#### => GLOB,
+    r#"[g]["](([\\]["])|[^"])+["]"# => GLOB,
      _
 }

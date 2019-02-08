@@ -12,24 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error::TSError;
+use crate::errors::*;
 use std::collections::VecDeque;
+use std::error;
+use std::fmt;
+use std::result;
 use std::sync::mpsc::Receiver;
 
 #[derive(Debug)]
 pub struct AsyncSink<T> {
-    queue: VecDeque<Receiver<Result<T, TSError>>>,
+    queue: VecDeque<Receiver<Result<T>>>,
     capacity: usize,
     size: usize,
 }
 
+#[derive(Debug)]
 pub enum SinkEnqueueError {
     AtCapacity,
 }
+impl error::Error for SinkEnqueueError {}
+impl fmt::Display for SinkEnqueueError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
 
+#[derive(Debug)]
 pub enum SinkDequeueError {
     Empty,
     NotReady,
+}
+impl error::Error for SinkDequeueError {}
+impl fmt::Display for SinkDequeueError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 /// A queue of async tasks defined by an receiver that returns once the task
@@ -42,7 +59,7 @@ impl<T> AsyncSink<T> {
             size: 0,
         }
     }
-    pub fn enqueue(&mut self, value: Receiver<Result<T, TSError>>) -> Result<(), SinkEnqueueError> {
+    pub fn enqueue(&mut self, value: Receiver<Result<T>>) -> result::Result<(), SinkEnqueueError> {
         if self.size >= self.capacity {
             Err(SinkEnqueueError::AtCapacity)
         } else {
@@ -51,7 +68,7 @@ impl<T> AsyncSink<T> {
             Ok(())
         }
     }
-    pub fn dequeue(&mut self) -> Result<Result<T, TSError>, SinkDequeueError> {
+    pub fn dequeue(&mut self) -> result::Result<Result<T>, SinkDequeueError> {
         match self.queue.pop_front() {
             None => Err(SinkDequeueError::Empty),
             Some(rx) => match rx.try_recv() {
@@ -73,13 +90,5 @@ impl<T> AsyncSink<T> {
     }
     pub fn has_capacity(&self) -> bool {
         self.size < self.capacity
-    }
-}
-
-impl From<SinkEnqueueError> for TSError {
-    fn from(e: SinkEnqueueError) -> TSError {
-        match e {
-            SinkEnqueueError::AtCapacity => TSError::new(&"Queue overflow"),
-        }
     }
 }

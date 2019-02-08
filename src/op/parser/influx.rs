@@ -36,13 +36,11 @@
 //!
 //! This operator takes no configuration
 
-use crate::error::TSError;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use serde_json::{Number, Value};
 use std::collections::HashMap;
 use std::f64;
-use std::result;
 use std::str::{self, Chars};
 
 /// The Raw Parser is a simple parser that performs no action on the
@@ -57,30 +55,18 @@ impl Parser {
 }
 
 impl Opable for Parser {
-    fn exec(&mut self, event: EventData) -> EventResult {
-        if !event.is_type(ValueType::Raw) {
-            let t = event.value.t();
-            return EventResult::Error(
-                event,
-                Some(TSError::from(TypeError::with_location(
-                    &"parse::influx",
-                    t,
-                    ValueType::Raw,
-                ))),
-            );
-        };
+    fn on_event(&mut self, event: EventData) -> EventResult {
+        ensure_type!(event, "parse::influx", ValueType::Raw);
         let res = event.replace_value(|val| {
             if let EventValue::Raw(raw) = val {
-                if let Ok(s) = str::from_utf8(&raw) {
-                    match parse(s) {
-                        Ok(parsed) => match serde_json::to_value(parsed) {
-                            Ok(val) => Ok(EventValue::JSON(val)),
-                            Err(_e) => Err(TSError::new(&"Invalid influx")),
-                        },
-                        Err(_e) => Err(TSError::new(&"Invalid influx")),
-                    }
-                } else {
-                    Err(TSError::new(&"Invalid utf8"))
+                let s = str::from_utf8(&raw)?;
+                let parsed = parse(s)?;
+                match serde_json::to_value(parsed) {
+                    Ok(val) => Ok(EventValue::JSON(val)),
+                    Err(_e) => Err(ErrorKind::InvalidInfluxData(
+                        "Could not create structure.".into(),
+                    )
+                    .into()),
                 }
             } else {
                 unreachable!()
@@ -88,7 +74,7 @@ impl Opable for Parser {
         });
 
         match res {
-            Ok(n) => EventResult::Next(n),
+            Ok(n) => next!(n),
             Err(e) => e,
         }
     }
@@ -103,7 +89,7 @@ pub struct InfluxDatapoint {
     timestamp: u64,
 }
 
-fn parse(data: &str) -> result::Result<InfluxDatapoint, TSError> {
+fn parse(data: &str) -> Result<InfluxDatapoint> {
     let mut data = String::from(data);
     loop {
         if let Some(c) = data.pop() {
@@ -112,7 +98,7 @@ fn parse(data: &str) -> result::Result<InfluxDatapoint, TSError> {
                 break;
             }
         } else {
-            return Err(TSError::new(&"empty event"));
+            return Err(ErrorKind::InvalidInfluxData("Empty.".into()).into());
         }
     }
 
@@ -135,27 +121,29 @@ fn parse(data: &str) -> result::Result<InfluxDatapoint, TSError> {
     })
 }
 
-fn parse_string(chars: &mut Chars) -> result::Result<(Value, char), TSError> {
+fn parse_string(chars: &mut Chars) -> Result<(Value, char)> {
     let val = parse_to_char(chars, '"')?;
     match chars.next() {
         Some(',') => Ok((Value::String(val), ',')),
         Some(' ') => Ok((Value::String(val), ' ')),
-        _ => Err(TSError::new(&"Unexpected character after string")),
+        _ => Err(ErrorKind::InvalidInfluxData("Unexpected character after string".into()).into()),
     }
 }
 
-fn float_or_bool(s: &str) -> result::Result<Value, TSError> {
+fn float_or_bool(s: &str) -> Result<Value> {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::Bool(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::Bool(false)),
         _ => Ok(num_f(s.parse()?)),
     }
 }
-fn parse_value(chars: &mut Chars) -> result::Result<(Value, char), TSError> {
+fn parse_value(chars: &mut Chars) -> Result<(Value, char)> {
     let mut res = String::new();
     match chars.next() {
         Some('"') => return parse_string(chars),
-        Some(' ') | Some(',') | None => return Err(TSError::new(&"Unexpected end of values")),
+        Some(' ') | Some(',') | None => {
+            return Err(ErrorKind::InvalidInfluxData("Unexpected end of values".into()).into());
+        }
         Some(c) => res.push(c),
     }
     while let Some(c) = chars.next() {
@@ -166,12 +154,15 @@ fn parse_value(chars: &mut Chars) -> result::Result<(Value, char), TSError> {
                 Some(' ') => return Ok((num_i(res.parse()?), ' ')),
                 Some(',') => return Ok((num_i(res.parse()?), ',')),
                 Some(c) => {
-                    return Err(TSError::new(&format!(
+                    return Err(ErrorKind::InvalidInfluxData(format!(
                         "Unexpected character '{}', expected ' ' or ','.",
                         c
-                    )))
+                    ))
+                    .into());
                 }
-                None => return Err(TSError::new(&"Unexpected end of line")),
+                None => {
+                    return Err(ErrorKind::InvalidInfluxData("Unexpected end of line".into()).into());
+                }
             },
             '\\' => {
                 if let Some(c) = chars.next() {
@@ -181,12 +172,13 @@ fn parse_value(chars: &mut Chars) -> result::Result<(Value, char), TSError> {
             _ => res.push(c),
         }
     }
-    Err(TSError::new(
-        &"Unexpected character or end of value definition",
-    ))
+    Err(
+        ErrorKind::InvalidInfluxData("Unexpected character or end of value definition".into())
+            .into(),
+    )
 }
 
-fn parse_fields(chars: &mut Chars) -> result::Result<HashMap<String, Value>, TSError> {
+fn parse_fields(chars: &mut Chars) -> Result<HashMap<String, Value>> {
     let mut res = HashMap::new();
     loop {
         let key = parse_to_char(chars, '=')?;
@@ -205,16 +197,16 @@ fn parse_fields(chars: &mut Chars) -> result::Result<HashMap<String, Value>, TSE
     }
 }
 
-fn parse_tags(chars: &mut Chars) -> result::Result<HashMap<String, String>, TSError> {
+fn parse_tags(chars: &mut Chars) -> Result<HashMap<String, String>> {
     let mut res = HashMap::new();
     loop {
         let (key, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
         if c != '=' {
-            return Err(TSError::new(&"Tag without value"));
+            return Err(ErrorKind::InvalidInfluxData("Tag without value".into()).into());
         };
         let (val, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
         if c == '=' {
-            return Err(TSError::new(&"= found in tag value"));
+            return Err(ErrorKind::InvalidInfluxData("= found in tag value".into()).into());
         }
         res.insert(key, val);
         if c == ' ' {
@@ -228,7 +220,7 @@ fn parse_to_char3(
     end1: char,
     end2: Option<char>,
     end3: Option<char>,
-) -> result::Result<(String, char), TSError> {
+) -> Result<(String, char)> {
     let mut res = String::new();
     while let Some(c) = chars.next() {
         match c {
@@ -243,25 +235,27 @@ fn parse_to_char3(
                     res.push('\\');
                     res.push(c)
                 }
-                None => return Err(TSError::new(&"non terminated escape sequence")),
+                None => {
+                    return Err(ErrorKind::InvalidInfluxData(
+                        "non terminated escape sequence".into(),
+                    )
+                    .into());
+                }
             },
             _ => res.push(c),
         }
     }
-    Err(TSError::new(&format!(
+    Err(ErrorKind::InvalidInfluxData(format!(
         "Expected '{}', '{:?}' or '{:?}' but did not find it",
         end1, end2, end3
-    )))
+    ))
+    .into())
 }
 
-fn parse_to_char2(
-    chars: &mut Chars,
-    end1: char,
-    end2: char,
-) -> result::Result<(String, char), TSError> {
+fn parse_to_char2(chars: &mut Chars, end1: char, end2: char) -> Result<(String, char)> {
     parse_to_char3(chars, end1, Some(end2), None)
 }
-fn parse_to_char(chars: &mut Chars, end: char) -> result::Result<String, TSError> {
+fn parse_to_char(chars: &mut Chars, end: char) -> Result<String> {
     let (res, _) = parse_to_char3(chars, end, None, None)?;
     Ok(res)
 }

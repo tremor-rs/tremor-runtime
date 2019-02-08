@@ -32,6 +32,8 @@ use prometheus::IntGauge; // w/ instance
 use serde_yaml;
 use std::time::Instant;
 
+static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
+
 lazy_static! {
     static ref BACKOFF_GAUGE: IntGauge =
         prom_int_gauge!("backoff_ms", "Current backoff in millis.");
@@ -79,17 +81,17 @@ impl Limiter {
 }
 
 impl Opable for Limiter {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         let d = duration_to_millis(self.last_pass.elapsed());
         if d <= self.backoff {
-            EventResult::NextID(3, event)
+            next_id!(DROP_OUTPUT_ID, event)
         } else {
             self.last_pass = Instant::now();
-            EventResult::Next(event)
+            next!(event)
         }
     }
 
-    fn result(&mut self, result: EventReturn) -> EventReturn {
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
         match result {
             Ok(Some(v)) if v > self.config.timeout => self.next_backoff(),
             Err(_) => self.next_backoff(),

@@ -26,9 +26,9 @@
 
 use crate::async_sink::{AsyncSink, SinkDequeueError};
 use crate::dflt;
-use crate::error::TSError;
 use crate::errors::*;
 use crate::metrics;
+use crate::pipeline::pool::WorkerPoolStep;
 use crate::pipeline::prelude::*;
 use crate::utils::duration_to_millis;
 use prometheus::{exponential_buckets, HistogramVec}; // w/ instance
@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::f64;
 use std::fmt;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
 
@@ -51,7 +51,7 @@ lazy_static! {
             "latency",
             "Latency for influx offramp.",
             exponential_buckets(0.0005, 1.1, 20).unwrap()
-        ).namespace("tremor").subsystem("influx").const_labels(hashmap!{"instance".into() => unsafe{ metrics::INSTANCE.to_string() }});
+        ).namespace("tremor").subsystem("influx").const_labels(hashmap!{"instance".into() => instance!()});
         register_histogram_vec!(opts, &["dest"]).unwrap()
     };
 }
@@ -67,6 +67,9 @@ pub struct Config {
     /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "dflt::d_4")]
     pub concurrency: usize,
+    /// Timeout before a batch is always send
+    #[serde(default = "dflt::d_0")]
+    pub timeout: u64,
 }
 
 #[derive(Clone)]
@@ -122,11 +125,8 @@ impl Offramp {
         while let Some(event) = self.payload.pop_front() {
             let res = event.maybe_extract(|val| {
                 if let EventValue::Raw(raw) = val {
-                    if let Ok(raw) = String::from_utf8(raw.to_vec()) {
-                        Ok((raw, Ok(None)))
-                    } else {
-                        Err(TSError::new(&"Bad UTF8"))
-                    }
+                    let raw = String::from_utf8(raw.to_vec())?;
+                    Ok((raw, Ok(None)))
                 } else {
                     unreachable!()
                 }
@@ -154,7 +154,34 @@ impl Offramp {
         }
         (payload, returns)
     }
-    fn send_future(&mut self) -> Receiver<EventReturn> {
+}
+
+impl WorkerPoolStep for Offramp {
+    fn dequeue(&mut self) -> std::result::Result<Result<Option<f64>>, SinkDequeueError> {
+        self.queue.dequeue()
+    }
+    fn has_capacity(&self) -> bool {
+        self.queue.has_capacity()
+    }
+    fn pop_payload(&mut self) -> Option<EventData> {
+        self.payload.pop_front()
+    }
+    fn push_payload(&mut self, event: EventData) {
+        self.payload.push_back(event)
+    }
+    fn batch_size(&self) -> usize {
+        self.config.batch_size
+    }
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+    fn empty(&mut self) {
+        self.queue.empty()
+    }
+    fn timeout(&self) -> u64 {
+        self.config.timeout
+    }
+    fn enqueue_send_future(&mut self) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let (payload, returns) = self.render_payload();
         let destination = self.clients[self.client_idx].clone();
@@ -162,33 +189,11 @@ impl Offramp {
         self.pool.execute(move || {
             let dst = destination.url.as_str();
             let r = flush(&destination.client, dst, payload.as_str());
-            match r.clone() {
-                Ok(r) => {
-                    for (dst, ids) in returns.iter() {
-                        let ret = Return {
-                            source: dst.source.to_owned(),
-                            chain: dst.chain.to_owned(),
-                            ids: ids.to_owned(),
-                            v: Ok(r),
-                        };
-                        ret.send();
-                    }
-                }
-                Err(e) => {
-                    for (dst, ids) in returns.iter() {
-                        let ret = Return {
-                            source: dst.source.to_owned(),
-                            chain: dst.chain.to_owned(),
-                            ids: ids.to_owned(),
-                            v: Err(e.clone()),
-                        };
-                        ret.send();
-                    }
-                }
-            };
+            Self::handle_return(&r, returns);
             let _ = tx.send(r);
         });
-        rx
+        self.queue.enqueue(rx)?;
+        Ok(())
     }
 }
 
@@ -205,39 +210,16 @@ fn flush(client: &reqwest::Client, url: &str, payload: &str) -> EventReturn {
 impl Opable for Offramp {
     opable_types!(ValueType::Raw, ValueType::Raw);
 
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         ensure_type!(event, "offramp::influx", ValueType::Raw);
-        //EventResult::Next(event)
-        // We only add the message if it is not already dropped and
-        // we are not in backoff time.
-
-        self.payload.push_back(event);
-
-        if self.config.batch_size > self.payload.len() {
-            EventResult::Done
-        } else {
-            match self.queue.dequeue() {
-                Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                    if let Some(e_out) = self.payload.pop_front() {
-                        EventResult::NextID(3, e_out)
-                    } else {
-                        EventResult::StepError(TSError::new(&"No capacity in queue"))
-                    }
-                }
-                _ => {
-                    let rx = self.send_future();
-                    if self.queue.enqueue(rx).is_ok() {
-                        EventResult::Done
-                    } else {
-                        EventResult::StepError(TSError::new(&"Could not enqueue event"))
-                    }
-                }
-            }
-        }
+        self.handle_event(event)
     }
+
+    fn on_timeout(&mut self) -> EventResult {
+        self.maybe_enque()
+    }
+
     fn shutdown(&mut self) {
-        self.queue.empty();
-        let rx = self.send_future();
-        let _ = rx.recv();
+        <Offramp as WorkerPoolStep>::shutdown(self)
     }
 }

@@ -1,1 +1,0 @@
-initSidebarItems({"mod":[["classifier","Classifiers used to classify events"],["generic","Generic operators"],["grouping","Grouping and static limiting"],["limiting","Rate limiting operators"],["offramp","Offramps to send data to external systems"],["parser","Format specific parsers"]]});

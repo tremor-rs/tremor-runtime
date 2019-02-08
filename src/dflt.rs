@@ -14,6 +14,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::vec::Vec;
 use std::{convert, f64};
 
 pub fn d_false() -> bool {
@@ -25,6 +26,13 @@ where
     T: convert::From<u8>,
 {
     T::from(0)
+}
+
+pub fn d_1<T>() -> T
+where
+    T: convert::From<u8>,
+{
+    T::from(1)
 }
 
 pub fn d_inf() -> f64 {
@@ -57,6 +65,10 @@ where
     T1: std::cmp::Eq + std::hash::Hash,
 {
     HashMap::new()
+}
+
+pub fn d_vec<T>() -> Vec<T> {
+    Vec::new()
 }
 
 pub fn d_empty() -> String {

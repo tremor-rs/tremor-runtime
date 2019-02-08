@@ -18,7 +18,6 @@ use super::types::EventData;
 use actix;
 use actix::prelude::*;
 use futures::sync::mpsc;
-use futures::Future;
 use std::collections::HashMap;
 
 pub type OnRampActorReplyChannel = mpsc::Sender<Return>;
@@ -56,8 +55,12 @@ impl Handler<OnData> for OnRampActor {
 }
 impl Handler<Shutdown> for OnRampActor {
     type Result = ();
-    fn handle(&mut self, shutdown: Shutdown, _ctx: &mut Context<Self>) -> Self::Result {
-        let _ = self.pipeline.send(shutdown).wait();
+    fn handle(&mut self, shutdown: Shutdown, ctx: &mut Context<Self>) -> Self::Result {
+        self.pipeline
+            .send(shutdown)
+            .into_actor(self)
+            .then(|_, _, _| actix::fut::ok(()))
+            .wait(ctx);
     }
 }
 

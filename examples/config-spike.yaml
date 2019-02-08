@@ -1,0 +1,85 @@
+##
+## A tremor deployment unit is a composition of
+## * Zero or many deployment specifications
+## * Zero or more pipelines
+##
+deployments:
+  - id: default                   # Opaque unique (deployment/node) string
+    name: default                 # Required, defaults to id
+    description: Foo bar baz      # Optional
+    binding:
+      onramps:
+        - onramp::metronome:
+           id: metro1
+           period: 1000
+        - onramp::stdin:
+           id: std1
+      offramps:
+        - offramp::stdout:
+            id: out
+            prefix: "FNORK"
+
+# module:
+#  - id: metrics-alerter # Opaque unique (deployment/node) string
+#    source: my-pipeline
+#    name: default                 # Required, defaults to id
+#    description: Foo bar baz      # Optional
+#    binding:
+#      inputs:
+#        -  id: input1
+#           type: json
+#      outputs:
+#        -  id: out
+#           type: raw
+
+links:
+  /deployments/default/metro1:
+   - [tremor://[host:port]]/pipelines/my-pipeline/in
+   - [tremor://[host:port]]/pipelines/my-pipeline2/in
+
+  /deployments/default/metro1: /pipelines/duplicate/in
+  /pipelines/duplicate/copy1: [tremor://[host:port]]/pipelines/my-pipeline/in
+  /pipelines/duplicate/copy2: [tremor://[host:port]]/pipelines/my-pipeline/in
+
+ std1: [tremor://[host:port]]/pipelines/my-pipeline/in
+  /pipelines/my-pipeline/out: /deployments/default/out
+#  - /deployments/left/out           # Synthesizes a passthrough pipeline for this case
+#    - /deployments/right/in
+#    - /deployments/bugger/flork
+#  constraints:
+#    same-node: true
+
+pipelines:
+  - id: my-pipeline
+    interface:                       # Minimal 'useful' surface - MUST connect inputs, SHOULD ( ordinarily ) connect outputs
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      beginning:
+        type: parse::json
+      op-with-ports:
+        type: filter::limit
+      module-ref:
+        type: magic-pipeline
+          pipeline: some-id-to-another-pipe
+           config: 
+      render:
+        type: render::json
+    links:
+      beginning/data-out: op-with-ports/data-out
+      op-with-ports/json-out: module-ref/in
+      module-ref/out: render/data-in
+
+    imports:
+      in: /beginning/data-in
+      config: /config/config-in
+
+    exports:
+      out:
+        - render/data-out
+      debug:
+        - render/data-out
+        - op-with-ports/json-out
+        - beginning/json-out

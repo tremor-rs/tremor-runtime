@@ -58,7 +58,15 @@ impl OnrampT for Onramp {
                         };
                         let i = i + 1 % len;
                         pipelines[i].do_send(msg);
-                        for _r in rx.wait() {}
+
+                        // NOTE Although we do nothing with the rx channel we
+                        // are required to wait to avoid the receiver being
+                        // dropped / going out of scope - which in turn introduces
+                        // hard to debug ERRORS of the form:
+                        //
+                        // ERROR 2019-01-25T12:27:53Z: tremor_runtime::pipeline::onramp: Pipeline return error: send failed because receiver is gone
+                        //
+                        for _ in rx.wait() {}
                     }
                     Err(e) => error!("Onramp error: {}", e),
                 }

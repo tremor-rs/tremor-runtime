@@ -15,27 +15,25 @@
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 //! Test regex matching the string data and evaluating to true
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:/d.*/").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:/d.*/").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test regex not matching the string data and evaluating to false
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:/e.*/").unwrap();
-//! assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:/e.*/").unwrap();
+//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test negations with compound rule
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{
 //!                 "key1": {
 //!                             "subkey1": "data1"
@@ -45,42 +43,38 @@
 //!                         },
 //!                 "key3": "data3"
 //!             }"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "!(key1.subkey1:\"data1\" OR NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("!(key1.subkey1:\"data1\" OR NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find string value in mimir array.  This search uses the ':' contains in array operator meaning
 //! in this case one of the values "foo", "data", or "bar".  Since there is a 'key' element containing
 //! the value "data" in the document the result of this rule evaluation will be true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, r#"key:["foo", "data", "bar"]"#).unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse(r#"key:["foo", "data", "bar"]"#).unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find int value in mimir array
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":4}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:[3, 4, 5]").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:[3, 4, 5]").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find float value in mimir array
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":4.1}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:[3.1, 4.1, 5.1]").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:[3.1, 4.1, 5.1]").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Find string value in array from document using the contains (":") operator.  In this case
@@ -88,162 +82,143 @@
 //! "v1", "v2" and "v3.  The rule key:"v2" will be a match since "v2" is contained in the document
 //! array.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":["v1", "v2", "v3"]}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:\"v2\"").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:\"v2\"").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find int value in json array
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":[3, 4, 5]}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:4").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:4").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find float value in json array
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:4.1").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:4.1").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test wildcard search with mimir
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:g\"da?a\"").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:g\"da?a\"").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test wildcard search with mimir (not a match)
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key:g\"daa?a\"").unwrap();
-//! assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key:g\"daa?a\"").unwrap();
+//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Testing glob match using star match
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key1": "this is a glob blahblah"}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key1:g\"this is a glob*\"").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key1:g\"this is a glob*\"").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test equal comparison of two integers.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key=5").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key=5").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than comparison of two integers.
 //! The value 5 from the json data is compared if it is
 //! greatere than 1 and greater than 4.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key>1").unwrap();
-//! r.add_rule(1, "key>4").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key>1 key>4").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than comparison of two integers.
 //! The value 5 from the json data is compared if it is
 //! greatere than -6.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key>-6").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key>-6").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than comparison of two integers.
 //! The value 5 from the json data is compared if it is
 //! greatere less than 10 and 9.  Returns true.
-//!```
-//! use mimir::*;
+//!
+//! ```
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key<10").unwrap();
-//! r.add_rule(1, "key<9").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key<10 key<9").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than comparison of two floating point numbers.
 //! The value 5.0 from the json data is compared if it is
 //! less than 10 and 9.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5.0}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key<10.0").unwrap();
-//! r.add_rule(1, "key<9.0").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key<10.0 key<9.0").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than or equals comparison of two integers.
 //! The value 5 from the json data is compared if it is
 //! less than or equals to 11 and 5.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key<=5").unwrap();
-//! r.add_rule(1, "key<=11").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key<=5 key<=11").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than or equals comparison of two integers.
 //! The value 5 from the json data is compared if it is
 //! greater than or equals to 3 and 4.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key >= 3").unwrap();
-//! r.add_rule(1, "key >= 4").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key >= 3 key >= 4").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than or equals comparison of two floating point numbers.
 //! The value 5.0 from the json data is compared if it is
 //! greater than or equals to 3.5 and 4.5.  Returns true.
 //! ```
-//! use mimir::*;
+//! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5.0}"#;
-//! let mut vals: MimirValue = serde_json::from_str(json).unwrap();
-//! let mut r = Rules::default();
-//! r.add_rule(0, "key >= 3.5").unwrap();
-//! r.add_rule(1, "key >= 4.5").unwrap();
-//! assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+//! let mut vals: Value = serde_json::from_str(json).unwrap();
+//! let mut s = Script::parse("key >= 3.5 key >= 4.5").unwrap();
+//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 
 #[macro_use]
@@ -252,15 +227,20 @@ extern crate lalrpop_util;
 extern crate serde_json;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate error_chain;
 
+pub mod errors;
+use crate::errors::*;
 use glob::Pattern;
 use pcre2::bytes::Regex;
-use serde_json::Value;
-use std::error::Error;
+pub use serde_json::Value;
+use std::collections::HashMap;
 use std::str;
 use std::str::FromStr;
+use std::string::ToString;
 
-pub type MimirValue = Value;
+pub type ValueMap = HashMap<String, Value>;
 
 lazy_static! {
     static ref IP_REGEX: regex::Regex =
@@ -271,6 +251,139 @@ lalrpop_mod!(
     #[cfg_attr(feature = "cargo-clippy", allow(clippy::all))]
     parser
 );
+
+#[derive(Default, Debug)]
+pub struct Interface {
+    imports: Vec<Id>,
+    exports: Vec<Id>,
+}
+
+#[derive(Debug)]
+pub struct Script {
+    interface: Interface,
+    statements: Vec<Stmt>,
+}
+
+impl Script {
+    pub fn parse(script: &str) -> Result<Self> {
+        parser::ScriptParser::new()
+            .parse(script)
+            .map_err(|e| ErrorKind::ParserError(e.to_string()).into())
+    }
+    pub fn run(&self, value: &mut Value, state: &mut ValueMap) -> Result<Option<usize>> {
+        let mut m: ValueMap = HashMap::new();
+        let mut i = 0;
+        let mut result: Option<usize> = None;
+        // Copy state variables that are imported
+        for import in &self.interface.imports {
+            if let Some(v) = state.get(&import.id) {
+                m.insert(import.id.clone(), v.clone());
+            }
+        }
+        'outer: for statement in &self.statements {
+            if statement.test(value, &m)? {
+                result = Some(i);
+                for action in &statement.actions {
+                    if action.execute(value, &mut m)? {
+                        break 'outer;
+                    }
+                }
+            };
+            i += 1;
+        }
+
+        // copy updated varialbes that are exported
+        for export in &self.interface.exports {
+            if let Some(v) = m.get(&export.id) {
+                state.insert(export.id.clone(), v.clone());
+            }
+        }
+        Ok(result)
+    }
+}
+#[derive(Debug)]
+pub struct Id {
+    id: String,
+    quoted: bool,
+}
+
+impl PartialEq<String> for Id {
+    fn eq(&self, s: &String) -> bool {
+        &self.id == s
+    }
+}
+
+impl PartialEq<str> for Id {
+    fn eq(&self, s: &str) -> bool {
+        self.id == s
+    }
+}
+
+impl ToString for Id {
+    fn to_string(&self) -> String {
+        self.id.to_string()
+    }
+}
+
+impl Id {
+    fn new(s: &str) -> Self {
+        if let Some("'") = s.get(0..1) {
+            Self {
+                id: s.trim_matches('\'').into(),
+                quoted: true,
+            }
+        } else {
+            Self {
+                id: s.into(),
+                quoted: false,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Path {
+    DataPath(Vec<Id>),
+    Var(Id),
+}
+#[derive(Debug)]
+pub enum RHSValue {
+    Literal(Value),
+    Lookup(Path),
+    List(Vec<RHSValue>), // TODO: Split out const list for optimisation
+}
+
+impl RHSValue {
+    pub fn reduce(&self, data: &Value, vars: &ValueMap) -> Option<Value> {
+        match self {
+            RHSValue::Literal(l) => Some(l.clone()),
+            RHSValue::Lookup(Path::DataPath(path)) => self.find(&path, 0, data),
+            RHSValue::Lookup(Path::Var(var)) => match vars.get(&var.id) {
+                Some(var) => Some(var.clone()),
+                None => None, // TODO: returning null is evil
+            },
+            RHSValue::List(list) => {
+                let out: Vec<Value> = list.iter().filter_map(|i| i.reduce(data, vars)).collect();
+                if out.len() == list.len() {
+                    Some(Value::Array(out))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+    fn find(&self, ks: &[Id], i: usize, value: &Value) -> Option<Value> {
+        if let Some(key) = ks.get(i) {
+            if let Some(v1) = value.get(&key.id) {
+                self.find(ks, i + 1, v1)
+            } else {
+                None
+            }
+        } else {
+            Some(value.clone())
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct CIDR {
@@ -307,94 +420,86 @@ pub struct Stmt {
 }
 
 impl Stmt {
-    pub fn test(&self, value: &Value) -> Result<bool, ErrorCode> {
-        self.item.test(value)
+    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
+        self.item.test(value, vars)
     }
 }
 
 #[derive(Debug)]
 pub enum Action {
-    Set { path: Vec<String>, value: Value },
-}
-
-#[derive(Debug, Clone)]
-pub enum MutationError {
-    /// A type conflict while trying to set a nested map
-    TypeConflict,
-    /// The path is invalid or empty
-    BadPath,
-}
-
-impl Error for MutationError {}
-
-impl std::fmt::Display for MutationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
+    Set { lhs: Path, rhs: RHSValue },
+    Return,
 }
 
 impl Action {
-    pub fn execute(&self, json: &mut Value) -> Result<(), MutationError> {
+    pub fn execute(&self, json: &mut Value, vars: &mut ValueMap) -> Result<bool> {
         match self {
-            Action::Set { path, value } => Action::mut_value(json, path, 0, value.clone()),
+            Action::Set {
+                lhs: Path::DataPath(path),
+                rhs,
+            } => {
+                // TODO what do we do if nothing was found?
+                if let Some(v) = rhs.reduce(json, vars) {
+                    Action::mut_value(json, path, 0, v)?;
+                };
+                Ok(false)
+            }
+            Action::Set {
+                lhs: Path::Var(var),
+                rhs,
+            } => {
+                // TODO what do we do if nothing was found?
+                if let Some(v) = rhs.reduce(json, vars) {
+                    vars.insert(var.id.clone(), v);
+                }
+                Ok(false)
+            }
+            Action::Return => Ok(true),
         }
     }
 
-    fn mut_value(
-        json: &mut Value,
-        ks: &[String],
-        i: usize,
-        val: Value,
-    ) -> Result<(), MutationError> {
+    fn mut_value(json: &mut Value, ks: &[Id], i: usize, val: Value) -> Result<()> {
         use serde_json::Map;
-        fn make_nested_object(ks: &[String], i: usize, val: Value) -> Value {
+        use serde_json::Value::*;
+        fn make_nested_object(ks: &[Id], i: usize, val: Value) -> Value {
             if let Some(key) = ks.get(i) {
                 let mut m = Map::new();
                 m.insert(key.to_string(), make_nested_object(ks, i + 1, val));
-                Value::Object(m)
+                Object(m)
             } else {
                 val
             }
         }
         if !json.is_object() {
-            return Err(MutationError::TypeConflict);
+            return Err(ErrorKind::MutationTypeConflict("not an object".into()).into());
         }
         if let Some(key) = ks.get(i) {
-            // This is the last key1
-            if i + 1 >= ks.len() {
-                if let Some(ref mut v) = json.get_mut(&key) {
-                    match v {
-                        Value::Object(ref mut m) => {
-                            m.insert(key.to_string(), val);
-                            Ok(())
-                        }
-                        _ => Err(MutationError::TypeConflict),
+            // This is the last key
+            let last = i + 1 >= ks.len();
+            if last {
+                match json {
+                    Object(ref mut m) => {
+                        m.insert(key.to_string(), val);
+                        Ok(())
                     }
-                } else {
-                    match json {
-                        Value::Object(ref mut m) => {
-                            m.insert(key.to_string(), val);
-                            Ok(())
-                        }
-                        _ => Err(MutationError::TypeConflict),
-                    }
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
                 }
-            } else if let Some(ref mut v) = json.get_mut(&key) {
+            } else if let Some(ref mut v) = json.get_mut(&key.id) {
                 match v {
-                    Value::Object(_m) => Action::mut_value(v, ks, i + 1, val),
-                    _ => Err(MutationError::TypeConflict),
+                    Object(_m) => Action::mut_value(v, ks, i + 1, val),
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
                 }
             } else {
                 match json {
-                    Value::Object(ref mut m) => {
+                    Object(ref mut m) => {
                         m.insert(key.to_string(), make_nested_object(ks, i + 1, val));
                         Ok(())
                     }
-                    _ => Err(MutationError::TypeConflict),
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
                 }
             }
         } else {
-            Err(MutationError::BadPath)
+            Err(ErrorKind::BadPath("empty".into()).into())
         }
     }
 }
@@ -408,51 +513,64 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn test(&self, value: &Value) -> Result<bool, ErrorCode> {
+    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
         match self {
             Item::Not(item) => {
-                let res = item.test(value)?;
+                let res = item.test(value, vars)?;
                 Ok(!res)
             }
             Item::And(left, right) => {
-                if left.test(value)? {
-                    right.test(value)
+                if left.test(value, vars)? {
+                    right.test(value, vars)
                 } else {
                     Ok(false)
                 }
             }
             Item::Or(left, right) => {
-                if left.test(value)? {
+                if left.test(value, vars)? {
                     Ok(false)
                 } else {
-                    right.test(value)
+                    right.test(value, vars)
                 }
             }
-            Item::Filter(filter) => filter.test(value),
+            Item::Filter(filter) => filter.test(value, vars),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct Filter {
-    path: Vec<String>,
-    cmp: Cmp,
+    lhs: Path,
+    rhs: Cmp,
 }
 
 impl Filter {
-    pub fn test(&self, value: &Value) -> Result<bool, ErrorCode> {
-        self.find_and_test(&self.path, 0, value)
+    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
+        match &self.lhs {
+            Path::DataPath(ref path) => self.find_and_test(&path, 0, value, value, vars),
+            Path::Var(ref var) => match vars.get(&var.id) {
+                Some(val) => self.rhs.test(val, value, vars),
+                _ => Ok(false),
+            },
+        }
     }
 
-    fn find_and_test(&self, ks: &[String], i: usize, value: &Value) -> Result<bool, ErrorCode> {
+    fn find_and_test(
+        &self,
+        ks: &[Id],
+        i: usize,
+        value: &Value,
+        data: &Value,
+        vars: &ValueMap,
+    ) -> Result<bool> {
         if let Some(key) = ks.get(i) {
-            if let Some(v1) = value.get(key) {
-                self.find_and_test(ks, i + 1, v1)
+            if let Some(v1) = value.get(&key.id) {
+                self.find_and_test(ks, i + 1, v1, data, vars)
             } else {
                 Ok(false)
             }
         } else {
-            self.cmp.test(value)
+            self.rhs.test(value, data, vars)
         }
     }
 }
@@ -460,35 +578,34 @@ impl Filter {
 #[derive(Debug)]
 enum Cmp {
     Exists,
-    Eq(Value),
-    Gt(Value),
-    Gte(Value),
-    Lt(Value),
-    Lte(Value),
-    Contains(Value),
+    Eq(RHSValue),
+    Gt(RHSValue),
+    Gte(RHSValue),
+    Lt(RHSValue),
+    Lte(RHSValue),
+    Contains(RHSValue),
     Regex(Regex),
     Glob(Pattern),
     CIDRMatch(CIDR),
-    IsInList(Vec<Value>),
 }
 impl Cmp {
-    pub fn test(&self, event_value: &Value) -> Result<bool, ErrorCode> {
+    pub fn test(&self, event_value: &Value, data: &Value, vars: &ValueMap) -> Result<bool> {
+        use serde_json::Value::*;
         match self {
             Cmp::Exists => Ok(true),
-            Cmp::IsInList(list) => Ok(list.contains(event_value)),
             Cmp::Glob(g) => match event_value {
-                Value::String(gmatch) => Ok(g.matches(gmatch)),
+                String(gmatch) => Ok(g.matches(gmatch)),
                 _ => Ok(false),
             },
             Cmp::Regex(rx) => match event_value {
-                Value::String(rxmatch) => match rx.is_match(&rxmatch.as_bytes()) {
+                String(rxmatch) => match rx.is_match(&rxmatch.as_bytes()) {
                     Ok(n) => Ok(n),
-                    Err(_) => Err(ErrorCode::RegexError),
+                    Err(_) => Err(ErrorKind::RegexpError(format!("{:?}", rx)).into()),
                 },
                 _ => Ok(false),
             },
             Cmp::CIDRMatch(cidr) => match event_value {
-                Value::String(ip_str) => {
+                String(ip_str) => {
                     if let Some(caps) = IP_REGEX.captures(ip_str) {
                         let a = u32::from_str(caps.get(1).map_or("", |m| m.as_str())).unwrap();
                         let b = u32::from_str(caps.get(2).map_or("", |m| m.as_str())).unwrap();
@@ -503,9 +620,15 @@ impl Cmp {
                 }
                 _ => Ok(false),
             },
-            Cmp::Eq(expected_value) => Ok(event_value == expected_value),
-            Cmp::Gt(expected_value) => match (event_value, expected_value) {
-                (Value::Number(event_value), Value::Number(expected_value)) => {
+            Cmp::Eq(expected_value) => {
+                if let Some(v) = expected_value.reduce(data, vars) {
+                    Ok(event_value == &v)
+                } else {
+                    Ok(false)
+                }
+            }
+            Cmp::Gt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
+                (Number(event_value), Some(Number(expected_value))) => {
                     if event_value.is_i64() && expected_value.is_i64() {
                         Ok(event_value.as_i64().unwrap() > expected_value.as_i64().unwrap())
                     } else if event_value.is_f64() && expected_value.is_f64() {
@@ -514,11 +637,11 @@ impl Cmp {
                         Ok(false)
                     }
                 }
-                (Value::String(s), Value::String(is)) => Ok(s > is),
+                (String(s), Some(String(is))) => Ok(s > is),
                 _ => Ok(false),
             },
-            Cmp::Lt(expected_value) => match (event_value, expected_value) {
-                (Value::Number(event_value), Value::Number(expected_value)) => {
+            Cmp::Lt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
+                (Number(event_value), Some(Number(expected_value))) => {
                     if event_value.is_i64() && expected_value.is_i64() {
                         Ok(event_value.as_i64().unwrap() < expected_value.as_i64().unwrap())
                     } else if event_value.is_f64() && expected_value.is_f64() {
@@ -527,11 +650,11 @@ impl Cmp {
                         Ok(false)
                     }
                 }
-                (Value::String(s), Value::String(is)) => Ok(s < is),
+                (String(s), Some(String(is))) => Ok(s < is),
                 _ => Ok(false),
             },
-            Cmp::Gte(expected_value) => match (event_value, expected_value) {
-                (Value::Number(event_value), Value::Number(expected_value)) => {
+            Cmp::Gte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
+                (Number(event_value), Some(Number(expected_value))) => {
                     if event_value.is_i64() && expected_value.is_i64() {
                         Ok(event_value.as_i64().unwrap() >= expected_value.as_i64().unwrap())
                     } else if event_value.is_f64() && expected_value.is_f64() {
@@ -540,11 +663,11 @@ impl Cmp {
                         Ok(false)
                     }
                 }
-                (Value::String(s), Value::String(is)) => Ok(s >= is),
+                (String(s), Some(String(is))) => Ok(s >= is),
                 _ => Ok(false),
             },
-            Cmp::Lte(expected_value) => match (event_value, expected_value) {
-                (Value::Number(event_value), Value::Number(expected_value)) => {
+            Cmp::Lte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
+                (Number(event_value), Some(Number(expected_value))) => {
                     if event_value.is_i64() && expected_value.is_i64() {
                         Ok(event_value.as_i64().unwrap() <= expected_value.as_i64().unwrap())
                     } else if event_value.is_f64() && expected_value.is_f64() {
@@ -553,94 +676,33 @@ impl Cmp {
                         Ok(false)
                     }
                 }
-                (Value::String(s), Value::String(is)) => Ok(s <= is),
+                (String(s), Some(String(is))) => Ok(s <= is),
                 _ => Ok(false),
             },
-            Cmp::Contains(expected_value) => match (event_value, expected_value) {
-                (Value::String(event_value), Value::String(expected_value)) => {
-                    Ok(event_value.contains(expected_value))
-                }
-                (Value::Number(event_value), Value::Number(expected_value)) => {
-                    if event_value.is_i64() && expected_value.is_i64() {
-                        Ok(event_value.as_i64().unwrap() == expected_value.as_i64().unwrap())
-                    } else if event_value.is_f64() && expected_value.is_f64() {
-                        #[allow(clippy::float_cmp)] // TODO: define a error
-                        Ok(event_value.as_f64().unwrap() == expected_value.as_f64().unwrap())
-                    } else {
-                        Ok(false)
+            Cmp::Contains(expected_value) => {
+                match (event_value, &expected_value.reduce(data, vars)) {
+                    (String(event_value), Some(String(expected_value))) => {
+                        Ok(event_value.contains(expected_value))
                     }
+                    (Number(event_value), Some(Number(expected_value))) => {
+                        if event_value.is_i64() && expected_value.is_i64() {
+                            Ok(event_value.as_i64().unwrap() == expected_value.as_i64().unwrap())
+                        } else if event_value.is_f64() && expected_value.is_f64() {
+                            #[allow(clippy::float_cmp)] // TODO: define a error
+                            Ok(event_value.as_f64().unwrap() == expected_value.as_f64().unwrap())
+                        } else {
+                            Ok(false)
+                        }
+                    }
+                    (Array(event_value), Some(v)) => Ok(event_value.contains(v)),
+                    (event_value, Some(Array(expected_value))) => {
+                        Ok(expected_value.contains(event_value))
+                    }
+
+                    _ => Ok(false),
                 }
-                (Value::Array(event_value), _) => Ok(event_value.contains(expected_value)),
-
-                _ => Ok(false),
-            },
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Rule<T> {
-    id: T,
-    statement: Stmt,
-}
-
-#[derive(Default, Debug)]
-pub struct Rules<T> {
-    rules: Vec<Rule<T>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ErrorCode {
-    NoError,
-    KeyNotFound,
-    RegexError,
-    ParseError,
-    MutationError(MutationError),
-}
-
-impl Error for ErrorCode {}
-
-impl std::fmt::Display for ErrorCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::convert::From<MutationError> for ErrorCode {
-    fn from(m: MutationError) -> Self {
-        ErrorCode::MutationError(m)
-    }
-}
-
-impl<T> Rules<T> {
-    pub fn add_rule(&mut self, id: T, rule: &str) -> Result<usize, ErrorCode> {
-        let res = parser::StmtParser::new().parse(rule);
-
-        match res {
-            Ok(n) => {
-                self.rules.push(Rule { id, statement: n });
-                Ok(self.rules.len())
-            }
-            Err(e) => {
-                println!("Parser error: {}", e);
-                Err(ErrorCode::ParseError)
             }
         }
-    }
-
-    pub fn eval_first_wins(&self, value: &mut Value) -> Result<Option<&T>, ErrorCode> {
-        for Rule { id, statement } in &self.rules {
-            if statement.test(value)? {
-                for action in &statement.actions {
-                    action.execute(value)?;
-                }
-                return Ok(Some(id));
-            };
-
-            //resp.get_mutevent();
-        }
-
-        Ok(None)
     }
 }
 
@@ -652,45 +714,66 @@ mod tests {
     fn test_glob() {
         let json = r#"{"key1": "data"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1:g\"da?a\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key1:g\"da?a\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_contains() {
         let json = r#"{"key1": "data3"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1:\"data\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse(r#"key1:"data""#).unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_equals() {
         let json = r#"{"key1": "data1"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1=\"data1\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key1=\"data1\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
+    }
+
+    #[test]
+    fn test_quote() {
+        let json = r#"{"key1": "da\\u1234ta1"}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse("key1=\"da\\u1234ta1\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_subkey_equals() {
         let json = r#"{"key1": {"sub1": "data1"}}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1.sub1=\"data1\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key1.sub1=\"data1\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_subkey_contains() {
         let json = r#"{"key1": {"sub1": "data1"}}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1.sub1:\"dat\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key1.sub1:\"dat\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
@@ -705,123 +788,143 @@ mod tests {
                    "key3": "data3"
                 }"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key1.subkey1:\"data1\" or key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s =Script::parse("key1.subkey1:\"data1\" or key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_eq() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key=5").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key=5").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_gt() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key>1").unwrap();
-        r.add_rule(1, "key>4").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key>1 key>4").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_negint_gt() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key>-6").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key>-6").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_lt() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key<10").unwrap();
-        r.add_rule(1, "key<9").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key<10 key<9").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_double_lt() {
         let json = r#"{"key":5.0}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key<10.0").unwrap();
-        r.add_rule(1, "key<9.0").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key<10.0 key<9.0").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_ltoe() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key<=5").unwrap();
-        r.add_rule(1, "key<=11").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key<=5 key<=11").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_gtoe() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key >= 3").unwrap();
-        r.add_rule(1, "key >= 4").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key >= 3 key >= 4").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_int_gtoe_double() {
         let json = r#"{"key":5.0}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key >= 3.5").unwrap();
-        r.add_rule(1, "key >= 4.5").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key >= 3.5 key >= 4.5").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_regex() {
         let json = r#"{"key":"data"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:/d.*/").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:/d.*/").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_regex_false() {
         let json = r#"{"key":"data"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:/e.*/").unwrap();
-        assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:/e.*/").unwrap();
+        assert_eq!(
+            false,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_negregex() {
         let json = r#"{"key":"data"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "NOT key:/d.*/").unwrap();
-        assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("NOT key:/d.*/").unwrap();
+        assert_eq!(
+            false,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_regex_bug() {
         let json = r#"{"key":"\\/"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, r#"key:/\\//"#).unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse(r#"key:/\\//"#).unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
@@ -836,152 +939,223 @@ mod tests {
                    "key3": "data3"
                 }"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "!(key1.subkey1:\"data1\" OR NOT (key3:\"data3\") OR NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s =Script::parse("!(key1.subkey1:\"data1\" OR NOT (key3:\"data3\") OR NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_list_contains_str() {
         let json = r#"{"key":"data"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:[\"foo\", \"data\", \"bar\"]").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:[\"foo\", \"data\", \"bar\"]").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_list_contains_int() {
         let json = r#"{"key":4}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:[3, 4, 5]").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:[3, 4, 5]").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_list_contains_float() {
         let json = r#"{"key":4.1}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:[3.1, 4.1, 5.1]").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:[3.1, 4.1, 5.1]").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_jsonlist_contains_str() {
         let json = r#"{"key":["v1", "v2", "v3"]}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:\"v2\"").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:\"v2\"").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_jsonlist_contains_int() {
         let json = r#"{"key":[3, 4, 5]}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:4").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:4").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_jsonlist_contains_float() {
         let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:4.1").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:4.1").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_bad_rule_syntax() {
-        let mut r = Rules::default();
-        assert_eq!(true, r.add_rule(0, "\"key").is_err());
+        assert_eq!(true, Script::parse("\"key").is_err());
     }
 
     #[test]
     fn test_ip_match() {
         let json = r#"{"key":"10.66.77.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:10.66.77.88").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:10.66.77.88").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_cidr_match() {
         let json = r#"{"key":"10.66.77.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:10.66.0.0/16").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:10.66.0.0/16").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_ip_match_false() {
         let json = r#"{"key":"10.66.78.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:10.66.77.88").unwrap();
-        assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:10.66.77.88").unwrap();
+        assert_eq!(
+            false,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_cidr_match_false() {
         let json = r#"{"key":"10.67.77.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key:10.66.0.0/16").unwrap();
-        assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key:10.66.0.0/16").unwrap();
+        assert_eq!(
+            false,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_exists() {
         let json = r#"{"key":"10.67.77.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "key").unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("key").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
     fn test_missing() {
         let json = r#"{"key":"10.67.77.88"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, "!key").unwrap();
-        assert_eq!(false, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse("!key").unwrap();
+        assert_eq!(
+            false,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
     }
 
     #[test]
-    fn test_mut() {
+    fn test_add() {
         let json = r#"{"key":"val"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(0, r#"key="val" {newkey.newsubkey.other := "newval";}"#)
-            .unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        let s = Script::parse(r#"key="val" {key2 := "newval";}"#).unwrap();
         assert_eq!(
-            Value::String("newval".to_string()),
-            vals["newkey"]["newsubkey"]["other"]
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
         );
+        assert_eq!(vals["key2"], json!("newval"));
     }
+
+    #[test]
+    fn test_add_nested() {
+        let json = r#"{"key":"val"}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse(r#"key="val" {newkey.newsubkey.other := "newval";}"#).unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
+        assert_eq!(vals["newkey"]["newsubkey"]["other"], json!("newval"));
+    }
+
+    #[test]
+    fn test_update() {
+        let json = r#"{"key":"val"}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse(r#"_ {key := "newval";}"#).unwrap();
+        let _ = s.run(&mut vals, &mut HashMap::new());
+        //        assert_eq!(Ok(Some(0)), s.run(&mut vals, &mut HashMap::new()));
+        assert_eq!(vals["key"], json!("newval"));
+    }
+
+    #[test]
+    fn test_update_nested() {
+        let json = r#"{"key":{"key1": "val"}}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse(r#"_ {key.key1 := "newval";}"#).unwrap();
+        let _ = s.run(&mut vals, &mut HashMap::new());
+        //        assert_eq!(Ok(Some(0)), s.run(&mut vals, &mut HashMap::new()));
+        assert_eq!(vals["key"]["key1"], json!("newval"));
+    }
+
+    #[test]
+    fn test_update_type_conflict() {
+        let json = r#"{"key":"key1"}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse(r#"_ {key.key1 := "newval";}"#).unwrap();
+        let _ = s.run(&mut vals, &mut HashMap::new());
+
+        // assert_eq!(
+        //     Err(ErrorCode::MutationError(MutationError::TypeConflict)),
+        //     s.run(&mut vals, &mut HashMap::new())
+        // );
+        assert_eq!(vals["key"], json!("key1"));
+    }
+
     #[test]
     fn test_mut_multi() {
         let json = r#"{"key":"val"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let mut r = Rules::default();
-        r.add_rule(
-            0,
+        let s = Script::parse(
             r#"key="val" {
                            newkey.newsubkey.other := "newval";
                            newkey.newsubkey.other2 := "newval2";
                          }"#,
         )
         .unwrap();
-        assert_eq!(true, r.eval_first_wins(&mut vals).unwrap().is_some());
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
         assert_eq!(
             Value::String("newval".to_string()),
             vals["newkey"]["newsubkey"]["other"]
@@ -990,6 +1164,288 @@ mod tests {
             Value::String("newval2".to_string()),
             vals["newkey"]["newsubkey"]["other2"]
         );
+    }
+
+    #[test]
+    fn test_underscore() {
+        let json = r#"{"key":"val"}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse(r#"_"#).unwrap();
+        assert_eq!(0, s.run(&mut vals, &mut HashMap::new()).unwrap().unwrap());
+    }
+
+    #[test]
+    fn doctest_time_test() {
+        let json = r#"{"key":5}"#;
+        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let s = Script::parse("key<10 key<9").unwrap();
+        assert_eq!(
+            true,
+            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+        );
+    }
+
+    #[test]
+    fn script_test() {
+        let script = r#"
+            import imported_var;
+            export classification, dimension, rate, index_type, below, timeframe;
+
+            _ { $index_type := index; $below := 5; $timeframe := 10000; }
+
+            application="app1 hello" { $classification := "applog_app1"; $rate := 1250; }
+            application="app2" { $classification := "applog_app2"; $rate := 2500; $below := 10; }
+            application="app3" { $classification := "applog_app3"; $rate := 18750; }
+            application="app4" { $classification := "applog_app4"; $rate := 750; $below := 10;   }
+            application="app5" { $classification := "applog_app5"; $rate := 18750; }
+            $classification { $dimension := application; return; }
+
+            index_type="applog_app6" { $dimension := logger_name; $classification := "applog_app6"; $rate := 4500; return; }
+
+            index_type="syslog_app1" { $classification := "syslog_app1"; $rate := 2500; }
+            tags:"tag1" { $classification := "syslog_app2"; $rate := 125; }
+            index_type="syslog_app2" { $classification := "syslog_app2"; $rate := 125; }
+            index_type="syslog_app3" { $classification := "syslog_app3"; $rate := 1750; }
+            index_type="syslog_app4" { $classification := "syslog_app4"; $rate := 1750; }
+            index_type="syslog_app5" { $classification := "syslog_app5"; $rate := 7500; }
+            index_type="syslog_app6" { $classification := "syslog_app6"; $rate := 125; }
+            $classification { $dimension := syslog_hostname; return; }
+
+            index_type="edilog" { $classification := "edilog"; $dimension := syslog_hostname; $rate := 3750; return; }
+
+             index_type="sqlserverlog" { $classification := "sqlserverlog"; $dimension := [src_ip, dst_ip]; $rate := 125; return; }
+
+            # type="applog" { $classification := "applog"; $dimension := [src_ip, dst_ip]; $rate := 75; return; }
+
+            _ { $classification := "default"; $rate := 250; }
+"#;
+        let s = Script::parse(script).unwrap();
+        assert_eq!(&s.interface.imports[0], "imported_var");
+    }
+
+    #[test]
+    fn test_mutate_var() {
+        let mut m: ValueMap = HashMap::new();
+
+        m.insert("a".to_string(), json!(1));
+        m.insert("b".to_string(), json!(1));
+        m.insert("c".to_string(), json!(1));
+
+        let mut v = Value::Null;
+
+        let script = r#"
+import a, b;
+export b, c, actual, actual1, actual2;
+
+
+_ { $actual1:= false; $actual2 := false; $actual := false; }
+
+$a=1 && $b=1 && !$c { $actual1 := true; }
+
+_ { $a := 2; $b := 3; $c := 4; }
+
+$a=2 && $b=3 && $c=4 && $actual1=true { $actual2 := true; }
+
+$actual1=true && $actual2=true { $actual := true; }
+
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["a"], json!(1));
+        assert_eq!(m["b"], json!(3));
+        assert_eq!(m["c"], json!(4));
+        assert_eq!(m["actual1"], json!(true));
+        assert_eq!(m["actual2"], json!(true));
+        assert_eq!(m["actual"], json!(true));
+    }
+
+    #[test]
+    fn test_mutate() {
+        let mut m: ValueMap = HashMap::new();
+
+        let mut v = json!(
+            {
+                "a": 1,
+                "b": 1,
+            }
+        );
+        let script = r#"
+export actual, actual1, actual2;
+
+_ { $actual1:= false; $actual2 := false; $actual := false; }
+
+a=1 && b=1 && !c { $actual1 := true; }
+
+_ { b := 3; c := 4; }
+
+a=1 && b=3 && c=4 && $actual1=true { $actual2 := true; }
+
+$actual1=true && $actual2=true { $actual := true; }
+
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(v["b"], json!(3));
+        assert_eq!(v["c"], json!(4));
+        assert_eq!(m["actual1"], json!(true));
+        assert_eq!(m["actual2"], json!(true));
+        assert_eq!(m["actual"], json!(true));
+    }
+
+    #[test]
+    fn unknown_key_test() {
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"a": 1});
+        let script = r#"
+export b;
+v:1 { $b := 2; return; }
+_ { $b := 3; }
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(m["b"], json!(3));
+    }
+    #[test]
+    #[ignore]
+    fn comment_before_interface() {
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"a": 1});
+
+        let script = r#"
+# comment
+export b;
+_ { $b := 2; }
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(m["b"], json!(2));
+    }
+
+    #[test]
+    fn comment_after_interface() {
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"a": 1});
+
+        let script = r#"
+export b;
+# comment
+_ { $b := 2; }
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(m["b"], json!(2));
+    }
+
+    #[test]
+    #[ignore]
+    fn comment_between_interface() {
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"a": 1});
+
+        let script = r#"
+export b;
+# comment
+import c;
+_ { $b := 2; }
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(m["b"], json!(2));
+    }
+
+    #[test]
+    fn comment_between_statements() {
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"a": 1});
+
+        let script = r#"
+export b, c;
+# comment
+# another comment
+v:1 { $b := 2; return; }
+# comment
+  # indented comment
+_ { $c := 3; }
+"#;
+        let s = Script::parse(script).unwrap();
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(v["a"], json!(1));
+        assert_eq!(m["c"], json!(3));
+    }
+
+    #[test]
+    fn demo_test() {
+        let script = r#"
+            export classification;
+            # The first class we define is named `info`,
+            # it matches if `short_message`  contains the string `"info"`
+            short_message:"info" { $classification := "info"; return; }
+            # The second class we define is `error`, it matches
+            # if  `short_message` contains the string `"ERROR`
+            short_message:"ERROR" { $classification := "error"; return; }
+            _ { $classification := "default"; }
+"#;
+        let s = Script::parse(script).unwrap();
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"short_message": "some info value"});
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["classification"], json!("info"));
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"short_message": "some ERROR value"});
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["classification"], json!("error"));
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"short_message": "some other value"});
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["classification"], json!("default"));
+    }
+    #[test]
+    #[ignore]
+    fn test_constructed_lit_list() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn assign_var() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn compare_var() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn import_var() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn export_var() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn return_test() {
+        assert!(false);
+    }
+
+    #[test]
+    #[ignore]
+    fn comment_test() {
+        assert!(false);
     }
 
 }

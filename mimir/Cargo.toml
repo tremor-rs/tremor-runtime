@@ -5,6 +5,18 @@ version = "0.1.1"
 authors = ["Ivan Monov <imonov@wayfair.com>"]
 edition = "2018"
 
+[dependencies]
+error-chain="0.12"
+lalrpop-util = "0.16.1"
+regex = "0.2.1"
+serde_json = "1.0"
+pcre2 = "0.1.1"
+glob = "0.2.11"
+lazy_static = "1.2.0"
+lalrpop = "0.16"
+codespan = "0.2.0"
+quick-error = "1.2.2"
+
 [build-dependencies]
 lalrpop = "0.16"
 
@@ -15,10 +27,3 @@ criterion = "0.2"
 name = "mimir_benchmark"
 harness = false
 
-[dependencies]
-lalrpop-util = "0.16.1"
-regex = "0.2.1"
-serde_json = "1.0"
-pcre2 = "0.1.1"
-glob = "0.2.11"
-lazy_static = "1.2.0"

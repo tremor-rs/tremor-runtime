@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["Config",""],["Offramp","An offramp that write to stdout"]]});

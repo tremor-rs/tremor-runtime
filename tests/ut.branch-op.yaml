@@ -1,0 +1,36 @@
+ramps:
+  # A brace or onramp/offramp pair that reads from
+  - id: bench-001
+    description: Replay like it's the 70's
+    onramps:
+      - id: blaster
+        type: onramp::blaster
+        config:
+          source: ./demo/data/data.json.xz
+    offramps:
+      - id: blackhole
+        type: offramp::blackhole
+        config:
+          warmup_secs: 10
+          stop_after_secs: 40
+          significant_figures: 2
+
+# We bind the main pipeline to a bench-001 ramp set
+links:
+  /ramps/bench-001/blaster: /pipelines/main/in
+  /pipelines/main/out: /ramps/bench-001/blackhole
+
+
+# Passthrough pipeline
+#   Refers directly to interface defined inputs/outputs
+pipelines:
+  - id: main
+    interface:
+      inputs: [ in ]
+      outputs: [ o1, o2, o3 ]
+    nodes:
+      - id: branch
+        type: foo::bar
+    links:
+      in: [ branch ]
+      branch: [ o1 , o2, o3 ]

@@ -18,10 +18,7 @@
 
 pub mod copy;
 pub mod count;
-pub mod into_var;
-pub mod into_vars;
 pub mod route;
-pub mod set;
 
 use crate::errors::*;
 use crate::pipeline::prelude::*;
@@ -32,22 +29,16 @@ use crate::pipeline::prelude::*;
 pub enum Generic {
     Copy(copy::Op),
     Count(count::Op),
-    IntoVar(into_var::Op),
-    IntoVars(into_vars::Op),
-    Set(set::Op),
     Route(route::Op),
 }
 
-opable!(Generic, Count, Set, Copy, Route, IntoVar, IntoVars);
+opable!(Generic, Count, Copy, Route);
 
 impl Generic {
     pub fn create(name: &str, opts: &ConfValue) -> Result<Generic> {
         match name {
             "copy" => Ok(Generic::Copy(copy::Op::create(opts)?)),
             "count" => Ok(Generic::Count(count::Op::create(opts)?)),
-            "into_var" => Ok(Generic::IntoVar(into_var::Op::create(opts)?)),
-            "into_vars" => Ok(Generic::IntoVars(into_vars::Op::create(opts)?)),
-            "set" => Ok(Generic::Set(set::Op::create(opts)?)),
             "route" => Ok(Generic::Route(route::Op::create(opts)?)),
             _ => Err(ErrorKind::UnknownOp("op".into(), name.into()).into()),
         }

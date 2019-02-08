@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["Config","A Limiter algorithm that just lets through a percentage of messages"],["Limiter",""]]});

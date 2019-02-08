@@ -34,3 +34,12 @@ pub fn print() {
         println_stderr!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
     }
 }
+
+pub fn log() {
+    info!("tremor version: {}", VERSION);
+    #[cfg(feature = "kafka")]
+    {
+        let (version_n, version_s) = get_rdkafka_version();
+        info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    }
+}

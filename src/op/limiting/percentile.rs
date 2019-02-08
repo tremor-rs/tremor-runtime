@@ -34,6 +34,8 @@ use prometheus::Gauge; // w/ instance
 use rand::prelude::*;
 use serde_yaml;
 
+static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
+
 lazy_static! {
     static ref PERCENTILE_GAUGE: Gauge =
         prom_gauge!("ts_limiting_percentile", "Current limiting percentile.");
@@ -91,15 +93,15 @@ fn min(f1: f64, f2: f64) -> f64 {
 }
 
 impl Opable for Limiter {
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         let mut rng = thread_rng();
         if rng.gen::<f64>() < self.percentile {
-            EventResult::Next(event)
+            next!(event)
         } else {
-            EventResult::NextID(3, event)
+            next_id!(DROP_OUTPUT_ID, event)
         }
     }
-    fn result(&mut self, result: EventReturn) -> EventReturn {
+    fn on_result(&mut self, result: EventReturn) -> EventReturn {
         match (&result, self.config.adjustment) {
             (Ok(Some(f)), Some(adjustment)) if f > &self.config.upper_limit => {
                 self.percentile = max(adjustment, self.percentile - adjustment);
@@ -139,9 +141,9 @@ mod tests {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let mut c = Limiter::create("percentile", conf).unwrap();
 
-        let r = c.exec(e);
+        let r = c.on_event(e);
 
-        assert_matches!(r, EventResult::Next(_));
+        assert_matches!(r, EventResult::NextID(1, _));
     }
 
     #[test]
@@ -156,7 +158,7 @@ mod tests {
         let e = EventData::new(0, 0, None, EventValue::Raw(vec![]));
         let mut c = Limiter::create("percentile", conf).unwrap();
 
-        let r = c.exec(e);
+        let r = c.on_event(e);
 
         assert_matches!(r, EventResult::NextID(3, _));
     }

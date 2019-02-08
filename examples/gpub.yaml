@@ -1,0 +1,16 @@
+onramps:
+  - onramp::metronome:
+      period: 5000
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - offramp::gpub:
+          service_account: "./examples/gps_pubsub_secret.json"  # Service Account
+          topic: "projects/wf-us-dataeng-sandbox/topics/wf-dataeng-test"
+          name: "tremor.txt"                                    # object name
+          user_project: "wf-us-dataeng-sandbox"                 # active project
+          content_encoding: "application/json"                  # content encoding
+      - offramp::stdout:
+          prefix: "GPUB "

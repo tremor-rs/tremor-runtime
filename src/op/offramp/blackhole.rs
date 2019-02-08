@@ -23,12 +23,13 @@
 use crate::errors::*;
 use crate::pipeline::prelude::*;
 use crate::utils;
-use hdrhistogram::serialization::Serializer;
-use hdrhistogram::serialization::V2Serializer;
+use hdrhistogram::serialization::{DeserializeError, Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
 use serde_yaml;
-use std::io::stdout;
+use std::fmt::Display;
+use std::io::{self, stdout, Read, Write};
 use std::process;
+use std::result;
 use std::str;
 
 /// A null offramp that records histograms
@@ -73,7 +74,7 @@ impl Offramp {
 
 impl Opable for Offramp {
     // TODO
-    fn exec(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, event: EventData) -> EventResult {
         let now_ns = utils::nanotime();
         let delta_ns = now_ns - event.ingest_ns;
 
@@ -87,14 +88,14 @@ impl Opable for Offramp {
                 .record(delta_ns)
                 .expect("HDR Histogram error");
         }
-        EventResult::Return(event.make_return(Ok(None)))
+        return_result!(event.make_return(Ok(None)))
     }
     fn shutdown(&mut self) {
         let mut buf = Vec::new();
         let mut serializer = V2Serializer::new();
 
         serializer.serialize(&self.delivered, &mut buf).unwrap();
-        utils::quantiles(buf.as_slice(), stdout(), 5, 2).expect("Failed to serialize histogram");
+        quantiles(buf.as_slice(), stdout(), 5, 2).expect("Failed to serialize histogram");
     }
 
     opable_types!(ValueType::Raw, ValueType::Raw);
@@ -102,3 +103,111 @@ impl Opable for Offramp {
 
 /*
 */
+
+#[derive(Debug)]
+enum HistogramError {
+    Io(io::Error),
+    // HistogramSerialize(V2SerializeError),
+    HistogramDeserialize(DeserializeError),
+}
+
+fn quantiles<R: Read, W: Write>(
+    mut reader: R,
+    mut writer: W,
+    quantile_precision: usize,
+    ticks_per_half: u32,
+) -> result::Result<(), HistogramError> {
+    let hist: Histogram<u64> = Deserializer::new().deserialize(&mut reader)?;
+
+    writer.write_all(
+        format!(
+            "{:>10} {:>quantile_precision$} {:>10} {:>14}\n\n",
+            "Value",
+            "Percentile",
+            // "QuantileIteration",
+            "TotalCount",
+            "1/(1-Percentile)",
+            quantile_precision = quantile_precision + 2 // + 2 from leading "0." for numbers
+        )
+        .as_ref(),
+    )?;
+    let mut sum = 0;
+    for v in hist.iter_quantiles(ticks_per_half) {
+        sum += v.count_since_last_iteration();
+        if v.quantile_iterated_to() < 1.0 {
+            writer.write_all(
+                format!(
+                    "{:12} {:1.*} {:10} {:14.2}\n",
+                    v.value_iterated_to(),
+                    quantile_precision,
+                    //                        v.quantile(),
+                    //                        quantile_precision,
+                    v.quantile_iterated_to(),
+                    sum,
+                    1_f64 / (1_f64 - v.quantile_iterated_to()),
+                )
+                .as_ref(),
+            )?;
+        } else {
+            writer.write_all(
+                format!(
+                    "{:12} {:1.*} {:10} {:>14}\n",
+                    v.value_iterated_to(),
+                    quantile_precision,
+                    //                        v.quantile(),
+                    //                        quantile_precision,
+                    v.quantile_iterated_to(),
+                    sum,
+                    "inf"
+                )
+                .as_ref(),
+            )?;
+        }
+    }
+
+    fn write_extra_data<T1: Display, T2: Display, W: Write>(
+        writer: &mut W,
+        label1: &str,
+        data1: T1,
+        label2: &str,
+        data2: T2,
+    ) -> result::Result<(), io::Error> {
+        writer.write_all(
+            format!(
+                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
+                label1, data1, label2, data2
+            )
+            .as_ref(),
+        )
+    }
+
+    write_extra_data(
+        &mut writer,
+        "Mean",
+        hist.mean(),
+        "StdDeviation",
+        hist.stdev(),
+    )?;
+    write_extra_data(&mut writer, "Max", hist.max(), "Total count", hist.len())?;
+    write_extra_data(
+        &mut writer,
+        "Buckets",
+        hist.buckets(),
+        "SubBuckets",
+        hist.distinct_values(),
+    )?;
+
+    Ok(())
+}
+
+impl From<io::Error> for HistogramError {
+    fn from(e: io::Error) -> Self {
+        HistogramError::Io(e)
+    }
+}
+
+impl From<DeserializeError> for HistogramError {
+    fn from(e: DeserializeError) -> Self {
+        HistogramError::HistogramDeserialize(e)
+    }
+}
