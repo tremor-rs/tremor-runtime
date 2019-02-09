@@ -50,6 +50,10 @@ error_chain! {
     }
 
     errors {
+        CyclicGraphError(g: String) {
+            description("Cycle detected in graph")
+                display("Cycle detected in graph: {}", g)
+        }
         ClonedError(t: String) {
             description("This is a cloned error we need to get rod of this")
                 display("Cloned error: {}", t)

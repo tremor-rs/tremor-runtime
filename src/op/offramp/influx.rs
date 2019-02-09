@@ -27,7 +27,6 @@
 use crate::async_sink::{AsyncSink, SinkDequeueError};
 use crate::dflt;
 use crate::errors::*;
-use crate::metrics;
 use crate::pipeline::pool::WorkerPoolStep;
 use crate::pipeline::prelude::*;
 use crate::utils::duration_to_millis;
