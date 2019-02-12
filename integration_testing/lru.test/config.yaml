@@ -15,6 +15,7 @@ pipelines:
           buckets:
             test:
               rate: 1
+              cardinality: 2
       - render::json
       - offramp::file:
           file: {out}

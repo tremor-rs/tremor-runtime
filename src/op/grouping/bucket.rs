@@ -63,12 +63,12 @@
 use crate::dflt;
 use crate::errors::*;
 use crate::pipeline::prelude::*;
+use lru::LruCache;
 use serde_json;
 use serde_yaml;
 use std::collections::HashMap;
 use std::iter::Iterator;
 use window::TimeWindow;
-use lru::LruCache;
 
 static DROP_OUTPUT_ID: usize = 3; // 1 is std, 2 is err, 3 is drop
 
@@ -123,7 +123,15 @@ impl Grouper {
         let config: Config = serde_yaml::from_value(opts.clone())?;
         let mut buckets = HashMap::new();
         for (name, spec) in config.buckets {
-            let Rate{cardinality: c, rate: _r, time_range: _t, windows: _w} = spec;
+            let Rate {
+                cardinality: c,
+                rate: _r,
+                time_range: _t,
+                windows: _w,
+            } = spec;
+            if c < 1 {
+                return Err("Can't have a cardinality lower then 1.".into());
+            }
             let bkt = Bucket {
                 class: name.clone(),
                 config: spec,
@@ -137,8 +145,11 @@ impl Grouper {
 
 impl std::fmt::Debug for Bucket {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Bucket: {} with config: {:?} - the lru_cache cannot be printed",
-            self.class, self.config)
+        write!(
+            f,
+            "Bucket: {} with config: {:?} - the lru_cache cannot be printed",
+            self.class, self.config
+        )
     }
 }
 
@@ -176,16 +187,17 @@ impl Opable for Grouper {
                     };
                     let window = match groups.get_mut(&dimensions) {
                         None => {
-                            groups.put(dimensions.clone(), TimeWindow::new(
-                            config.windows,
-                            config.time_range / (config.windows as u64),
-                            config.rate
-                        ));
+                            groups.put(
+                                dimensions.clone(),
+                                TimeWindow::new(
+                                    config.windows,
+                                    config.time_range / (config.windows as u64),
+                                    config.rate,
+                                ),
+                            );
                             groups.get_mut(&dimensions).unwrap()
-                        },
-                        Some(m) => {
-                            m
                         }
+                        Some(m) => m,
                     };
                     if window.inc_t(event.ingest_ns).is_ok() {
                         next!(event)
@@ -215,12 +227,13 @@ mod tests {
         EventData::new_with_vars(0, now, None, EventValue::Raw(vec![]), vars)
     }
 
-    fn conf() -> Value {
+    fn conf(card: u64) -> Value {
         let buckets = Value::Mapping(Mapping::from_iter(
             hashmap! {
             vs("a") => Value::Mapping(Mapping::from_iter(
                 hashmap!{
-                    vs("rate") => vi(1)
+                    vs("rate") => vi(1),
+                    vs("cardinality") => vi(card)
                 }.into_iter()))}
             .into_iter(),
         ));
@@ -233,7 +246,7 @@ mod tests {
     fn grouping_test_pass() {
         let e = event(hashmap! {"classification".to_string() => "a".into()}, 0);
 
-        let mut g = Grouper::create("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf(1000)).unwrap();
         let r = g.on_event(e);
         assert_matches!(r, EventResult::NextID(1, _));
     }
@@ -242,7 +255,7 @@ mod tests {
     fn grouping_test_fail() {
         let e = event(hashmap! {"classification".to_string() => "b".into()}, 0);
 
-        let mut g = Grouper::create("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf(1000)).unwrap();
         let r = g.on_event(e);
         assert_matches!(r, EventResult::NextID(3, _));
     }
@@ -259,12 +272,45 @@ mod tests {
             s!(1) + ms!(200),
         );
 
-        let mut g = Grouper::create("bucket", &conf()).unwrap();
+        let mut g = Grouper::create("bucket", &conf(1000)).unwrap();
         let r = g.on_event(e);
         assert_matches!(r, EventResult::NextID(1, _));
 
         let r = g.on_event(e1);
         assert_matches!(r, EventResult::NextID(3, _));
+
+        let r = g.on_event(e2);
+        assert_matches!(r, EventResult::NextID(1, _));
+    }
+
+    #[test]
+    fn lru_invalid() {
+        assert!(Grouper::create("bucket", &conf(0)).is_err());
+    }
+
+    #[test]
+    fn lru() {
+        let ha =
+            hashmap! {"classification".into() => "a".into(), "dimensions".into() => "a".into()};
+        let hb =
+            hashmap! {"classification".into() => "a".into(), "dimensions".into() => "b".into()};
+        let e = event(ha.clone(), 0);
+        let eb = event(hb.clone(), 0);
+        // the second message arrives 100ms later
+        let e1 = event(ha.clone(), ms!(100));
+        let e2 = event(ha.clone(), s!(1) + ms!(200));
+
+        let mut g = Grouper::create("bucket", &conf(1)).unwrap();
+        let r = g.on_event(e);
+        assert_matches!(r, EventResult::NextID(1, _));
+
+        // hb should evict a from the LRU cache
+        let r = g.on_event(eb);
+        assert_matches!(r, EventResult::NextID(1, _));
+
+        //That way we are allowe to ingest a again
+        let r = g.on_event(e1);
+        assert_matches!(r, EventResult::NextID(1, _));
 
         let r = g.on_event(e2);
         assert_matches!(r, EventResult::NextID(1, _));
