@@ -45,7 +45,7 @@
 //!             }"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
 //! let mut s = Script::parse("!(key1.subkey1:\"data1\" OR NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find string value in mimir array.  This search uses the ':' contains in array operator meaning
@@ -167,7 +167,7 @@
 //!
 //! Test less than comparison of two integers.
 //! The value 5 from the json data is compared if it is
-//! greatere less than 10 and 9.  Returns true.
+//! greater less than 10 and 9.  Returns true.
 //!
 //! ```
 //! use mimir::*; use std::collections::HashMap;
@@ -221,15 +221,6 @@
 //! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 
-#[macro_use]
-extern crate lalrpop_util;
-#[macro_use]
-extern crate serde_json;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate error_chain;
-
 pub mod errors;
 use crate::errors::*;
 use glob::Pattern;
@@ -239,6 +230,9 @@ use std::collections::HashMap;
 use std::str;
 use std::str::FromStr;
 use std::string::ToString;
+
+use lalrpop_util::lalrpop_mod;
+use lazy_static::lazy_static;
 
 pub type ValueMap = HashMap<String, Value>;
 
@@ -272,15 +266,15 @@ impl Script {
     }
     pub fn run(&self, value: &mut Value, state: &mut ValueMap) -> Result<Option<usize>> {
         let mut m: ValueMap = HashMap::new();
-        let mut i = 0;
         let mut result: Option<usize> = None;
         // Copy state variables that are imported
-        for import in &self.interface.imports {
-            if let Some(v) = state.get(&import.id) {
-                m.insert(import.id.clone(), v.clone());
-            }
-        }
-        'outer: for statement in &self.statements {
+        m.extend(
+            self.interface
+                .imports
+                .iter()
+                .filter_map(|import| Some((import.id.clone(), state.get(&import.id)?.clone()))),
+        );
+        'outer: for (i, statement) in self.statements.iter().enumerate() {
             if statement.test(value, &m)? {
                 result = Some(i);
                 for action in &statement.actions {
@@ -289,15 +283,16 @@ impl Script {
                     }
                 }
             };
-            i += 1;
         }
 
-        // copy updated varialbes that are exported
-        for export in &self.interface.exports {
-            if let Some(v) = m.get(&export.id) {
-                state.insert(export.id.clone(), v.clone());
-            }
-        }
+        // copy updated variables that are exported
+        state.extend(
+            self.interface
+                .exports
+                .iter()
+                .filter_map(|export| Some((export.id.clone(), m.get(&export.id)?.clone()))),
+        );
+
         Ok(result)
     }
 }
@@ -327,7 +322,7 @@ impl ToString for Id {
 
 impl Id {
     fn new(s: &str) -> Self {
-        if let Some("'") = s.get(0..1) {
+        if &s[0..=0] == "'" {
             Self {
                 id: s.trim_matches('\'').into(),
                 quoted: true,
@@ -356,12 +351,9 @@ pub enum RHSValue {
 impl RHSValue {
     pub fn reduce(&self, data: &Value, vars: &ValueMap) -> Option<Value> {
         match self {
-            RHSValue::Literal(l) => Some(l.clone()),
+            RHSValue::Literal(l) => Some(l.to_owned()),
             RHSValue::Lookup(Path::DataPath(path)) => self.find(&path, 0, data),
-            RHSValue::Lookup(Path::Var(var)) => match vars.get(&var.id) {
-                Some(var) => Some(var.clone()),
-                None => None, // TODO: returning null is evil
-            },
+            RHSValue::Lookup(Path::Var(var)) => Some(vars.get(&var.id)?.clone()),
             RHSValue::List(list) => {
                 let out: Vec<Value> = list.iter().filter_map(|i| i.reduce(data, vars)).collect();
                 if out.len() == list.len() {
@@ -374,13 +366,10 @@ impl RHSValue {
     }
     fn find(&self, ks: &[Id], i: usize, value: &Value) -> Option<Value> {
         if let Some(key) = ks.get(i) {
-            if let Some(v1) = value.get(&key.id) {
-                self.find(ks, i + 1, v1)
-            } else {
-                None
-            }
+            let v1 = value.get(&key.id)?;
+            self.find(ks, i + 1, v1)
         } else {
-            Some(value.clone())
+            Some(value.to_owned())
         }
     }
 }
@@ -454,7 +443,7 @@ impl Action {
                 }
                 Ok(false)
             }
-            Action::Return => Ok(true),
+            _ => Ok(true),
         }
     }
 
@@ -471,9 +460,8 @@ impl Action {
             }
         }
         if !json.is_object() {
-            return Err(ErrorKind::MutationTypeConflict("not an object".into()).into());
-        }
-        if let Some(key) = ks.get(i) {
+            Err(ErrorKind::MutationTypeConflict("not an object".into()).into())
+        } else if let Some(key) = ks.get(i) {
             // This is the last key
             let last = i + 1 >= ks.len();
             if last {
@@ -482,12 +470,12 @@ impl Action {
                         m.insert(key.to_string(), val);
                         Ok(())
                     }
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
                 }
             } else if let Some(ref mut v) = json.get_mut(&key.id) {
                 match v {
-                    Object(_m) => Action::mut_value(v, ks, i + 1, val),
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
+                    Object(_) => Action::mut_value(v, ks, i + 1, val),
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
                 }
             } else {
                 match json {
@@ -495,7 +483,7 @@ impl Action {
                         m.insert(key.to_string(), make_nested_object(ks, i + 1, val));
                         Ok(())
                     }
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".into()).into()),
+                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
                 }
             }
         } else {
@@ -528,7 +516,7 @@ impl Item {
             }
             Item::Or(left, right) => {
                 if left.test(value, vars)? {
-                    Ok(false)
+                    Ok(true)
                 } else {
                     right.test(value, vars)
                 }
@@ -598,10 +586,10 @@ impl Cmp {
                 _ => Ok(false),
             },
             Cmp::Regex(rx) => match event_value {
-                String(rxmatch) => match rx.is_match(&rxmatch.as_bytes()) {
-                    Ok(n) => Ok(n),
-                    Err(_) => Err(ErrorKind::RegexpError(format!("{:?}", rx)).into()),
-                },
+                String(rxmatch) => rx
+                    .is_match(&rxmatch.as_bytes())
+                    .map_err(|_| ErrorKind::RegexpError(format!("{:?}", rx)).into()),
+
                 _ => Ok(false),
             },
             Cmp::CIDRMatch(cidr) => match event_value {
@@ -629,52 +617,30 @@ impl Cmp {
             }
             Cmp::Gt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
                 (Number(event_value), Some(Number(expected_value))) => {
-                    if event_value.is_i64() && expected_value.is_i64() {
-                        Ok(event_value.as_i64().unwrap() > expected_value.as_i64().unwrap())
-                    } else if event_value.is_f64() && expected_value.is_f64() {
-                        Ok(event_value.as_f64().unwrap() > expected_value.as_f64().unwrap())
-                    } else {
-                        Ok(false)
-                    }
+                    compare_numbers!(event_value, expected_value, >)
                 }
                 (String(s), Some(String(is))) => Ok(s > is),
                 _ => Ok(false),
             },
+
             Cmp::Lt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
                 (Number(event_value), Some(Number(expected_value))) => {
-                    if event_value.is_i64() && expected_value.is_i64() {
-                        Ok(event_value.as_i64().unwrap() < expected_value.as_i64().unwrap())
-                    } else if event_value.is_f64() && expected_value.is_f64() {
-                        Ok(event_value.as_f64().unwrap() < expected_value.as_f64().unwrap())
-                    } else {
-                        Ok(false)
-                    }
+                    compare_numbers!(event_value, expected_value, <)
                 }
                 (String(s), Some(String(is))) => Ok(s < is),
                 _ => Ok(false),
             },
+
             Cmp::Gte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
                 (Number(event_value), Some(Number(expected_value))) => {
-                    if event_value.is_i64() && expected_value.is_i64() {
-                        Ok(event_value.as_i64().unwrap() >= expected_value.as_i64().unwrap())
-                    } else if event_value.is_f64() && expected_value.is_f64() {
-                        Ok(event_value.as_f64().unwrap() >= expected_value.as_f64().unwrap())
-                    } else {
-                        Ok(false)
-                    }
+                    compare_numbers!(event_value, expected_value, >=)
                 }
                 (String(s), Some(String(is))) => Ok(s >= is),
                 _ => Ok(false),
             },
             Cmp::Lte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
                 (Number(event_value), Some(Number(expected_value))) => {
-                    if event_value.is_i64() && expected_value.is_i64() {
-                        Ok(event_value.as_i64().unwrap() <= expected_value.as_i64().unwrap())
-                    } else if event_value.is_f64() && expected_value.is_f64() {
-                        Ok(event_value.as_f64().unwrap() <= expected_value.as_f64().unwrap())
-                    } else {
-                        Ok(false)
-                    }
+                    compare_numbers!(event_value, expected_value, <=)
                 }
                 (String(s), Some(String(is))) => Ok(s <= is),
                 _ => Ok(false),
@@ -685,14 +651,7 @@ impl Cmp {
                         Ok(event_value.contains(expected_value))
                     }
                     (Number(event_value), Some(Number(expected_value))) => {
-                        if event_value.is_i64() && expected_value.is_i64() {
-                            Ok(event_value.as_i64().unwrap() == expected_value.as_i64().unwrap())
-                        } else if event_value.is_f64() && expected_value.is_f64() {
-                            #[allow(clippy::float_cmp)] // TODO: define a error
-                            Ok(event_value.as_f64().unwrap() == expected_value.as_f64().unwrap())
-                        } else {
-                            Ok(false)
-                        }
+                        compare_numbers!(event_value, expected_value, ==)
                     }
                     (Array(event_value), Some(v)) => Ok(event_value.contains(v)),
                     (event_value, Some(Array(expected_value))) => {
@@ -706,9 +665,29 @@ impl Cmp {
     }
 }
 
+#[macro_export]
+macro_rules! compare_numbers {
+    {$x:expr, $y:expr, $operator:tt} => {
+        {
+            let x = $x;
+            let y = $y;
+
+            if x.is_i64() & & y.is_i64() {
+                Ok(x.as_i64().unwrap() $operator y.as_i64().unwrap())
+            } else if x.is_f64() & & y.is_f64() {
+              #[allow(clippy::float_cmp)] // TODO: define a error
+                Ok(x.as_f64().unwrap() $operator y.as_f64().unwrap())
+            } else {
+                Ok(false)
+              }
+            }
+        }
+    }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_glob() {
@@ -810,7 +789,7 @@ mod tests {
     fn test_int_gt() {
         let json = r#"{"key":5}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
-        let s = Script::parse("key>1 key>4").unwrap();
+        let s = Script::parse("key>1 OR key>4").unwrap();
         assert_eq!(
             true,
             s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
@@ -941,7 +920,7 @@ mod tests {
         let mut vals: Value = serde_json::from_str(json).unwrap();
         let s =Script::parse("!(key1.subkey1:\"data1\" OR NOT (key3:\"data3\") OR NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
         assert_eq!(
-            true,
+            false,
             s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
         );
     }

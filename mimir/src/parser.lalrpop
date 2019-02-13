@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 
 use regex;
 use std::str::FromStr;
-use serde_json::Value;
-use super::{Item, Stmt, Cmp, Filter, CIDR, Action, Script, RHSValue, Path, Interface, Id};
+use serde_json::{json, Value};
+use crate::{Item, Stmt, Cmp, Filter, CIDR, Action, Script, RHSValue, Path, Interface, Id};
 use pcre2::bytes::{RegexBuilder, Regex};
 use glob::Pattern;
 
