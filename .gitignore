@@ -3,7 +3,15 @@
 **/*.rs.bk
 .rpm
 /window/target*
+/property_testing/target
 local-examples
 .#*
 secrets
 log
+*~
+config.yaml.out
+log.txt
+exp.json
+exp.json.jq
+gen.json
+gen.json.jq

@@ -11,10 +11,9 @@ test:
   script:
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
-    - cargo test
+    - cargo test --all-features
     - cargo test -p mimir -p window
-    - cargo clippy
-    - cargo build --features php-runtime
+    - cargo clippy --all-features
     - cp target/debug/native/php-src/libs/* /lib64
     - make it
 

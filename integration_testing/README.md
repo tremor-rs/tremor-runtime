@@ -1,8 +1,25 @@
 # Integration Testing Framework
 
-## Writing tests
+## Background
 
-Each tests has a own folder. The name of the folder has to be `<test name>.test` The required files are:
+This runner runs two sorts of tests:
+
+* basic tests do the following:
+    * start tremor with a fixed configuration
+    * push fixed input through the file system onramp
+    * test the output against the expected output
+
+These tests are designed such that new features can be added with appropriate tests - and you can create new tests from a template on the command line
+
+In addition it will run a properties based test for the file/dirs/logs on ramp.
+
+The properties-based test will generate a set of random messages and various file create/move/rename actions and run them.
+
+There is a trivial identity function - the sorted output should be identical to the aggregated, sorted input. The runner will test that these are identical.
+
+## Writing basic tests
+
+Each basic test has a own folder. The name of the folder has to be `<test name>.test` The required files are:
 
 * `README.md` - a description of the test
 * `config` - a shell script that gets sourced to customize configuration

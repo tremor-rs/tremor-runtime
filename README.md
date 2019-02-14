@@ -7,15 +7,15 @@ This tool allows configuring a pipeline that moves data from a source to a desti
 
 Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with Kafka, other message systems should be easily pluggable.
 
-## Usecases
+## Use Cases
 
 ### Elastic Search data ingress and rate limiting
 
-Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify and rate limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes. 
+Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify and rate limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes.
 
-### HTTP to Kafka brodge
+### HTTP to Kafka bridge
 
-Kafkas optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime this can be a disadvantage, such as PHP,  or tools that only run for a  short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead only relying on HTTP as its transport.
+Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead only relying on HTTP as its transport.
 
 ### PHP Execution
 
@@ -48,9 +48,36 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 
 If you are not comfortable with managing library packages on your system or don't have experience with , please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `clang`, `openssl-static`, and  `libstdc++-static` are required, for different distributions or operating systems, please install packages accordingly.
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `clang`, `openssl-static`, and `libstdc++-static` are required, for different distributions or operating systems, please install packages accordingly.
 
 Bison version 3.0.5 or later is also required and needs to be set in the PATH variable of your system.
+
+## Running locally
+
+To run `tremor` locally and introspect its docker environment do the following:
+
+```
+make image
+docker run tremor-runtime
+```
+
+A local shell can be gotten by finding the container id of the running docker container and using that to attach a shell to the image.
+
+```
+docker ps
+```
+
+This returns:
+```
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+fa7e3b4cec86        tremor-runtime      "/tremor-runtime.sh"   43 seconds ago      Up 42 seconds                           gracious_shannon
+```
+
+Executing a shell on that container will then give you local access:
+
+```
+docker exec -it 838f22d9cb98 sh
+```
 
 ## Configuration file
 
@@ -154,7 +181,7 @@ The demo mode logically follows the flow outlined below. It reads the data from 
 ║          │         ║                            ║          │         ║
 ║          │         ║                            ║          ▼         ║
 ║ ┌────────────────┐ ║                            ║ ┌────────────────┐ ║
-║ │  data.josn.xz  │ ║                            ║ │     mimir      │ ║
+║ │  data.json.xz  │ ║                            ║ │     mimir      │ ║
 ║ └────────────────┘ ║                            ║ └────────────────┘ ║
 ╚════════════════════╝                            ║          │         ║
                                                   ║          │         ║
@@ -181,7 +208,7 @@ The demo can be configured in (for example) the `demo/demo.yaml` file. An abbrev
 version: '3.3'
 services:
 # ...
-  loadgen:
+ loadgen:
 # ...
     environment:
       - CONFIG_FILE=/configs/loadgen-250.yaml
@@ -199,7 +226,7 @@ Configuration lives in `demo/config`.
 
 #### Test data
 
-The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`. 
+The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`.
 
 #### Benchmark Framework
 

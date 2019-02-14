@@ -19,7 +19,10 @@
 
 #[cfg(feature = "bench")]
 pub mod blaster;
+#[cfg(feature = "drop_copy")]
+pub mod drop_copy;
 pub mod file;
+pub mod gsub;
 pub mod http;
 #[cfg(feature = "kafka")]
 pub mod kafka;
@@ -27,10 +30,10 @@ pub mod metronome;
 #[cfg(feature = "mssql")]
 pub mod mssql;
 pub mod stdin;
-pub mod gsub;
+pub mod utils;
 
 use crate::errors::*;
-use crate::pipeline::prelude::*;
+use crate::pipeline::prelude::{ConfValue, OnRampActor};
 use actix;
 use actix::prelude::*;
 use std::thread::JoinHandle;
@@ -57,6 +60,8 @@ pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
         "stdin" => Ok(Onramps::Stdin(stdin::Onramp::create(opts)?)),
         "gsub" => Ok(Onramps::Gsub(gsub::Onramp::create(opts)?)),
         "metronome" => Ok(Onramps::Metronome(metronome::Onramp::create(opts)?)),
+        #[cfg(feature = "drop_copy")]
+        "drop_copy" => Ok(Onramps::DropCopy(drop_copy::Onramp::create(opts)?)),
         _ => panic!("Unknown onramp: {}", name),
     }
 }
@@ -64,15 +69,17 @@ pub fn create(name: &str, opts: &ConfValue) -> Result<Onramps> {
 pub enum Onramps {
     #[cfg(feature = "bench")]
     Blaster(blaster::Onramp),
+    File(file::Onramp),
+    HTTP(http::Onramp),
     #[cfg(feature = "kafka")]
     Kafka(kafka::Onramp),
     #[cfg(feature = "mssql")]
     MSSql(mssql::Onramp),
-    File(file::Onramp),
-    HTTP(http::Onramp),
     Stdin(stdin::Onramp),
     Metronome(metronome::Onramp),
     Gsub(gsub::Onramp),
+    #[cfg(feature = "drop_copy")]
+    DropCopy(drop_copy::Onramp),
 }
 
 impl Onramp for Onramps {
@@ -80,15 +87,17 @@ impl Onramp for Onramps {
         match self {
             #[cfg(feature = "bench")]
             Onramps::Blaster(i) => i.enter_loop(pipelines),
+            Onramps::HTTP(i) => i.enter_loop(pipelines),
+            Onramps::File(i) => i.enter_loop(pipelines),
             #[cfg(feature = "kafka")]
             Onramps::Kafka(i) => i.enter_loop(pipelines),
-            Onramps::File(i) => i.enter_loop(pipelines),
             #[cfg(feature = "mssql")]
             Onramps::MSSql(i) => i.enter_loop(pipelines),
-            Onramps::HTTP(i) => i.enter_loop(pipelines),
             Onramps::Stdin(i) => i.enter_loop(pipelines),
             Onramps::Metronome(i) => i.enter_loop(pipelines),
             Onramps::Gsub(i) => i.enter_loop(pipelines),
+            #[cfg(feature = "drop_copy")]
+            Onramps::DropCopy(i) => i.enter_loop(pipelines),
         }
     }
 }

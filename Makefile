@@ -4,9 +4,9 @@ CARGO_VSN=$(shell grep '^version' Cargo.toml | sed -e 's/.*=[^"]*"//' -e 's/"$$/
 VSN=$(DOCKER_VSN)
 
 help:
-	@echo "This docker files wraps the tasks:"
+	@echo "This makefile wraps the tasks:"
 	@echo "  image - builds the image"
-	@echo "  demo - runs a simple demp"
+	@echo "  demo - runs a simple demo"
 	@echo "  clippy-install - install nightly and clippy"
 	@echo "  clippy - runs clippy"
 	@echo "  bench - runs benchmarks"

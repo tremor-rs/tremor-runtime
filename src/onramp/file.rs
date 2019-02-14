@@ -24,14 +24,9 @@
 use crate::errors::*;
 use crate::onramp::{EnterReturn, Onramp as OnrampT, PipelineOnramp};
 use crate::pipeline::prelude::*;
-use crate::utils;
-use futures::sync::mpsc::channel;
-use futures::Stream;
 use serde_yaml;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::thread;
+use crate::onramp::utils::process_file;
 
 #[derive(Deserialize)]
 pub struct Onramp {
@@ -54,24 +49,6 @@ impl Onramp {
 impl OnrampT for Onramp {
     fn enter_loop(&mut self, pipelines: PipelineOnramp) -> EnterReturn {
         let file = self.file.clone();
-        let len = pipelines.len();
-        thread::spawn(move || {
-            let reader = BufReader::new(File::open(file).unwrap());
-            let mut i = 0;
-            for (_num, line) in reader.lines().enumerate() {
-                if let Ok(line) = line {
-                    let (tx, rx) = channel(0);
-                    let msg = OnData {
-                        reply_channel: Some(tx),
-                        data: EventValue::Raw(line.into_bytes()),
-                        vars: HashMap::new(),
-                        ingest_ns: utils::nanotime(),
-                    };
-                    i = (i + 1) % len;
-                    pipelines[i].do_send(msg);
-                    for _r in rx.wait() {}
-                }
-            }
-        })
+        thread::spawn(move || {process_file(file, &pipelines[..])})
     }
 }

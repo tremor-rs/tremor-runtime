@@ -1,16 +1,21 @@
 #!/usr/bin/env sh
 
+set -e
+set -u
+set -o pipefail
+
 BASEDIR=$(dirname "$0")
+FEATURES="drop_copy kafka mssql php-runtime"
 
 . ${BASEDIR}/common.sh
 
 help() {
     cat <<EOF
 Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
-tremor-runtime test runner
+tremor-runtime test runner for basic and property tests
   -h         show this help
   -l         lists all tests
-  -n NAME    creates a new test from the template
+  -n NAME    creates a new basic test from the template
   -d         set -x for tracing
   -t TARGET  selects the build target 'debug', 'release', or 'none'
   -c CMD     command to run for tests, defaults to the command appropriate to the
@@ -30,17 +35,21 @@ while getopts hdlt:c:n: opt; do
             build_target=$OPTARG
             ;;
         l)
-            ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g"
+            echo "basic tests:"
+            ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;* ;g"
+            echo ""
+            echo "property tests:"
+            ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;* ;g"
             exit 0
             ;;
         n)
             test=$OPTARG
-            if [ -d ${BASEDIR}/${test}.test ]
+            if [ -d ${BASEDIR}/basic/${test}.test ]
             then
                 echo "Test ${test} already exists"
                 exit 1
             fi
-            cp -r ${BASEDIR}/template.test ${BASEDIR}/${test}.test
+            cp -r ${BASEDIR}/basic/template.test ${BASEDIR}/basic/${test}.test
             exit 0
             ;;
         c)
@@ -58,14 +67,13 @@ then
     build_target=debug
 fi
 
-set -e
+set -ex
 case $build_target in
     debug)
-        cargo build --features php-runtime
-	
+        cargo build --features "${FEATURES}"
         ;;
     release)
-        cargo build --release --features php-runtime
+        cargo build --release --features "${FEATURES}"
         ;;
     none)
         ;;
@@ -74,10 +82,11 @@ case $build_target in
         exit 1
         ;;
 esac
-set +e
+set +ex
 
 shift "$((OPTIND-1))"
 
+set -u
 case $build_target in
     debug)
         run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-runtime"}
@@ -92,6 +101,7 @@ case $build_target in
             exit 1
         fi
 esac
+set +u
 
 echo $run_cmd
 
@@ -101,14 +111,81 @@ then
     tests=$@
 fi
 
+# run the property tests
+
 if [ -z "${tests}" ]
 then
-    tests=$(ls -d ${BASEDIR}/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/;;g")
+    propertytests=$(ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;;g")
 fi
 
-for test in $tests
+for test in $propertytests
 do
-    TEST_DIR="${BASEDIR}/${test}.test"
+
+    TEST_DIR="${BASEDIR}/property/${test}.test"
+
+    got_file="${TEST_DIR}/got.json"
+    exp_file="${TEST_DIR}/exp.json"
+    log_file="${TEST_DIR}/log.txt"
+
+    yaml_file="${TEST_DIR}/config.yaml"
+    if [ ! -f "${yaml_file}" ]
+    then
+        error "${test}: file '${yaml_file}' not found"
+        exit 1
+    fi
+
+    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" -e "s;{dir};${TEST_DIR};" $yaml_file > "${yaml_file}.out";
+
+    readme_file="${TEST_DIR}/README.md"
+    if [ ! -f "${readme_file}" ]
+    then
+        error "${test}: file '${readme_file}' not found"
+        exit 1
+    fi
+
+    SCRIPT_DIR="${TEST_DIR}/scripts"
+
+    cat ${readme_file}
+
+    # run the setup script
+    ${SCRIPT_DIR}/setup.sh ${SCRIPT_DIR} $exp_file
+
+    # start tremor detached
+    $run_cmd -m --config "${yaml_file}.out" 2> ${log_file} &
+    # get the PID to kill tremor later on
+    TREMOR_PID=$!
+
+    # need to let tremor start
+    ${SCRIPT_DIR}/check_for_liveness.sh ${SCRIPT_DIR}
+
+    # run the test
+    ${SCRIPT_DIR}/run_test.sh ${SCRIPT_DIR}
+
+    # capture the 'got' for comparison against the exp
+    ${SCRIPT_DIR}/check_finished.sh ${SCRIPT_DIR} ${got_file}
+
+    if diff ${got_file} ${exp_file} > /dev/null
+    then
+        ok "${test}: passed"
+        PASSED_TESTS="${PASSED_TESTS}$test "
+    else
+        error "${test}: failed"
+        FAILED_TESTS="${FAILED_TESTS}$test "
+    fi
+
+    kill -9 $TREMOR_PID
+
+done
+
+# now run basic tests
+if [ -z "${tests}" ]
+then
+    basictests=$(ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;;g")
+fi
+
+for test in $basictests
+do
+    TEST_DIR="${BASEDIR}/basic/${test}.test"
 
     config_file="${TEST_DIR}/config"
     data_file="${TEST_DIR}/in.json"
@@ -164,7 +241,7 @@ do
         exit 1
     fi
 
-    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" -e "s;{dir};${TEST_DIR};" $yaml_file > "${yaml_file}.out"
+    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" -e "s;{dir};${TEST_DIR};" $yaml_file > "${yaml_file}.out";
 
     # Limiting Configuration
 
@@ -232,6 +309,6 @@ fi
 
 if [ -z "${PASSED_TESTS+x}" ]
 then
-    echo "No tests run, this is bad"
+    echo "No tests run"
     exit 1
 fi

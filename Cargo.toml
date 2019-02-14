@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.3.6"
+version = "0.3.7"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>"]
 edition = "2018"
@@ -10,6 +10,7 @@ edition = "2018"
 members = [
     "mimir",
     "window",
+    "property_testing"
 ]
 
 [profile.release]
@@ -55,6 +56,9 @@ crossbeam-channel = "0.3"
 xz2 = {version = "0.1", optional = true}
 hdrhistogram = {version = "6.0", optional = true}
 
+# file
+notify = { version = "4", optional = true}
+
 # php
 php = { version = "0.1", optional=true }
 
@@ -89,3 +93,4 @@ kafka = ["rdkafka", "rdkafka-sys", "tokio-threadpool"]
 mssql = ["tiberius", "futures-state-stream", "tokio-current-thread"]
 bench = ["xz2", "hdrhistogram"]
 php-runtime = ["php"]
+drop_copy = ["notify"]
