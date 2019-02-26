@@ -16,6 +16,7 @@ lazy_static = "1.2.0"
 lalrpop = "0.16"
 codespan = "0.2.0"
 quick-error = "1.2.2"
+hostname = "0.1"
 
 [build-dependencies]
 lalrpop = "0.16"

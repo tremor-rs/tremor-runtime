@@ -222,15 +222,19 @@
 //! ```
 
 pub mod errors;
+pub mod registry;
+
 use crate::errors::*;
 use glob::Pattern;
 use pcre2::bytes::Regex;
+use registry::{FnError, Registry, TremorFnWrapper};
 pub use serde_json::Value;
 use std::collections::HashMap;
 use std::str;
 use std::str::FromStr;
 use std::string::ToString;
 
+use hostname::get_hostname;
 use lalrpop_util::lalrpop_mod;
 use lazy_static::lazy_static;
 
@@ -239,6 +243,79 @@ pub type ValueMap = HashMap<String, Value>;
 lazy_static! {
     static ref IP_REGEX: regex::Regex =
         regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?").unwrap();
+    static ref REGISTRY: Registry = {
+        let mut module_map = HashMap::new();
+        let mut map = HashMap::new();
+        #[allow(unused_variables)]
+        map.insert(
+            "max".to_owned(),
+            tremor_fn! (math::max(a: Number, b: Number){
+                if a.as_f64() > b.as_f64() {
+                    Ok(Value::Number(a.to_owned()))
+                } else {
+                    Ok(Value::Number(b.to_owned()))
+                }
+            }),
+        );
+
+        #[allow(unused_variables)]
+        map.insert(
+            "min".to_owned(),
+            tremor_fn!(math::min(a: Number, b: Number) {
+                if a.as_f64() < b.as_f64() {
+                    Ok(Value::Number(a.to_owned()))
+
+                } else {
+                    Ok(Value::Number(b.to_owned()))
+                }
+            }),
+        );
+
+        module_map.insert("math".to_owned(), map);
+
+        let mut map = HashMap::new();
+        map.insert(
+            "hostname".to_owned(),
+            tremor_fn!(system::hostname() {
+                Ok(Value::String(get_hostname().unwrap()))
+            }),
+        );
+
+        module_map.insert("system".to_owned(), map);
+
+        let mut map = HashMap::new();
+        map.insert(
+            "format".to_owned(),
+            TremorFnWrapper {
+                module: "string".to_owned(),
+                name: "format".to_string(),
+                fun: |args| {
+                    let format = args[0].as_str().to_owned();
+
+                    match format {
+                        Some(fmt) => {
+                            let mut out = String::from(fmt);
+                            for arg in args[1..].iter() {
+                                if let Some(a) = arg.as_str() {
+                                    out = out.replacen("{}", a, 1);
+                                } else {
+                                    return Err(FnError::ExecutionError);
+                                }
+                            }
+
+                            Ok(Value::String(out.to_owned()))
+                        }
+
+                        None => Err(FnError::ExecutionError),
+                    }
+                },
+            },
+        );
+
+        module_map.insert("string".to_owned(), map);
+
+        Registry::new(module_map)
+    };
 }
 
 lalrpop_mod!(
@@ -341,10 +418,12 @@ pub enum Path {
     DataPath(Vec<Id>),
     Var(Id),
 }
+
 #[derive(Debug)]
 pub enum RHSValue {
     Literal(Value),
     Lookup(Path),
+    Function(TremorFnWrapper, Vec<RHSValue>),
     List(Vec<RHSValue>), // TODO: Split out const list for optimisation
 }
 
@@ -362,6 +441,15 @@ impl RHSValue {
                     None
                 }
             }
+            RHSValue::Function(f, a) => Some(
+                (f.fun)(
+                    a.iter()
+                        .map(|val| val.reduce(data, vars).unwrap())
+                        .collect::<Vec<Value>>()
+                        .as_slice(),
+                )
+                .unwrap(),
+            ),
         }
     }
     fn find(&self, ks: &[Id], i: usize, value: &Value) -> Option<Value> {
@@ -1353,6 +1441,7 @@ _ { $c := 3; }
 "#;
         let s = Script::parse(script).unwrap();
         let _ = s.run(&mut v, &mut m);
+
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["c"], json!(3));
     }
@@ -1385,6 +1474,75 @@ _ { $c := 3; }
         let _ = s.run(&mut v, &mut m);
         assert_eq!(m["classification"], json!("default"));
     }
+
+    #[test]
+    pub fn registry_functions() {
+        let script = r#"
+           export max;
+
+          _ { $max := math::max(1, 2);}
+       "#;
+
+        let s = Script::parse(script).unwrap();
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"v": 1});
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["max"], json!(2));
+    }
+
+    #[test]
+    pub fn registry_returns_hostname() {
+        use hostname::get_hostname;
+
+        let script = r#"
+         export hostname;
+
+         _ { $hostname := system::hostname();}
+        "#;
+
+        let s = Script::parse(script).unwrap();
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"v": 1});
+        let _ = s.run(&mut v, &mut m);
+        assert_eq!(m["hostname"], json!(get_hostname()));
+    }
+
+    #[test]
+    pub fn registry_formats_string() {
+        let script = r#" 
+           export format;
+
+       _ { $format := string::format("{}_{}", "snot", "badger");}
+      "#;
+
+        let s = Script::parse(script).unwrap();
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"v": 1});
+        let _ = s.run(&mut v, &mut m);
+
+        assert_eq!(m["format"], json!("snot_badger"));
+    }
+
+    #[test]
+    pub fn registry_formats_string_with_misleading_brackets() {
+        let script = r#"
+          export format;
+
+        _ { $format := string::format("{foo{}}", "bar");}
+      "#;
+
+        let s = Script::parse(script).unwrap();
+
+        let mut m: ValueMap = HashMap::new();
+        let mut v = json!({"v":1});
+        let _ = s.run(&mut v, &mut m);
+
+        assert_eq!(m["format"], json!("{foobar}"));
+    }
+
     #[test]
     #[ignore]
     fn test_constructed_lit_list() {
