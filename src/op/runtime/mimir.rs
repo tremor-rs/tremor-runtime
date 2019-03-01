@@ -1,11 +1,18 @@
 use crate::errors::*;
 use crate::pipeline::prelude::*;
-use mimir::Script;
+use mimir::{registry::Context, Script};
 
 #[derive(Deserialize, Debug)]
 struct Config {
     script: String,
 }
+
+#[derive(Debug)]
+struct TremorContext {
+    ingest_ns: u64,
+}
+
+impl Context for TremorContext {}
 
 #[derive(Debug)]
 pub struct Runtime {
@@ -23,17 +30,20 @@ impl Runtime {
 
 impl Opable for Runtime {
     opable_types!(ValueType::JSON, ValueType::JSON);
-    fn on_event(&mut self, event: EventData) -> EventResult {
+    fn on_event(&mut self, mut event: EventData) -> EventResult {
         ensure_type!(event, "runtime::mimir", ValueType::JSON);
-        let mut event = event;
-        let res = match (&mut event.value, &mut event.vars) {
-            (EventValue::JSON(ref mut json), ref mut meta) => self.runtime.run(json, meta),
-            _ => unreachable!(),
+        let context = TremorContext {
+            ingest_ns: event.ingest_ns,
         };
 
-        match res {
-            Ok(_) => next!(event),
-            Err(e) => EventResult::Error(Box::new(event), Some(e.into())),
+        match event.value {
+            EventValue::JSON(ref mut json) => {
+                match self.runtime.run(&context, json, &mut event.vars) {
+                    Ok(_) => next!(event),
+                    Err(e) => EventResult::Error(Box::new(event), Some(e.into())),
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }

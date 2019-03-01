@@ -142,7 +142,7 @@ Filter: Filter = {
         lhs, rhs: Cmp::Lt(rhs)
     },
     <lhs:LHS> GTE <rhs:RHS> => Filter{
-        lhs, rhs: Cmp::Gte(rhs)
+        lhs, rhs: Cmp::Gte(rhs) 
     },
     <lhs:LHS> LTE <rhs:RHS> => Filter{
         lhs, rhs: Cmp::Lte(rhs)
@@ -194,11 +194,11 @@ RHSValue: RHSValue = {
 
 Funcall: RHSValue = {
     <m:IDTOKEN> CONCON <f:IDTOKEN> BOpen <a: RHSListItems> BClose => {
-      RHSValue::Function(REGISTRY.find(m,f).unwrap(), a)
+      RHSValue::Function(REGISTRY.lock().unwrap().find(m,f).unwrap(), a)
       
    },
     <m:IDTOKEN> CONCON <f:IDTOKEN> BOpen BClose => {
-      RHSValue::Function(REGISTRY.find(m,f).unwrap(), vec![])
+      RHSValue::Function(REGISTRY.lock().unwrap().find(m,f).unwrap(), vec![])
    },
 }
 

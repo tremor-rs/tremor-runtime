@@ -18,8 +18,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:/d.*/").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:/d.*/").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test regex not matching the string data and evaluating to false
@@ -27,8 +27,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:/e.*/").unwrap();
-//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:/e.*/").unwrap();
+//! assert_eq!(false, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test negations with compound rule
@@ -44,8 +44,8 @@
 //!                 "key3": "data3"
 //!             }"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("!(key1.subkey1:\"data1\" OR NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
-//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "!(key1.subkey1:\"data1\" OR NOT key3:\"data3\" or NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
+//! assert_eq!(false, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find string value in mimir array.  This search uses the ':' contains in array operator meaning
@@ -55,8 +55,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse(r#"key:["foo", "data", "bar"]"#).unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( r#"key:["foo", "data", "bar"]"#).unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find int value in mimir array
@@ -64,8 +64,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":4}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:[3, 4, 5]").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:[3, 4, 5]").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find float value in mimir array
@@ -73,8 +73,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":4.1}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:[3.1, 4.1, 5.1]").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:[3.1, 4.1, 5.1]").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Find string value in array from document using the contains (":") operator.  In this case
@@ -85,8 +85,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":["v1", "v2", "v3"]}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:\"v2\"").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:\"v2\"").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find int value in json array
@@ -94,8 +94,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":[3, 4, 5]}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:4").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:4").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test find float value in json array
@@ -103,8 +103,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:4.1").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:4.1").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test wildcard search with mimir
@@ -112,8 +112,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:g\"da?a\"").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:g\"da?a\"").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test wildcard search with mimir (not a match)
@@ -121,8 +121,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":"data"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key:g\"daa?a\"").unwrap();
-//! assert_eq!(false, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key:g\"daa?a\"").unwrap();
+//! assert_eq!(false, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Testing glob match using star match
@@ -130,8 +130,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key1": "this is a glob blahblah"}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key1:g\"this is a glob*\"").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key1:g\"this is a glob*\"").unwrap();
+//! assert_eq!(true, s.run(&(),  &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test equal comparison of two integers.
@@ -139,8 +139,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key=5").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key=5").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than comparison of two integers.
@@ -150,8 +150,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key>1 key>4").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key>1 key>4").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than comparison of two integers.
@@ -161,8 +161,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key>-6").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key>-6").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than comparison of two integers.
@@ -173,8 +173,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key<10 key<9").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key<10 key<9").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than comparison of two floating point numbers.
@@ -184,8 +184,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5.0}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key<10.0 key<9.0").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key<10.0 key<9.0").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test less than or equals comparison of two integers.
@@ -195,8 +195,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key<=5 key<=11").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key<=5 key<=11").unwrap();
+//! assert_eq!(true, s.run(&(),  &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than or equals comparison of two integers.
@@ -206,8 +206,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key >= 3 key >= 4").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key >= 3 key >= 4").unwrap();
+//! assert_eq!(true, s.run(&(), &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 //!
 //! Test greater than or equals comparison of two floating point numbers.
@@ -217,8 +217,8 @@
 //! use mimir::*; use std::collections::HashMap;
 //! let json = r#"{"key":5.0}"#;
 //! let mut vals: Value = serde_json::from_str(json).unwrap();
-//! let mut s = Script::parse("key >= 3.5 key >= 4.5").unwrap();
-//! assert_eq!(true, s.run(&mut vals, &mut HashMap::new()).unwrap().is_some());
+//! let mut s = Script::parse( "key >= 3.5 key >= 4.5").unwrap();
+//! assert_eq!(true, s.run(&(),  &mut vals, &mut HashMap::new()).unwrap().is_some());
 //! ```
 
 pub mod errors;
@@ -227,12 +227,13 @@ pub mod registry;
 use crate::errors::*;
 use glob::Pattern;
 use pcre2::bytes::Regex;
-use registry::{FnError, Registry, TremorFnWrapper};
+use registry::{Context, FnError, Registry, TremorFnWrapper};
 pub use serde_json::Value;
 use std::collections::HashMap;
 use std::str;
 use std::str::FromStr;
 use std::string::ToString;
+use std::sync::Mutex;
 
 use hostname::get_hostname;
 use lalrpop_util::lalrpop_mod;
@@ -243,53 +244,32 @@ pub type ValueMap = HashMap<String, Value>;
 lazy_static! {
     static ref IP_REGEX: regex::Regex =
         regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?").unwrap();
-    static ref REGISTRY: Registry = {
-        let mut module_map = HashMap::new();
-        let mut map = HashMap::new();
+    static ref REGISTRY: Mutex<Registry> = {
+        let mut registry = Registry::default();
         #[allow(unused_variables)]
-        map.insert(
-            "max".to_owned(),
-            tremor_fn! (math::max(a: Number, b: Number){
+        registry
+            .insert(tremor_fn! (math::max(_context, a: Number, b: Number){
                 if a.as_f64() > b.as_f64() {
                     Ok(Value::Number(a.to_owned()))
                 } else {
                     Ok(Value::Number(b.to_owned()))
                 }
-            }),
-        );
-
-        #[allow(unused_variables)]
-        map.insert(
-            "min".to_owned(),
-            tremor_fn!(math::min(a: Number, b: Number) {
+            }))
+            .insert(tremor_fn!(math::min(_context, a: Number, b: Number) {
                 if a.as_f64() < b.as_f64() {
                     Ok(Value::Number(a.to_owned()))
 
                 } else {
                     Ok(Value::Number(b.to_owned()))
                 }
-            }),
-        );
-
-        module_map.insert("math".to_owned(), map);
-
-        let mut map = HashMap::new();
-        map.insert(
-            "hostname".to_owned(),
-            tremor_fn!(system::hostname() {
+            }))
+            .insert(tremor_fn!(system::hostname(_context) {
                 Ok(Value::String(get_hostname().unwrap()))
-            }),
-        );
-
-        module_map.insert("system".to_owned(), map);
-
-        let mut map = HashMap::new();
-        map.insert(
-            "format".to_owned(),
-            TremorFnWrapper {
+            }))
+            .insert(TremorFnWrapper {
                 module: "string".to_owned(),
                 name: "format".to_string(),
-                fun: |args| {
+                fun: |context, args| {
                     let format = args[0].as_str().to_owned();
 
                     match format {
@@ -309,12 +289,9 @@ lazy_static! {
                         None => Err(FnError::ExecutionError),
                     }
                 },
-            },
-        );
+            });
 
-        module_map.insert("string".to_owned(), map);
-
-        Registry::new(module_map)
+        Mutex::new(registry)
     };
 }
 
@@ -341,7 +318,12 @@ impl Script {
             .parse(script)
             .map_err(|e| ErrorKind::ParserError(e.to_string()).into())
     }
-    pub fn run(&self, value: &mut Value, state: &mut ValueMap) -> Result<Option<usize>> {
+    pub fn run<T: Context + 'static>(
+        &self,
+        context: &T,
+        value: &mut Value,
+        state: &mut ValueMap,
+    ) -> Result<Option<usize>> {
         let mut m: ValueMap = HashMap::new();
         let mut result: Option<usize> = None;
         // Copy state variables that are imported
@@ -352,10 +334,10 @@ impl Script {
                 .filter_map(|import| Some((import.id.clone(), state.get(&import.id)?.clone()))),
         );
         'outer: for (i, statement) in self.statements.iter().enumerate() {
-            if statement.test(value, &m)? {
+            if statement.test(context, value, &m)? {
                 result = Some(i);
                 for action in &statement.actions {
-                    if action.execute(value, &mut m)? {
+                    if action.execute(context, value, &mut m)? {
                         break 'outer;
                     }
                 }
@@ -428,13 +410,21 @@ pub enum RHSValue {
 }
 
 impl RHSValue {
-    pub fn reduce(&self, data: &Value, vars: &ValueMap) -> Option<Value> {
+    pub fn reduce<T: Context + 'static>(
+        &self,
+        context: &T,
+        data: &Value,
+        vars: &ValueMap,
+    ) -> Option<Value> {
         match self {
             RHSValue::Literal(l) => Some(l.to_owned()),
             RHSValue::Lookup(Path::DataPath(path)) => self.find(&path, 0, data),
             RHSValue::Lookup(Path::Var(var)) => Some(vars.get(&var.id)?.clone()),
             RHSValue::List(list) => {
-                let out: Vec<Value> = list.iter().filter_map(|i| i.reduce(data, vars)).collect();
+                let out: Vec<Value> = list
+                    .iter()
+                    .filter_map(|i| i.reduce(context, data, vars))
+                    .collect();
                 if out.len() == list.len() {
                     Some(Value::Array(out))
                 } else {
@@ -442,9 +432,10 @@ impl RHSValue {
                 }
             }
             RHSValue::Function(f, a) => Some(
-                (f.fun)(
+                f.invoke::<T>(
+                    context.to_owned(),
                     a.iter()
-                        .map(|val| val.reduce(data, vars).unwrap())
+                        .map(|val| val.reduce(context, data, vars).unwrap())
                         .collect::<Vec<Value>>()
                         .as_slice(),
                 )
@@ -497,8 +488,13 @@ pub struct Stmt {
 }
 
 impl Stmt {
-    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
-        self.item.test(value, vars)
+    pub fn test<T: Context + 'static>(
+        &self,
+        context: &T,
+        value: &Value,
+        vars: &ValueMap,
+    ) -> Result<bool> {
+        self.item.test(context, value, vars)
     }
 }
 
@@ -509,14 +505,19 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn execute(&self, json: &mut Value, vars: &mut ValueMap) -> Result<bool> {
+    pub fn execute<T: Context + 'static>(
+        &self,
+        context: &T,
+        json: &mut Value,
+        vars: &mut ValueMap,
+    ) -> Result<bool> {
         match self {
             Action::Set {
                 lhs: Path::DataPath(path),
                 rhs,
             } => {
                 // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(json, vars) {
+                if let Some(v) = rhs.reduce(context, json, vars) {
                     Action::mut_value(json, path, 0, v)?;
                 };
                 Ok(false)
@@ -526,7 +527,7 @@ impl Action {
                 rhs,
             } => {
                 // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(json, vars) {
+                if let Some(v) = rhs.reduce(context, json, vars) {
                     vars.insert(var.id.clone(), v);
                 }
                 Ok(false)
@@ -589,27 +590,32 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
+    pub fn test<T: Context + 'static>(
+        &self,
+        context: &T,
+        value: &Value,
+        vars: &ValueMap,
+    ) -> Result<bool> {
         match self {
             Item::Not(item) => {
-                let res = item.test(value, vars)?;
+                let res = item.test(context, value, vars)?;
                 Ok(!res)
             }
             Item::And(left, right) => {
-                if left.test(value, vars)? {
-                    right.test(value, vars)
+                if left.test(context, value, vars)? {
+                    right.test(context, value, vars)
                 } else {
                     Ok(false)
                 }
             }
             Item::Or(left, right) => {
-                if left.test(value, vars)? {
+                if left.test(context, value, vars)? {
                     Ok(true)
                 } else {
-                    right.test(value, vars)
+                    right.test(context, value, vars)
                 }
             }
-            Item::Filter(filter) => filter.test(value, vars),
+            Item::Filter(filter) => filter.test(context, value, vars),
         }
     }
 }
@@ -621,18 +627,24 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn test(&self, value: &Value, vars: &ValueMap) -> Result<bool> {
+    pub fn test<T: Context + 'static>(
+        &self,
+        context: &T,
+        value: &Value,
+        vars: &ValueMap,
+    ) -> Result<bool> {
         match &self.lhs {
-            Path::DataPath(ref path) => self.find_and_test(&path, 0, value, value, vars),
+            Path::DataPath(ref path) => self.find_and_test(context, &path, 0, value, value, vars),
             Path::Var(ref var) => match vars.get(&var.id) {
-                Some(val) => self.rhs.test(val, value, vars),
+                Some(val) => self.rhs.test(context, val, value, vars),
                 _ => Ok(false),
             },
         }
     }
 
-    fn find_and_test(
+    fn find_and_test<T: Context + 'static>(
         &self,
+        context: &T,
         ks: &[Id],
         i: usize,
         value: &Value,
@@ -641,12 +653,12 @@ impl Filter {
     ) -> Result<bool> {
         if let Some(key) = ks.get(i) {
             if let Some(v1) = value.get(&key.id) {
-                self.find_and_test(ks, i + 1, v1, data, vars)
+                self.find_and_test(context, ks, i + 1, v1, data, vars)
             } else {
                 Ok(false)
             }
         } else {
-            self.rhs.test(value, data, vars)
+            self.rhs.test(context, value, data, vars)
         }
     }
 }
@@ -665,7 +677,13 @@ enum Cmp {
     CIDRMatch(CIDR),
 }
 impl Cmp {
-    pub fn test(&self, event_value: &Value, data: &Value, vars: &ValueMap) -> Result<bool> {
+    pub fn test<T: Context + 'static>(
+        &self,
+        context: &T,
+        event_value: &Value,
+        data: &Value,
+        vars: &ValueMap,
+    ) -> Result<bool> {
         use serde_json::Value::*;
         match self {
             Cmp::Exists => Ok(true),
@@ -697,44 +715,52 @@ impl Cmp {
                 _ => Ok(false),
             },
             Cmp::Eq(expected_value) => {
-                if let Some(v) = expected_value.reduce(data, vars) {
+                if let Some(v) = expected_value.reduce(context, data, vars) {
                     Ok(event_value == &v)
                 } else {
                     Ok(false)
                 }
             }
-            Cmp::Gt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
-                (Number(event_value), Some(Number(expected_value))) => {
-                    compare_numbers!(event_value, expected_value, >)
+            Cmp::Gt(expected_value) => {
+                match (event_value, &expected_value.reduce(context, data, vars)) {
+                    (Number(event_value), Some(Number(expected_value))) => {
+                        compare_numbers!(event_value, expected_value, >)
+                    }
+                    (String(s), Some(String(is))) => Ok(s > is),
+                    _ => Ok(false),
                 }
-                (String(s), Some(String(is))) => Ok(s > is),
-                _ => Ok(false),
-            },
+            }
 
-            Cmp::Lt(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
-                (Number(event_value), Some(Number(expected_value))) => {
-                    compare_numbers!(event_value, expected_value, <)
+            Cmp::Lt(expected_value) => {
+                match (event_value, &expected_value.reduce(context, data, vars)) {
+                    (Number(event_value), Some(Number(expected_value))) => {
+                        compare_numbers!(event_value, expected_value, <)
+                    }
+                    (String(s), Some(String(is))) => Ok(s < is),
+                    _ => Ok(false),
                 }
-                (String(s), Some(String(is))) => Ok(s < is),
-                _ => Ok(false),
-            },
+            }
 
-            Cmp::Gte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
-                (Number(event_value), Some(Number(expected_value))) => {
-                    compare_numbers!(event_value, expected_value, >=)
+            Cmp::Gte(expected_value) => {
+                match (event_value, &expected_value.reduce(context, data, vars)) {
+                    (Number(event_value), Some(Number(expected_value))) => {
+                        compare_numbers!(event_value, expected_value, >=)
+                    }
+                    (String(s), Some(String(is))) => Ok(s >= is),
+                    _ => Ok(false),
                 }
-                (String(s), Some(String(is))) => Ok(s >= is),
-                _ => Ok(false),
-            },
-            Cmp::Lte(expected_value) => match (event_value, &expected_value.reduce(data, vars)) {
-                (Number(event_value), Some(Number(expected_value))) => {
-                    compare_numbers!(event_value, expected_value, <=)
+            }
+            Cmp::Lte(expected_value) => {
+                match (event_value, &expected_value.reduce(context, data, vars)) {
+                    (Number(event_value), Some(Number(expected_value))) => {
+                        compare_numbers!(event_value, expected_value, <=)
+                    }
+                    (String(s), Some(String(is))) => Ok(s <= is),
+                    _ => Ok(false),
                 }
-                (String(s), Some(String(is))) => Ok(s <= is),
-                _ => Ok(false),
-            },
+            }
             Cmp::Contains(expected_value) => {
-                match (event_value, &expected_value.reduce(data, vars)) {
+                match (event_value, &expected_value.reduce(context, data, vars)) {
                     (String(event_value), Some(String(expected_value))) => {
                         Ok(event_value.contains(expected_value))
                     }
@@ -784,7 +810,9 @@ mod tests {
         let s = Script::parse("key1:g\"da?a\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -795,7 +823,9 @@ mod tests {
         let s = Script::parse(r#"key1:"data""#).unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -806,7 +836,9 @@ mod tests {
         let s = Script::parse("key1=\"data1\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -817,7 +849,9 @@ mod tests {
         let s = Script::parse("key1=\"da\\u1234ta1\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -828,7 +862,9 @@ mod tests {
         let s = Script::parse("key1.sub1=\"data1\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -839,7 +875,9 @@ mod tests {
         let s = Script::parse("key1.sub1:\"dat\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -858,7 +896,9 @@ mod tests {
         let s =Script::parse("key1.subkey1:\"data1\" or key3:\"data3\" or (key1.subkey1:\"dat\" and key2.subkey2=\"data2\")").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -869,7 +909,9 @@ mod tests {
         let s = Script::parse("key=5").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -880,7 +922,9 @@ mod tests {
         let s = Script::parse("key>1 OR key>4").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -891,7 +935,9 @@ mod tests {
         let s = Script::parse("key>-6").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -902,7 +948,9 @@ mod tests {
         let s = Script::parse("key<10 key<9").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -913,7 +961,9 @@ mod tests {
         let s = Script::parse("key<10.0 key<9.0").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -924,7 +974,9 @@ mod tests {
         let s = Script::parse("key<=5 key<=11").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -935,7 +987,9 @@ mod tests {
         let s = Script::parse("key >= 3 key >= 4").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -946,7 +1000,9 @@ mod tests {
         let s = Script::parse("key >= 3.5 key >= 4.5").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -957,7 +1013,9 @@ mod tests {
         let s = Script::parse("key:/d.*/").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -968,7 +1026,9 @@ mod tests {
         let s = Script::parse("key:/e.*/").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -979,7 +1039,9 @@ mod tests {
         let s = Script::parse("NOT key:/d.*/").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -990,7 +1052,9 @@ mod tests {
         let s = Script::parse(r#"key:/\\//"#).unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1009,7 +1073,9 @@ mod tests {
         let s =Script::parse("!(key1.subkey1:\"data1\" OR NOT (key3:\"data3\") OR NOT (key1.subkey1:\"dat\" and key2.subkey2=\"data2\"))").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1020,7 +1086,9 @@ mod tests {
         let s = Script::parse("key:[\"foo\", \"data\", \"bar\"]").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1031,7 +1099,9 @@ mod tests {
         let s = Script::parse("key:[3, 4, 5]").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1042,7 +1112,9 @@ mod tests {
         let s = Script::parse("key:[3.1, 4.1, 5.1]").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1053,7 +1125,9 @@ mod tests {
         let s = Script::parse("key:\"v2\"").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1064,7 +1138,9 @@ mod tests {
         let s = Script::parse("key:4").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1075,7 +1151,9 @@ mod tests {
         let s = Script::parse("key:4.1").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1091,7 +1169,9 @@ mod tests {
         let s = Script::parse("key:10.66.77.88").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1102,7 +1182,9 @@ mod tests {
         let s = Script::parse("key:10.66.0.0/16").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1113,7 +1195,9 @@ mod tests {
         let s = Script::parse("key:10.66.77.88").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1124,7 +1208,9 @@ mod tests {
         let s = Script::parse("key:10.66.0.0/16").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1135,7 +1221,9 @@ mod tests {
         let s = Script::parse("key").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1146,7 +1234,9 @@ mod tests {
         let s = Script::parse("!key").unwrap();
         assert_eq!(
             false,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1157,7 +1247,9 @@ mod tests {
         let s = Script::parse(r#"key="val" {key2 := "newval";}"#).unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
         assert_eq!(vals["key2"], json!("newval"));
     }
@@ -1169,7 +1261,9 @@ mod tests {
         let s = Script::parse(r#"key="val" {newkey.newsubkey.other := "newval";}"#).unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
         assert_eq!(vals["newkey"]["newsubkey"]["other"], json!("newval"));
     }
@@ -1179,8 +1273,8 @@ mod tests {
         let json = r#"{"key":"val"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
         let s = Script::parse(r#"_ {key := "newval";}"#).unwrap();
-        let _ = s.run(&mut vals, &mut HashMap::new());
-        //        assert_eq!(Ok(Some(0)), s.run(&mut vals, &mut HashMap::new()));
+        let _ = s.run(&(), &mut vals, &mut HashMap::new());
+        //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["key"], json!("newval"));
     }
 
@@ -1189,8 +1283,8 @@ mod tests {
         let json = r#"{"key":{"key1": "val"}}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
         let s = Script::parse(r#"_ {key.key1 := "newval";}"#).unwrap();
-        let _ = s.run(&mut vals, &mut HashMap::new());
-        //        assert_eq!(Ok(Some(0)), s.run(&mut vals, &mut HashMap::new()));
+        let _ = s.run(&(), &mut vals, &mut HashMap::new());
+        //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["key"]["key1"], json!("newval"));
     }
 
@@ -1199,11 +1293,11 @@ mod tests {
         let json = r#"{"key":"key1"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
         let s = Script::parse(r#"_ {key.key1 := "newval";}"#).unwrap();
-        let _ = s.run(&mut vals, &mut HashMap::new());
+        let _ = s.run(&(), &mut vals, &mut HashMap::new());
 
         // assert_eq!(
         //     Err(ErrorCode::MutationError(MutationError::TypeConflict)),
-        //     s.run(&mut vals, &mut HashMap::new())
+        //     s.run(&(), &mut vals, &mut HashMap::new())
         // );
         assert_eq!(vals["key"], json!("key1"));
     }
@@ -1221,7 +1315,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
         assert_eq!(
             Value::String("newval".to_string()),
@@ -1238,7 +1334,10 @@ mod tests {
         let json = r#"{"key":"val"}"#;
         let mut vals: Value = serde_json::from_str(json).unwrap();
         let s = Script::parse(r#"_"#).unwrap();
-        assert_eq!(0, s.run(&mut vals, &mut HashMap::new()).unwrap().unwrap());
+        assert_eq!(
+            0,
+            s.run(&(), &mut vals, &mut HashMap::new()).unwrap().unwrap()
+        );
     }
 
     #[test]
@@ -1248,7 +1347,9 @@ mod tests {
         let s = Script::parse("key<10 key<9").unwrap();
         assert_eq!(
             true,
-            s.run(&mut vals, &mut HashMap::new()).unwrap().is_some()
+            s.run(&(), &mut vals, &mut HashMap::new())
+                .unwrap()
+                .is_some()
         );
     }
 
@@ -1317,7 +1418,7 @@ $actual1=true && $actual2=true { $actual := true; }
 
 "#;
         let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(m["a"], json!(1));
         assert_eq!(m["b"], json!(3));
         assert_eq!(m["c"], json!(4));
@@ -1351,7 +1452,7 @@ $actual1=true && $actual2=true { $actual := true; }
 
 "#;
         let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(v["b"], json!(3));
         assert_eq!(v["c"], json!(4));
@@ -1370,7 +1471,7 @@ v:1 { $b := 2; return; }
 _ { $b := 3; }
 "#;
         let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(3));
     }
@@ -1386,7 +1487,7 @@ export b;
 _ { $b := 2; }
 "#;
         let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(2));
     }
@@ -1402,128 +1503,9 @@ export b;
 _ { $b := 2; }
 "#;
         let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(2));
-    }
-
-    #[test]
-    #[ignore]
-    fn comment_between_interface() {
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"a": 1});
-
-        let script = r#"
-export b;
-# comment
-import c;
-_ { $b := 2; }
-"#;
-        let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(m["b"], json!(2));
-    }
-
-    #[test]
-    fn comment_between_statements() {
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"a": 1});
-
-        let script = r#"
-export b, c;
-# comment
-# another comment
-v:1 { $b := 2; return; }
-# comment
-  # indented comment
-_ { $c := 3; }
-"#;
-        let s = Script::parse(script).unwrap();
-        let _ = s.run(&mut v, &mut m);
-
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(m["c"], json!(3));
-    }
-
-    #[test]
-    fn demo_test() {
-        let script = r#"
-            export classification;
-            # The first class we define is named `info`,
-            # it matches if `short_message`  contains the string `"info"`
-            short_message:"info" { $classification := "info"; return; }
-            # The second class we define is `error`, it matches
-            # if  `short_message` contains the string `"ERROR`
-            short_message:"ERROR" { $classification := "error"; return; }
-            _ { $classification := "default"; }
-"#;
-        let s = Script::parse(script).unwrap();
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"short_message": "some info value"});
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(m["classification"], json!("info"));
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"short_message": "some ERROR value"});
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(m["classification"], json!("error"));
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"short_message": "some other value"});
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(m["classification"], json!("default"));
-    }
-
-    #[test]
-    pub fn registry_functions() {
-        let script = r#"
-           export max;
-
-          _ { $max := math::max(1, 2);}
-       "#;
-
-        let s = Script::parse(script).unwrap();
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"v": 1});
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(m["max"], json!(2));
-    }
-
-    #[test]
-    pub fn registry_returns_hostname() {
-        use hostname::get_hostname;
-
-        let script = r#"
-         export hostname;
-
-         _ { $hostname := system::hostname();}
-        "#;
-
-        let s = Script::parse(script).unwrap();
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"v": 1});
-        let _ = s.run(&mut v, &mut m);
-        assert_eq!(m["hostname"], json!(get_hostname()));
-    }
-
-    #[test]
-    pub fn registry_formats_string() {
-        let script = r#" 
-           export format;
-
-       _ { $format := string::format("{}_{}", "snot", "badger");}
-      "#;
-
-        let s = Script::parse(script).unwrap();
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"v": 1});
-        let _ = s.run(&mut v, &mut m);
-
-        assert_eq!(m["format"], json!("snot_badger"));
     }
 
     #[test]
@@ -1538,7 +1520,7 @@ _ { $c := 3; }
 
         let mut m: ValueMap = HashMap::new();
         let mut v = json!({"v":1});
-        let _ = s.run(&mut v, &mut m);
+        let _ = s.run(&(), &mut v, &mut m);
 
         assert_eq!(m["format"], json!("{foobar}"));
     }

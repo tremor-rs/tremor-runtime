@@ -18,8 +18,10 @@ use super::step::Step;
 use crate::errors::*;
 use actix;
 use actix::prelude::*;
+use mimir::registry::Context;
 use serde_json;
 use std::collections::HashMap;
+use std::convert::AsMut;
 use std::fmt::{self, Debug, Display};
 use std::result;
 
@@ -220,6 +222,14 @@ impl EventData {
     }
 }
 
+impl Context for EventData {}
+
+impl AsMut<EventData> for EventData {
+    fn as_mut(&mut self) -> &mut EventData {
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum EventValue {
     Raw(Vec<u8>),
@@ -232,6 +242,12 @@ impl EventValue {
             EventValue::Raw(_) => ValueType::Raw,
             EventValue::JSON(_) => ValueType::JSON,
         }
+    }
+}
+
+impl AsMut<EventValue> for EventValue {
+    fn as_mut(&mut self) -> &mut EventValue {
+        self
     }
 }
 
