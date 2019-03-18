@@ -15,7 +15,7 @@ appenders:
 
 # Write only warnings to stdout
 root:
-  level: error
+  level: info
   appenders:
     - stdout
 

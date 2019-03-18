@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 use rdkafka::util::get_rdkafka_version;
 use std::io::Write;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// println_stderr and run_command_or_fail are copied from rdkafka-sys
 macro_rules! println_stderr(

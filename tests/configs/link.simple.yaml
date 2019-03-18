@@ -1,0 +1,6 @@
+---
+binding:
+  - id: default
+    links:
+      /onramp/bench-001/blaster: [ /pipeline/main/in ]
+      /pipeline/main/out: [ /offramp/bench-001/out ]

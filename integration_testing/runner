@@ -12,7 +12,7 @@ FEATURES="drop_copy kafka mssql php-runtime"
 help() {
     cat <<EOF
 Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
-tremor-runtime test runner for basic and property tests
+tremor-server test runner for basic and property tests
   -h         show this help
   -l         lists all tests
   -n NAME    creates a new basic test from the template
@@ -70,10 +70,10 @@ fi
 set -ex
 case $build_target in
     debug)
-        cargo build --features "${FEATURES}"
+        cargo build --all --features "${FEATURES}"
         ;;
     release)
-        cargo build --release --features "${FEATURES}"
+        cargo build --all --release --features "${FEATURES}"
         ;;
     none)
         ;;
@@ -89,7 +89,7 @@ shift "$((OPTIND-1))"
 set -u
 case $build_target in
     debug)
-        run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-runtime"}
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-server"}
         ;;
     release)
         run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor-runtime"}
@@ -111,12 +111,14 @@ then
     tests=$@
 fi
 
+echo "tests: $tests"
+
 # run the property tests
 
-if [ -z "${tests}" ]
-then
-    propertytests=$(ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;;g")
-fi
+# if [ -z "${tests}" ]
+# then
+#     propertytests=$(ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;;g")
+# fi
 
 for test in $propertytests
 do
@@ -181,7 +183,9 @@ done
 if [ -z "${tests}" ]
 then
     basictests=$(ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;;g")
-fi
+else
+    basictests=$tests
+fi 
 
 for test in $basictests
 do
@@ -193,6 +197,7 @@ do
     gen_file="${TEST_DIR}/gen.json"
     exp_file="${TEST_DIR}/exp.json"
     log_file="${TEST_DIR}/log.txt"
+    mapping_file="${TEST_DIR}/../link.yaml"
 
     if [ ! -d "${TEST_DIR}" ]
     then
@@ -251,7 +256,7 @@ do
         warn "${test}:  skipped"
     else
         xzcat $in_file > $data_file
-        if $run_cmd -m --config "${yaml_file}.out" 2> ${log_file}
+        if $run_cmd --config "${yaml_file}.out" --mapping "${mapping_file}" 2> ${log_file}
         then
             if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
             then

@@ -1,0 +1,99 @@
+/*!
+Copyright (C) 2013-2017 by Andrea Giammarchi - @WebReflection
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+
+/*!
+ * https://github.com/Starcounter-Jack/JSON-Patch
+ * (c) 2017 Joachim Wester
+ * MIT license
+ */
+
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * @license  MIT
+ */
+
+/**
+ * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 2.1.4
+ * Copyright (C) 2017 Oliver Nightingale
+ * @license MIT
+ */
+
+/*!
+ * lunr.utils
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.tokenizer
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.Pipeline
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.Vector
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.stemmer
+ * Copyright (C) 2017 Oliver Nightingale
+ * Includes code from - http://tartarus.org/~martin/PorterStemmer/js.txt
+ */
+
+/*!
+ * lunr.stopWordFilter
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.trimmer
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.TokenSet
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.Index
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * lunr.Builder
+ * Copyright (C) 2017 Oliver Nightingale
+ */
+
+/*!
+ * Determine if an object is a Buffer
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */

@@ -1,0 +1,36 @@
+# Translation of the netdev config
+---
+
+onramps:
+  - onramp::kafka:
+      group_id: loginfra_tremor_netdevice_adhoc_memory_test
+      topics:
+        - __netDeviceProcessed
+      brokers:
+        - kafkac5n1.host.bo1.csnzoo.com:9092
+        - kafkac5n2.host.bo1.csnzoo.com:9092
+        - kafkac5n3.host.bo1.csnzoo.com:9092
+        - kafkac5n4.host.bo1.csnzoo.com:9092
+        - kafkac5n5.host.bo1.csnzoo.com:9092
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - parse::json
+      - runtime::tremor:
+          script: |
+            export classification;
+            _ { $index_key := "index_key"; }
+            src_ip AND dst_ip { $classification := "src_to_dst"; $dimensions := [src_ip, dst_ip]; }
+            _ { $classification := "default"; $dimensions := syslog_hostname; }
+      - grouper::bucket:
+          buckets:
+            src_to_dst:
+              rate: 2
+              cardinality: 2000
+            default:
+              rate: 50
+              cardinality: 1000
+      - render::json
+      - offramp::debug

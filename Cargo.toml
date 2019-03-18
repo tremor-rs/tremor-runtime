@@ -1,60 +1,76 @@
 [package]
 name = "tremor-runtime"
-version = "0.3.7"
+version = "0.4.0-rc.3"
 description = "Tremor Runtime"
-authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>"]
+authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [workspace]
 
 members = [
-    "mimir",
+    "tremor-server",
+    "tremor-tool",
+    "tremor-script",
     "window",
-    "property_testing"
+    "property_testing",
+    "tremor-pipeline",
+    "tremor-api",
 ]
 
 [profile.release]
 lto = true
+opt-level = 3
 
 [dependencies]
+hashbrown = { version = "0.1", features = ["serde"] }
+rmp-serde = "0.13"
 actix = "0.7"
 actix-web = { version = "0.7", features = ["alpn"] }
 base64 = "0.9"
 bytes = "0.4"
 chrono = "0.4"
-clap = "2.23"
-dot = "0.1.4"
+clap = { version = "2.27", features = ["yaml"] }
+dot = "0.1"
 elastic = "0.20"
 env_logger = "0.5"
 error-chain="0.12"
 futures = "0.1"
 hostname = "0.1"
 lazy_static = "0.2"
-libc = "0.2.43"
+libc = "0.2"
 log = "0.4"
-maplit = "1.0"
+#maplit = "1"
+maplit = { git = "https://github.com/Licenser/maplit", branch="hashbrown", features=["hashbrown"] }
 openssl = { version="0.10" }
 prometheus = { version = "0.4", features = ["process"] }
 rand = "0.5"
-reqwest = "0.8"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
+reqwest = "0.9"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
 serde_yaml = "0.8"
-threadpool = "1.7.1"
+threadpool = "1"
 uuid = { version = "0.7", features = ["serde", "v4"] }
 window = { path = "window" }
-mimir = { path = "mimir" }
-lru = "0.1.11"
+tremor-pipeline = { path = "tremor-pipeline" }
 tokio = "0.1"
-url = "1.7"
+url = "1"
 log4rs = "0.8"
-petgraph = "0.4.13"
+tokio-threadpool = "0.1"
+futures-channel = "0.2"
+futures-timer = "0.1"
+tokio-sync = "0.1"
+
+# will be in new graph
+tremor-script = { path = "tremor-script" }
+lru = "0.1"
 
 crossbeam-channel = "0.3"
+
 # blaster / blackhole
-xz2 = {version = "0.1", optional = true}
-hdrhistogram = {version = "6.0", optional = true}
+xz2 = {version = "0.1", optional = true }
+hdrhistogram = {version = "6", optional = true }
 
 # file
 notify = { version = "4", optional = true}
@@ -65,32 +81,31 @@ php = { version = "0.1", optional=true }
 # mssql
 tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"], optional = true }
 futures-state-stream = {version = "0.1", optional=true}
-tokio-current-thread = {version = "0.1.1", optional=true}
+tokio-current-thread = {version = "0.1", optional=true}
 
 # kafka
-rdkafka = {version = "0.17", optional = true}
-rdkafka-sys = {version = "0.11.4-0", optional = true}
-tokio-threadpool = {version = "0.1.7", optional=true}
+rdkafka = {version = "0.20", optional = true}
+rdkafka-sys = {version = "0.11.6-1", optional = true}
 
 #Google cloud stuff
-google-storage1 = "1.0.8+20180905"
-google-pubsub1 = "1.0.8+20181001"
-hyper-rustls = "^0.6"
-yup-oauth2 = "^1.0"
+google-storage1 = "1"
+google-pubsub1 = "1"
+hyper-rustls = "0.6"
+yup-oauth2 = "1"
+
 # This project intentionally uses an old version of Hyper. See
 # https://github.com/Byron/google-apis-rs/issues/173 for more
 # information.
-hyper = "^0.10"
-
+hyper = "0.10"
 
 [dev-dependencies]
-matches = "0.1.8"
-
+matches = "0.1"
+criterion = "0.2"
 
 [features]
-default = ["mssql", "kafka"]
-kafka = ["rdkafka", "rdkafka-sys", "tokio-threadpool"]
-mssql = ["tiberius", "futures-state-stream", "tokio-current-thread"]
-bench = ["xz2", "hdrhistogram"]
+default = ["mssql", "kafka", "bench"]
+kafka = ["rdkafka", "rdkafka-sys" ]
+mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
+bench = ["xz2", "hdrhistogram" ]
 php-runtime = ["php"]
 drop_copy = ["notify"]

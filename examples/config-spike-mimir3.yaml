@@ -29,7 +29,7 @@ pipelines:
       - parse:
           type: parse::json
       - classify:
-          type: runtime::mimir
+          type: runtime::tremor
           rules: |
 
             import imported_var;

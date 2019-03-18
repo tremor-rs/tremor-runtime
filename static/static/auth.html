@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OAuth 2.0 Callback</title>
+</head>
+<script>
+  // from https://github.com/swagger-api/swagger-ui/blob/master/dist/o2c.html
+
+  var qp;
+
+  if (window.location.hash) {
+    qp = location.hash.substring(1).replace(/^\//, '');
+  } else {
+    qp = location.search.substring(1);
+  }
+
+  qp = qp ? JSON.parse('{"' + qp.replace(/&/g, '","').replace(/=/g, '":"') + '"}',
+    function (key, value) {
+      return key === '' ? value : decodeURIComponent(value)
+    }
+  ) : {};
+
+  if (window.opener) {
+    window.opener.onOAuthFinished(qp);
+    window.close();
+  }
+</script>
+</html>

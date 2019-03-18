@@ -1,0 +1,100 @@
+onramp:
+  - id: blaster
+    type: blaster
+    config:
+      source: data/data.json.xz
+      interval: 4000000 # 250 events/s
+    codec: pass
+  - id: kafka-in
+    type: kafka
+    codec: json
+    config:
+      brokers:
+        - kafka:9092
+      topics:
+        - demo
+        - snotbadger
+      group_id: demo
+
+offramp:
+  - id: kafka-out
+    type: kafka
+    codec: pass
+    config:
+      brokers:
+        - kafka:9092
+      topic: demo
+  - id: debug
+    type: debug
+  - id: elastic
+    type: elastic
+    config:
+      endpoints:
+        - http://elastic:9200
+      
+      
+pipeline:
+  - id: loadgen
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: p
+        op: passthrough
+    links:
+      in: [ p ]
+      p : [ out ]
+  - id: demo
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: runtime                                    # We run a tremor_script script with two rules on it
+        op: runtime::tremor
+        config:
+          script: |
+            export class, rate, index, doc_type;
+            _ { $index := "tremor"; $doc_type := "log"; }
+            # The first class we define is named `info`,
+            # it matches if `short_message`  contains the string `"info"`
+            # we configure it to have a rate of 10 events/s 
+            short_message:"info" { $class := "info"; $rate := 10; return; }
+            # The second class we define is `error`, it matches
+            # if  `short_message` contains the string `"ERROR`
+            # we configure it to have a rate of 100 events/s 
+            short_message:"ERROR" { $class := "error"; $rate := 100; return; }
+            # The _ denotes that this will match every event. Since we use 'return'
+            # in the previous rules we know that only events that didn't match another
+            # rule will arrive here. We're setting class and rate here to 'defaut' and
+            # 90 rates.
+            _ { $class := "default"; $rate := 90; }
+      - id: bucket                                    # Now we limit how much each class is allowed to send per second
+        op: grouper::bucket
+      - id: bp                                        # Apply back pressure, every time a response is over 100ms we bump the backoff
+        op: generic::backpressure
+        config:
+          timeout: 100
+      - id: batch                                     # Batch to 50 events at a time and send them at once
+        op: generic::batch
+        config:
+          count: 50
+    links:
+      in: [ runtime ]
+      runtime: [ bucket ]
+      bucket: [ bp ]
+      bp: [ batch ]
+      batch: [ out ]
+
+binding:
+  - id: loadgen
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen/{instance}/in' ]
+      '/pipeline/loadgen/{instance}/out': [ '/offramp/kafka-out/{instance}/in' ]
+  - id: demo
+    links:
+      '/onramp/kafka-in/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
+      '/pipeline/demo/{instance}/out': [ '/offramp/debug/{instance}/in', '/offramp/elastic/{instance}/in'  ]

@@ -5,7 +5,7 @@ services:
     ports:
       - '2181:2181'
   kafka:
-    image: 'wurstmeister/kafka:2.11-1.1.0'
+    image: 'wurstmeister/kafka:2.12-2.1.1'
     depends_on:
       - zookeeper
     ports:
@@ -14,27 +14,39 @@ services:
       KAFKA_ADVERTISED_HOST_NAME: kafka
       KAFKA_CREATE_TOPICS: "demo:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-  loadgen:
-    image: tremor-runtime
-    depends_on:
-      - kafka
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+  elastic:
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:6.6.1'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
     environment:
-      - SLEEP=30
-      - CONFIG_FILE=/configs/loadgen-250.yaml
-      - LOGGER_FILE=/configs/logger.yaml
-    volumes:
-      - ./configs:/configs:ro
-      - ./data:/data:ro
+      discovery.type: single-node
+  kibana:
+    image: 'docker.elastic.co/kibana/kibana:6.6.1'
+    ports:
+      - '5601:5601'
+    depends_on:
+      - elastic
+    environment:
+      ELASTICSEARCH_URL: 'http://elastic:9200'
+    links:
+      - elastic
   tremor:
     image: tremor-runtime
     depends_on:
+      - kibana
       - kafka
     ports:
       - 9898:9898
     environment:
       - SLEEP=20
-      - CONFIG_FILE=/configs/tremor-demo.yaml
+      - CONFIG_FILE=/configs/config.yaml
+      - MAPPING_FILE=/configs/mappings.yaml
       - LOGGER_FILE=/configs/logger.yaml
+      - RUST_BACKTRACE=1
+      - RUST_LOG=info
     volumes:
       - ./configs:/configs:ro
       - ./logs:/logs:rw
+      - ./data:/data:ro

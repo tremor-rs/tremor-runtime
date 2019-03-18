@@ -2,6 +2,7 @@ APP=tremor-runtime
 DOCKER_VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=//')
 CARGO_VSN=$(shell grep '^version' Cargo.toml | sed -e 's/.*=[^"]*"//' -e 's/"$$//')
 VSN=$(DOCKER_VSN)
+YEAR=2018-2019
 
 help:
 	@echo "This makefile wraps the tasks:"
@@ -43,3 +44,12 @@ bench: force
 
 force:
 	true
+
+chk_copyright:
+	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || (echo "No copyright in $$f") done
+
+chk_copyright_ci:
+	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
+
+docserve:
+	mkdocs serve

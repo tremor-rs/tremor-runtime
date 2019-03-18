@@ -1,0 +1,313 @@
+// Copyright 2018-2019, Wayfair GmbH
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use regex;
+use std::str::FromStr;
+use serde_json::{json, Value};
+use super::{CIDR, Id, ItemStage1, Path, StmtStage1, CmpStage1, FilterStage1, ActionStage1, ScriptStage1, RHSValueStage1, Interface};
+use pcre2::bytes::{RegexBuilder, Regex};
+use glob::Pattern;
+
+grammar;
+
+pub Script: ScriptStage1 = {
+    <interface:Interface> <statements:StmtStage1s> => ScriptStage1{interface, statements},
+    <StmtStage1s> => ScriptStage1{interface: Interface::default(), statements: <>},
+}
+
+Import: Vec<Id> = {
+    IMPORT <VarList> ";" => <>,
+}
+
+Export: Vec<Id> = {
+    EXPORT <VarList> ";" => <>
+}
+
+Interface: Interface = {
+    <imports:Import> <exports:Export> => Interface{imports, exports},
+    <exports:Export> <imports:Import> => Interface{imports, exports},
+    <imports:Import> => Interface{imports, exports: Vec::new()},
+    <exports:Export> => Interface{imports: Vec::new(), exports},
+}
+
+VarList: Vec<Id> = {
+    <list:VarList> COMMA <item:Id> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    Id => vec![<>]
+}
+
+StmtStage1s: Vec<StmtStage1> = {
+    <stmts: StmtStage1s> <stmt: StmtStage1> => {
+        let mut stmts: Vec<StmtStage1> = stmts;
+        stmts.push(stmt);
+        stmts
+    },
+    <StmtStage1> => vec![<>],
+    <StmtStage1s> SLC => <>,
+    SLC => vec![],
+
+}
+
+StmtStage1: StmtStage1 = {
+    ItemStage1 => StmtStage1{item: <>, actions: Vec::new()},
+    <item:ItemStage1> CBOpen <actions: ActionStage1s> ";" CBClose => StmtStage1{item, actions},
+}
+
+
+
+// FilterStage1 related
+
+// An item can be a filter expression, a parenthesized expression, or a
+// predicate expression.
+ItemStage1: ItemStage1 = {
+    MaybeNegatedFilterStage1 => <>,
+    Enclosed => <>,
+    <l: ItemStage1> AND <r: MaybeNegatedFilterStage1> => ItemStage1::And(Box::new(l), Box::new(r)),
+    <l: ItemStage1> OR <r: MaybeNegatedFilterStage1> => ItemStage1::Or(Box::new(l), Box::new(r)),
+    <l: ItemStage1> AND <r: Enclosed> => ItemStage1::And(Box::new(l), Box::new(r)),
+    <l: ItemStage1> OR <r: Enclosed> => ItemStage1::Or(Box::new(l), Box::new(r)),
+}
+
+// An enclosed expression is a parenthesized sub-expression or a negated
+// sub-expression.
+Enclosed: ItemStage1 = {
+    NOT <Enclosed> => ItemStage1::Not(Box::new(<>)),
+    BOpen <ItemStage1> BClose => <>,
+}
+
+// A maybe negated filter can either be a filter expression or a negated
+// filter expression
+MaybeNegatedFilterStage1: ItemStage1 = {
+    FilterStage1 => ItemStage1::Filter(<>),
+    NOT <FilterStage1> => ItemStage1::Not(Box::new(ItemStage1::Filter(<>))),
+}
+
+
+LHS: Path = {
+    Path => <>
+}
+
+
+RHS: RHSValueStage1 = {
+    ValueLit => RHSValueStage1::Literal(<>),
+    Path => RHSValueStage1::Lookup(<>),
+    RHSList => RHSValueStage1::List(<>),
+    Funcall => <>,
+}
+
+RHSList: Vec<RHSValueStage1> = {
+    "[" <RHSListItemStage1s> "]" => <>
+}
+
+RHSListItemStage1s: Vec<RHSValueStage1> = {
+    <list:RHSListItemStage1s> COMMA <item:RHSValueStage1> => {
+        let mut list: Vec<RHSValueStage1> = list;
+        list.push(item);
+        list
+    },
+    RHSValueStage1 => vec![<>]
+}
+
+
+// A filter expression is one of: An IPV4 address An list reference A regular
+// expression A wildcard ( glob-like ) expression A term A number Or a negated
+// sub-filter
+FilterStage1: FilterStage1 = {
+    <lhs:LHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Exists
+    },
+    // `_` will always match, we test if the top level object exists, wich is always true
+    USCORE => FilterStage1{ rhs: CmpStage1::Exists, lhs: Path::DataPath(Vec::new()) },
+    <lhs:LHS> EQ <rhs:CIDRLit> => FilterStage1{
+        lhs, rhs: CmpStage1::CIDRMatch(rhs)
+    },
+    <lhs:LHS> EQ <rhs:GlobLit> => FilterStage1{
+        lhs, rhs: CmpStage1::Glob(rhs)
+    },
+    <lhs:LHS> EQ <rhs:RegexLit> => FilterStage1{
+        lhs, rhs: CmpStage1::Regex(rhs)
+    },
+    <lhs:LHS> EQ <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Eq(rhs)
+    },
+    <lhs:LHS> GT <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Gt(rhs)
+    },
+    <lhs:LHS> LT <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Lt(rhs)
+    },
+    <lhs:LHS> GTE <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Gte(rhs) 
+    },
+    <lhs:LHS> LTE <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Lte(rhs)
+    },
+    // The contains filter test if a string
+    // is contained in a substring as well as
+    // if a value is in a event-list
+    //
+    // TODO: This overlaps with string contains
+    // we should fix this
+    <lhs:LHS> CON <rhs:RHS> => FilterStage1{
+        lhs, rhs: CmpStage1::Contains(rhs)
+    },
+}
+
+
+// ActionStage1 Blocks are used to execute actions
+// based on matched filters
+ActionStage1s: Vec<ActionStage1> = {
+    <actions: ActionStage1s> ";" <action: ActionStage1> => {
+        let mut actions: Vec<ActionStage1> = actions;
+        actions.push(action);
+        actions
+    },
+    <ActionStage1> => vec![<>],
+}
+
+ActionStage1: ActionStage1 = {
+    <lhs:LHS> STO <rhs:RHS> => ActionStage1::Set{
+        lhs, rhs
+    },
+    RETURN => ActionStage1::Return,
+}
+
+RHSValueStage1: RHSValueStage1 = {
+    ValueLit => RHSValueStage1::Literal(<>),
+    Path => RHSValueStage1::Lookup(<>),
+
+}
+
+Funcall: RHSValueStage1 = {
+    <m:IDTOKEN> CONCON <f:IDTOKEN> BOpen <a: RHSListItemStage1s> BClose => {
+        RHSValueStage1::Function(m.to_string(), f.to_string(), a)
+   },
+    <m:IDTOKEN> CONCON <f:IDTOKEN> BOpen BClose => {
+        RHSValueStage1::Function(m.to_string(), f.to_string(), vec![])
+   },
+}
+
+// A path used to access nested json values
+// it uses a dot notation.
+// TODO: Add array index support?
+DataPath: Vec<Id> = {
+    <path:DataPath> DOT <key:Id> => {
+      let mut path = path;
+        path.push(key);
+        path
+    },
+    Id => vec![<>],
+}
+
+Path: Path = {
+    DataPath => Path::DataPath(<>),
+    DOLLAR <Id> => Path::Var(<>)
+}
+
+
+// LITERALS
+
+// A CIDR or  IP, where a plain IP (i.e. 10.5.8.20) is treated as the CIDR 10.5.8.20/32
+CIDRLit: CIDR = {
+    IP =>
+    {
+        let re = regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?").unwrap();
+        let caps = re.captures(<>).unwrap();
+        let a = u8::from_str(caps.get(1).map_or("", |m| m.as_str())).unwrap();
+        let b = u8::from_str(caps.get(2).map_or("", |m| m.as_str())).unwrap();
+        let c = u8::from_str(caps.get(3).map_or("", |m| m.as_str())).unwrap();
+        let d = u8::from_str(caps.get(4).map_or("", |m| m.as_str())).unwrap();
+        let e = u8::from_str(caps.get(5).map_or("32", |m| m.as_str())).unwrap();
+        CIDR::new(a, b, c, d, e)
+    },
+}
+
+
+ValueLit: Value = {
+    DblLit => <>,
+    IntLit => <>,
+    StrLit => <>,
+    BoolLit => <>,
+}
+
+BoolLit: Value = {
+    TRUE => Value::Bool(true),
+    FALSE => Value::Bool(false),
+}
+
+// A string literal
+StrLit: Value = {
+    STRING => Value::String(<>.trim_matches('"').to_string())
+}
+
+Id: Id = {
+    IDTOKEN => Id::new(<>),
+}
+// A double literal
+DblLit: Value = DOUBLE => json!(f64::from_str(<>).unwrap());
+
+// An integer literal
+IntLit: Value = LONG => json!(i64::from_str(<>).unwrap());
+
+// A regular expression
+RegexLit: Regex = { <Regexstr> => RegexBuilder::new().jit(true).jit_if_available(true).build(&<>.trim_matches('/').to_string()).unwrap()};
+
+// A glob
+GlobLit: Pattern = { <Globstr> => Pattern::new(&<>.trim_matches('g').trim_matches('"').to_string()).unwrap()};
+
+// Helpers
+Regexstr: String = REGEX => <>.to_string();
+Globstr: String =  GLOB => <>.to_string() ;
+
+match {
+    r"((?i)and)|(\&\&)" => AND,
+    r"((?i)or)|(\|\|)" => OR,
+    r"((?i)not)|(!)" => NOT,
+    "import" => IMPORT,
+    "true" => TRUE,
+    "false" => FALSE,
+    "export" => EXPORT,
+    "return" => RETURN,
+} else {
+    ":" => CON,
+    "::" => CONCON,
+    "=" => EQ,
+    ">" => GT,
+    "<" => LT,
+    ">=" => GTE,
+    "<=" => LTE,
+    "." => DOT,
+    "_" => USCORE,
+    "$" => DOLLAR,
+    ":=" => STO,
+    "," => COMMA,
+    "{" => CBOpen,
+    "}" => CBClose,
+    "(" => BOpen,
+    ")" => BClose,
+} else {
+    r"[+-]?[0-9]+" => LONG,
+    r"[+-]?[0-9]+\.[0-9]+" => DOUBLE,
+    r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/?(\d{1,2})?" => IP,
+    r#""([\\].|[^"])*""# => STRING,
+    r"[a-zA-Z][a-zA-Z0-9_-]*|'[a-zA-Z][a-zA-Z0-9_-]*'" => IDTOKEN,
+} else {
+    r"#[^\n]*" => SLC,
+    r"[/](([\\][/])|[^/])+[/]" => REGEX,
+    r#"[g]["](([\\]["])|[^"])+["]"# => GLOB,
+     _
+}

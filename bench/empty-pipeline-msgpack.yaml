@@ -1,0 +1,36 @@
+# Test maximal througbhput with an empty pipeline
+# and without de/encoding
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: msgpack
+    config:
+      base64: true
+      source: ./demo/data/data.msgpack.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    codec: msgpack
+    config:
+      warmup_secs: 10
+      stop_after_secs: 40
+      significant_figures: 2
+
+
+binding:
+  - id: bench
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]

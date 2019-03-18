@@ -1,20 +1,39 @@
-onramps:
-  - onramp::file:
-      file: {in}
-      pipeline: main
+onramp:
+  - id: in
+    type: file
+    config:
+      source: {in}
+      close_on_done: true
 
-pipelines:
-  - name: main
-    steps:
-      - parse::json
-      - runtime::mimir:
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
           script: |
-            export classification, dimensions;
-            _ { $classification := "test"; $dimensions := [type, application]; }
-      - grouper::bucket:
-          buckets:
-            test:
-              rate: 1
-      - render::json
-      - offramp::file:
-          file: {out}
+            export class, dimensions, rate;
+            _ { $class := "test"; $dimensions := [type, application]; $rate := 1; }
+      - id: b
+        op: grouper::bucket
+    links:
+      in: [ r ]
+      r: [ b ]
+      b: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]

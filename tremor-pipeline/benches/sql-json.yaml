@@ -1,0 +1,79 @@
+# Pipeline from bench1.yaml that resembles the most complex pipeline used
+# in distsys to our knowledge.
+id: main
+interface:
+  inputs: [ in ]
+  outputs: [ out, error ]
+nodes:
+  - id: parse
+    op: json::decode
+  - id: classify
+    op: runtime::tremor
+    config:
+      script: |
+        pdo_error_message="[unixODBC][Driver Manager]Invalid parameter index" { db_error_type := "error 1"; return; }
+        pdo_error_message="[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]Error converting data type nvarchar to int." { db_error_type := "error 1"; return; }
+        pdo_error_message="[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]String or binary data would be truncated." { db_error_type := "error 1"; return; }
+        pdo_error_message="[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]Column name or number of supplied values does not match table definition." { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message="[Microsoft][ODBC Driver 11 for SQL Server]COUNT field incorrect or syntax error" { db_error_type := "error 1"; return; }
+
+        pdo_error_message:g"Violation of PRIMARY KEY constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]Violation of PRIMARY KEY constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]Cannot insert the value NULL into column" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"String or binary data would be truncated*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Invalid column name*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Error converting data type varchar to datetime" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Cannot insert duplicate key row in object*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Cannot insert the value NULL into column*x" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Incorrect syntax near*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Violation of UNIQUE KEY constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Violation of PRIMARY KEY constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Conversion failed when converting the varchar value*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Some character(s) could not be converted into client's character set.  Unconverted bytes were changed to question marks*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"An error occurred while getting new row from user defined Table Valued Function*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"[Microsoft][ODBC Driver 11 for SQL Server][SQL Server]An error occurred while getting new row from user defined Table Valued Function" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Cannot convert a char value to money. The char value has incorrect syntax.*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Arithmetic overflow error converting expression to data type int.*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Arithmetic overflow error for data type smallint, value*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"The UPDATE statement conflicted with the CHECK constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"The INSERT statement conflicted with the FOREIGN KEY constraint*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Failed to update database*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"Error converting data type*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"String or binary data would be truncated*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"*Could not use view or function*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"*was deadlocked on lock resources with another process and has been chosen as the deadlock victim.*" { db_error_type := "error 1"; return; }
+ 
+        pdo_error_message:g"*is out of the range for numeric representation*" { db_error_type := "error 1"; return; }
+ 
+  - id: render
+    op: json::encode
+links:
+  in: [ parse ]
+  parse: [ classify ]
+  classify: [ render ]
+  render: [ out ]

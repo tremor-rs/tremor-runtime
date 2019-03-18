@@ -1,10 +1,29 @@
-onramps:
-  - onramp::bad_onramp:
-      file: {in}
-      pipeline: main
+onramp:
+  - id: in
+    type: bad_onramp
 
-pipelines:
-  - name: main
-    steps:
-      - offramp::file:
-          file: {out}
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: p
+        op: passthrough
+    links:
+      in: [ p ]
+      p: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]

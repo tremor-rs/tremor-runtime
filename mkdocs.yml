@@ -1,0 +1,40 @@
+site_name: Tremor Usage Guide
+site_author: The Tremor Team
+repo_url: https://git.csnzoo.com/tremor/tremor-runtime
+repo_name: data-engeering/tremor-runtime
+edit_uri: edit/master/docs
+docs_dir: docs
+site_dir: html
+pages:
+#  - Home: index.md
+#  - Configuration: Configuration.md
+theme:
+  name: material
+  logo: img/logo.png
+extra:
+  repo_icon: gitlab
+markdown_extensions:
+  - codehilite
+  - toc:
+      permalink: true
+nav:
+  - Home: index.md
+  - Operations: 
+    - Configuration: Configuration.md
+    - Tremor Script: 
+      - Overview: tremor-script.md
+      - Functions:
+          - Overview: tremor-script/functions.md
+          - string: tremor-script/functions/string.md
+          - system: tremor-script/functions/system.md
+    - API: Api.md
+    - Tremor Tool: CLI.md
+    - Configuration Walkthrough: ConfigurationWalkthrough.md
+  - Artefacts:
+    - Codecs: codecs.md
+    - Onramps: onramps.md
+    - Offramps: offramps.md
+    - Operators: operators.md
+  - Development:
+    - Profiling: Profiling.md
+  - 'Glossary': Glossary.md

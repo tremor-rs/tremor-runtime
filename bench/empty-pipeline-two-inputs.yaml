@@ -1,0 +1,38 @@
+onramp:
+  - id: blaster1
+    type: blaster
+    codec: pass
+    config:
+      source: ./demo/data/data.json.xz
+  - id: blaster2
+    type: blaster
+    codec: pass
+    config:
+      source: ./demo/data/data.json.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    codec: pass
+    config:
+      warmup_secs: 10
+      stop_after_secs: 40
+      significant_figures: 2
+
+
+binding:
+  - id: bench
+    links:
+      '/onramp/blaster1/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/onramp/blaster2/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]

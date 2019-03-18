@@ -1,0 +1,12 @@
+onramps:
+  - onramp::metronome:
+      pipeline: main
+      period: 1000
+
+pipelines:
+  - name: main
+    steps:
+      - runtime::tremor:
+          script: |
+            _ { mutated := "value"; }
+      - offramp::stdout

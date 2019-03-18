@@ -1,8 +1,8 @@
-*/exp.json
-*/gen.json
-*/log.txt
-*/res.diff
-*/in.json
-*/out.json
-*/config.yaml.out
-*/*.jq
+basic/*/exp.json
+basic/*/gen.json
+basic/*/log.txt
+basic/*/res.diff
+basic/*/in.json
+basic/*/out.json
+basic/*/config.yaml.out
+basic/*/*.jq

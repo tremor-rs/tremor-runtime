@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bytes::Bytes;
-use prometheus::{self, Encoder, TextEncoder};
+//use bytes::Bytes;
+//use prometheus::{self, Encoder, TextEncoder};
 
-use actix_web::HttpRequest;
+//use actix_web::HttpRequest;
 
 pub static mut INSTANCE: &str = "tremor";
+/*
 pub fn get(_req: &HttpRequest) -> Bytes {
     let encoder = TextEncoder::new();
     let metric_familys = prometheus::gather();
@@ -25,3 +26,5 @@ pub fn get(_req: &HttpRequest) -> Bytes {
     encoder.encode(&metric_familys, &mut buffer).unwrap();
     Bytes::from(buffer)
 }
+
+*/

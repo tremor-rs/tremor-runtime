@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/*
 macro_rules! opable {
     ( $e:ident, $( $i:ident ),* ) => {
         impl Opable for $e {
@@ -97,8 +98,10 @@ macro_rules! opable_types {
 
     }
 }
+*/
 
 /// println_stderr and run_command_or_fail are copied from rdkafka-sys
+#[macro_export]
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -106,17 +109,18 @@ macro_rules! println_stderr(
     } }
 );
 
+/*
 macro_rules! ms {
     ($x:expr) => {
         1_000_000 * $x
     };
 }
-
 macro_rules! s {
-    ($x:expr) => {
-        1_000_000_000 * $x
+($x:expr) => {
+1_000_000_000 * $x
     };
 }
+*/
 
 macro_rules! instance {
     // crate::metrics::INSTANCE is never muated after the initial setting
@@ -125,6 +129,7 @@ macro_rules! instance {
         unsafe { crate::metrics::INSTANCE.to_string() }
     };
 }
+/*
 macro_rules! prom_int_gauge {
     ($name:expr, $desc:expr) => {
         register_int_gauge!(opts!($name, $desc)
@@ -181,3 +186,4 @@ macro_rules! ensure_type {
         }
     };
 }
+*/

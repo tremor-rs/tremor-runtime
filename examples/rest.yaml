@@ -1,0 +1,80 @@
+onramp:
+  - id: blaster
+    type: blaster
+    config:
+      source: demo/data/data.json.xz
+      interval: 500000000 # 2 events/s
+    codec: json
+
+offramp:
+  - id: rest
+    type: rest
+    config:
+      endpoints:
+        - http://127.0.0.1:8080
+      headers:
+        'Content-Type': 'application/json'
+
+pipeline:
+  - id: loadgen
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: p
+        op: passthrough
+    links:
+      in: [ p ]
+      p : [ out ]
+  - id: demo
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: runtime                                    # We run a tremor_script script with two rules on it
+        op: runtime::tremor
+        config:
+          script: |
+            export class, rate, index, doc_type;
+            _ { $index := "tremor"; $doc_type := "log"; }
+            # The first class we define is named `info`,
+            # it matches if `short_message`  contains the string `"info"`
+            # we configure it to have a rate of 10 events/s 
+            short_message:"info" { $class := "info"; $rate := 10; return; }
+            # The second class we define is `error`, it matches
+            # if  `short_message` contains the string `"ERROR`
+            # we configure it to have a rate of 100 events/s 
+            short_message:"ERROR" { $class := "error"; $rate := 100; return; }
+            # The _ denotes that this will match every event. Since we use 'return'
+            # in the previous rules we know that only events that didn't match another
+            # rule will arrive here. We're setting class and rate here to 'defaut' and
+            # 90 rates.
+            _ { $class := "default"; $rate := 90; }
+      - id: bucket                                    # Now we limit how much each class is allowed to send per second
+        op: grouper::bucket
+      - id: bp
+        op: generic::backpressure
+        config:
+          timeout: 100
+      - id: batch
+        op: generic::batch
+        config:
+          count: 10
+    links:
+      in: [ runtime ]
+      runtime: [ bucket ]
+      bucket: [ bp ]
+      bp: [ batch ]
+      batch: [ out ]
+
+
+binding:
+  - id: default
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
+      '/pipeline/demo/{instance}/out': [ '/offramp/rest/{instance}/in'  ]
+

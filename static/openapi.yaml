@@ -1,0 +1,529 @@
+openapi: '3.0.0'
+info:
+  title: Tremor Api
+  description: 'REST API for tremor'
+  version: '1.0'
+  
+servers:
+  - url: http://localhost:9898/
+    description: The default ( development ) endpoint on a local ( development ) host
+
+paths:
+  /{artefact-kind}:
+    get:
+      summary: Lists artefacts of a given type
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Returns a list of identifiers for each element stored in the repository
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+
+      operationId: find_artefacts
+      tags: [ repo ]
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+      responses:
+        '200':
+          description: 'Find repository managed tremor artefacts'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registry_set'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/registry_set'
+    post:
+      summary: Publish a new artefact of a given type to the tremor artefact repository
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Publishes a new artefact to the tremor artefact repository if the artefact id
+        is unique.
+
+        Returns artefact data, on success.
+
+        If an arterfact of the same name already exists, a conflict error is returned.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+
+      operationId: publish_artefact
+      tags: [ repo ]
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+      responses:
+        '201':
+          description: 'Successfully published artefact to tremor registry'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publish_ok'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/publish_ok'
+        '409':
+          description: 'An arterfact with the same id already exists error'
+    
+  /{artefact-kind}/{artefact-id}:
+    get:
+      summary: Get artefact data from tremor artefact repository
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+
+        Returns artefact data, on success.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+      tags: [ repo ]
+      operationId: get_artefact_by_id
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+        - name: artefact-id
+          in: path
+          required: true
+          description: The ( server ) unique id of the artefact
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Get a tremor artefact and any registered instances'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artefact'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/artefact'
+        '404':
+          description: 'The artefact was not found and does not exist'
+    delete:
+      summary: Remove artefact from tremor artefact repository
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+
+        Returns old artefact data, on success.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+      tags: [ repo ]
+      operationId: delete_artefact_by_id
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+        - name: artefact-id
+          in: path
+          required: true
+          description: The ( server ) unique id of the artefact
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Get a tremor artefact and any registered instances'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artefact'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/artefact'
+        '404':
+          description: 'The artefact was not found and does not exist'
+
+  /{artefact-kind}/{artefact-id}/{instance-id}:
+    get:
+      summary: Get deployed artefact servant data from tremor artefact registry
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+
+        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        and accesible via the tremor instance registry
+
+        Returns instance data, on success.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+      tags: [ repo, reg ]
+      operationId: get_artefact_instance_by_id
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+        - name: artefact-id
+          in: path
+          required: true
+          description: The ( server ) unique id of the artefact
+          schema:
+            type: string
+        - name: instance-id
+          in: path
+          required: true
+          description: The ( server ) unique instance id of the artefact
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Get tremor artefact instance data'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artefact'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/artefact'
+        '404':
+          description: 'The artefact instance was not found and does not exist'
+    post:
+      summary: Publish, deploy and activate instances
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+
+        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        and accesible via the tremor instance registry
+
+        Creates new instances of artefacts ( if required ), publishes instances
+        to the tremor instance registry. If instances are onramps, offramps or
+        pipelines new registry values will be created. In the case of onramps
+        and offramps these are deployed *after* any dependant pipeline instances
+        and then they are interaconnected.
+
+        Returns instance data, on success.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+      tags: [ repo, reg ]
+      operationId: activate
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+        - name: artefact-id
+          in: path
+          required: true
+          description: The ( server ) unique id of the artefact
+          schema:
+            type: string
+        - name: instance-id
+          in: path
+          required: true
+          description: The ( server ) unique instance id of the artefact
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Old tremor artefact instance data'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artefact'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/artefact'
+        '404':
+          description: 'The artefact instance was not found and does not exist'
+    delete:
+      summary: Deactivate and unpublish deployed instances
+      description: |
+        Given a valid artefact kind parameter of:
+
+        * pipeline
+        * onramp
+        * offramp
+        * binding
+
+        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+
+        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        and accesible via the tremor instance registry
+
+        Deactivates, stops and unpublishes the target instances and any
+        dependant instances that are no longer referenced by the runtime.
+
+        Returns old instance data, on success.
+
+        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+      tags: [ repo, reg ]
+      operationId: deactivate
+      parameters:
+        - name: artefact-kind
+          in: path
+          required: true
+          description: The type of artefact
+          schema:
+            type: string
+            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+        - name: artefact-id
+          in: path
+          required: true
+          description: The ( server ) unique id of the artefact
+          schema:
+            type: string
+        - name: instance-id
+          in: path
+          required: true
+          description: The ( server ) unique instance id of the artefact
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Old tremor artefact instance data'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artefact'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/artefact'
+        '404':
+          description: 'The artefact instance was not found and does not exist'
+
+  /version:
+    get:
+      summary: Get's the current version
+      description: |
+
+        This endpoint returns version information for the current
+        version of tremor. Versioning policy follows [Semantic Versioning](https://semver.org/)
+
+      tags: [ version ]
+      operationId: get_version
+      responses:
+        '200':
+          description: The current version of treor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/version'
+            
+
+components:
+  schemas:
+    version:
+      description: Version information
+      properties:
+        version:
+          type: string
+          description: The semantic version code
+      required: [ version ]
+    
+    registry_set:
+      description: A list of registry artefacts
+      type: array
+      items:
+        $ref: '#/components/schemas/artefact'
+
+    artefact:
+      oneOf:
+        - $ref: '#/components/schemas/pipeline'
+        - $ref: '#/components/schemas/onramp'
+        - $ref: '#/components/schemas/offramp'
+        - $ref: '#/components/schemas/binding'
+    
+    instance:
+      oneOf:
+        - $ref: '#/components/schemas/mapping'
+        
+    publish_ok:
+      description: Response when a registry publish was succesful
+      properties:
+        id:
+          type: string
+          description: The id of the pubished artefact
+      required: [ id ]
+      
+    pipeline:
+      description: A tremor pipeline specification
+      type: object
+      properties:
+        id:
+          type: string
+          description: A unique identifier for this pipeline specification
+        description:
+          type: string
+          description: Documentation for this type
+        interface:
+          $ref: "#/components/schemas/interface"
+        nodes:
+          $ref: "#/components/schemas/vertices"
+        links:
+          $ref: "#/components/schemas/edges"
+      required: [ id ]
+
+    interface:
+      type: object
+      properties:
+        inputs:
+          $ref: "#/components/schemas/stream_names"
+        outputs:
+          $ref: "#/components/schemas/stream_names"
+
+    stream_names:
+      description: The set of input or output stream names
+      type: array
+      items: 
+        type: string
+
+    vertices:
+      description: The set of operator nodes this pipeline DAG is formed from
+      type: array
+      items:
+        $ref: "#/components/schemas/operator"
+
+    operator:
+      description: An operator node in a pipeline or vertex in the pipeline DAG
+      type: object
+      properties:
+        id:
+          type: string
+          description: A pipeline unique identifier for this operator
+        description:
+          type: string
+          description: Documentation for this type
+        type:
+          type: string
+          description: Rust native type for this operator specification
+        config:
+          type: object
+          description: A map of key/value pairs used to configure this operator
+
+    edges:
+      description: The set of connections between nodes/vertices/operators in a pipeline DAG
+      type: object
+
+    onramp:
+      description: A tremor onramp specification
+      type: object
+      properties:
+        type:
+          type: string
+          description: Rust native type for this onramp specification
+        id:
+          type: string
+          description: A unique identifier for this onramp specification
+        description:
+          type: string
+          description: Documentation for this type
+        codec:
+          $ref: "#/components/schemas/codec"
+          description: The codec supported by this offramp
+        config:
+          type: object
+          description: A map of key/value pairs used to configure this onramp
+      required: [ type, id ]    
+  
+    offramp:
+      description: A tremor offramp specification
+      type: object
+      properties:
+        type:
+          type: string
+          description: Rust native type for this offramp specification
+        id:
+          type: string
+          description: A unique identifier for this offramp specification
+        description:
+          type: string
+          description: Documentation for this type
+        codec:
+          $ref: "#/components/schemas/codec"
+        config:
+          type: object
+          description: A map of key/value pairs used to configure this onramp
+
+      required: [ type, id ]  
+    
+    binding:
+      description: A tremor binding specification
+      type: object
+      properties:
+        id:
+          type: string
+          description: A unique identifier for this binding specification
+        description:
+          type: string
+          description: Documentation for this type
+        links:
+          $ref: "#/components/schemas/binding_map"
+      required: [ id ]  
+    
+    binding_map:
+      description: A map of binding specification links
+      type: object
+
+    mapping:
+      description: A tremor mapping specification
+      type: object
+
+    codec:
+      description: The data format supported for encoding/decoding to/from tremor types
+      type: string
+      enum:
+        - json
+        - msgpack
+        - raw
+        - influx
+

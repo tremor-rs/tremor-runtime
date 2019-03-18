@@ -1,0 +1,32 @@
+---
+onramp:
+  - id: blaster
+    type: blaster
+    config:
+      source: ./demo/data/data.json.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    config:
+      warmup_secs: 10
+      stop_after_secs: 40
+      significant_figures: 2
+
+# We bind the main pipeline to a bench-001 deployment
+binding:
+  - id: default
+    links:
+      /onramp/blaster/{instance}/: [ /pipeline/main/in ]
+      # /offramp/bench-001/blaster: /pipeline/main/in perhapp
+      /pipeline/main/out: [ /offramp/bench-001/blackhole ]
+
+# Passthrough pipeline
+#   Refers directly to interface defined inputs/outputs
+pipeline:
+  - id: main
+    interface:
+      inputs: [ in ]
+      outputs: [ out ]
+    links:
+      in: [ out ]

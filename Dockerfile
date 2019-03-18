@@ -5,20 +5,36 @@ RUN yum install git make gcc clang openssl-static libstdc++-static bison  autoco
 RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 
 COPY Cargo.* ./
+# Main library
 COPY src ./src
+# supporting libraries
+COPY property_testing ./property_testing
 COPY window ./window
-COPY mimir ./mimir
+COPY tremor-pipeline ./tremor-pipeline
+COPY tremor-script ./tremor-script
+COPY tremor-api ./tremor-api
+# Binaries
+COPY tremor-server ./tremor-server
+COPY tremor-tool ./tremor-tool
 
 RUN source $HOME/.cargo/env &&\
-  cargo build --features "bench" --release
+  cargo build --all-features --release --all
 
 FROM centos:7
 
-COPY --from=builder target/release/tremor-runtime /tremor-runtime
+COPY --from=builder target/release/tremor-server /tremor-server
+COPY --from=builder target/release/tremor-tool /tremor-tall
 # COPY --from=builder target/release/native/php-src/libs/libphp7.la /lib64
 # COPY --from=builder target/release/native/php-src/libs/libphp7.so /lib64
-COPY tremor-runtime.sh /tremor-runtime.sh
-COPY examples/tremor.yaml /tremor.yaml
-COPY examples/logger.yaml /logger.yaml
+# Entrypoint
+COPY docker/entrypoint.sh /entrypoint.sh
+# configuration file
+COPY docker/tremor.yaml /tremor.yaml
+# mappings
+COPY docker/mapping.yaml /mapping.yaml
+# logger configuration
+COPY docker/logger.yaml /logger.yaml
+# static files
+COPY static /static
 
-ENTRYPOINT ["/tremor-runtime.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

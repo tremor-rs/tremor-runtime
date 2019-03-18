@@ -29,7 +29,7 @@ pipelines:
       - parse:
           type: parse::json
       - classify:
-          type: classifier::mimir
+          type: runtime::tremor
           rules:
             - rule: application="app1" { $dimension := application }
               class: applog_app1

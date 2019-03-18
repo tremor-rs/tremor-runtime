@@ -181,7 +181,7 @@ The demo mode logically follows the flow outlined below. It reads the data from 
 ║          │         ║                            ║          │         ║
 ║          │         ║                            ║          ▼         ║
 ║ ┌────────────────┐ ║                            ║ ┌────────────────┐ ║
-║ │  data.json.xz  │ ║                            ║ │     mimir      │ ║
+║ │  data.json.xz  │ ║                            ║ │     tremor     │ ║
 ║ └────────────────┘ ║                            ║ └────────────────┘ ║
 ╚════════════════════╝                            ║          │         ║
                                                   ║          │         ║

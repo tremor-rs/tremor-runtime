@@ -1,0 +1,49 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: {in}
+      close_on_done: true
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r1
+        op: runtime::tremor
+        config:
+          script: |
+            export class, dimensions, rate;
+            _ { $class := "default"; $dimensions := application; $rate := 5; }
+      - id: b1
+        op: grouper::bucket
+      - id: r2
+        op: runtime::tremor
+        config:
+          script: |
+            export dimensions, rate;
+            _ { $dimensions := host; $rate := 1; }
+      - id: b2
+        op: grouper::bucket
+    links:
+      in: [ r1 ]
+      r1: [ b1 ]
+      b1: [ r2 ]
+      r2: [ b2 ]
+      b2: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]

@@ -1,0 +1,37 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: {in}
+      close_on_done: true
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+             _ { tremor.index_key := string::format("{}-{}", application, type); tremor.instance := system::instance(); }
+    links:
+      in: [ r ]
+      r: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
+
+

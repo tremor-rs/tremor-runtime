@@ -1,6 +1,6 @@
 test:
   stage: test
-  image: wayfair/data-engineering/dataeng-rust:1.32.0
+  image: wayfair/tremor/dataeng-rust:1.33.0
   when: always
   # cache:
   #   paths:
@@ -9,10 +9,11 @@ test:
   tags:
     - docker
   script:
+    - make chk_copyright_ci
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
     - cargo test --all-features
-    - cargo test -p mimir -p window
+    - cargo test -p tremor-script -p window
     - cargo clippy --all-features
     - cp target/debug/native/php-src/libs/* /lib64
     - make it
@@ -22,7 +23,7 @@ test:
 #
 # bench:
 #   stage: test
-#   image: wayfair/data-engineering/dataeng-rust:1.31.1a
+#   image: wayfair/tremor/dataeng-rust:1.31.1a
 #   when: always
 #   allow_failure: true
 #   cache:
@@ -35,3 +36,25 @@ test:
 #     - cargo build --release
 #     - cp target/release/native/php-src/libs/* /lib64
 #     - make bench
+
+# This job updates the live copy of the docs site
+mkdocs:
+  tags:  # this ensures it runs on the docs machine
+    - docs
+  script:
+    - mkdocs build -d /docs/$CI_PROJECT_PATH
+  only:
+    - master
+
+
+# This job creates/updates development copies of the site for every
+# push to non-master branches
+mkdocs-dev:
+  tags:
+    - docs
+  script:
+    - mkdir -p /docs/$CI_PROJECT_PATH/_dev/$CI_COMMIT_REF_NAME
+    - mkdocs build -d /docs/$CI_PROJECT_PATH/_dev/$CI_COMMIT_REF_NAME
+  except:
+    - master
+

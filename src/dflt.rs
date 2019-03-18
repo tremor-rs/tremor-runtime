@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,10 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::vec::Vec;
+#![allow(dead_code)]
 use std::{convert, f64};
 
 pub fn d_false() -> bool {
@@ -60,21 +58,17 @@ where
     T::from(1000)
 }
 
-pub fn d_hashmap<T1, T2>() -> HashMap<T1, T2>
+pub fn d<T>() -> T
 where
-    T1: std::cmp::Eq + std::hash::Hash,
+    T: Default,
 {
-    HashMap::new()
-}
-
-pub fn d_vec<T>() -> Vec<T> {
-    Vec::new()
-}
-
-pub fn d_empty() -> String {
-    String::from("")
+    T::default()
 }
 
 pub fn d_none<T>() -> Option<T> {
     None
+}
+
+pub fn dflt<T: Default>() -> T {
+    T::default()
 }

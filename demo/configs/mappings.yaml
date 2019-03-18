@@ -1,0 +1,5 @@
+mapping:
+  /binding/loadgen/loadgen:
+    instance: "loadgen"
+  /binding/demo/demo:
+    instance: "demo"

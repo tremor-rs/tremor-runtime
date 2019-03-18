@@ -1,0 +1,32 @@
+[package]
+build = "build.rs"
+name = "tremor-script"
+version = "0.1.1"
+authors = ["Ivan Monov <imonov@wayfair.com>", "Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+error-chain="0.12"
+lalrpop-util = "0.16"
+regex = "0.2"
+serde_json = "1.0"
+pcre2 = "0.1"
+glob = "0.2"
+lazy_static = "1"
+lalrpop = "0.16"
+codespan = "0.2.0"
+hostname = "0.1"
+hashbrown = { version = "0.1", features = ["serde"] }
+
+
+[build-dependencies]
+lalrpop = "0.16"
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "tremor_script_benchmark"
+harness = false
+

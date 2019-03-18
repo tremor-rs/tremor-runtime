@@ -1,0 +1,23 @@
+onramps:
+  - onramp::stdin:
+      pipeline: main
+
+pipelines:
+  - name: main
+    steps:
+      - op::count:
+          metric: typed
+          desc: 'events typed'
+          labels:
+            keyboard: mac
+      - op::set:
+          var: index
+          val: index
+      - op::set:
+          var: doc-type
+          val: doc-type
+      - offramp::elastic:
+          endpoints:
+            - http://127.0.0.1:8888
+          batch_size: 5
+          timeout: 500

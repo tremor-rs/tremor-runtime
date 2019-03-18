@@ -1,0 +1,3 @@
+mapping:
+  /binding/default/01:
+    instance: "01"

@@ -1,4 +1,4 @@
-// Copyright 2018, Wayfair GmbH
+// Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,18 +14,18 @@
 
 use chrono::Timelike;
 use chrono::Utc;
-use libc;
-#[cfg(test)]
-use serde_yaml::Value;
-use std::ptr;
 use std::time::Duration;
-
-pub fn nanos_to_millis(nanos: u64) -> u64 {
-    nanos / ms!(1)
-}
+//use libc;
+//#[cfg(test)]
+//use serde_yaml::Value;
+//use std::ptr;
 
 pub fn duration_to_millis(at: Duration) -> u64 {
-    (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / ms!(1))
+    (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
+}
+/*
+pub fn nanos_to_millis(nanos: u64) -> u64 {
+nanos / 1_000_000
 }
 
 pub fn duration_to_libc_timespec(at: Duration) -> libc::timespec {
@@ -34,15 +34,17 @@ pub fn duration_to_libc_timespec(at: Duration) -> libc::timespec {
         tv_nsec: i64::from(at.subsec_nanos()) as libc::c_long,
     }
 }
+*/
 
 pub fn nanotime() -> u64 {
     let now = Utc::now();
     let seconds: u64 = now.timestamp() as u64;
     let nanoseconds: u64 = u64::from(now.nanosecond());
 
-    (seconds * s!(1)) + nanoseconds
+    (seconds * 1_000_000_000) + nanoseconds
 }
 
+/*
 /// Park current thread for a precise ( nanosecond granular, more precise than sleep ) amount of time
 /// Resolution varies by operating system / hardware architecture
 ///
@@ -109,7 +111,8 @@ fn macos_park(rqtp: &libc::timespec, remain: Option<&mut libc::timespec>) -> i32
         _ => unsafe { libc::nanosleep(rqtp as *const _, ptr::null_mut()) },
     }
 }
-
+ */
+/*
 #[cfg(test)]
 pub fn vs(s: &str) -> Value {
     Value::String(s.to_string())
@@ -124,3 +127,4 @@ pub fn vi(i: u64) -> Value {
 pub fn vf(f: f64) -> Value {
     Value::Number(f.into())
 }
+*/
