@@ -14,6 +14,7 @@
 
 //! HTTP / REST client
 
+use crate::errors::*;
 use reqwest;
 use std::fmt;
 
@@ -37,34 +38,34 @@ impl HttpC {
         }
     }
 
-    pub fn get(&self, path: String) -> reqwest::RequestBuilder {
+    pub fn get(&self, path: String) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl).unwrap();
-        self.client.get(endpoint)
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.get(endpoint))
     }
 
-    pub fn post(&self, path: String) -> reqwest::RequestBuilder {
+    pub fn post(&self, path: String) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl).unwrap();
-        self.client.post(endpoint)
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.post(endpoint))
     }
 
-    pub fn put(&self, path: String) -> reqwest::RequestBuilder {
+    pub fn put(&self, path: String) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl).unwrap();
-        self.client.put(endpoint)
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.put(endpoint))
     }
 
-    pub fn patch(&self, path: String) -> reqwest::RequestBuilder {
+    pub fn patch(&self, path: String) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl).unwrap();
-        self.client.patch(endpoint)
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.patch(endpoint))
     }
 
-    pub fn delete(&self, path: String) -> reqwest::RequestBuilder {
+    pub fn delete(&self, path: String) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl).unwrap();
-        self.client.delete(endpoint)
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.delete(endpoint))
     }
 
     // pub fn head(&self, path: String) -> reqwest::RequestBuilder {

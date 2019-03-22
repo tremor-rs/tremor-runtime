@@ -1,12 +1,19 @@
 #!/bin/sh
 
+set -x
+
 . $(dirname $0)/common.inc
 
-if [ ! -f ./bench/$1.yaml ]
+file=$1
+if [ ! -f $file ]
+then
+  file="./bench/$file.yaml"
+fi
+
+if [ ! -f $file ]
 then
     echo "Benchmark file ./bench/$1.yaml not found!"
     exit 1
 fi
-result=$(target/release/tremor-server -c ./bench/$1.yaml -m ./bench/link.yaml -q 20)
 
-echo "$result"
+target/release/tremor-server -c $file bench/link.yaml

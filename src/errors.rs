@@ -14,9 +14,13 @@
 
 #![allow(deprecated)]
 use crate::async_sink;
-//use crate::pipeline::types::ValueType;
 use actix;
+use base64;
 use elastic;
+use error_chain::{
+    error_chain, error_chain_processing, impl_error_chain_kind, impl_error_chain_processed,
+    impl_extract_backtrace,
+};
 use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
 use prometheus;
@@ -28,7 +32,6 @@ use std;
 use tokio_sync::mpsc::error as tokio_sync_error;
 use tremor_pipeline;
 use url;
-//use tokio::sync::mpsc::bounded;
 
 impl Clone for Error {
     fn clone(&self) -> Self {
@@ -69,6 +72,21 @@ impl From<crossbeam_channel::RecvError> for Error {
         Error::from(format!("{:?}", e))
     }
 }
+
+impl<P> From<std::sync::PoisonError<P>> for Error {
+    fn from(e: std::sync::PoisonError<P>) -> Error {
+        Error::from(format!("poison Error: {:?}", e))
+    }
+}
+
+#[cfg(test)]
+impl PartialEq for Error {
+    fn eq(&self, _other: &Error) -> bool {
+        // This might be Ok since we try to compare Result in tets
+        false
+    }
+}
+
 /*
 impl From<std::option::NoneError> for Error {
     fn from(e: std::option::NoneError) -> Error {
@@ -84,6 +102,7 @@ error_chain! {
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
     }
     foreign_links {
+        Base64Error(base64::DecodeError);
         YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
         JSONError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
@@ -130,6 +149,10 @@ error_chain! {
         UnpublishFailedNonZeroInstances(key: String) {
             description("The artefact has non-zero instances and cannot be unpublished")
                 display("Cannot unpublish artefact {} which has non-zero instances.", key)
+        }
+        UnpublishFailedSystemArtefact(key: String) {
+            description("The artefact is a system artefact and cannot be unpublished")
+                display("Cannot unpublish system artefact {}.", key)
         }
 
         BindFailedAlreadyExists(key: String) {

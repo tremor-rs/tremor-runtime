@@ -95,10 +95,12 @@ impl Operator for Backpressure {
         if let Some(Value::String(_s)) = insight.meta.get("error") {
             self.next_backoff();
         } else if let Some(Value::Number(v)) = insight.meta.get("time") {
-            if v.as_f64().unwrap() > self.config.timeout {
-                self.next_backoff();
-            } else {
-                self.backoff = 0;
+            if let Some(vf) = v.as_f64() {
+                if vf > self.config.timeout {
+                    self.next_backoff();
+                } else {
+                    self.backoff = 0;
+                }
             }
         }
     }

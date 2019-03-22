@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.4.0-rc.3"
+version = "0.4.0-rc.4"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -48,7 +48,7 @@ rand = "0.5"
 reqwest = "0.9"
 serde = "1"
 serde_derive = "1"
-serde_json = "1"
+serde_json = { git = "https://github.com/Licenser/json", branch="hashbrown", features=["hashbrown"] }
 serde_yaml = "0.8"
 threadpool = "1"
 uuid = { version = "0.7", features = ["serde", "v4"] }

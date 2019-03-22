@@ -15,6 +15,18 @@ offramp:
       <key>: <value>
 ```
 
+## System Offramps
+
+Each tremor runtime comes with some pre-configured offramos that can be used.
+
+### stdout
+
+The offramp `/offramp/system::stdout/system` can be used to print to STDOUT. Data will be formatted as JSON.
+
+### Stderr
+
+The offramp `/offramp/system::stderr/system` can be used to print to STDERR. Data will be formatted as JSON.
+
 ## Supported Offramps
 
 ### elastic

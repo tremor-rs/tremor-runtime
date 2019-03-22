@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(deprecated)]
+
 use error_chain::{
     error_chain, error_chain_processing, impl_error_chain_kind, impl_error_chain_processed,
     impl_extract_backtrace,
 };
 
+#[cfg(test)]
+impl PartialEq for Error {
+    fn eq(&self, _other: &Error) -> bool {
+        // This might be Ok since we try to compare Result in tets
+        false
+    }
+}
+
 error_chain! {
+
+    foreign_links {
+        ParseIntError(std::num::ParseIntError);
+    }
     errors {
         ClonedError(t: String) {
             description("This is a cloned error we need to get rod of this")
@@ -55,9 +69,9 @@ error_chain! {
             description("Bad type passed to function")
                 display("Bad type passed to function {}::{}/{}", m, f, a)
         }
-        RuntimeError(m: String, f: String, a: usize) {
+        RuntimeError(m: String, f: String,  a: usize, c: String ) {
             description("Runtime error in function")
-                display("Runtime error in function {}::{}/{}", m, f, a)
+                display("Runtime error in function {}::{}/{}: {}", m, f, a, c)
         }
 
     }

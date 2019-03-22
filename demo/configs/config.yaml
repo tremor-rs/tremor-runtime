@@ -31,6 +31,14 @@ offramp:
     config:
       endpoints:
         - http://elastic:9200
+  - id: influxdb
+    type: rest
+    codec: influx
+    config:
+      endpoints:
+        - http://influx:8086/write?db=tremor
+      headers:
+        'Client': 'Tremor'
       
       
 pipeline:
@@ -46,6 +54,26 @@ pipeline:
     links:
       in: [ p ]
       p : [ out ]
+  - id: enrich
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            _ { tags.host := system::hostname(); }
+      - id: batch
+        op: generic::batch
+        config:
+          count: 50
+    links:
+      in: [ runtime ]
+      runtime: [ batch ]
+      batch: [ out ]
   - id: demo
     interface:
       inputs:
@@ -98,3 +126,7 @@ binding:
     links:
       '/onramp/kafka-in/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
       '/pipeline/demo/{instance}/out': [ '/offramp/debug/{instance}/in', '/offramp/elastic/{instance}/in'  ]
+  - id: metrics
+    links:
+      '/pipeline/system::metrics/system/out': [ '/pipeline/enrich/system/in' ]
+      '/pipeline/enrich/system/out': [ '/offramp/influxdb/system/in' ]

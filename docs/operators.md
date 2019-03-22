@@ -33,15 +33,15 @@ Configuration consists of key / value pairs.
 
 The tremor script runtime that allows to modify events or their metadata. To learn more about Tremor Script please see the [related section](../tremor-script).
 
-Supported configuration options are:
+**Configuration options**:
 
 * `script` - The script to execute.
 
-Outputs:
+**Outputs**:
 
 * `out`
 
-Example:
+**Example**:
 
 ```yaml
 - id: rt
@@ -59,40 +59,77 @@ Bucket will perform a sliding window rate limiting based on event metadata. Limi
 
 This operator does not support configuration.
 
-Used metadata Variables:
+**Metadata Variables**:
 
 * `$class` - The class of an event. (String)
 * `$rate` - Allowed events per second per class/dimension (Number)
 * (Optional) `$dimensions` - The dimensions of the event. (Any)
+* (Optional)`$cardinality` - the maximum number of dimensions kept track of at the same time (Number, default: `1000`)
 
-Outputs:
+**Outputs**:
 
 * `out`
 * `error` - Unprocessable events for example if `$class` or `$rate` are not set.
 * `overflow` - Events that exceed the rate defined for them
 
-Example:
+**Example**:
 
 ```yaml
 - id: group
   op: grouper::bucket
 ```
 
+**Metrics**:
+
+The bucket operator generates additional metrics. For each class the following two statistics are generated (as an example):
+
+```json
+{"measurement":"bucketing",
+ "tags":{
+   "action":"pass",
+   "class":"test",
+   "direction":"output",
+   "node":"bucketing",
+   "pipeline":"main",
+   "port":"out"
+ },
+ "fields":{"count":93},
+ "timestamp":1553012903452340000
+}
+{"measurement":"bucketing",
+ "tags":{
+   "action":"overflow",
+   "class":"test",
+   "direction":"output",
+   "node":"bucketing",
+   "pipeline":"main",
+   "port":"out"
+ },
+ "fields":{"count":127},
+ "timestamp":1553012903452340000
+}
+```
+
+This tells us the following, up until this measurement was published in the class `test`:
+
+* (`pass`) Passed 93 events 
+* (`overflow`) Marked 127 events as overflow due to not fitting in the limit
+
 ## generic::backpressure
 
 The backpressure operator is used to introduce delays based on downstream systems load. Longer backpressure steps are introduced every time the latency of a downstream system reached `timeout`, or an error occurs. On an successful transmission within the timeout limit, the delay is reset.
 
-Supprted configuration options are:
+**Configuration options**:
 
 * `timeout` - Maximum allowed 'write' time in milliseconds.
 * `steps` - Array of values to delay when a we detect backpressure. (default: `[50, 100, 250, 500, 1000, 5000, 10000]`)
 
-Outputs:
+**Outputs**:
 
 * `out`
 * `overflow` - Events that are not let past due to active backpressure
 
-Example:
+**Example**:
 
 ```yaml
 - id: bp
@@ -110,9 +147,11 @@ Supported configuration options are:
 * `count` - Elements per batch
 * `timeout` - Maximum delay between the first element of a batch and the last element of a batch.
 
-Outputs:
+**Outputs**:
 
 * `out`
+
+**Example**:
 
 ```yaml
 - id: batch
@@ -125,11 +164,11 @@ Outputs:
 
 Passes through the event without modifying it, used for debugging.
 
-Outputs:
+**Outputs**:
 
 * `out`
 
-Example:
+**Example**:
 
 ```yaml
 - id: passthrough
@@ -140,16 +179,16 @@ Example:
 
 Generates a history entry in the event. Data is written to an array with the key provided in `name`, tagged with `"event: <op>(<event_id>)"`.
 
-Supported configuration options are:
+**Configuration options**:
 
 * `op` - The operation name of this operator
 * `name` - The field to store the history on
 
-Outputs:
+**Outputs**:
 
 * `out`
 
-Example:
+**Example**:
 
 ```yaml
 - id: history

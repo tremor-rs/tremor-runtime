@@ -24,8 +24,10 @@ use std::fmt;
 use std::str::FromStr;
 
 lazy_static! {
-    static ref IP_REGEX: regex::Regex =
-        regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?").unwrap();
+    static ref IP_REGEX: regex::Regex = {
+        regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?")
+            .expect("Failed to create IP regexp")
+    };
 }
 
 macro_rules! compare_numbers {
@@ -34,11 +36,21 @@ macro_rules! compare_numbers {
             let x = $x;
             let y = $y;
 
-            if x.is_i64() & & y.is_i64() {
-                Ok(x.as_i64().unwrap() $operator y.as_i64().unwrap())
-            } else if x.is_f64() & & y.is_f64() {
-                #[allow(clippy::float_cmp)] // TODO: define a error
-                Ok(x.as_f64().unwrap() $operator y.as_f64().unwrap())
+            if x.is_i64() && y.is_i64() {
+                match (x.as_i64(), y.as_i64()) {
+                    (Some(vx), Some(vy)) => Ok(vx $operator vy),
+                    _ => Ok(false)
+                }
+
+            } else if x.is_f64() && y.is_f64() {
+                // TODO: define a error
+                match (x.as_f64(), y.as_f64()) {
+                    (Some(vx), Some(vy)) => {
+                        #[allow(clippy::float_cmp)]
+                        Ok(vx $operator vy)
+                    }
+                    _ => Ok(false)
+                }
             } else {
                 Ok(false)
             }
@@ -141,20 +153,20 @@ impl<Ctx: Context + 'static> RHSValue<Ctx> {
         data: &'v Value,
         locals: &'l ValueMap,
         globals: &'g ValueMap,
-    ) -> Option<&'v Value> {
+    ) -> Result<Option<&'v Value>> {
         match self {
-            RHSValue::Literal(l) => Some(l),
-            RHSValue::Lookup(_path) => self.find(0, data),
-            RHSValue::LookupLocal(id) => Some(locals.get(id.id())?),
+            RHSValue::Literal(l) => Ok(Some(l)),
+            RHSValue::Lookup(_path) => Ok(self.find(0, data)),
+            RHSValue::LookupLocal(id) => Ok(locals.get(id.id())),
             RHSValue::LookupGlobal(id) => {
                 // If we hace set an imported variable it's goiung to be in local
                 // and shadow the global one so we need to check here first.
                 if let Some(v) = locals.get(id.id()) {
-                    Some(v)
+                    Ok(Some(v))
                 } else if let Some(v) = globals.get(id.id()) {
-                    Some(v)
+                    Ok(Some(v))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
             RHSValue::List(ref mut list, ref mut computed) => {
@@ -166,25 +178,25 @@ impl<Ctx: Context + 'static> RHSValue<Ctx> {
                     unreachable!()
                 };
                 for e in list {
-                    if let Some(v) = e.reduce(context, data, locals, globals) {
+                    if let Some(v) = e.reduce(context, data, locals, globals)? {
                         out.push(v.to_owned())
                     } else {
-                        return None;
+                        return Ok(None);
                     }
                 }
-                Some(computed)
+                Ok(Some(computed))
             }
             RHSValue::Function(_, _, f, a, ref mut result) => {
                 let mut args = Vec::new();
                 for e in a {
-                    if let Some(v) = e.reduce(context, data, locals, globals) {
+                    if let Some(v) = e.reduce(context, data, locals, globals)? {
                         args.push(v.to_owned())
                     } else {
-                        return None;
+                        return Ok(None);
                     }
                 }
-                *result = f(context, &args).unwrap();
-                Some(result)
+                *result = f(context, &args)?;
+                Ok(Some(result))
             }
         }
     }
@@ -261,21 +273,21 @@ impl<Ctx: Context + 'static> Action<Ctx> {
         match self {
             Action::Set { path, rhs } => {
                 // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals) {
+                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
                     Action::<Ctx>::mut_value(json, path, 0, v.to_owned())?;
                 };
                 Ok(false)
             }
             Action::SetLocal { id, rhs } => {
                 // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals) {
+                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
                     locals.insert(id.id().clone(), v.to_owned());
                 }
                 Ok(false)
             }
             Action::SetGlobal { id, rhs } => {
                 // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals) {
+                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
                     //TODO: We kind of need to set both global na and local where
                     // we export but don't import
                     let v1 = v.clone();
@@ -415,7 +427,23 @@ pub enum Cmp<Ctx: Context + 'static> {
     CIDRMatch(CIDR),
 }
 
+fn str_to_ip(ip_str: &str) -> Result<Option<u32>> {
+    if let Some(caps) = IP_REGEX.captures(ip_str) {
+        let a = u32::from_str(caps.get(1).map_or("", |m| m.as_str()))?;
+        let b = u32::from_str(caps.get(2).map_or("", |m| m.as_str()))?;
+        let c = u32::from_str(caps.get(3).map_or("", |m| m.as_str()))?;
+        let d = u32::from_str(caps.get(4).map_or("", |m| m.as_str()))?;
+        let ip = (a << 24) | (b << 16) | (c << 8) | d;
+
+        Ok(Some(ip))
+    } else {
+        Ok(None)
+    }
+}
 impl<Ctx: Context + 'static> Cmp<Ctx> {
+    // the number compairison in a macro increases this over the threshold.
+    // as it's a macro we can ignore it
+    #[allow(clippy::cyclomatic_complexity)]
     pub fn test(
         &mut self,
         context: &Ctx,
@@ -440,13 +468,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             },
             Cmp::CIDRMatch(cidr) => match event_value {
                 String(ip_str) => {
-                    if let Some(caps) = IP_REGEX.captures(ip_str) {
-                        let a = u32::from_str(caps.get(1).map_or("", |m| m.as_str())).unwrap();
-                        let b = u32::from_str(caps.get(2).map_or("", |m| m.as_str())).unwrap();
-                        let c = u32::from_str(caps.get(3).map_or("", |m| m.as_str())).unwrap();
-                        let d = u32::from_str(caps.get(4).map_or("", |m| m.as_str())).unwrap();
-                        let ip = (a << 24) | (b << 16) | (c << 8) | d;
-
+                    if let Some(ip) = str_to_ip(ip_str)? {
                         Ok(cidr.contains(ip))
                     } else {
                         Ok(false)
@@ -455,7 +477,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
                 _ => Ok(false),
             },
             Cmp::Eq(expected_value) => {
-                if let Some(v) = expected_value.reduce(context, data, locals, globals) {
+                if let Some(v) = expected_value.reduce(context, data, locals, globals)? {
                     Ok(event_value == v)
                 } else {
                     Ok(false)
@@ -464,7 +486,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             Cmp::Gt(expected_value) => {
                 match (
                     event_value,
-                    &expected_value.reduce(context, data, locals, globals),
+                    &expected_value.reduce(context, data, locals, globals)?,
                 ) {
                     (Number(event_value), Some(Number(expected_value))) => {
                         compare_numbers!(event_value, expected_value, >)
@@ -477,7 +499,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             Cmp::Lt(expected_value) => {
                 match (
                     event_value,
-                    &expected_value.reduce(context, data, locals, globals),
+                    &expected_value.reduce(context, data, locals, globals)?,
                 ) {
                     (Number(event_value), Some(Number(expected_value))) => {
                         compare_numbers!(event_value, expected_value, <)
@@ -490,7 +512,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             Cmp::Gte(expected_value) => {
                 match (
                     event_value,
-                    &expected_value.reduce(context, data, locals, globals),
+                    &expected_value.reduce(context, data, locals, globals)?,
                 ) {
                     (Number(event_value), Some(Number(expected_value))) => {
                         compare_numbers!(event_value, expected_value, >=)
@@ -502,7 +524,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             Cmp::Lte(expected_value) => {
                 match (
                     event_value,
-                    &expected_value.reduce(context, data, locals, globals),
+                    &expected_value.reduce(context, data, locals, globals)?,
                 ) {
                     (Number(event_value), Some(Number(expected_value))) => {
                         compare_numbers!(event_value, expected_value, <=)
@@ -514,7 +536,7 @@ impl<Ctx: Context + 'static> Cmp<Ctx> {
             Cmp::Contains(expected_value) => {
                 match (
                     event_value,
-                    &expected_value.reduce(context, data, locals, globals),
+                    &expected_value.reduce(context, data, locals, globals)?,
                 ) {
                     (Array(event_value), Some(v)) => Ok(event_value.contains(v)),
                     (event_value, Some(Array(expected_value))) => {
@@ -566,7 +588,7 @@ mod tests {
             _ { $classification := "default"; $rate := 250; }
 "#;
         let r: Registry<()> = registry();
-        let s = Script::parse(script, &r).unwrap();
+        let s = Script::parse(script, &r).expect("Failed to parse script");
         assert_eq!(&s.interface.imports()[0], "imported_var");
     }
 }

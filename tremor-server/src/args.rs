@@ -26,13 +26,15 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .short("c")
                 .help("config file to load")
                 .takes_value(true)
+                .min_values(1)
+                .max_values(10000) // there is no 'as many as you want' but this comes close
                 .required(false),
         )
         .arg(
-            Arg::with_name("mapping")
-                .long("mapping")
-                .short("m")
-                .help("disables the prometheus API metrics endpoint.")
+            Arg::with_name("storage-directory")
+                .long("storage-directory")
+                .short("d")
+                .help("Directory where changed configs get stored.")
                 .takes_value(true)
                 .required(false),
         )
@@ -59,13 +61,5 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .help("instance id")
                 .takes_value(true)
                 .default_value("tremor"),
-        )
-        .arg(
-            Arg::with_name("queue-size")
-                .long("queue-sizer")
-                .short("q")
-                .help("queue size for the pipeline")
-                .takes_value(true)
-                .default_value("50"),
         )
 }

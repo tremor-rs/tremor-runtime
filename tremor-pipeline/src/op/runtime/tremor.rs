@@ -26,7 +26,7 @@ impl tremor_script::Context for Context {}
 op!(TremorFactory(node) {
         if let Some(map) = &node.config {
             let config: Config = serde_yaml::from_value(map.clone())?;
-            let runtime = Script::parse(&config.script, &FN_REGISTRY.lock().unwrap())?;
+            let runtime = Script::parse(&config.script, &*FN_REGISTRY.lock()?)?;
             Ok(Box::new(Tremor {
                 runtime,
                 config,
@@ -78,7 +78,11 @@ mod test {
         let config = Config {
             script: r#"a=1 {snot := "badger";}"#.to_string(),
         };
-        let runtime = Script::parse(&config.script, &FN_REGISTRY.lock().unwrap()).unwrap();
+        let runtime = Script::parse(
+            &config.script,
+            &FN_REGISTRY.lock().expect("could not claim lock"),
+        )
+        .expect("failed to parse script");
         let mut op = Tremor {
             config,
             runtime,
@@ -93,7 +97,11 @@ mod test {
             kind: None,
         };
 
-        let (out, event) = op.on_event("in", event).unwrap().pop().unwrap();
+        let (out, event) = op
+            .on_event("in", event)
+            .expect("failed to run piepline")
+            .pop()
+            .expect("no event returned");
         assert_eq!("out", out);
 
         assert_eq!(event.value.t(), ValueType::JSON);

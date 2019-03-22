@@ -14,6 +14,8 @@
 
 -compile(export_all).
 
+-define(SYS_OFFRAMPS, [<<"system::stderr">>,<<"system::stdout">>]).
+
 -record(state,{
                connection,
                %% All created VMs in this run
@@ -67,7 +69,7 @@ list_offramp(C) ->
     Offramps.
 
 list_offramp_post(#state{offramps = Offramps}, _Args, Result) ->
-    lists:sort(Result) == lists:sort(Offramps).
+    lists:sort(Result) == lists:sort(Offramps ++ ?SYS_OFFRAMPS).
 
 list_offramp_next(S, _Result, _Args) ->
     S.
@@ -228,8 +230,9 @@ cleanup() ->
     C = tremor_api:new(),
     %% We do it twice to ensure failed vm's are deleted proppelry.
     {ok, Offramps} = tremor_offramp:list(C),
-    [tremor_offramp:unpublish(Offramp, C) || Offramp <- Offramps],
-    {ok, []} = tremor_offramp:list(C),
+    [tremor_offramp:unpublish(Offramp, C) || Offramp <- Offramps -- ?SYS_OFFRAMPS],
+    {ok, Rest} = tremor_offramp:list(C),
+    ?SYS_OFFRAMPS = lists:sort(Rest),
     ok.
 
 

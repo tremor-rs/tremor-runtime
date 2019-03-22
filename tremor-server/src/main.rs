@@ -27,21 +27,21 @@ extern crate log;
 
 mod args;
 
+use crate::system::World;
 use env_logger;
 use serde_yaml;
 use tremor_api;
+use tremor_runtime;
 use tremor_runtime::config;
-use tremor_runtime::dynamic;
 use tremor_runtime::errors;
 use tremor_runtime::functions;
-use tremor_runtime::mapping;
 use tremor_runtime::metrics;
+use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system;
 use tremor_runtime::url;
 use tremor_runtime::version;
 
 use crate::errors::*;
-use crate::mapping::Mappings;
 use crate::url::TremorURL;
 use actix_web::middleware::cors::Cors;
 use actix_web::{
@@ -52,14 +52,60 @@ use actix_web::{
     server,
     App,
 };
-use clap::value_t;
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
 
+fn load_file(world: &World, file_name: &str) -> Result<usize> {
+    info!("Loading configuration from {}", file_name);
+    let mut count = 0;
+    let file = File::open(file_name)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+    let buffered_reader = BufReader::new(file);
+    let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
+    let config = tremor_runtime::incarnate(config)?;
+
+    for o in config.offramps {
+        let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
+        info!("Loading {} from file.", id);
+        world.repo.publish_offramp(id, false, o)?;
+        count += 1;
+    }
+    for pipeline in config.pipes {
+        let id = TremorURL::parse(&format!("/pipeline/{}", pipeline.id))?;
+        info!("Loading {} from file.", id);
+        world
+            .repo
+            .publish_pipeline(id, false, PipelineArtefact { pipeline })?;
+        count += 1;
+    }
+    for o in config.onramps {
+        let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
+        info!("Loading {} from file.", id);
+        world.repo.publish_onramp(id, false, o)?;
+        count += 1;
+    }
+    for binding in config.bindings {
+        let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
+        info!("Loading {} from file.", id);
+        world.repo.publish_binding(
+            id,
+            false,
+            BindingArtefact {
+                binding,
+                mapping: None,
+            },
+        )?;
+        count += 1;
+    }
+    for (binding, mapping) in config.mappings {
+        world.link_binding(binding, mapping)?;
+        count += 1;
+    }
+    Ok(count)
+}
 fn run_dun() -> Result<()> {
-    functions::load();
-    use crate::system::World;
+    functions::load()?;
 
     let matches = args::parse().get_matches();
 
@@ -76,7 +122,9 @@ fn run_dun() -> Result<()> {
         // We know that instance will only get set once at
         // the very beginning nothing can access it yet,
         // this makes it allowable to use unsafe here.
-        let s = matches.value_of("instance").unwrap();
+        let s = matches
+            .value_of("instance")
+            .ok_or_else(|| Error::from("instance argument missing"))?;
         let forget_s = mem::transmute(&s as &str);
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
@@ -84,59 +132,20 @@ fn run_dun() -> Result<()> {
         metrics::INSTANCE = forget_s;
     }
 
-    let qsize = value_t!(matches.value_of("queue-size"), usize)
-        .map_err(|_| Error::from("Queue size is not a number"))?;
+    let storage_directory = matches.value_of("storage-directory").map(|s| s.to_string());
+    // TODO: Allow configuring this for offramps and pipelines
+    let (world, handle) = World::start(50, storage_directory)?;
 
-    let (world, handle) = World::start(qsize)?;
-
-    if let Some(config_file) = matches.value_of("config") {
-        let file = File::open(config_file).map_err(|e| {
-            Error::from(format!(
-                "Could not open config file {} => {}",
-                config_file, e
-            ))
-        })?;
-        let buffered_reader = BufReader::new(file);
-        let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
-        let config = dynamic::incarnate(config)?;
-
-        for o in config.offramps {
-            let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
-            info!("Loading {} from file.", id);
-            world.repo.publish_offramp(&id, o)?;
-        }
-        for p in config.pipes {
-            let id = TremorURL::parse(&format!("/pipeline/{}", p.id))?;
-            info!("Loading {} from file.", id);
-            world.repo.publish_pipeline(&id, p)?;
-        }
-        for o in config.onramps {
-            let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
-            info!("Loading {} from file.", id);
-            world.repo.publish_onramp(&id, o)?;
-        }
-        for b in config.bindings {
-            let id = TremorURL::parse(&format!("/binding/{}", b.id))?;
-            info!("Loading {} from file.", id);
-            world.repo.publish_binding(&id, b)?;
+    if let Some(config_files) = matches.values_of("config") {
+        for config_file in config_files {
+            load_file(&world, config_file)?;
         }
     }
 
-    if let Some(mappings_file) = matches.value_of("mapping") {
-        let file = File::open(mappings_file).map_err(|e| {
-            Error::from(format!(
-                "Could not open mapping file {} => {}",
-                mappings_file, e
-            ))
-        })?;
-        let buffered_reader = BufReader::new(file);
-        let mappings: Mappings = serde_yaml::from_reader(buffered_reader)?;
-        for (binding, mapping) in mappings.mapping {
-            world.link_binding(&binding, mapping)?;
-        }
-    }
-
-    let host = matches.value_of("host").unwrap();
+    let host = matches
+        .value_of("host")
+        .ok_or_else(|| Error::from("host argument missing"))?;
+;
 
     let w = world.clone();
     let s = server::new(move || {
@@ -208,7 +217,7 @@ fn run_dun() -> Result<()> {
             .handler(
                 "/api-docs",
                 fs::StaticFiles::new("static")
-                    .unwrap()
+                    .expect("Missing static directoy")
                     .show_files_listing()
                     .index_file("index.html"),
             )
@@ -218,7 +227,7 @@ fn run_dun() -> Result<()> {
     info!("Listening at: http://{}", host);
 
     s.bind(&host)
-        .unwrap_or_else(|_| panic!("Can not bind to {}", host))
+        .map_err(|e| Error::from(format!("Can not bind to {}", e)))?
         .run();
     warn!("API stopped");
     world.stop();

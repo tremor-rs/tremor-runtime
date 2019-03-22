@@ -26,40 +26,72 @@ use std::fmt;
 #[allow(unused_variables)]
 pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
     let mut registry = Registry::default();
+
     #[allow(unused_variables)]
     fn format<Ctx: Context + 'static>(context: &Ctx, args: &[Value]) -> Result<Value> {
-        if args.is_empty() {
-            return Err(ErrorKind::RuntimeError(
+        match args.len() {
+            0 => Err(ErrorKind::RuntimeError(
                 "string".to_string(),
                 "format".to_string(),
                 args.len(),
+                "format requires at least 1 parameter, 0 are supplied".into(),
             )
-            .into());
-        }
-        let format = args[0].as_str().to_owned();
+            .into()),
+            _ => {
+                match &args[0] {
+                    Value::String(format) => {
+                        let mut arg_stack = if args.is_empty() {
+                            vec![]
+                        } else {
+                            args[1..].to_vec()
+                        };
+                        arg_stack.reverse();
 
-        match format {
-            Some(fmt) => {
-                let mut out = String::from(fmt);
-                for arg in args[1..].iter() {
-                    if let Some(a) = arg.as_str() {
-                        out = out.replacen("{}", a, 1);
-                    } else {
-                        return Err(ErrorKind::RuntimeError(
-                            "string".to_string(),
-                            "format".to_string(),
-                            args.len(),
-                        )
-                        .into());
+                        let mut out = String::new();
+                        let mut iter = format.chars().enumerate();
+                        while let Some(char) = iter.next() {
+                            match char {
+                        (pos, '{')  => match iter.next() {
+                            Some((_, '}')) => {
+                                let arg = match arg_stack.pop() {
+                                    Some(a) => a,
+                                    None => return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)).into()),
+                                };
+
+                                if let Value::String(s) = arg {
+                                    out.push_str(s.as_str())
+                                } else {
+                                    out.push_str(format!("{}", arg).as_str());
+                                }
+                            }
+                            Some((_, '{')) => {
+                                out.push('{');
+                            }
+                            _ => {
+                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format". to_owned(), args.len(), format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)).into())
+                            }
+                        },
+                        (pos, '}') => match iter.next() {
+                            Some((pos, '}')) => out.push('}'),
+                            _ => {
+                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)).into());
+                            }
+                        },
+                        (_, c) => out.push(c),
+                    }
+                        }
+
+                        if arg_stack.is_empty() {
+                            Ok(Value::String(out))
+                        } else {
+                            Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()).into())
+                        }
+                    }
+                    _ => {
+                        Err(ErrorKind::RuntimeError("string".to_owned(), "fprmat".to_owned(), args.len(), "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()).into())
+
                     }
                 }
-                Ok(Value::String(out.to_owned()))
-            }
-            None => {
-                Err(
-                    ErrorKind::RuntimeError("string".to_string(), "format".to_string(), args.len())
-                        .into(),
-                )
             }
         }
     }
@@ -80,7 +112,12 @@ pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
             }
         }))
         .insert(tremor_fn!(system::hostname(_context) {
-            Ok(Value::String(get_hostname().unwrap()))
+            if let Some(hostname) = get_hostname(){
+                Ok(Value::String(hostname))
+            } else {
+                Err(ErrorKind::RuntimeError("system".to_owned(), "hostname".to_owned(), 0, "could not get hostname".into()).into())
+            }
+
         }))
         .insert(TremorFnWrapper {
             module: "string".to_owned(),
@@ -218,13 +255,13 @@ mod tests {
     use crate::registry;
     use serde_json::json;
 
+    fn fun<Ctx: Context + 'static>(m: &str, f: &str) -> TremorFn<Ctx> {
+        registry().find(m, f).expect("could not find function")
+    }
     #[test]
     pub fn call_a_function_from_a_registry_works() {
-        let returned_value = registry().find("math", "max");
-        assert_eq!(
-            json!(2),
-            (returned_value.unwrap()(&(), &[json!(1), json!(2)]).unwrap())
-        );
+        let max = fun("math", "max");
+        assert_eq!(Ok(json!(2)), max(&(), &[json!(1), json!(2)]));
     }
 
     #[test]
@@ -248,61 +285,78 @@ mod tests {
 
     #[test]
     pub fn add() {
-        let f = tremor_fn!(module::name(_context, _a: Number, _b: Number){
-            Ok(json!(_a.as_f64().unwrap() + _b.as_f64().unwrap()))
+        let f = tremor_fn!(math::add(_context, _a: Number, _b: Number){
+            match (_a.as_f64(), _b.as_f64()) {
+                (Some(a), Some(b)) =>             Ok(json!(a + b)),
+                _ => Err(ErrorKind::RuntimeError(
+                    "math".to_string(),
+                    "add".to_string(),
+                    2,
+                    "could not add numbers".into(),
+                ).into())
+
+            }
+
         });
 
-        assert_eq!(f.invoke(&(), &[json!(2), json!(3)]).unwrap(), json!(5.0));
+        assert_eq!(Ok(json!(5.0)), f.invoke(&(), &[json!(2), json!(3)]));
     }
 
     #[test]
     pub fn t3() {
-        let f = tremor_fn!(module::name(_context, _a: Number, _b: Number, _c: Number)  {
-            Ok(json!(_a.as_i64().unwrap()  + _b.as_i64().unwrap()  + _c.as_i64().unwrap()))
+        let f = tremor_fn!(math::add(_context, _a: Number, _b: Number, _c: Number){
+            match (_a.as_f64(), _b.as_f64(), _c.as_f64()) {
+                (Some(a), Some(b), Some(c)) => Ok(json!(a + b + c)),
+                _ => Err(ErrorKind::RuntimeError(
+                    "math".to_string(),
+                    "add".to_string(),
+                    3,
+                    "could not add numbers".into(),
+                ).into())
+
+            }
+
         });
         let args = &[json!(1), json!(2), json!(3)];
 
-        assert_eq!(f.invoke(&(), args).unwrap(), json!(6));
+        assert_eq!(Ok(json!(6.0)), f.invoke(&(), args));
     }
 
     #[test]
     pub fn registry_format_with_3_args() {
-        let f = registry().find("math", "max").unwrap();
+        let f = fun("math", "max");
 
         assert!(f(&(), &[json!(1), json!(2), json!(3)]).is_err());
     }
 
-    #[ignore]
     #[test]
     pub fn format() {
-        let format = registry().find("string", "format");
+        let format = fun("string", "format");
+        assert_eq!(Ok(json!("empty")), format(&(), &[json!("empty")]));
+        let format = fun("string", "format");
         assert_eq!(
-            json!("empty"),
-            (format.unwrap()(&(), &[json!("empty")]).unwrap())
+            Ok(json!("12")),
+            format(&(), &[json!("{}{}"), json!(1), json!(2)])
         );
-        let format = registry().find("string", "format");
+        let format = fun("string", "format");
         assert_eq!(
-            json!("12"),
-            (format.unwrap()(&(), &[json!("{}{}"), json!(1), json!(2)]).unwrap())
-        );
-        let format = registry().find("string", "format");
-        assert_eq!(
-            json!("1 + 2"),
-            (format.unwrap()(&(), &[json!("{} + {}"), json!(1), json!(2)]).unwrap())
+            Ok(json!("1 + 2")),
+            format(&(), &[json!("{} + {}"), json!(1), json!(2)])
         );
     }
-    #[ignore]
+
     #[test]
     pub fn format_literal_curlies() {
-        let format = registry().find("string", "format");
+        let format = fun("string", "format");
+        assert_eq!(Ok(json!("{}")), (format(&(), &[json!("{{}}")])));
+    }
+
+    #[test]
+    pub fn format_literal_curlies_with_other_curlies_in_same_line() {
+        let format = fun("string", "format");
         assert_eq!(
-            json!("{}"),
-            (format.unwrap()(&(), &[json!("{{}}")]).unwrap())
-        );
-        let format = registry().find("string", "format");
-        assert_eq!(
-            json!("a string with {} in it has {} {}"),
-            (format.unwrap()(
+            Ok(json!("a string with {} in it has 1 {}")),
+            format(
                 &(),
                 &[
                     json!("a string with {} in it has {} {{}}"),
@@ -310,8 +364,100 @@ mod tests {
                     json!(1)
                 ]
             )
-            .unwrap())
         );
+    }
+
+    #[test]
+    pub fn format_evil_test() {
+        let format = fun("string", "format");
+        assert_eq!(Ok(json!("}")), format(&(), &[json!("}}")]));
+    }
+
+    #[test]
+    pub fn format_escaped_foo() {
+        let format = fun("string", "format");
+        assert_eq!(Ok(json!("{foo}")), format(&(), &[json!("{{foo}}")]));
+    }
+
+    #[test]
+    pub fn format_three_parenthesis() {
+        let format = fun("string", "format");
+        assert_eq!(
+            Ok(json!("{foo}")),
+            format(&(), &[json!("{{{}}}"), json!("foo")])
+        );
+    }
+
+    #[test]
+    pub fn umatched_parenthesis() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_3_parenthesis() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{{{")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_closed_parenthesis() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("}")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_closed_3_parenthesis() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("}}}")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_parenthesis_with_string() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{foo}")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_parenthesis_with_argument() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{foo}"), json!("1")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_parenthesis_too_few() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{}")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn unmatched_parenthesis_too_many() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!("{}"), json!("1"), json!("2")]);
+
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn bad_format() {
+        let format = fun("string", "format");
+        let res = format(&(), &[json!(7)]);
+
+        assert!(res.is_err());
     }
 
 }

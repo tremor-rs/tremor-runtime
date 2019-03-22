@@ -31,24 +31,25 @@ fn benchmark_json(c: &mut Criterion) {
     // Pipeline
     let file = File::open("benches/distsys-json.yaml").expect("could not open file");
     let buffered_reader = BufReader::new(file);
-    let config = serde_yaml::from_reader(buffered_reader).unwrap();
-    let pipeline = tremor_pipeline::build_pipeline(config).unwrap();
+    let config = serde_yaml::from_reader(buffered_reader).expect("failed to load config");
+    let pipeline = tremor_pipeline::build_pipeline(config).expect("failed to build pipeline");
     let mut exec = pipeline
         .to_executable_graph(tremor_pipeline::buildin_ops)
-        .unwrap();
+        .expect("Failed to create executable branch");
 
     // Data
-    let source_data_file = File::open("benches/bench.json.xz").unwrap();
+    let source_data_file = File::open("benches/bench.json.xz").expect("data file missing");
     let mut data = vec![];
     XzDecoder::new(source_data_file)
         .read_to_end(&mut data)
         .expect("Neither a readable nor valid XZ compressed file error");
     let lines: Vec<Event> = data
         .lines()
-        .map(|d| d.unwrap().into_bytes())
+        .map(|d| d.expect("io error").into_bytes())
         .enumerate()
         .map(|(i, d)| Event {
             id: i as u64,
+            is_batch: false,
             ingest_ns: i as u64,
             meta: HashMap::new(),
             value: EventValue::Raw(d),
@@ -63,7 +64,7 @@ fn benchmark_json(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).unwrap();
+                        exec.enqueue("in", e).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -77,24 +78,25 @@ fn benchmark_msgpack(c: &mut Criterion) {
     // Pipeline
     let file = File::open("benches/distsys-msgpack.yaml").expect("could not open file");
     let buffered_reader = BufReader::new(file);
-    let config = serde_yaml::from_reader(buffered_reader).unwrap();
-    let pipeline = tremor_pipeline::build_pipeline(config).unwrap();
+    let config = serde_yaml::from_reader(buffered_reader).expect("failed to load config");
+    let pipeline = tremor_pipeline::build_pipeline(config).expect("failed to build pipeline");
     let mut exec = pipeline
         .to_executable_graph(tremor_pipeline::buildin_ops)
-        .unwrap();
+        .expect("Failed to create executable branch");
 
     // Data
-    let source_data_file = File::open("benches/bench.msgpack.xz").unwrap();
+    let source_data_file = File::open("benches/bench.msgpack.xz").expect("data file missing");
     let mut data = vec![];
     XzDecoder::new(source_data_file)
         .read_to_end(&mut data)
         .expect("Neither a readable nor valid XZ compressed file error");
     let lines: Vec<Event> = data
         .lines()
-        .map(|d| base64::decode(&d.unwrap()).unwrap())
+        .map(|d| base64::decode(&d.expect("io error")).expect("bad base64 data"))
         .enumerate()
         .map(|(i, d)| Event {
             id: i as u64,
+            is_batch: false,
             ingest_ns: i as u64,
             meta: HashMap::new(),
             value: EventValue::Raw(d),
@@ -109,7 +111,7 @@ fn benchmark_msgpack(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).unwrap();
+                        exec.enqueue("in", e).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -123,24 +125,25 @@ fn benchmark_sql(c: &mut Criterion) {
     // Pipeline
     let file = File::open("benches/sql-json.yaml").expect("could not open file");
     let buffered_reader = BufReader::new(file);
-    let config = serde_yaml::from_reader(buffered_reader).unwrap();
-    let pipeline = tremor_pipeline::build_pipeline(config).unwrap();
+    let config = serde_yaml::from_reader(buffered_reader).expect("failed to load config");
+    let pipeline = tremor_pipeline::build_pipeline(config).expect("failed to build pipeline");
     let mut exec = pipeline
         .to_executable_graph(tremor_pipeline::buildin_ops)
-        .unwrap();
+        .expect("Failed to create executable branch");
 
     // Data
-    let source_data_file = File::open("benches/sql.json.xz").unwrap();
+    let source_data_file = File::open("benches/sql.json.xz").expect("data file missing");
     let mut data = vec![];
     XzDecoder::new(source_data_file)
         .read_to_end(&mut data)
         .expect("Neither a readable nor valid XZ compressed file error");
     let lines: Vec<Event> = data
         .lines()
-        .map(|d| d.unwrap().into_bytes())
+        .map(|d| d.expect("io error").into_bytes())
         .enumerate()
         .map(|(i, d)| Event {
             id: i as u64,
+            is_batch: false,
             ingest_ns: i as u64,
             meta: HashMap::new(),
             value: EventValue::Raw(d),
@@ -155,7 +158,7 @@ fn benchmark_sql(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).unwrap();
+                        exec.enqueue("in", e).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -169,24 +172,25 @@ fn benchmark_sql_msgpack(c: &mut Criterion) {
     // Pipeline
     let file = File::open("benches/sql-msgpack.yaml").expect("could not open file");
     let buffered_reader = BufReader::new(file);
-    let config = serde_yaml::from_reader(buffered_reader).unwrap();
-    let pipeline = tremor_pipeline::build_pipeline(config).unwrap();
+    let config = serde_yaml::from_reader(buffered_reader).expect("failed to load config");
+    let pipeline = tremor_pipeline::build_pipeline(config).expect("failed to build pipeline");
     let mut exec = pipeline
         .to_executable_graph(tremor_pipeline::buildin_ops)
-        .unwrap();
+        .expect("Failed to create executable branch");
 
     // Data
-    let source_data_file = File::open("benches/sql.msgpack.xz").unwrap();
+    let source_data_file = File::open("benches/sql.msgpack.xz").expect("data file missing");
     let mut data = vec![];
     XzDecoder::new(source_data_file)
         .read_to_end(&mut data)
         .expect("Neither a readable nor valid XZ compressed file error");
     let lines: Vec<Event> = data
         .lines()
-        .map(|d| base64::decode(&d.unwrap()).unwrap())
+        .map(|d| base64::decode(&d.expect("io error")).expect("bad base64 data"))
         .enumerate()
         .map(|(i, d)| Event {
             id: i as u64,
+            is_batch: false,
             ingest_ns: i as u64,
             meta: HashMap::new(),
             value: EventValue::Raw(d),
@@ -201,7 +205,7 @@ fn benchmark_sql_msgpack(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).unwrap();
+                        exec.enqueue("in", e).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,

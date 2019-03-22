@@ -66,6 +66,7 @@ use crate::{Event, Operator};
 use hashbrown::HashMap;
 use lru::LruCache;
 use serde_json;
+use serde_json::{json, Value};
 use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
@@ -93,31 +94,47 @@ impl Rate {
     pub fn from_meta(meta: &HashMap<String, serde_json::Value>) -> Option<Self> {
         match meta.get("rate") {
             Some(serde_json::Value::Number(rate)) if rate.is_u64() => {
-                let rate = rate.as_u64().unwrap();
-                let time_range = match meta.get("time_range") {
-                    Some(serde_json::Value::Number(time_range)) if time_range.is_u64() => {
-                        time_range.as_u64().unwrap()
-                    }
-                    _ => 1000,
-                };
-                let windows: usize = match meta.get("windows") {
-                    Some(serde_json::Value::Number(windows)) if windows.is_u64() => {
-                        windows.as_u64().unwrap() as usize
-                    }
-                    _ => 100,
-                };
-                Some(Rate {
-                    rate,
-                    time_range,
-                    windows,
-                })
+                if let Some(rate) = rate.as_u64() {
+                    let time_range = match meta.get("time_range") {
+                        Some(serde_json::Value::Number(time_range)) if time_range.is_u64() => {
+                            time_range.as_u64().unwrap_or(1000)
+                        }
+                        _ => 1000,
+                    };
+                    let windows: usize = match meta.get("windows") {
+                        Some(serde_json::Value::Number(windows)) if windows.is_u64() => {
+                            windows.as_u64().unwrap_or(100) as usize
+                        }
+                        _ => 100,
+                    };
+                    Some(Rate {
+                        rate,
+                        time_range,
+                        windows,
+                    })
+                } else {
+                    None
+                }
             }
             _ => None,
         }
     }
 }
 
-type Bucket = LruCache<String, TimeWindow>;
+struct Bucket {
+    cache: LruCache<String, TimeWindow>,
+    pass: u64,
+    overflow: u64,
+}
+impl Bucket {
+    fn new(cardinality: usize) -> Self {
+        Self {
+            cache: LruCache::new(cardinality),
+            pass: 0,
+            overflow: 0,
+        }
+    }
+}
 
 pub struct BucketGrouper {
     _id: String,
@@ -138,13 +155,16 @@ impl Operator for BucketGrouper {
                 None => {
                     let cardinality = match event.meta.get("cardinality") {
                         Some(serde_json::Value::Number(cardinality)) if cardinality.is_u64() => {
-                            cardinality.as_u64().unwrap() as usize
+                            cardinality.as_u64().unwrap_or(1000) as usize
                         }
                         _ => 1000,
                     };
-                    self.buckets
-                        .insert(class.clone(), LruCache::new(cardinality));
-                    self.buckets.get_mut(class).unwrap()
+                    self.buckets.insert(class.clone(), Bucket::new(cardinality));
+                    if let Some(g) = self.buckets.get_mut(class) {
+                        g
+                    } else {
+                        unreachable!()
+                    }
                 }
             };
             let d = if let Some(d) = event.meta.get("dimensions") {
@@ -153,14 +173,14 @@ impl Operator for BucketGrouper {
                 &serde_json::Value::Null
             };
             let dimensions = serde_json::to_string(d)?;
-            let window = match groups.get_mut(&dimensions) {
+            let window = match groups.cache.get_mut(&dimensions) {
                 None => {
                     let rate = if let Some(rate) = Rate::from_meta(&event.meta) {
                         rate
                     } else {
                         return Ok(vec![("error".to_string(), event)]);
                     };
-                    groups.put(
+                    groups.cache.put(
                         dimensions.clone(),
                         TimeWindow::new(
                             rate.windows,
@@ -168,17 +188,50 @@ impl Operator for BucketGrouper {
                             rate.rate,
                         ),
                     );
-                    groups.get_mut(&dimensions).unwrap()
+                    if let Some(g) = groups.cache.get_mut(&dimensions) {
+                        g
+                    } else {
+                        unreachable!()
+                    }
                 }
                 Some(m) => m,
             };
             if window.inc_t(event.ingest_ns).is_ok() {
+                groups.pass += 1;
                 Ok(vec![("out".to_string(), event)])
             } else {
+                groups.overflow += 1;
                 Ok(vec![("overflow".to_string(), event)])
             }
         } else {
             Ok(vec![("error".to_string(), event)])
         }
+    }
+
+    fn metrics(&self, mut tags: HashMap<String, String>, timestamp: u64) -> Vec<Value> {
+        let mut res = Vec::with_capacity(self.buckets.len() * 2);
+        for (class, b) in &self.buckets {
+            tags.insert("class".to_owned(), class.to_owned());
+
+            tags.insert("action".to_owned(), "pass".to_owned());
+            res.push(json!({
+                "measurement": "bucketing",
+                "tags": tags,
+                "fields": {
+                    "count": b.pass
+                },
+                "timestamp": timestamp
+            }));
+            tags.insert("action".to_owned(), "overflow".to_owned());
+            res.push(json!({
+                "measurement": "bucketing",
+                "tags": tags,
+                "fields": {
+                    "count": b.overflow
+                },
+                "timestamp": timestamp
+            }));
+        }
+        res
     }
 }

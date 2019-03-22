@@ -55,7 +55,7 @@ impl Operator for EventHistory {
                     json!([format!("evt: {}({})", self.config.op, event.id)]),
                 );
             }
-            _ => (), // panic! snot badger attack
+            _ => (),
         };
         Ok(vec![("out".to_string(), event)])
     }
@@ -74,7 +74,7 @@ impl Operator for EventHistory {
                     json!([format!("sig: {}({})", self.config.op, signal.id)]),
                 );
             }
-            _ => (), // panic! snot badger attack
+            _ => (),
         };
         Ok(vec![])
     }
@@ -104,7 +104,11 @@ mod test {
             kind: None,
         };
 
-        let (out, mut event) = op.on_event("in", event).unwrap().pop().unwrap();
+        let (out, mut event) = op
+            .on_event("in", event)
+            .expect("failed to run pipeline")
+            .pop()
+            .expect("empty results");
         assert_eq!("out", out);
         let _ = op.on_signal(&mut event);
 
@@ -114,7 +118,7 @@ mod test {
             Some(JsonArray(ref history)) => {
                 assert_eq!(2, history.len());
             }
-            _ => panic!(" evil badger"),
+            _ => assert!(false),
         }
     }
 }

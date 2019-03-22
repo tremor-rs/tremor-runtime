@@ -15,12 +15,11 @@
 // Screw actix web, it's not our fault!
 #![allow(clippy::type_complexity)]
 
-use crate::api::{content_type, reply, ResourceType, State};
-use actix_web::http::StatusCode;
-use actix_web::{error, HttpRequest, HttpResponse, Path, Responder};
+use crate::api::*;
+use actix_web::{error, Path, Responder};
 use hashbrown::HashMap;
 use tremor_runtime::errors::*;
-use tremor_runtime::url::TremorURL;
+use tremor_runtime::repository::BindingArtefact;
 
 #[derive(Serialize)]
 struct BindingWrap {
@@ -29,95 +28,84 @@ struct BindingWrap {
 }
 
 pub fn list_artefact(req: HttpRequest<State>) -> impl Responder {
-    let res = req.state().world.repo.list_bindings();
-    reply(req, res, 200)
+    let res: Result<Vec<String>> = req
+        .state()
+        .world
+        .repo
+        .list_bindings()
+        .map(|l| l.iter().filter_map(|v| v.artefact()).collect());
+    reply(req, res, false, 200)
 }
 
-pub fn publish_artefact((req, data_raw): (HttpRequest<State>, String)) -> impl Responder {
-    let data: tremor_runtime::config::Binding = match content_type(&req) {
-        Some(ResourceType::Yaml) => serde_yaml::from_str(&data_raw).unwrap(),
-        Some(ResourceType::Json) => serde_json::from_str(&data_raw).unwrap(),
-        None => return HttpResponse::InternalServerError().finish(),
-    };
-    let url = TremorURL::parse(&format!("/binding/{}", data.id))
-        .map_err(|_e| error::ErrorBadRequest("bad url"))
-        .unwrap();
-    let res = req.state().world.repo.publish_binding(&url, data);
-    reply(req, res, 201)
+pub fn publish_artefact((req, data_raw): (HttpRequest<State>, String)) -> ApiResult {
+    let binding: tremor_runtime::config::Binding = decode(&req, &data_raw)?;
+    let url = build_url(&["binding", &binding.id])?;
+    let res = req.state().world.repo.publish_binding(
+        url,
+        false,
+        BindingArtefact {
+            binding,
+            mapping: None,
+        },
+    );
+    reply(req, res.map(|a| a.binding), true, 201)
 }
 
-pub fn unpublish_artefact((req, path): (HttpRequest<State>, Path<(String)>)) -> impl Responder {
-    let url = TremorURL::parse(&format!("/binding/{}", path))
-        .map_err(|e| error::ErrorBadRequest(format!("bad url: {}", e)))
-        .unwrap();
-    let res = req.state().world.repo.unpublish_binding(&url);
-    reply(req, res, 200)
+pub fn unpublish_artefact((req, id): (HttpRequest<State>, Path<(String)>)) -> ApiResult {
+    let url = build_url(&["binding", &id])?;
+    let res = req.state().world.repo.unpublish_binding(url);
+    reply(req, res.map(|a| a.binding), true, 200)
 }
 
-pub fn get_artefact((req, id): (HttpRequest<State>, Path<String>)) -> impl Responder {
-    let url = TremorURL::parse(&format!("/binding/{}", id))
-        .map_err(|_e| error::ErrorBadRequest("bad url"))
-        .unwrap();
-
+pub fn get_artefact((req, id): (HttpRequest<State>, Path<String>)) -> ApiResult {
+    let url = build_url(&["binding", &id])?;
     let res = req
         .state()
         .world
         .repo
-        .find_binding(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"));
-
+        .find_binding(url)
+        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
     match res {
-        Ok(res) => match res {
-            Some(res) => {
-                let res: Result<BindingWrap> = Ok(BindingWrap {
-                    artefact: res.artefact,
-                    instances: res.instances,
-                });
-                reply(req, res, 200)
-            }
-            None => HttpResponse::build(StatusCode::from_u16(404).unwrap()).finish(),
-        },
-        Err(_) => HttpResponse::build(StatusCode::from_u16(404).unwrap()).finish(),
+        Some(res) => {
+            let res: Result<BindingWrap> = Ok(BindingWrap {
+                artefact: res.artefact.binding,
+                instances: res.instances.iter().filter_map(|v| v.instance()).collect(),
+            });
+            reply(req, res, false, 200)
+        }
+        None => Err(error::ErrorNotFound("Artefact not found")),
     }
 }
 
-pub fn get_servant((req, path): (HttpRequest<State>, Path<(String, String)>)) -> impl Responder {
-    let url = TremorURL::parse(&format!("/binding/{}/{}", path.0, path.1))
-        .map_err(|_e| error::ErrorBadRequest("bad url"))
-        .unwrap();
-    let res = req.state().world.reg.find_binding(&url);
-    reply(req, res, 200)
+pub fn get_servant((req, path): (HttpRequest<State>, Path<(String, String)>)) -> ApiResult {
+    let url = build_url(&["binding", &path.0, &path.1])?;
+    let res0 = req.state().world.reg.find_binding(url);
+    match res0 {
+        Ok(res) => match res {
+            Some(res) => reply(req, Ok(res.binding), false, 200),
+            None => Err(error::ErrorNotFound("Binding not found")),
+        },
+        Err(e) => Err(error::ErrorInternalServerError(format!(
+            "Internal server error: {}",
+            e
+        ))),
+    }
 }
 
 // We really don't want to deal with that!
 #[allow(clippy::implicit_hasher)]
 pub fn link_servant(
     (req, path, data_raw): (HttpRequest<State>, Path<(String, String)>, String),
-) -> impl Responder {
-    let data: HashMap<String, String> = match content_type(&req) {
-        Some(ResourceType::Yaml) => serde_yaml::from_str(&data_raw).unwrap(),
-        Some(ResourceType::Json) => serde_json::from_str(&data_raw).unwrap(),
-        None => return HttpResponse::InternalServerError().finish(),
-    };
-    let url = TremorURL::parse(&format!("/binding/{}/{}", path.0, path.1))
-        .map_err(|_e| error::ErrorBadRequest("bad url"))
-        .unwrap();
-    let res = req.state().world.link_binding(&url, data);
-    reply(req, res, 201)
+) -> ApiResult {
+    let data: HashMap<String, String> = decode(&req, &data_raw)?;
+    let url = build_url(&["binding", &path.0, &path.1])?;
+    let res = req.state().world.link_binding(url, data);
+    reply(req, res.map(|a| a.binding), true, 201)
 }
 
-// We really don't want to deal with that!
 #[allow(clippy::implicit_hasher)]
-pub fn unlink_servant((req, path): (HttpRequest<State>, Path<(String, String)>)) -> impl Responder {
-    /*let data: HashMap<String, String> = match content_type(&req) {
-        Some(ResourceType::Yaml) => serde_yaml::from_slice(&data_raw).unwrap(),
-        Some(ResourceType::Json) => serde_json::from_slice(&data_raw).unwrap(),
-        None => return HttpResponse::InternalServerError().finish(),
-    };
-     */
-    let url = TremorURL::parse(&format!("/binding/{}/{}", path.0, path.1))
-        .map_err(|_e| error::ErrorBadRequest("bad url"))
-        .unwrap();
-    let res = req.state().world.unlink_binding(&url, HashMap::new());
-    reply(req, res, 200)
+pub fn unlink_servant((req, path): (HttpRequest<State>, Path<(String, String)>)) -> ApiResult {
+    let url = build_url(&["binding", &path.0, &path.1])?;
+    let res = req.state().world.unlink_binding(url, HashMap::new());
+    reply(req, res.map(|a| a.binding), true, 200)
 }

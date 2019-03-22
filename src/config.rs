@@ -24,6 +24,7 @@ pub type OffRampVec = Vec<OffRamp>;
 pub type PipelineVec = Vec<dynaconfig::Pipeline>;
 pub type BindingVec = Vec<Binding>;
 pub type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
+pub type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +37,8 @@ pub struct Config {
     pub binding: Vec<Binding>,
     #[serde(default = "dflt")]
     pub pipeline: PipelineVec,
+    #[serde(default = "dflt")]
+    pub mapping: MappingMap,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -82,7 +85,7 @@ mod test {
     fn slurp(file: &str) -> Config {
         let file = File::open(file).expect("could not open file");
         let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).unwrap()
+        serde_yaml::from_reader(buffered_reader).expect("could parse file")
     }
 
     #[test]

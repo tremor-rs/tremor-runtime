@@ -32,11 +32,25 @@ services:
       ELASTICSEARCH_URL: 'http://elastic:9200'
     links:
       - elastic
+  influx:
+    image: influxdb:1.7
+    ports:
+      - '8086:8086'
+      - '8083:8083'
+    environment:
+      INFLUXDB_DB: 'tremor'
+  chronograf:
+    image: chronograf:1.7
+    ports:
+      - '8888:8888'
+    depends_on:
+      - influx
   tremor:
     image: tremor-runtime
     depends_on:
       - kibana
       - kafka
+      - influx
     ports:
       - 9898:9898
     environment:

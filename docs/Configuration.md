@@ -1,6 +1,6 @@
 # Configuring Tremor
 
-This is a short canned synopsis of tremor cofiguration.
+This is a short canned synopsis of tremor configuration.
 
 Tremor supports dynamic reconfiguration since v0.4.
 

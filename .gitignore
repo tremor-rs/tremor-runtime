@@ -19,3 +19,4 @@ integration_testing/property/drop_copy.test/drop_in
 html
 flamegraph.svg
 out.stacks
+coyote.html

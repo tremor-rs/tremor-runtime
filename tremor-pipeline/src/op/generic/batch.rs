@@ -143,7 +143,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event1.clone()).unwrap();
+        let r = op
+            .on_event("in", event1.clone())
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
@@ -155,9 +157,11 @@ mod test {
             kind: None,
         };
 
-        let mut r = op.on_event("in", event2.clone()).unwrap();
+        let mut r = op
+            .on_event("in", event2.clone())
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
-        let (out, event) = r.pop().unwrap();
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
         let events: Vec<Event> = event.into_iter().collect();
         assert_eq!(events, vec![event1, event2]);
@@ -171,7 +175,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).unwrap();
+        let r = op.on_event("in", event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -197,7 +201,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event1.clone()).unwrap();
+        let r = op
+            .on_event("in", event1.clone())
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
@@ -209,9 +215,11 @@ mod test {
             kind: None,
         };
 
-        let mut r = op.on_event("in", event2.clone()).unwrap();
+        let mut r = op
+            .on_event("in", event2.clone())
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
-        let (out, event) = r.pop().unwrap();
+        let (out, event) = r.pop().expect("empty results");
         assert_eq!("out", out);
 
         let events: Vec<Event> = event.into_iter().collect();
@@ -226,7 +234,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).unwrap();
+        let r = op.on_event("in", event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -238,7 +246,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).unwrap();
+        let r = op.on_event("in", event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -264,7 +272,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event1.clone()).unwrap();
+        let r = op
+            .on_event("in", event1.clone())
+            .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
         let mut signal = Event {
@@ -276,9 +286,9 @@ mod test {
             kind: None,
         };
 
-        let mut r = op.on_signal(&mut signal).unwrap();
+        let mut r = op.on_signal(&mut signal).expect("failed to run pipeline");
         assert_eq!(r.len(), 1);
-        let (out, event) = r.pop().unwrap();
+        let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);
 
         let events: Vec<Event> = event.into_iter().collect();
@@ -293,7 +303,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).unwrap();
+        let r = op.on_event("in", event).expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -305,7 +315,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).unwrap();
+        let r = op.on_event("in", event).expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }
 }

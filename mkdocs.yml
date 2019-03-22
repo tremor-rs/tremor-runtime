@@ -19,9 +19,12 @@ markdown_extensions:
       permalink: true
 nav:
   - Home: index.md
-  - Operations: 
+  - 'Architecture Overview': Overview.md
+  - History: History.md
+  - Operations:
     - Configuration: Configuration.md
-    - Tremor Script: 
+    - Monitoring.md
+    - Tremor Script:
       - Overview: tremor-script.md
       - Functions:
           - Overview: tremor-script/functions.md
@@ -36,5 +39,6 @@ nav:
     - Offramps: offramps.md
     - Operators: operators.md
   - Development:
+    - 'Quick Start Guide': QuickStart.md
     - Profiling: Profiling.md
   - 'Glossary': Glossary.md

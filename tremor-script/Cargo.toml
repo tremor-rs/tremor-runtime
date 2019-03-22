@@ -10,7 +10,7 @@ license = "Apache-2.0"
 error-chain="0.12"
 lalrpop-util = "0.16"
 regex = "0.2"
-serde_json = "1.0"
+serde_json = { git = "https://github.com/Licenser/json", branch="hashbrown", features=["hashbrown"] }
 pcre2 = "0.1"
 glob = "0.2"
 lazy_static = "1"
@@ -25,8 +25,3 @@ lalrpop = "0.16"
 
 [dev-dependencies]
 criterion = "0.2"
-
-[[bench]]
-name = "tremor_script_benchmark"
-harness = false
-

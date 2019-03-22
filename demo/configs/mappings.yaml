@@ -3,3 +3,4 @@ mapping:
     instance: "loadgen"
   /binding/demo/demo:
     instance: "demo"
+  /binding/metrics/system: {}

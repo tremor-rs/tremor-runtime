@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn inc() {
         let mut sw = SlidingWindow::new(10, 10u32);
-        assert_eq!(sw.inc().unwrap(), 1);
+        assert_eq!(sw.inc(), Ok(1));
         assert_eq!(sw.count(), 1);
     }
     #[test]
@@ -291,16 +291,20 @@ mod properties {
             match self {
                 Window::New => SlidingWindow::new(size, max),
                 Window::Step { next, step } => {
-                    let mut next = next.pop().unwrap().execute(size, max);
-                    match step {
-                        WindowAction::Tick => {
-                            next.tick();
-                            next
+                    if let Some(mut next) = next.pop() {
+                        let mut next = next.execute(size, max);
+                        match step {
+                            WindowAction::Tick => {
+                                next.tick();
+                                next
+                            }
+                            WindowAction::Inc => {
+                                let _ = next.inc();
+                                next
+                            }
                         }
-                        WindowAction::Inc => {
-                            let _ = next.inc();
-                            next
-                        }
+                    } else {
+                        unreachable!("This should not happen!")
                     }
                 }
             }

@@ -6,23 +6,23 @@
     - name: GET /version
       command: ../target/debug/tremor-tool -f json api version
       stdout_has:
-        - "{\"version\":\"0.4.0-rc.2\"}"
+        - "{\"version\":\"0.4.0-rc.4\"}"
     - name: GET /onramp
       command: ../target/debug/tremor-tool -f json api onramp list
       stdout_has:
-        - "\\[]"
+        - '\[]'
     - name: GET /offramp
       command: ../target/debug/tremor-tool -f json api offramp list
       stdout_has:
-        - "\\[]"
+        - '\["system::stderr","system::stdout"]'
     - name: GET /pipeline
       command: ../target/debug/tremor-tool -f json api pipeline list
       stdout_has:
-        - "\\[]"
+        - '\["system::metrics"]'
     - name: GET /binding
       command: ../target/debug/tremor-tool -f json api binding list
       stdout_has:
-        - "\\[]"
+        - '\[]'
 - name: REST API - Interactive deploy/undeploy of a pipeline ( YAML )
   entries:
     - name: GET /pipeline/main should 404 before publish
@@ -32,7 +32,7 @@
     - name: GET /pipeline should return an empty list
       command: ../target/debug/tremor-tool -f yaml api pipeline list
       stdout_has:
-        - "\\[]"
+        - '\["system::metrics"]'
     - name: Publish pipeline ( YAML )
       command: ../target/debug/tremor-tool -f yaml api pipeline create tests/bench-pipeline.json
       stdout_has:
@@ -48,7 +48,7 @@
     - name: Get /pipeline should return a list of 1 element
       command: ../target/debug/tremor-tool api pipeline list
       stdout_has:
-        - "\\[\"main\"]"
+        - '\[\"main\","system::metrics"]'
     - name: GET /pipeline/main should 200 after publish
       command: ../target/debug/tremor-tool api pipeline fetch main
       stdout_has:
@@ -68,7 +68,7 @@
     - name: Get /pipeline should return an empty list
       command: ../target/debug/tremor-tool api pipeline list
       stdout_has:
-        - "\\[]"
+        - '\["system::metrics"]'
 - name: REST API - Interactive deploy/undeploy of a pipeline ( JSON )
   entries:
     - name: GET /pipeline/main should 404 before publish
@@ -78,7 +78,7 @@
     - name: GET /pipeline should return an empty list
       command: ../target/debug/tremor-tool -f json api pipeline list
       stdout_has:
-        - "\\[]"
+        - '\["system::metrics"]'
     - name: Publish pipeline ( JSON )
       command: ../target/debug/tremor-tool -f json api pipeline create tests/bench-pipeline.yaml
       stdout_has:
@@ -94,7 +94,7 @@
     - name: Get /pipeline should return a list of 1 element
       command: ../target/debug/tremor-tool api pipeline list
       stdout_has:
-        - "\\[\"main\"]"
+        - '\["main","system::metrics"]'
     - name: GET /pipeline/main should 200 after publish
       command: ../target/debug/tremor-tool api pipeline fetch main
       stdout_has:
@@ -114,7 +114,7 @@
     - name: Get /pipeline should return an empty list
       command: ../target/debug/tremor-tool api pipeline list
       stdout_has:
-        - "\\[]"
+        - '\["system::metrics"]'
 
 - name: REST API - Interactive deploy/undeploy of an onramp ( YAML )
   entries:
@@ -125,7 +125,7 @@
     - name: GET /onramp should return an empty list
       command: ../target/debug/tremor-tool -f yaml api onramp list
       stdout_has:
-        - "\\[]"
+        - '\[]'
     - name: Publish onramp ( YAML )
       command: ../target/debug/tremor-tool -f yaml api onramp create tests/bench-onramp.json
       stdout_has:
@@ -149,7 +149,7 @@
     - name: Get /onramp should return an empty list
       command: ../target/debug/tremor-tool api onramp list
       stdout_has:
-        - "\\[]"
+        - '\[]'
 - name: REST API - Interactive deploy/undeploy of an onramp ( JSON )
   entries:
     - name: GET /onramp/blaster should 404 before publish
@@ -159,7 +159,7 @@
     - name: GET /onramp should return an empty list
       command: ../target/debug/tremor-tool -f json api onramp list
       stdout_has:
-        - "\\[]"
+        - '\[]'
     - name: Publish onramp ( JSON )
       command: ../target/debug/tremor-tool -f json api onramp create tests/bench-onramp.yaml
       stdout_has:
@@ -183,7 +183,7 @@
     - name: Get /onramp should return an empty list
       command: ../target/debug/tremor-tool api onramp list
       stdout_has:
-        - "\\[]"
+        - '\[]'
 
 - name: REST API - Interactive deploy/undeploy of an offramp ( YAML )
   entries:
@@ -194,7 +194,7 @@
     - name: GET /offramp should return an empty list
       command: ../target/debug/tremor-tool -f yaml api offramp list
       stdout_has:
-        - "\\[]"
+        - '\["system::stderr","system::stdout"]'
     - name: Publish offramp ( YAML )
       command: ../target/debug/tremor-tool -f yaml api offramp create tests/bench-offramp.json
       stdout_has:
@@ -206,7 +206,7 @@
     - name: Get /offramp should return a list of 1 element
       command: ../target/debug/tremor-tool api offramp list
       stdout_has:
-        - "\\[\"blackhole\"]"
+        - '\["blackhole","system::stderr","system::stdout"]'
     - name: GET /offramp/main should 200 after publish
       command: ../target/debug/tremor-tool api offramp fetch blackhole
       stdout_has:
@@ -218,7 +218,7 @@
     - name: Get /offramp should return an empty list
       command: ../target/debug/tremor-tool api offramp list
       stdout_has:
-        - "\\[]"
+        - '\["system::stderr","system::stdout"]'
 - name: REST API - Interactive deploy/undeploy of an offramp ( JSON )
   entries:
     - name: GET /offramp/blackhole should 404 before publish
@@ -228,7 +228,7 @@
     - name: GET /offramp should return an empty list
       command: ../target/debug/tremor-tool -f json api offramp list
       stdout_has:
-        - "\\[]"
+        - '\["system::stderr","system::stdout"]'
     - name: Publish offramp ( JSON )
       command: ../target/debug/tremor-tool -f json api offramp create tests/bench-offramp.yaml
       stdout_has:
@@ -240,7 +240,7 @@
     - name: Get /offramp should return a list of 1 element
       command: ../target/debug/tremor-tool api offramp list
       stdout_has:
-        - "\\[\"blackhole\"]"
+        - '\["blackhole","system::stderr","system::stdout"]'
     - name: GET /offramp/blackhole should 200 after publish
       command: ../target/debug/tremor-tool api offramp fetch blackhole
       stdout_has:
@@ -252,8 +252,7 @@
     - name: Get /offramp should return an empty list
       command: ../target/debug/tremor-tool api offramp list
       stdout_has:
-        - "\\[]"
-
+        - '\["system::stderr","system::stdout"]'
 - name: REST API - Interactive deploy/undeploy of an binding ( YAML )
   entries:
     - name: GET /binding/default should 404 before publish
@@ -263,7 +262,7 @@
     - name: GET /binding should return an empty list
       command: ../target/debug/tremor-tool -f yaml api binding list
       stdout_has:
-        - "\\[]"
+        - '\[]'
     - name: Publish binding ( YAML )
       command: ../target/debug/tremor-tool -f yaml api binding create tests/bench-binding.json
       stdout_has:
@@ -287,7 +286,7 @@
     - name: Get /binding should return an empty list
       command: ../target/debug/tremor-tool api binding list
       stdout_has:
-        - "\\[]"
+        - '\[]'
 - name: REST API - Interactive deploy/undeploy of an binding ( JSON )
   entries:
     - name: GET /binding/default should 404 before publish
@@ -297,7 +296,7 @@
     - name: GET /binding should return an empty list
       command: ../target/debug/tremor-tool -f json api binding list
       stdout_has:
-        - "\\[]"
+        - '\[]'
     - name: Publish binding ( JSON )
       command: ../target/debug/tremor-tool -f json api binding create tests/bench-binding.yaml
       stdout_has:
@@ -321,7 +320,7 @@
     - name: Get /binding should return an empty list
       command: ../target/debug/tremor-tool api binding list
       stdout_has:
-        - "\\[]"
+        - '\[]'
 
 
 
@@ -341,3 +340,15 @@
       command: ../target/debug/tremor-tool api binding instance default 01
     - name: Unpublish mapping ( JSON )
       command: ../target/debug/tremor-tool api binding deactivate default 01
+    - name: Get /binding/default/01 should not return a mapping
+      command: ../target/debug/tremor-tool api binding instance default 01
+      stderr_has:
+        - "Not found"
+    - name: Unpublish binding
+      command: ../target/debug/tremor-tool api binding delete default
+    - name: Unpublish pipeline
+      command: ../target/debug/tremor-tool api pipeline delete main
+    - name: Unpublish blackhole
+      command: ../target/debug/tremor-tool api offramp delete blackhole
+    - name: Unpublish pipeline
+      command: ../target/debug/tremor-tool api onramp delete blaster

@@ -13,7 +13,10 @@
 // limitations under the License.
 
 #![forbid(warnings)]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+)]
 
 pub mod errors;
 mod interpreter;
@@ -34,71 +37,46 @@ mod tests {
     #[test]
     fn test_glob() {
         let json = r#"{"key1": "data"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1=g"da?a""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1=g"da?a""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_glob_with_slash() {
         let json = r#"{"key1": "d/a/ta"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1=g"d*ta""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1=g"d*ta""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_equals() {
         let json = r#"{"key1": "data1"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1="data1""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1="data1""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_quote() {
         let json = r#"{"key1": "da\\u1234ta1"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1="da\u1234ta1""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1="da\u1234ta1""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_subkey_equals() {
         let json = r#"{"key1": {"sub1": "data1"}}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1.sub1="data1""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1.sub1="data1""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
@@ -112,183 +90,118 @@ mod tests {
                     },
                    "key3": "data3"
                 }"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1.subkey1="data1" or key3="data3" or (key1.subkey1=g"dat*" and key2.subkey2="data2")"#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key1.subkey1="data1" or key3="data3" or (key1.subkey1=g"dat*" and key2.subkey2="data2")"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_eq() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=5", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=5", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_gt() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key>1 OR key>4", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key>1 OR key>4", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_negint_gt() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key>-6", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key>-6", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_lt() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10 key<9", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key<10 key<9", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_double_lt() {
         let json = r#"{"key":5.0}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10.0 key<9.0", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key<10.0 key<9.0", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_ltoe() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key<=5 key<=11", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key<=5 key<=11", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_gtoe() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key >= 3 key >= 4", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key >= 3 key >= 4", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_int_gtoe_double() {
         let json = r#"{"key":5.0}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key >= 3.5 key >= 4.5", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key >= 3.5 key >= 4.5", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_regex() {
         let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=/d.*/", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=/d.*/", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_regex_false() {
         let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=/e.*/", &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=/e.*/", &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_negregex() {
         let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("NOT key=/d.*/", &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("NOT key=/d.*/", &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_regex_bug() {
         let json = r#"{"key":"\\/"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key=/\\//"#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key=/\\//"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
@@ -302,99 +215,65 @@ mod tests {
                     },
                    "key3": "data3"
                 }"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"!(key1.subkey1:"data1" OR NOT (key3:"data3") OR NOT (key1.subkey1:"dat" and key2.subkey2="data2"))"#, &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"!(key1.subkey1:"data1" OR NOT (key3:"data3") OR NOT (key1.subkey1:"dat" and key2.subkey2="data2"))"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_list_contains_str() {
         let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key:["foo", "data", "bar"]"#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s =
+            Script::parse(r#"key:["foo", "data", "bar"]"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_list_contains_int() {
         let json = r#"{"key":4}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key:[3, 4, 5]", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key:[3, 4, 5]", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_list_contains_float() {
         let json = r#"{"key":4.1}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key:[3.1, 4.1, 5.1]", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key:[3.1, 4.1, 5.1]", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_jsonlist_contains_str() {
         let json = r#"{"key":["v1", "v2", "v3"]}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key:"v2""#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key:"v2""#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_jsonlist_contains_int() {
         let json = r#"{"key":[3, 4, 5]}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key:4", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key:4", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_jsonlist_contains_float() {
         let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key:4.1", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key:4.1", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
@@ -406,124 +285,85 @@ mod tests {
     #[test]
     fn test_ip_match() {
         let json = r#"{"key":"10.66.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.77.88", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=10.66.77.88", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_cidr_match() {
         let json = r#"{"key":"10.66.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.0.0/16", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=10.66.0.0/16", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_ip_match_false() {
         let json = r#"{"key":"10.66.78.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.77.88", &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=10.66.77.88", &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_cidr_match_false() {
         let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.0.0/16", &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key=10.66.0.0/16", &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_exists() {
         let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_missing() {
         let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("!key", &r).unwrap();
-        assert_eq!(
-            false,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("!key", &r).expect("Failed to parse script");
+        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn test_add() {
         let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key="val" {key2 := "newval";}"#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s =
+            Script::parse(r#"key="val" {key2 := "newval";}"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["key2"], json!("newval"));
     }
 
     #[test]
     fn test_add_nested() {
         let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s =
-            Script::parse(r#"key="val" {newkey.newsubkey.other := "newval";}"#, &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse(r#"key="val" {newkey.newsubkey.other := "newval";}"#, &r)
+            .expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["newkey"]["newsubkey"]["other"], json!("newval"));
     }
 
     #[test]
     fn test_update() {
         let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_ {key := "newval";}"#, &r).unwrap();
+        let mut s = Script::parse(r#"_ {key := "newval";}"#, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut vals, &mut HashMap::new());
         //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["key"], json!("newval"));
@@ -532,9 +372,10 @@ mod tests {
     #[test]
     fn test_update_nested() {
         let json = r#"{"key":{"key1": "val"}}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_ {key.key1 := "newval";}"#, &r).unwrap();
+        let mut s =
+            Script::parse(r#"_ {key.key1 := "newval";}"#, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut vals, &mut HashMap::new());
         //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(vals["key"]["key1"], json!("newval"));
@@ -543,9 +384,10 @@ mod tests {
     #[test]
     fn test_update_type_conflict() {
         let json = r#"{"key":"key1"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_ {key.key1 := "newval";}"#, &r).unwrap();
+        let mut s =
+            Script::parse(r#"_ {key.key1 := "newval";}"#, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut vals, &mut HashMap::new());
 
         // assert_eq!(
@@ -558,7 +400,7 @@ mod tests {
     #[test]
     fn test_mut_multi() {
         let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
         let mut s = Script::parse(
             r#"key="val" {
@@ -567,13 +409,8 @@ mod tests {
                          }"#,
             &r,
         )
-        .unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        .expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
         assert_eq!(
             Value::String("newval".to_string()),
             vals["newkey"]["newsubkey"]["other"]
@@ -587,27 +424,19 @@ mod tests {
     #[test]
     fn test_underscore() {
         let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_"#, &r).unwrap();
-        assert_eq!(
-            0,
-            s.run(&(), &mut vals, &mut HashMap::new()).unwrap().unwrap()
-        );
+        let mut s = Script::parse(r#"_"#, &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
     fn doctest_time_test() {
         let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).unwrap();
+        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
         let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10 key<9", &r).unwrap();
-        assert_eq!(
-            true,
-            s.run(&(), &mut vals, &mut HashMap::new())
-                .unwrap()
-                .is_some()
-        );
+        let mut s = Script::parse("key<10 key<9", &r).expect("Failed to parse script");
+        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
     }
 
     #[test]
@@ -637,7 +466,7 @@ $actual1=true && $actual2=true { $actual := true; }
 
 "#;
         let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
+        let mut s = Script::parse(script, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(m["a"], json!(1));
         assert_eq!(m["b"], json!(3));
@@ -672,7 +501,7 @@ $actual1=true && $actual2=true { $actual := true; }
 
 "#;
         let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
+        let mut s = Script::parse(script, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(v["b"], json!(3));
@@ -692,7 +521,7 @@ v:1 { $b := 2; return; }
 _ { $b := 3; }
 "#;
         let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
+        let mut s = Script::parse(script, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(3));
@@ -709,7 +538,7 @@ export b;
 _ { $b := 2; }
 "#;
         let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
+        let mut s = Script::parse(script, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(2));
@@ -726,70 +555,10 @@ export b;
 _ { $b := 2; }
 "#;
         let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
+        let mut s = Script::parse(script, &r).expect("Failed to parse script");
         let _ = s.run(&(), &mut v, &mut m);
         assert_eq!(v["a"], json!(1));
         assert_eq!(m["b"], json!(2));
-    }
-
-    #[test]
-    pub fn registry_formats_string_with_misleading_brackets() {
-        let script = r#"
-          export format;
-
-        _ { $format := string::format("{foo{}}", "bar");}
-      "#;
-
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).unwrap();
-
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"v":1});
-        let _ = s.run(&(), &mut v, &mut m);
-
-        assert_eq!(m["format"], json!("{foobar}"));
-    }
-
-    #[test]
-    #[ignore]
-    fn test_constructed_lit_list() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn assign_var() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn compare_var() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn import_var() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn export_var() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn return_test() {
-        assert!(false);
-    }
-
-    #[test]
-    #[ignore]
-    fn comment_test() {
-        assert!(false);
     }
 
 }

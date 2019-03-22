@@ -14,6 +14,8 @@
 
 -compile(export_all).
 
+-define(SYS_PIPES, [<<"system::metrics">>]).
+
 -record(state,{
                connection,
                %% All created VMs in this run
@@ -71,7 +73,7 @@ list_pipeline(C) ->
     Pipelines.
 
 list_pipeline_post(#state{pipelines = Pipelines}, _Args, Result) ->
-    lists:sort(Result) == lists:sort(Pipelines).
+    lists:sort(Result) == lists:sort(Pipelines ++ ?SYS_PIPES).
 
 list_pipeline_next(S, _Result, _Args) ->
     S.
@@ -232,8 +234,9 @@ cleanup() ->
     C = tremor_api:new(),
     %% We do it twice to ensure failed vm's are deleted proppelry.
     {ok, Pipelines} = tremor_pipeline:list(C),
-    [tremor_pipeline:unpublish(Pipeline, C) || Pipeline <- Pipelines],
-    {ok, []} = tremor_pipeline:list(C),
+    [tremor_pipeline:unpublish(Pipeline, C) || Pipeline <- Pipelines -- ?SYS_PIPES],
+    {ok, Rest} = tremor_pipeline:list(C),
+    ?SYS_PIPES = lists:sort(Rest),
     ok.
 
 

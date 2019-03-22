@@ -14,7 +14,10 @@
 
 #![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -28,7 +31,9 @@ use petgraph::graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde_json;
+use serde_json::{json, Value};
 use std::fmt;
+use std::iter;
 use std::iter::Iterator;
 use std::sync::Mutex;
 use tremor_script::{tremor_fn, Registry};
@@ -262,6 +267,9 @@ impl Operator for OperatorNode {
     fn on_contraflow(&mut self, contraevent: &mut Event) {
         self.op.on_contraflow(contraevent)
     }
+    fn metrics(&self, tags: HashMap<String, String>, timestamp: u64) -> Vec<Value> {
+        self.op.metrics(tags, timestamp)
+    }
 }
 
 // TODO We need an actual operator registry ...
@@ -350,6 +358,16 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         outputs.push(id);
     }
 
+    // Add metrics output port
+    let id = graph.add_node(NodeConfig {
+        id: "metrics".to_string(),
+        kind: NodeKind::Output,
+        _type: "passthrough".to_string(),
+        config: None, // passthrough has no config
+    });
+    nodes.insert("metrics".to_string(), id);
+    outputs.push(id);
+
     for (from, tos) in &config.links {
         for to in tos {
             let from_idx = nodes[&from.id];
@@ -388,47 +406,147 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct NodeMetrics {
+    inputs: HashMap<String, u64>,
+    outputs: HashMap<String, u64>,
+}
+
+impl NodeMetrics {
+    fn to_value(
+        &self,
+        metric_name: &str,
+        tags: &mut HashMap<String, String>,
+        timestamp: u64,
+    ) -> Vec<Value> {
+        let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
+        for (k, v) in &self.inputs {
+            tags.insert("direction".to_owned(), "input".to_owned());
+            tags.insert("port".to_owned(), k.to_owned());
+            res.push(json!({
+                "measurement": metric_name,
+                "tags": tags,
+                "fields": {
+                    "count": v
+                },
+                "timestamp": timestamp
+            }))
+        }
+        for (k, v) in &self.outputs {
+            tags.insert("direction".to_owned(), "output".to_owned());
+            tags.insert("port".to_owned(), k.to_owned());
+            res.push(json!({
+                "measurement": metric_name,
+                "tags": tags,
+                "fields": {
+                    "count": v
+                },
+                "timestamp": timestamp
+            }))
+        }
+        res
+    }
+}
+
 #[derive(Debug)]
 pub struct ExecutableGraph {
+    pub id: String,
     pub graph: Vec<OperatorNode>,
     pub inputs: HashMap<String, usize>,
     stack: Vec<(usize, String, Event)>,
     signalflow: Vec<usize>,
     contraflow: Vec<usize>,
     port_indexes: ExecPortIndexMap,
+    returns: Vec<(String, Event)>,
+    metrics: Vec<NodeMetrics>,
+    metrics_idx: usize,
+    last_metrics: u64,
 }
 
 impl ExecutableGraph {
     /// This is a performance critial function!
     pub fn enqueue(&mut self, stream_name: &str, event: Event) -> Result<Vec<(String, Event)>> {
         // Resolve the input stream or entrypoint for this enqueue operation
+        if event.ingest_ns - self.last_metrics > 10_000_000_000 {
+            let mut tags = HashMap::new();
+            tags.insert("pipeline".to_string(), self.id.clone());
+            self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
+            self.last_metrics = event.ingest_ns;
+        }
         self.stack
             .push((self.inputs[stream_name], "in".to_string(), event));
         self.run()
     }
 
     fn run(&mut self) -> Result<Vec<(String, Event)>> {
-        let mut returns: Vec<(String, Event)> = Vec::with_capacity(self.graph.len());
-        loop {
-            if let Some((idx, port, event)) = self.stack.pop() {
-                let res = {
-                    let node = &mut self.graph[idx];
-                    if node.kind == NodeKind::Output {
-                        returns.push((node.id.clone(), event));
-                        vec![]
-                    } else {
-                        // TODO: Do we want to fail on here or do something different?
-                        // got to discuss this.
-                        node.on_event(&port, event)?
-                    }
-                };
-                self.enqueue_events(idx, res);
-                if self.stack.is_empty() {
-                    returns.reverse();
-                    return Ok(returns);
-                }
+        while self.next()? {}
+        let mut ret = Vec::with_capacity(self.returns.len());
+        std::mem::swap(&mut ret, &mut self.returns);
+        ret.reverse();
+        Ok(ret)
+    }
+
+    fn next(&mut self) -> Result<bool> {
+        if let Some((idx, port, event)) = self.stack.pop() {
+            // count ingres
+
+            let node = &mut self.graph[idx];
+            if node.kind == NodeKind::Output {
+                self.returns.push((node.id.clone(), event));
             } else {
-                unreachable!()
+                // TODO: Do we want to fail on here or do something different?
+                // got to discuss this.
+                let res = node.on_event(&port, event)?;
+                for (out_port, _) in &res {
+                    if let Some(count) = self.metrics[idx].outputs.get_mut(out_port) {
+                        *count += 1;
+                    } else {
+                        self.metrics[idx].outputs.insert(out_port.clone(), 1);
+                    }
+                }
+                self.enqueue_events(idx, res);
+            };
+            Ok(!self.stack.is_empty())
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn enqueue_metrics(
+        &mut self,
+        metric_name: String,
+        mut tags: HashMap<String, String>,
+        timestamp: u64,
+    ) {
+        for (i, m) in self.metrics.iter().enumerate() {
+            tags.insert("node".to_owned(), self.graph[i].id.clone());
+            for v in self.graph[i].metrics(tags.clone(), timestamp) {
+                self.stack.push((
+                    self.metrics_idx,
+                    "in".to_owned(),
+                    Event {
+                        id: 0,
+                        meta: MetaMap::default(),
+                        value: EventValue::JSON(v),
+                        ingest_ns: timestamp,
+                        kind: None,
+                        is_batch: false,
+                    },
+                ));
+            }
+            for v in m.to_value(&metric_name, &mut tags, timestamp) {
+                self.stack.push((
+                    self.metrics_idx,
+                    "in".to_owned(),
+                    Event {
+                        id: 0,
+                        meta: MetaMap::default(),
+                        value: EventValue::JSON(v),
+                        ingest_ns: timestamp,
+                        kind: None,
+                        is_batch: false,
+                    },
+                ));
             }
         }
     }
@@ -438,9 +556,19 @@ impl ExecutableGraph {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
                 let len = outgoing.len();
                 for (idx, in_port) in outgoing.iter().take(len - 1) {
-                    self.stack.push((*idx, in_port.clone(), event.clone()))
+                    if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                        *count += 1;
+                    } else {
+                        self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                    }
+                    self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
                 let (idx, in_port) = &outgoing[len - 1];
+                if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                    *count += 1;
+                } else {
+                    self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                }
                 self.stack.push((*idx, in_port.clone(), event))
             }
         }
@@ -526,7 +654,14 @@ impl Pipeline {
         }
 
         Ok(ExecutableGraph {
+            metrics: iter::repeat(NodeMetrics::default())
+                .take(graph.len())
+                .collect(),
+            returns: Vec::new(),
             stack: Vec::with_capacity(graph.len()),
+            id: self.id.clone(),
+            metrics_idx: i2pos[&self.nodes["metrics"]],
+            last_metrics: 0,
             graph,
             inputs,
             port_indexes,
@@ -548,14 +683,16 @@ mod test {
     fn slurp(file: &str) -> config::Pipeline {
         let file = File::open(file).expect("could not open file");
         let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).unwrap()
+        serde_yaml::from_reader(buffered_reader).expect("failed to read config")
     }
 
     #[test]
     fn distsys_exec() {
         let c = slurp("tests/configs/distsys.yaml");
-        let p = build_pipeline(c).unwrap();
-        let mut e = p.to_executable_graph(buildin_ops).unwrap();
+        let p = build_pipeline(c).expect("failed to build pipeline");
+        let mut e = p
+            .to_executable_graph(buildin_ops)
+            .expect("failed to build executable graph");
         let event1 = Event {
             is_batch: false,
             id: 1,
@@ -564,17 +701,39 @@ mod test {
             value: EventValue::JSON(json!({"snot": "badger"})),
             kind: None,
         };
-        let results = e.enqueue("in", event1).unwrap();
+        let results = e.enqueue("in", event1).expect("failed to enqueue event");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
         assert_eq!(results[0].1.meta["class"], "default");
+        dbg!(&e.metrics);
+        // We ignore the first, and the last three nodes because:
+        // * The first one is the input, handled seperately
+        assert_eq!(e.metrics[0].inputs.get("in"), None);
+        assert_eq!(e.metrics[0].outputs.get("out"), Some(&1));
+        // * The last-2 is the output, handled seperately
+        assert_eq!(e.metrics[e.metrics.len() - 3].inputs.get("in"), Some(&1));
+        assert_eq!(e.metrics[e.metrics.len() - 3].outputs.get("out"), None);
+        // * the last-1 is the error output
+        assert_eq!(e.metrics[e.metrics.len() - 2].inputs.get("in"), None);
+        assert_eq!(e.metrics[e.metrics.len() - 2].outputs.get("out"), None);
+        // * last is the metrics output
+        assert_eq!(e.metrics[e.metrics.len() - 1].inputs.get("in"), None);
+        assert_eq!(e.metrics[e.metrics.len() - 1].outputs.get("out"), None);
+
+        // Now for the normal case
+        for m in &e.metrics[1..e.metrics.len() - 3] {
+            assert_eq!(m.inputs["in"], 1);
+            assert_eq!(m.outputs["out"], 1);
+        }
     }
 
     #[test]
     fn simple_graph_exec() {
         let c = slurp("tests/configs/simple_graph.yaml");
-        let p = build_pipeline(c).unwrap();
-        let mut e = p.to_executable_graph(buildin_ops).unwrap();
+        let p = build_pipeline(c).expect("failed to build pipeline");
+        let mut e = p
+            .to_executable_graph(buildin_ops)
+            .expect("failed to build executable graph");
         let event1 = Event {
             is_batch: false,
             id: 1,
@@ -583,7 +742,7 @@ mod test {
             value: EventValue::Raw(r#"{"snot": "badger"}"#.as_bytes().to_vec()),
             kind: None,
         };
-        let results = e.enqueue("in", event1).unwrap();
+        let results = e.enqueue("in", event1).expect("failed to enqueue");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
         assert_eq!(results[0].1.id, 1);
@@ -592,9 +751,11 @@ mod test {
     #[test]
     fn complex_graph_exec() {
         let c = slurp("tests/configs/two_input_complex_graph.yaml");
-        let p = build_pipeline(c).unwrap();
+        let p = build_pipeline(c).expect("failed to build pipeline");
         println!("{}", p.to_dot());
-        let mut e = p.to_executable_graph(buildin_ops).unwrap();
+        let mut e = p
+            .to_executable_graph(buildin_ops)
+            .expect("failed to build executable graph");
         let event1 = Event {
             is_batch: false,
             id: 1,
@@ -611,7 +772,7 @@ mod test {
             value: EventValue::Raw(r#"{"snot": "badger"}"#.as_bytes().to_vec()),
             kind: None,
         };
-        let results = e.enqueue("in1", event1).unwrap();
+        let results = e.enqueue("in1", event1).expect("failed to enqueue event");
         assert_eq!(results.len(), 6);
         for i in 0..=5 {
             assert_eq!(results[i].0, "out");
@@ -658,7 +819,7 @@ mod test {
             json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"])
         );
 
-        let results = e.enqueue("in2", event2).unwrap();
+        let results = e.enqueue("in2", event2).expect("failed to enqueue event");
         assert_eq!(results.len(), 3);
         for i in 0..=2 {
             assert_eq!(results[i].0, "out");
@@ -680,10 +841,9 @@ mod test {
 
     #[test]
     fn load_simple() {
-        let config = slurp("tests/configs/pipe.simple.yaml");
-        println!("{:?}", &config);
-        let p = build_pipeline(config).unwrap();
-        let l = p.config.links.iter().next().unwrap();
+        let c = slurp("tests/configs/pipe.simple.yaml");
+        let p = build_pipeline(c).expect("failed to build pipeline");
+        let l = p.config.links.iter().next().expect("no links");
         assert_eq!(
             (&"in".to_string(), vec!["out".to_string()]),
             (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())

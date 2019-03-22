@@ -3,9 +3,6 @@ onramp:
     type: metronome
     config:
       interval: 10000
-offramp:
-  - id: stdout
-    type: stdout
 pipeline:
   - id: main
     interface:
@@ -22,4 +19,5 @@ binding:
   - id: default
     links:
       '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/stdout/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/system::stdout/system/in' ]
+      '/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]

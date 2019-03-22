@@ -18,5 +18,5 @@ use actix_web::{HttpRequest, Responder};
 
 pub fn get_version(req: HttpRequest<State>) -> impl Responder {
     let payload = rm::Version::new();
-    reply(req, Ok(payload), 200)
+    reply(req, Ok(payload), false, 200)
 }

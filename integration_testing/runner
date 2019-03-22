@@ -256,7 +256,7 @@ do
         warn "${test}:  skipped"
     else
         xzcat $in_file > $data_file
-        if $run_cmd --config "${yaml_file}.out" --mapping "${mapping_file}" 2> ${log_file}
+        if $run_cmd --config "${yaml_file}.out" "${mapping_file}" 2> ${log_file}
         then
             if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
             then

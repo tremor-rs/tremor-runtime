@@ -33,4 +33,4 @@ then
    LOGGER_FILE="logger.yaml"
 fi
 
-exec ./tremor-server --config "${CONFIG_FILE}" --logger-config "${LOGGER_FILE}" --mapping "${MAPPING_FILE}"
+exec ./tremor-server --config "${CONFIG_FILE}" "${MAPPING_FILE}" --logger-config "${LOGGER_FILE}"

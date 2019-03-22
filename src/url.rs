@@ -35,7 +35,7 @@ pub enum Scope {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TremorURL {
-    pub scope: Scope,
+    scope: Scope,
     host: String,
     resource_type: Option<ResourceType>,
     artefact: Option<String>,
@@ -183,8 +183,30 @@ impl TremorURL {
             Err(e) => Err(e.into()),
         }
     }
+
+    pub fn trim_to_instance(&mut self) {
+        self.instance_port = None;
+        self.scope = Scope::Servant;
+    }
+
+    pub fn trim_to_artefact(&mut self) {
+        self.instance_port = None;
+        self.instance = None;
+        self.scope = Scope::Artefact;
+    }
+
     pub fn set_instance(&mut self, i: String) {
         self.instance = Some(i);
+        if self.scope == Scope::Artefact {
+            self.scope = Scope::Servant;
+        }
+    }
+
+    pub fn set_port(&mut self, i: String) {
+        self.instance_port = Some(i);
+        if self.scope == Scope::Servant {
+            self.scope = Scope::Port;
+        }
     }
 
     pub fn instance(&self) -> Option<String> {
@@ -198,6 +220,9 @@ impl TremorURL {
     }
     pub fn resource_type(&self) -> Option<ResourceType> {
         self.resource_type
+    }
+    pub fn scope(&self) -> Scope {
+        self.scope
     }
 }
 
@@ -223,46 +248,28 @@ impl Serialize for TremorURL {
 
 #[cfg(test)]
 mod test {
-    /*
     use super::*;
     #[test]
     fn url() {
-        let tremor_url =
-            TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/in?format=json").unwrap();
+        let url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")
+            .expect("failed to parse url");
 
-        assert_eq!(tremor_url.relative(), false);
-        assert_eq!(tremor_url.scheme(), "tremor");
-        assert_eq!(tremor_url.username(), "");
-        assert_eq!(tremor_url.password(), None);
-        assert_eq!(tremor_url.host_str(), "127.0.0.1");
-        assert_eq!(tremor_url.port(), Some(1234));
-        assert_eq!(tremor_url.path(), "/pipeline/main/in");
+        assert_eq!(Scope::Port, url.scope());
+        assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
+        assert_eq!(Some("main".to_owned()), url.artefact());
+        assert_eq!(Some("01".to_owned()), url.instance());
+        assert_eq!(Some("in".to_owned()), url.instance_port());
     }
 
     #[test]
     fn short_url() {
-        let tremor_url = TremorURL::parse("/pipeline/main/in").unwrap();
+        let url = TremorURL::parse("/pipeline/main/01/in").expect("failed to parse url");
 
-        assert_eq!(tremor_url.relative(), false);
-        assert_eq!(tremor_url.scheme(), "tremor");
-        assert_eq!(tremor_url.username(), "");
-        assert_eq!(tremor_url.password(), None);
-        assert_eq!(tremor_url.host_str(), "");
-        assert_eq!(tremor_url.port(), None);
-        assert_eq!(tremor_url.path(), "/pipeline/main/in");
+        assert_eq!(Scope::Port, url.scope());
+        assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
+        assert_eq!(Some("main".to_owned()), url.artefact());
+        assert_eq!(Some("01".to_owned()), url.instance());
+        assert_eq!(Some("in".to_owned()), url.instance_port());
     }
 
-    #[test]
-    fn relative_short_url() {
-        let tremor_url = TremorURL::parse("pipeline/main/in").unwrap();
-
-        assert_eq!(tremor_url.relative(), true);
-        assert_eq!(tremor_url.scheme(), "tremor");
-        assert_eq!(tremor_url.username(), "");
-        assert_eq!(tremor_url.password(), None);
-        assert_eq!(tremor_url.host_str(), "");
-        assert_eq!(tremor_url.port(), None);
-        assert_eq!(tremor_url.path(), "/pipeline/main/in");
-    }
-    */
 }

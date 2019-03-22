@@ -14,5 +14,5 @@
 extern crate lalrpop;
 
 fn main() {
-    lalrpop::process_root().unwrap();
+    lalrpop::process_root().expect("Failed to build grammer");
 }

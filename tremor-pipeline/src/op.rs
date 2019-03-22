@@ -20,6 +20,8 @@ pub mod runtime;
 
 use super::{Event, NodeConfig};
 use crate::errors::*;
+use hashbrown::HashMap;
+use serde_json::Value;
 
 pub trait Operator: std::fmt::Debug + Send {
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>>;
@@ -39,6 +41,11 @@ pub trait Operator: std::fmt::Debug + Send {
     // A lot of operators won't need to handle insights so we default to
     // passing the isnight through
     fn on_contraflow(&mut self, _insight: &mut Event) {}
+
+    // Returns metrics for this operator
+    fn metrics(&self, _tags: HashMap<String, String>, _timestamp: u64) -> Vec<Value> {
+        Vec::new()
+    }
 }
 
 pub trait InitializableOperator {

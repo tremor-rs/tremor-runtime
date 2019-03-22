@@ -1,5 +1,3 @@
-
-
 ### Remnve element form a vector:
 
 ```rust
@@ -23,4 +21,20 @@ for (idx, in_port) in outgoing.iter().take(len - 1) {
   }
 let (idx, in_port) = &outgoing[len - 1];
 self.stack.push((*idx, in_port.clone(), event))
+```
+
+### Rewrite entry to not require a clone when the value exists
+
+```rust
+*self.metrics[*idx].outputs.entry(in_port.clone()).or_insert(0) += 1;
+```
+
+becomes where the clone is limited to only happen when the element doesn't exist.
+
+```rust
+if let Some(count) = self.metrics[*idx].outputs.get_mut(in_port) {
+  *count += 1;
+} else {
+  self.metrics[*idx].outputs.insert(in_port.clone(), 1);
+}
 ```

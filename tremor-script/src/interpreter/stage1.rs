@@ -22,7 +22,11 @@ use std::str;
 use std::string::ToString;
 
 lalrpop_mod!(
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::all))]
+    #[cfg_attr(
+        feature = "cargo-clippy",
+        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+    )]
+
     pub parser
 );
 

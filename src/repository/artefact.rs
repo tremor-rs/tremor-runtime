@@ -12,23 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dynamic::codec;
-use crate::dynamic::offramp::{self, CreateOfframp, OfframpAddr, OfframpMsg};
-use crate::dynamic::onramp::{self, CreateOnramp, OnrampAddr, OnrampMsg};
+use crate::codec;
 use crate::errors::*;
+use crate::offramp::{self, CreateOfframp, OfframpAddr, OfframpMsg};
+use crate::onramp::{self, CreateOnramp, OnrampAddr, OnrampMsg};
 use crate::registry::ServantId;
 use crate::system::{PipelineAddr, PipelineMsg, World};
-use crate::url::{self, TremorURL};
+use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
 use maplit::hashmap;
 
-pub type ArtefactId = String;
-pub use crate::dynamic::Binding as BindingArtefact;
-pub use crate::dynamic::OffRamp as OfframpArtefact;
-pub use crate::dynamic::OnRamp as OnrampArtefact;
+pub type ArtefactId = TremorURL;
+pub use crate::OffRamp as OfframpArtefact;
+pub use crate::OnRamp as OnrampArtefact;
 use crossbeam_channel::bounded;
-pub use tremor_pipeline::Pipeline as PipelineArtefact;
+
+#[derive(Clone, Debug)]
+pub struct BindingArtefact {
+    pub binding: crate::Binding,
+    pub mapping: Option<crate::config::MappingMap>,
+}
+
+#[derive(Clone)]
+pub struct PipelineArtefact {
+    pub pipeline: tremor_pipeline::Pipeline,
+}
+
+impl From<tremor_pipeline::Pipeline> for PipelineArtefact {
+    fn from(pipeline: tremor_pipeline::Pipeline) -> PipelineArtefact {
+        PipelineArtefact { pipeline }
+    }
+}
 
 pub trait Artefact: Clone {
     //    type Configuration;
@@ -44,19 +59,18 @@ pub trait Artefact: Clone {
     fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult>;
 
     fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool>;
-    fn artefact_id(u: &TremorURL) -> Result<String>;
-    fn servant_id(u: &TremorURL) -> Result<String>;
-    //    fn new(Configuration) -> Result<Self>;
+    fn artefact_id(u: TremorURL) -> Result<ArtefactId>;
+    fn servant_id(u: TremorURL) -> Result<ServantId>;
 }
 
 impl Artefact for PipelineArtefact {
@@ -73,20 +87,38 @@ impl Artefact for PipelineArtefact {
     fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        if let Some(pipeline) = system.reg.find_pipeline(&id)? {
+        if let Some(pipeline) = system.reg.find_pipeline(id.clone())? {
             // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
             for (from, to) in mappings {
                 match to.resource_type() {
                     //TODO: Check that we really have the right ramp!
-                    Some(url::ResourceType::Offramp) => {
-                        if let Some(offramp) = system.reg.find_offramp(&to)? {
+                    Some(ResourceType::Offramp) => {
+                        if let Some(offramp) = system.reg.find_offramp(to.clone())? {
                             pipeline
                                 .addr
                                 .clone()
-                                .send(PipelineMsg::ConnectOfframp(from.clone(), to, offramp))
+                                .send(PipelineMsg::ConnectOfframp(
+                                    from.clone(),
+                                    to.clone(),
+                                    offramp,
+                                ))
+                                .map_err(|e| -> Error {
+                                    format!("Could not send to pipeline: {}", e).into()
+                                })?;
+                        } else {
+                            return Err(format!("Offramp {} not found", to).into());
+                        }
+                    }
+                    Some(ResourceType::Pipeline) => {
+                        info!("[Pipeline:{}] Linking port {} to {}", id, from, to);
+                        if let Some(p) = system.reg.find_pipeline(to.clone())? {
+                            pipeline
+                                .addr
+                                .clone()
+                                .send(PipelineMsg::ConnectPipeline(from.clone(), to.clone(), p))
                                 .map_err(|e| -> Error {
                                     format!("Could not send to pipeline: {:?}", e).into()
                                 })?;
@@ -95,7 +127,7 @@ impl Artefact for PipelineArtefact {
                         }
                     }
                     _ => {
-                        return Err("Source isn't a Offramp".into());
+                        return Err("Source isn't a Offramp or pipeline".into());
                     }
                 }
             }
@@ -108,20 +140,26 @@ impl Artefact for PipelineArtefact {
     fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        if let Some(pipeline) = system.reg.find_pipeline(&id)? {
+        if let Some(pipeline) = system.reg.find_pipeline(id.clone())? {
             for (from, to) in mappings {
                 match to.resource_type() {
-                    Some(url::ResourceType::Offramp) => {
+                    Some(ResourceType::Offramp) => {
                         pipeline
                             .addr
-                            .send(PipelineMsg::DisconnectOfframp(from.clone(), to))
+                            .send(PipelineMsg::Disconnect(from.clone(), to))
+                            .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
+                    }
+                    Some(ResourceType::Pipeline) => {
+                        pipeline
+                            .addr
+                            .send(PipelineMsg::Disconnect(from.clone(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     _ => {
-                        return Err("Source isn't an Offramp".into());
+                        return Err("Source isn't an Offramp or Pipeline".into());
                     }
                 }
             }
@@ -131,15 +169,17 @@ impl Artefact for PipelineArtefact {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<String> {
+    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+        id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
-            (Some(url::ResourceType::Pipeline), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
             _ => Err("URL does not contain a pipeline artifact id".into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<String> {
+    fn servant_id(mut id: TremorURL) -> Result<ServantId> {
+        id.trim_to_instance();
         match (&id.resource_type(), &id.instance()) {
-            (Some(url::ResourceType::Pipeline), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
             _ => Err("URL does not contain a pipeline servant id".into()),
         }
     }
@@ -171,14 +211,14 @@ impl Artefact for OfframpArtefact {
     fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
-        if let Some(offramp) = system.reg.find_offramp(id)? {
+        if let Some(offramp) = system.reg.find_offramp(id.clone())? {
             for (pipeline_id, _this) in mappings {
                 info!("Linking offramp {} to {}", id, pipeline_id);
-                if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id)? {
+                if let Some(pipeline) = system.reg.find_pipeline(pipeline_id.clone())? {
                     offramp.send(OfframpMsg::Connect {
                         id: pipeline_id,
                         addr: pipeline,
@@ -194,11 +234,11 @@ impl Artefact for OfframpArtefact {
     fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
-        if let Some(offramp) = system.reg.find_offramp(id)? {
+        if let Some(offramp) = system.reg.find_offramp(id.clone())? {
             let (tx, rx) = bounded(mappings.len());
             for (_this, pipeline_id) in mappings {
                 offramp.send(OfframpMsg::Disconnect {
@@ -217,15 +257,17 @@ impl Artefact for OfframpArtefact {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<String> {
+    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+        id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
-            (Some(url::ResourceType::Offramp), Some(id_s)) => Ok(id_s.to_string()),
-            _ => Err("URL does not contain a offramp artifact id".into()),
+            (Some(ResourceType::Offramp), Some(_)) => Ok(id),
+            _ => Err(format!("URL does not contain an offramp artifact id: {}", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<String> {
+    fn servant_id(mut id: TremorURL) -> Result<ServantId> {
+        id.trim_to_instance();
         match (&id.resource_type(), &id.instance()) {
-            (Some(url::ResourceType::Offramp), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Offramp), Some(_)) => Ok(id),
             _ => Err("URL does not contain a offramp servant id".into()),
         }
     }
@@ -256,16 +298,16 @@ impl Artefact for OnrampArtefact {
     fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        if let Some(onramp) = system.reg.find_onramp(&id)? {
+        if let Some(onramp) = system.reg.find_onramp(id.clone())? {
             // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
             for (_from, to) in mappings {
                 match to.resource_type() {
                     //TODO: Check that we really have the right onramp!
-                    Some(url::ResourceType::Pipeline) => {
-                        if let Some(pipeline) = system.reg.find_pipeline(&to)? {
+                    Some(ResourceType::Pipeline) => {
+                        if let Some(pipeline) = system.reg.find_pipeline(to.clone())? {
                             onramp.send(OnrampMsg::Connect(vec![(to.clone(), pipeline)]))?;
                         } else {
                             return Err(format!("Pipeline {:?} not found", to).into());
@@ -285,10 +327,10 @@ impl Artefact for OnrampArtefact {
     fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
-        if let Some(onramp) = system.reg.find_onramp(&id)? {
+        if let Some(onramp) = system.reg.find_onramp(id.clone())? {
             let mut links = Vec::new();
             let (tx, rx) = bounded(mappings.len());
             for to in mappings.values() {
@@ -311,15 +353,17 @@ impl Artefact for OnrampArtefact {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<String> {
+    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+        id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
-            (Some(url::ResourceType::Onramp), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Onramp), Some(_)) => Ok(id),
             _ => Err(format!("URL {} does not contain a onramp artifact id", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<String> {
+    fn servant_id(mut id: TremorURL) -> Result<ServantId> {
+        id.trim_to_instance();
         match (&id.resource_type(), &id.instance()) {
-            (Some(url::ResourceType::Onramp), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Onramp), Some(_id)) => Ok(id),
             _ => Err(format!("URL {} does not contain a onramp servant id", id).into()),
         }
     }
@@ -338,107 +382,132 @@ impl Artefact for BindingArtefact {
     fn link(
         &self,
         system: &World,
-        _id: &TremorURL,
+        id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         let mut pipelines: Vec<(TremorURL, TremorURL)> = Vec::new();
         let mut onramps: Vec<(TremorURL, TremorURL)> = Vec::new();
         let mut res = self.clone();
-        res.links.clear();
-        for (src, dsts) in self.links.clone() {
+        res.binding.links.clear();
+        for (src, dsts) in self.binding.links.clone() {
             // TODO: It should be validated ahead of time that every mapping has an instance!
             // * is a port
             // *  is a combination of on and offramp
-            if let Some(instance) = src.instance().clone() {
-                let instance = instance.trim_start_matches("%7B").trim_end_matches("%7D");
-                let from = if let Some(i) = mappings.get(instance) {
-                    let mut from = src.clone();
-                    from.set_instance(i.to_owned());
-                    from
-                } else {
-                    return Err(format!("Instance {} not found for src {}", instance, src).into());
-                };
+            if let Some(mut instance) = src.instance().clone() {
+                for (map_name, map_replace) in &mappings {
+                    let mut f = String::from("%7B");
+                    f.push_str(map_name.as_str());
+                    f.push_str("%7D");
+                    instance = instance.as_str().replace(f.as_str(), map_replace.as_str());
+                }
+                let mut from = src.clone();
+                from.set_instance(instance.to_owned());
                 let mut tos: Vec<TremorURL> = Vec::new();
                 for dst in dsts {
                     // TODO: It should be validated ahead of time that every mapping has an instance!
-                    if let Some(instance) = dst.instance().clone() {
+                    if let Some(mut instance) = dst.instance().clone() {
                         // Thisbecause it is an URL we have to use escape codes
-                        let instance = instance.trim_start_matches("%7B").trim_end_matches("%7D");
-                        if let Some(i) = mappings.get(instance) {
-                            let mut to = dst.clone();
-                            to.set_instance(i.to_owned());
-                            tos.push(to.clone());
-                            match (&from.resource_type(), &to.resource_type()) {
-                                //TODO: Check that we really have the right onramp!
-                                (
-                                    Some(url::ResourceType::Onramp),
-                                    Some(url::ResourceType::Pipeline),
-                                ) => onramps.push((from.clone(), to)),
-                                (
-                                    Some(url::ResourceType::Pipeline),
-                                    Some(url::ResourceType::Offramp),
-                                ) => pipelines.push((from.clone(), to)),
-                                (_, _) => {
-                                    return Err(
-                        "links require the from of onramp -> pipeline or pipelein -> offramp"
-                                            .into(),
-                                    );
-                                }
+                        for (map_name, map_replace) in &mappings {
+                            let mut f = String::from("%7B");
+                            f.push_str(map_name.as_str());
+                            f.push_str("%7D");
+                            instance = instance.as_str().replace(f.as_str(), map_replace.as_str());
+                        }
+                        let mut to = dst.clone();
+                        to.set_instance(instance);
+                        tos.push(to.clone());
+                        match (&from.resource_type(), &to.resource_type()) {
+                            //TODO: Check that we really have the right onramp!
+                            (Some(ResourceType::Onramp), Some(ResourceType::Pipeline)) => {
+                                onramps.push((from.clone(), to))
                             }
-                        } else {
-                            return Err(
-                                format!("Instance {} not found for dst {}", instance, dst).into()
-                            );
+                            (Some(ResourceType::Pipeline), Some(ResourceType::Offramp)) => {
+                                pipelines.push((from.clone(), to))
+                            }
+                            (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline)) => {
+                                pipelines.push((from.clone(), to))
+                            }
+                            (_, _) => {
+                                return Err(
+                                    "links require the from of onramp -> pipeline or pipelein -> offramp"
+                                        .into(),
+                                );
+                            }
                         };
                     }
                 }
-                res.links.insert(from, tos);
+                res.binding.links.insert(from, tos);
             }
         }
 
         for (from, to) in pipelines {
-            if system.reg.find_offramp(&to)?.is_none() {
-                info!("Offramp not found during binding process, binding {} to create a new instance.", &to);
-                system.bind_offramp(&to)?;
-            }
-            if system.reg.find_pipeline(&from)?.is_none() {
+            info!("Binding {} to {}", from, to);
+            match to.resource_type() {
+                Some(ResourceType::Offramp) => {
+                    if system.reg.find_offramp(to.clone())?.is_none() {
+                        info!("Offramp not found during binding process, binding {} to create a new instance.", &to);
+                        system.bind_offramp(to.clone())?;
+                    } else {
+                        info!("Existing offramp {} found", to);
+                    }
+                }
+                Some(ResourceType::Pipeline) => {
+                    if system.reg.find_pipeline(to.clone())?.is_none() {
+                        info!("Pipeline not found during binding process, binding {} to create a new instance.", &to);
+                        system.bind_pipeline(to.clone())?;
+                    } else {
+                        info!("Existing pipeline {} found", to);
+                    }
+                }
+                _ => (),
+            };
+            if system.reg.find_pipeline(from.clone())?.is_none() {
                 info!(
                     "Pipeline (src) not found during binding process, binding {} to create a new instance.",
-                    &from
+                    from
                 );
-                system.bind_pipeline(&from)?;
+                system.bind_pipeline(from.clone())?;
             }
-            system.link_pipeline(
-                &from,
-                hashmap! {from.instance_port().unwrap().to_string() =>  to.clone()},
-            )?;
-            system.link_offramp(&to.clone(), hashmap! {from =>  to})?;
+            system.link_pipeline(from.clone(), hashmap! { from
+                                                          .instance_port()
+                                                          .ok_or_else(|| Error::from(format!("{} is missing an instnace port", from)))? =>  to.clone()})?;
+            match to.resource_type() {
+                Some(ResourceType::Offramp) => {
+                    system.link_offramp(to.clone(), hashmap! {from =>  to})?;
+                }
+                Some(ResourceType::Pipeline) => {
+                    //TODO: How to reverse link onramps
+                    warn!("Linking pipelines is currently only supported for system pipelines!")
+                }
+                _ => (),
+            }
         }
 
         for (from, to) in onramps {
-            if system.reg.find_pipeline(&to)?.is_none() {
-                info!("Pipeline (dst) not found during binding process, binding {} to create a new instance.", &to);
-                system.bind_pipeline(&to)?;
+            if system.reg.find_pipeline(to.clone())?.is_none() {
+                info!("Pipeline (dst) not found during binding process, binding {} to create a new instance.", to);
+                system.bind_pipeline(to.clone())?;
             }
-            if system.reg.find_onramp(&from)?.is_none() {
+            if system.reg.find_onramp(from.clone())?.is_none() {
                 info!(
                     "Onramp not found during binding process, binding {} to create a new instance.",
-                    &from
+                    from
                 );
-                system.bind_onramp(&from)?;
+                system.bind_onramp(from.clone())?;
             }
             system.link_onramp(
-                &from,
-                hashmap! {from.instance_port().unwrap().to_string() =>  to},
+                from.clone(),
+                hashmap! { from.instance_port().ok_or_else(|| Error::from(format!("{} is missing an instnace port", from)))? =>  to},
             )?;
         }
+        res.mapping = Some(hashmap! {id => mappings});
         Ok(res)
     }
 
     fn unlink(
         &self,
         system: &World,
-        _id: &TremorURL,
+        _id: TremorURL,
         _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
         // TODO Quiescence Protocol ( termination correctness checks )
@@ -457,39 +526,50 @@ impl Artefact for BindingArtefact {
         // post-quiescence cleanup logic can hook off / block on etc...
         //
 
-        for (from, to) in &self.links {
-            if from.resource_type() == Some(url::ResourceType::Onramp) {
+        for (from, to) in &self.binding.links {
+            if from.resource_type() == Some(ResourceType::Onramp) {
                 let mut mappings = HashMap::new();
                 for p in to {
-                    mappings.insert(from.instance_port().unwrap(), p.clone());
+                    mappings.insert(
+                        from.instance_port().ok_or_else(|| {
+                            Error::from(format!("{} is missing an instnace port", from))
+                        })?,
+                        p.clone(),
+                    );
                 }
-                system.unlink_onramp(from, mappings)?;
+                system.unlink_onramp(from.clone(), mappings)?;
             }
         }
-        for (from, tos) in &self.links {
-            if from.resource_type() == Some(url::ResourceType::Pipeline) {
+        for (from, tos) in &self.binding.links {
+            if from.resource_type() == Some(ResourceType::Pipeline) {
                 for to in tos {
                     let mut mappings = HashMap::new();
-                    mappings.insert(from.instance_port().unwrap(), to.clone());
-                    system.unlink_pipeline(from, mappings)?;
+                    if let Some(port) = from.instance_port() {
+                        mappings.insert(port, to.clone());
+                    } else {
+                        error!("{} is missing an instnace port", from)
+                    }
+                    system.unlink_pipeline(from.clone(), mappings)?;
                     let mut mappings = HashMap::new();
                     mappings.insert(to.clone(), from.clone());
-                    system.unlink_offramp(to, mappings)?;
+                    system.unlink_offramp(to.clone(), mappings)?;
                 }
             }
         }
         Ok(true)
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<String> {
+    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+        id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
-            (Some(url::ResourceType::Binding), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Binding), Some(_)) => Ok(id),
             _ => Err(format!("URL {} does not contain a binding artifact id", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<String> {
+    fn servant_id(mut id: TremorURL) -> Result<ServantId> {
+        id.trim_to_instance();
         match (&id.resource_type(), &id.instance()) {
-            (Some(url::ResourceType::Binding), Some(id)) => Ok(id.to_string()),
+            (Some(ResourceType::Binding), Some(_id)) => Ok(id),
             _ => Err(format!("URL {} does not contain a binding servant id", id).into()),
         }
     }
