@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::dflt;
-use crate::onramp::prelude::*;
 use crate::errors::*;
+use crate::onramp::prelude::*;
 
 //NOTE: This is required for StreamHander's stream
 use futures::stream::Stream;
@@ -201,13 +201,19 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
         };
 
         if let Ok(m) = m {
-            let m = m?;
-            if let Some(data) = m.payload_view::<[u8]>() {
-                let data = data.map_err(|_e| Error::from("failed to fetch data from kafka"))?;
-                id += 1;
-                send_event(&pipelines, &codec, id, EventValue::Raw(data.to_vec()));
+            if let Ok(m) = m {
+                if let Some(data) = m.payload_view::<[u8]>() {
+                    if let Ok(data) = data {
+                        id += 1;
+                        send_event(&pipelines, &codec, id, EventValue::Raw(data.to_vec()));
+                    } else {
+                        error!("failed to fetch data from kafka")
+                    }
+                } else {
+                    error!("No data in kafka message");
+                }
             } else {
-                error!("No data in kafka message");
+                error!("Failed to fetch kafka message.");
             }
         }
     }
