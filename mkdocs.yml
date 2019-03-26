@@ -41,4 +41,6 @@ nav:
   - Development:
     - 'Quick Start Guide': QuickStart.md
     - Profiling: Profiling.md
+    - 'Debugging with LLDB': Debugging.md
+    - Benchmarking: Benchmarking.md
   - 'Glossary': Glossary.md

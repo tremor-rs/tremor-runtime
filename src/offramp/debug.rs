@@ -23,10 +23,10 @@
 
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
-use crate::{Event, OpConfig};
 use crate::errors::*;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::{Event, OpConfig};
 use hashbrown::HashMap;
 use std::time::{Duration, Instant};
 

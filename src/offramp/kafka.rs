@@ -21,12 +21,12 @@
 //! See [Config](struct.Config.html) for details.
 
 use super::{Offramp, OfframpImpl};
-use crate::dflt;
 use crate::codec::Codec;
-use crate::{Event, OpConfig};
+use crate::dflt;
 use crate::errors::*;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::{Event, OpConfig};
 use futures::Future;
 use hashbrown::HashMap;
 use hostname::get_hostname;

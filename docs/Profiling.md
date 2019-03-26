@@ -57,4 +57,22 @@ $ RUST_BACKTRACE=1 PROFILEFREQUENCY=1000 valgrind --tool=callgrind \
 
 Note: When using a **release** build make sure debug symbols are configured in Cargo.toml and enable link time optimisations ( LTO )
 
+## Flamegraphs
 
+Install rust flamegraph support
+
+```bash
+$ cargo install flamegraph
+```
+
+Perform a benchmark run with flamegraph support ( on Mac OS X )
+
+```bash
+$ flamegraph target/release/tremor-server -c bench/real-workflow-througput-json.yaml bench/link.yaml
+```
+
+This generates a `flamegraph.svg` file which can be opened in Chrome
+
+```bash
+$ open flamegraph.svg
+```

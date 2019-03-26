@@ -1,0 +1,14 @@
+agents:
+  queue: "docker"
+
+steps:
+  - command: .buildkite/scripts/test.sh
+    agents:
+      queue: "docker"
+    plugins:
+      - ssh://git@git.csnzoo.com/wayfair/docker-buildkite-plugin.git:
+          image: "wayfair/tremor/dataeng-rust:1.33.0"
+
+env:
+  GITLAB_API_TOKEN: "A Super Real Token"
+

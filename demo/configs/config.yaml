@@ -4,7 +4,7 @@ onramp:
     config:
       source: data/data.json.xz
       interval: 4000000 # 250 events/s
-    codec: pass
+    codec: json
   - id: kafka-in
     type: kafka
     codec: json
@@ -12,18 +12,24 @@ onramp:
       brokers:
         - kafka:9092
       topics:
-        - demo
+        - info
+        - error
         - snotbadger
       group_id: demo
 
 offramp:
-  - id: kafka-out
+  - id: kafka-error
     type: kafka
-    codec: pass
     config:
       brokers:
         - kafka:9092
-      topic: demo
+      topic: error
+  - id: kafka-info
+    type: kafka
+    config:
+      brokers:
+        - kafka:9092
+      topic: info
   - id: debug
     type: debug
   - id: elastic
@@ -39,21 +45,46 @@ offramp:
         - http://influx:8086/write?db=tremor
       headers:
         'Client': 'Tremor'
-      
-      
+
 pipeline:
-  - id: loadgen
+  - id: loadgen-info
     interface:
       inputs:
         - in
       outputs:
         - out
     nodes:
-      - id: p
-        op: passthrough
+      - id: r                                    # We run a tremor_script script with two rules on it
+        op: runtime::tremor
+        config:
+          script: |
+            export class, rate;
+            short_message=g"*info*" { $class := "info"; $rate := 1000; return; }
+      - id: b
+        op: grouper::bucket
     links:
-      in: [ p ]
-      p : [ out ]
+      in: [ r ]
+      r: [ b ]
+      b : [ out ]
+  - id: loadgen-error
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r                                    # We run a tremor_script script with two rules on it
+        op: runtime::tremor
+        config:
+          script: |
+            export class, rate;
+            short_message=g"*ERROR*" { $class := "error"; $rate := 1000; return; }
+      - id: b
+        op: grouper::bucket
+    links:
+      in: [ r ]
+      r: [ b ]
+      b : [ out ]
   - id: enrich
     interface:
       inputs:
@@ -90,11 +121,11 @@ pipeline:
             # The first class we define is named `info`,
             # it matches if `short_message`  contains the string `"info"`
             # we configure it to have a rate of 10 events/s 
-            short_message:"info" { $class := "info"; $rate := 10; return; }
+            short_message=g"*info*" { $class := "info"; $rate := 10; return; }
             # The second class we define is `error`, it matches
             # if  `short_message` contains the string `"ERROR`
             # we configure it to have a rate of 100 events/s 
-            short_message:"ERROR" { $class := "error"; $rate := 100; return; }
+            short_message=g"*ERROR*" { $class := "error"; $rate := 100; return; }
             # The _ denotes that this will match every event. Since we use 'return'
             # in the previous rules we know that only events that didn't match another
             # rule will arrive here. We're setting class and rate here to 'defaut' and
@@ -118,10 +149,14 @@ pipeline:
       batch: [ out ]
 
 binding:
-  - id: loadgen
+  - id: loadgen-info
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen/{instance}/in' ]
-      '/pipeline/loadgen/{instance}/out': [ '/offramp/kafka-out/{instance}/in' ]
+      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen-info/{instance}/in' ]
+      '/pipeline/loadgen-info/{instance}/out': [ '/offramp/kafka-info/{instance}/in' ]
+  - id: loadgen-error
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen-error/{instance}/in' ]
+      '/pipeline/loadgen-error/{instance}/out': [ '/offramp/kafka-error/{instance}/in' ]
   - id: demo
     links:
       '/onramp/kafka-in/{instance}/out': [ '/pipeline/demo/{instance}/in' ]

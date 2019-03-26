@@ -12,7 +12,7 @@ services:
       - '9092:9092'
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
-      KAFKA_CREATE_TOPICS: "demo:1:1"
+      KAFKA_CREATE_TOPICS: "info:1:1,error:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
   elastic:

@@ -145,15 +145,13 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
     //
     // This is terrible :/
     let mut id = 0;
+    let mut good_topics = Vec::new();
     for topic in topics {
         match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
             Ok(m) => {
                 let errors: Vec<_> = m.topics().iter().map(|t| t.error()).collect();
                 match errors.as_slice() {
-                    [None] => match consumer.subscribe(&[topic]) {
-                        Ok(()) => info!("Subscribed to topic: {}", topic),
-                        Err(e) => error!("Kafka error for topic '{}': {}", topic, e),
-                    },
+                    [None] => good_topics.push(topic),
                     [Some(e)] => {
                         error!("Kafka error for topic '{}': {:?}. Not subscring!", topic, e)
                     }
@@ -163,6 +161,11 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
             Err(e) => error!("Kafka error for topic '{}': {}. Not subscring!", topic, e),
         };
     }
+
+    match consumer.subscribe(&good_topics) {
+        Ok(()) => info!("Subscribed to topics: {:?}", good_topics),
+        Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
+    };
 
     // We do this twice so we don't consume a message from kafka and then wait
     // as this could lead to timeouts

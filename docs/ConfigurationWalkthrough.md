@@ -188,6 +188,12 @@ $ tremor-tool api pipeline list metronome-pipeline.yaml
 $ tremor-tool api binding list metronome-binding.yaml
 ```
 
+## Limitations
+
+Live deployments via the API only work with a single entity and passing a list using the API isn't supported. In order to achieve that you can use ['Static or Bootstrap Deployments](./Configuration/Static or Bootstrap deployments) 
+
+
+
 ## Deployment
 
 Once all artefacts are published into the tremor repository we are ready to
@@ -223,5 +229,4 @@ Deploy via tremor-tool:
 
 ```bash
 $ tremor-tool api binding activate default walkthrough metronome-mapping.yaml
-```
 ```

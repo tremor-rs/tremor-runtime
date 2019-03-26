@@ -26,7 +26,7 @@ can be one of:
 
 Specifications for onramps, offramps, pipelines and bindings in tremor should be
 considered templates. They are stored in an internal tremor *repository*. A tremor
-repository stores artefacts, much like git repositories store code.
+repository stores artefacts, much like git repositories qcode.
 
 Live onramps, offramps and pipelines in tremor are in a runnable state. They consume
 typically network bandwidth and some compute in the case of onramps and offramps. They
@@ -121,6 +121,30 @@ binding:
     links:
       '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]  
+```
+
+Static deployements support multip[le configurations. You can specify multiple configurations by using a list in the config instead of specifying one item as illustrated below:
+
+```yaml
+onramp:
+  - id: kafka-in
+    type: kafka
+    codec: json
+    config:
+      brokers:
+        - kafka:9092
+      topics:
+        - demo
+      group_id: demo
+  - id: kafka-again
+    type: kafka
+    codec: json
+    config:
+      brokers:
+        - kafka:9092
+      topics:
+        - snotbadger
+      group_id: demo
 ```
 
 This file 'loads' the repository on startup with various specifications or templates, but it doesn't do anything. For that, we need to define one or many instances for tremor to deploy. This is done in the reg.yaml file:

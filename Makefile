@@ -40,7 +40,7 @@ doc: force
 
 bench: force
 	cargo build --release --features bench
-	for f in bench/*.sh; do $$f; done
+	./bench/all.sh | tee bench-`date +%s`.txt
 
 force:
 	true
