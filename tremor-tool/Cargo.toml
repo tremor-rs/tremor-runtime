@@ -26,3 +26,4 @@ log = "0.4"
 log4rs = "0.8"
 hashbrown = { version = "0.1", features = ["serde"] }
 http = "0.1"
+dirs = "1.0.5"

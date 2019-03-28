@@ -1,5 +1,4 @@
 #!/bin/bash
-./bench/run bench7
 ./bench/run empty-pipeline-influx
 ./bench/run empty-pipeline-json
 ./bench/run empty-pipeline-msgpack

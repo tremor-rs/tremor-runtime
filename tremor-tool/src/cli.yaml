@@ -56,6 +56,26 @@ subcommands:
         subcommands:
           - version:
               about: Get tremor version
+          - target:
+              about: Target one or many tremor server instances
+              subcommands:
+                - list:
+                    about: List registered targets
+                - create:
+                    about: Create a new API target
+                    args:
+                      - TARGET_ID:
+                          help: The unique target id for the targetted tremor servers
+                          required: true
+                      - SOURCE:
+                          help: JSON or YAML file request body
+                          required: true
+                - delete:
+                    about: Delete an existing API target
+                    args:
+                      - TARGET_ID:
+                          help: The unique target id for the targetted tremor servers
+                          required: true
           - binding:
               about: Query/update binding specification repository
               subcommands:

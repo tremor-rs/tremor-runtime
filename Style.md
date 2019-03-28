@@ -1,7 +1,10 @@
 # General style guide
 
 ## unwrap
-In runtime code the the use of unwrap & friends is forbidden. Instead errors should be chekced and a proper Result returned or error printed.
+In the runtime code the use of unwrap & friends is forbidden as they do not provide
+hygienic errors to developers.
+
+Instead errors should be checked and a proper Result returned or error printed.
 
 
 ### In functions

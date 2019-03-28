@@ -1,4 +1,4 @@
-### Remnve element form a vector:
+### Remove element from a vector:
 
 ```rust
 self.pipelines.retain(|item| item != to_delete)
@@ -13,7 +13,8 @@ for (idx, in_port) in outgoing  {
 }
 ```
 
-becomes 
+becomes:
+
 ```rust
 let len = outgoing.len();
 for (idx, in_port) in outgoing.iter().take(len - 1) {
