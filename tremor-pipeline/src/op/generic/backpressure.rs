@@ -26,11 +26,9 @@
 //! be discarded.
 
 use crate::errors::*;
-use crate::utils::duration_to_millis;
 use crate::{Event, Operator};
 use serde_json::{self, Value};
 use serde_yaml;
-use std::time::Instant;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -48,7 +46,7 @@ pub struct Config {
 pub struct Backpressure {
     config: Config,
     backoff: u64,
-    last_pass: Instant,
+    last_pass: u64,
 }
 
 fn d_steps() -> Vec<u64> {
@@ -58,8 +56,10 @@ fn d_steps() -> Vec<u64> {
 impl Backpressure {
     pub fn next_backoff(&mut self) {
         for backoff in &self.config.steps {
-            if *backoff > self.backoff {
-                self.backoff = *backoff;
+            // convert backoff to ns
+            let b = *backoff * 1_000_000;
+            if b > self.backoff {
+                self.backoff = b;
                 break;
             }
         }
@@ -71,7 +71,7 @@ op!(BackpressureFactory(node) {
         Ok(Box::new(Backpressure {
             config: serde_yaml::from_value(map.clone())?,
             backoff: 0,
-            last_pass: Instant::now(),
+            last_pass: 0,
         }))
     } else {
         Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
@@ -80,10 +80,11 @@ op!(BackpressureFactory(node) {
 
 impl Operator for Backpressure {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        let d = duration_to_millis(self.last_pass.elapsed());
-        if d <= self.backoff {
+        let d = event.ingest_ns - self.last_pass;
+        if d < self.backoff {
             Ok(vec![("overflow".to_string(), event)])
         } else {
+            self.last_pass = event.ingest_ns;
             Ok(vec![("out".to_string(), event)])
         }
     }
@@ -104,4 +105,214 @@ impl Operator for Backpressure {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{EventValue, MetaMap};
+    use serde_json::json;
+
+    #[test]
+    fn pass_wo_error() {
+        let mut op = Backpressure {
+            config: Config {
+                timeout: 100.0,
+                steps: vec![1, 10, 100],
+            },
+            backoff: 0,
+            last_pass: 0,
+        };
+
+        // Sent a first event, as all is initited clean
+        // we syould see this pass
+        let event1 = Event {
+            is_batch: false,
+            id: 1,
+            ingest_ns: 1,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("snot")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event1.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+
+        // Without a timeout event sent a second event,
+        // it too should pass
+        let event2 = Event {
+            is_batch: false,
+            id: 2,
+            ingest_ns: 2,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("badger")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event2.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+    }
+
+    #[test]
+    fn block_on_error() {
+        let mut op = Backpressure {
+            config: Config {
+                timeout: 100.0,
+                steps: vec![1, 10, 100],
+            },
+            backoff: 0,
+            last_pass: 0,
+        };
+
+        // Sent a first event, as all is initited clean
+        // we syould see this pass
+        let event1 = Event {
+            is_batch: false,
+            id: 1,
+            ingest_ns: 1_000_000,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("snot")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event1.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+
+        // Insert a timeout event with `time` set top `200`
+        // this is over our limit of `100` so we syould move
+        // one up the backup steps
+        let mut m = MetaMap::new();
+        m.insert("time".into(), json!(200.0));
+        let mut insight = Event {
+            is_batch: false,
+            id: 1,
+            ingest_ns: 2,
+            meta: m,
+            value: EventValue::None,
+            kind: None,
+        };
+
+        // Verify that we now have a backoff of 1ms
+        op.on_contraflow(&mut insight);
+        assert_eq!(op.backoff, 1_000_000);
+
+        // The first event was sent at exactly 1ms
+        // our we should block all eventsup to
+        // 1_999_999
+        // this event syould overflow
+        let event2 = Event {
+            is_batch: false,
+            id: 2,
+            ingest_ns: 2_000_000 - 1,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("badger")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event2.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("overflow", out);
+
+        // On exactly 2_000_000 we should be allowed to send
+        // again
+        let event3 = Event {
+            is_batch: false,
+            id: 3,
+            ingest_ns: 2_000_000,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("badger")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event3.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+
+        // Since now the last successful event was at 2_000_000
+        // the next event should overflow at 2_000_001
+        let event3 = Event {
+            is_batch: false,
+            id: 3,
+            ingest_ns: 2_000_000 + 1,
+            meta: MetaMap::new(),
+            value: EventValue::JSON(json!("badger")),
+            kind: None,
+        };
+        let mut r = op
+            .on_event("in", event3.clone())
+            .expect("could not run pipeline");
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("overflow", out);
+    }
+
+    #[test]
+    fn walk_backoff() {
+        let mut op = Backpressure {
+            config: Config {
+                timeout: 100.0,
+                steps: vec![1, 10, 100],
+            },
+            backoff: 0,
+            last_pass: 0,
+        };
+        // An contraflow that fails the timeout
+        let mut m = MetaMap::new();
+        m.insert("time".into(), json!(200.0));
+
+        let mut insight = Event {
+            is_batch: false,
+            id: 1,
+            ingest_ns: 2,
+            meta: m,
+            value: EventValue::None,
+            kind: None,
+        };
+
+        // A contraflow that passes the timeout
+        let mut m = MetaMap::new();
+        m.insert("time".into(), json!(99.0));
+
+        let mut insight_reset = Event {
+            is_batch: false,
+            id: 1,
+            ingest_ns: 2,
+            meta: m.clone(),
+            value: EventValue::None,
+            kind: None,
+        };
+
+        // Assert initial state
+        assert_eq!(op.backoff, 0);
+        // move one step up
+        op.on_contraflow(&mut insight);
+        assert_eq!(op.backoff, 1_000_000);
+        // move another step up
+        op.on_contraflow(&mut insight);
+        assert_eq!(op.backoff, 10_000_000);
+        // move another another step up
+        op.on_contraflow(&mut insight);
+        assert_eq!(op.backoff, 100_000_000);
+        // We are at the highest step everything
+        // should stay  the same
+        op.on_contraflow(&mut insight);
+        assert_eq!(op.backoff, 100_000_000);
+        // Now we should reset
+        op.on_contraflow(&mut insight_reset);
+        assert_eq!(op.backoff, 0);
+    }
+
 }

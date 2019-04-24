@@ -43,7 +43,6 @@ pub mod errors;
 #[macro_use]
 mod macros;
 mod op;
-mod utils;
 
 pub use op::runtime::tremor::Context as TremorContext;
 pub use op::{InitializableOperator, Operator};
