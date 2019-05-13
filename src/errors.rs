@@ -17,10 +17,7 @@ use crate::async_sink;
 use actix;
 use base64;
 use elastic;
-use error_chain::{
-    error_chain, error_chain_processing, impl_error_chain_kind, impl_error_chain_processed,
-    impl_extract_backtrace,
-};
+use error_chain::*;
 use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
 use prometheus;
