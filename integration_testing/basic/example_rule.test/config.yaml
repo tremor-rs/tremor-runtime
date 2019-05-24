@@ -23,9 +23,12 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, rate;
-            short_message=g"*INFO*"  { $class := "info"; $rate := 2; return; }
-            short_message=g"*ERROR*" { $class := "error"; $rate := 3; return; }
+            match event of
+              case %{short_message ~= glob|*INFO*|} => let $class = "info", let $rate = 2
+              case %{short_message ~= glob|*ERROR*|} => let $class = "error", let $rate = 3
+              default => let $m = event.short_message
+            end;
+            event;
       - id: b
         op: grouper::bucket
     links:

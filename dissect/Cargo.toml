@@ -1,0 +1,8 @@
+[package]
+name = "dissect"
+version = "0.1.0"
+authors = ["= <dcaetanodesouza@wayfair.com>"]
+edition = "2018"
+
+[dependencies]
+halfbrown = "0.1"

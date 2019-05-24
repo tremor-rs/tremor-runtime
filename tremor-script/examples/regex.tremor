@@ -1,0 +1,4 @@
+drop match { "test": "http://example.com/", "footle": "bar" } ->
+  case foo := %{ test ~= re|^http://.*/$|, footle == "bar" } => foo
+  default => "ko"
+end

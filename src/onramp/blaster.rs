@@ -47,7 +47,9 @@ impl OnrampImpl for Blaster {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let mut source_data_file = File::open(&config.source)?;
             let mut data = vec![];
-            let ext = Path::new(&config.source).extension().map(|x| x.to_str());
+            let ext = Path::new(&config.source)
+                .extension()
+                .map(std::ffi::OsStr::to_str);
             if ext == Some(Some("xz")) {
                 XzDecoder::new(source_data_file)
                     .read_to_end(&mut data)
@@ -135,7 +137,7 @@ fn onramp_loop(
         }
 
         if let Some(data) = acc.consuming.pop() {
-            send_event(&pipelines, &codec, id, EventValue::Raw(data));
+            send_event(&pipelines, &codec, id, data);
             id += 1;
         }
     }

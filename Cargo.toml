@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.4.2"
+version = "0.5.0-alpha1"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -16,55 +16,45 @@ members = [
     "property_testing",
     "tremor-pipeline",
     "tremor-api",
+    "dissect",
+    "kv"
+
 ]
 
 [profile.release]
-lto = true
+debug = true
+lto = false
 opt-level = 3
 
 [dependencies]
-hashbrown = { version = "0.1", features = ["serde"] }
-rmp-serde = "0.13"
 actix = "0.7"
-actix-web = { version = "0.7", features = ["alpn"] }
 base64 = "0.9"
-bytes = "0.4"
 chrono = "0.4"
-clap = { version = "2.27", features = ["yaml"] }
-dot = "0.1"
 elastic = "0.20"
-env_logger = "0.5"
 error-chain="0.12"
 futures = "0.1"
+hashbrown = { version = "0.2", features = ["serde"] }
 hostname = "0.1"
-lazy_static = "0.2"
 libc = "0.2"
-log = "0.4"
-#maplit = "1"
-maplit = { git = "https://github.com/Licenser/maplit", branch="hashbrown", features=["hashbrown"] }
-openssl = { version="0.10" }
-prometheus = { version = "0.4", features = ["process"] }
-rand = "0.5"
-reqwest = "0.9"
-serde = "1"
-serde_derive = "1"
-serde_json = { git = "https://github.com/Licenser/json", branch="hashbrown", features=["hashbrown"] }
-serde_yaml = "0.8"
-threadpool = "1"
-uuid = { version = "0.7", features = ["serde", "v4"] }
-window = { path = "window" }
-tremor-pipeline = { path = "tremor-pipeline" }
-tokio = "0.1"
-url = "1"
 log4rs = "0.8"
+rental = "0.5"
+reqwest = "0.9"
+rmp-serde = "0.13"
+serde = "1"
+serde_json = "1"
+serde_yaml = "0.8"
+simd-json = "0.1"
+threadpool = "1"
+tremor-pipeline = { path = "tremor-pipeline" }
+url = "1"
+log = "0.4"
+serde_derive = "1"
+lazy_static = "0.2"
 tokio-threadpool = "0.1"
-futures-channel = "0.2"
-futures-timer = "0.1"
-tokio-sync = "0.1"
+halfbrown = "0.1"
 
 # will be in new graph
 tremor-script = { path = "tremor-script" }
-lru = "0.1"
 
 crossbeam-channel = "0.3"
 
@@ -73,32 +63,44 @@ xz2 = {version = "0.1", optional = true }
 hdrhistogram = {version = "6", optional = true }
 
 # file
-notify = { version = "4", optional = true}
+# notify = { version = "4", optional = true}
 
 # php
-php = { version = "0.1", optional=true }
+# php = { version = "0.1", optional=true }
 
 # mssql
-tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"], optional = true }
-futures-state-stream = {version = "0.1", optional=true}
-tokio-current-thread = {version = "0.1", optional=true}
+# tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"], optional = true }
+# futures-state-stream = {version = "0.1", optional=true}
+# tokio-current-thread = {version = "0.1", optional=true}
 
 # kafka
-rdkafka = {version = "0.17", optional = true}
-rdkafka-sys = {version = "0.11.4-0", optional = true}
-#rdkafka = {version = "0.20", optional = true}
-#rdkafka-sys = {version = "0.11.6-1", optional = true}
+rdkafka = {version = "0.21", optional = true}
+rdkafka-sys = {version = "1", optional = true}
 
 #Google cloud stuff
-google-storage1 = "1"
-google-pubsub1 = "1"
-hyper-rustls = "0.6"
-yup-oauth2 = "1"
+# google-storage1 = "1"
+# google-pubsub1 = "1"
+# hyper-rustls = "0.6"
+# yup-oauth2 = "1"
 
 # This project intentionally uses an old version of Hyper. See
 # https://github.com/Byron/google-apis-rs/issues/173 for more
 # information.
-hyper = "0.10"
+# hyper = "0.10"
+
+# logstash grok patterns
+grok = "1"
+
+## Unused dependencies
+# uuid = { version = "0.7", features = ["serde", "v4"] }
+# window = { path = "window" }
+# rand = "0.5"
+# actix-web = { version = "0.7", features = ["alpn"] }
+# bytes = "0.4"
+# futures-channel = "0.2"
+# futures-timer = "0.1"
+# openssl = { version="0.10" }
+# lru = "0.1"
 
 [dev-dependencies]
 matches = "0.1"
@@ -107,7 +109,10 @@ criterion = "0.2"
 [features]
 default = ["mssql", "kafka", "bench"]
 kafka = ["rdkafka", "rdkafka-sys" ]
-mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 bench = ["xz2", "hdrhistogram" ]
-php-runtime = ["php"]
-drop_copy = ["notify"]
+php-runtime = []
+mssql = []
+drop_copy = []
+#mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
+# php-runtime = ["php"]
+# drop_copy = ["notify"]

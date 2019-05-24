@@ -6,28 +6,27 @@ edition = "2018"
 
 [dependencies]
 tremor-runtime = { path = "../" }
-tremor-script = { path = "../tremor-script" }
-tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-api = { path = "../tremor-api" }
-window = { path = "../window" }
-serde = "1"
-serde_derive = "1"
-serde_json = { git = "https://github.com/Licenser/json", branch="hashbrown", features=["hashbrown"] }
 serde_yaml = "0.8"
-uuid = { version = "0.7", features = ["serde", "v4"]}
-prometheus = { version = "0.4", features = ["process"] }
-lazy_static = "0.2"
-error-chain="0.12"
-#maplit = "1"
-maplit = { git = "https://github.com/Licenser/maplit", branch="hashbrown", features=["hashbrown"] }
 clap = { version = "2.27", features = ["yaml"] }
-reqwest = "0.8"
 env_logger = "0.5"
 log = "0.4"
 log4rs = "0.8"
-actix = "0.7"
 actix-web = { version = "0.7", features = ["alpn"] }
 jemallocator = { version = "0.1", optional = true }
+
+#serde = "1"
+#serde_derive = "1"
+#serde_json = "1"
+#reqwest = "0.8"
+#prometheus = { version = "0.4", features = ["process"] }
+#tremor-script = { path = "../tremor-script" }
+#tremor-pipeline = { path = "../tremor-pipeline" }
+#actix = "0.7"
+#uuid = { version = "0.7", features = ["serde", "v4"]}
+#window = { path = "../window" }
+#lazy_static = "0.2"
+#error-chain="0.12"
 
 [features]
 default = ["jemallocator"]

@@ -15,8 +15,8 @@
 use crate::onramp::prelude::*;
 //NOTE: This is required for StreamHander's stream
 use crate::utils::nanotime;
-use serde_json::json;
 use serde_yaml::Value;
+use simd_json::json;
 use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -74,14 +74,11 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
             };
         }
         thread::sleep(Duration::from_millis(config.interval));
-        send_event(
-            &pipelines,
-            &codec,
-            id,
-            tremor_pipeline::EventValue::JSON(
-                json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}),
-            ),
-        );
+        let data =
+            serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
+        if let Ok(data) = data {
+            send_event(&pipelines, &codec, id, data);
+        }
         id += 1;
     }
 }
@@ -97,6 +94,6 @@ impl Onramp for Metronome {
     }
 
     fn default_codec(&self) -> &str {
-        "pass"
+        "json"
     }
 }

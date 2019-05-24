@@ -24,12 +24,11 @@ struct PipelineWrap {
 }
 
 pub fn list_artefact(req: HttpRequest<State>) -> ApiResult {
-    let res: Result<Vec<String>> = req
-        .state()
-        .world
-        .repo
-        .list_pipelines()
-        .map(|l| l.iter().filter_map(|v| v.artefact()).collect());
+    let res: Result<Vec<String>> = req.state().world.repo.list_pipelines().map(|l| {
+        l.iter()
+            .filter_map(tremor_runtime::url::TremorURL::artefact)
+            .collect()
+    });
     reply(req, res, false, 200)
 }
 
@@ -70,7 +69,11 @@ pub fn get_artefact((req, id): (HttpRequest<State>, Path<String>)) -> ApiResult 
         Some(res) => {
             let res: Result<PipelineWrap> = Ok(PipelineWrap {
                 artefact: res.artefact.pipeline.config,
-                instances: res.instances.iter().filter_map(|v| v.instance()).collect(),
+                instances: res
+                    .instances
+                    .iter()
+                    .filter_map(tremor_runtime::url::TremorURL::instance)
+                    .collect(),
             });
             reply(req, res, false, 200)
         }

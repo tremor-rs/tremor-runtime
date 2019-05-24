@@ -1,0 +1,5 @@
+match [ 1, 2, 3, 4, 5 , 2, 3, 4, 5 ] ->
+  case foo := %[ 2, 4 ] when false => foo[2][0][0] # BUG array [2][0] should == 5 ... extra [0]
+  case %[ 2, 4 ] => "ok"
+  default => "ko"
+end

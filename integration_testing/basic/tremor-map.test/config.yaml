@@ -23,7 +23,9 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-             _ { tremor.index_key := string::format("{}-{}", application, type); tremor.instance := system::instance(); }
+             let event.tremor.index_key = string::format("{}-{}", event.application, event.type);
+             let event.tremor.instance = system::instance();
+             event;
     links:
       in: [ r ]
       r: [ out ]

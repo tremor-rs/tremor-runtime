@@ -2,7 +2,7 @@
 -module(tremor_http).
 
 -export([new/1, get/2, get/3, post/3, put/3, url/2,
-        delete/2, delete/3, connect/1, close/1]).
+        delete/2, delete/3, connect/1, close/1, decode/1]).
 
 -export([take_last/1, full_list/1]).
 

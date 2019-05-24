@@ -11,8 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 extern crate lalrpop;
+extern crate version_check;
 
 fn main() {
-    lalrpop::process_root().expect("Failed to build grammer");
+    lalrpop::process_root().expect("Unable to initialize LALRPOP");
+
+    if version_check::is_nightly().unwrap_or(false) {
+        println!("cargo:rustc-cfg=can_join_spans");
+        println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
+    }
 }

@@ -1,0 +1,4 @@
+drop match { "snot": "badger" } ->
+  case foo := %{ snot ~= re|bar.*|, fleek := snot ~= grok|%{WORD:name}%{GREEDYDATA:optional}| } => "hit"
+#  default => .[match ... . ... let local := ... 
+end;

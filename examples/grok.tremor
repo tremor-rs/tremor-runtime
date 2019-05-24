@@ -1,0 +1,4 @@
+  _ {
+  instance := system::instance();
+  grokked := logstash::grok("%{WORD:beep} %{GREEDYDATA:boop}", line);
+}

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//NOTE: error_chain
 #![allow(deprecated)]
+#![allow(clippy::large_enum_variant)]
 
-use crate::ValueType;
 use error_chain::*;
-use serde_json;
 use serde_yaml;
 use std;
 impl<P> From<std::sync::PoisonError<P>> for Error {
@@ -31,13 +31,13 @@ error_chain! {
     }
     foreign_links {
         YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
-        JSONError(serde_json::Error);
+        JSONError(simd_json::Error);
+        SerdeError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
         FromUTF8Error(std::string::FromUtf8Error);
         UTF8Error(std::str::Utf8Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-
     }
 
     errors {
@@ -52,10 +52,6 @@ error_chain! {
         ExtraOpConfig(e: String) {
             description("Operator has extra config")
                 display("Operator {} has a config but can't be configured", e)
-        }
-        TypeError(l: String, expected: ValueType, got: ValueType) {
-            description("Type error")
-                display("expected type '{}' but found type '{}' in {}", expected, got, l)
         }
 
         UnknownOp(n: String, o: String) {

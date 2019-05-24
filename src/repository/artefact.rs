@@ -21,7 +21,6 @@ use crate::system::{PipelineAddr, PipelineMsg, World};
 use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
-use maplit::hashmap;
 
 pub type ArtefactId = TremorURL;
 pub use crate::OffRamp as OfframpArtefact;
@@ -468,12 +467,20 @@ impl Artefact for BindingArtefact {
                 );
                 system.bind_pipeline(from.clone())?;
             }
-            system.link_pipeline(from.clone(), hashmap! { from
-                                                          .instance_port()
-                                                          .ok_or_else(|| Error::from(format!("{} is missing an instnace port", from)))? =>  to.clone()})?;
+            system.link_pipeline(
+                from.clone(),
+                vec![(
+                    from.instance_port().ok_or_else(|| {
+                        Error::from(format!("{} is missing an instnace port", from))
+                    })?,
+                    to.clone(),
+                )]
+                .into_iter()
+                .collect(),
+            )?;
             match to.resource_type() {
                 Some(ResourceType::Offramp) => {
-                    system.link_offramp(to.clone(), hashmap! {from =>  to})?;
+                    system.link_offramp(to.clone(), vec![(from, to)].into_iter().collect())?;
                 }
                 Some(ResourceType::Pipeline) => {
                     //TODO: How to reverse link onramps
@@ -497,10 +504,17 @@ impl Artefact for BindingArtefact {
             }
             system.link_onramp(
                 from.clone(),
-                hashmap! { from.instance_port().ok_or_else(|| Error::from(format!("{} is missing an instnace port", from)))? =>  to},
+                vec![(
+                    from.instance_port().ok_or_else(|| {
+                        Error::from(format!("{} is missing an instnace port", from))
+                    })?,
+                    to,
+                )]
+                .into_iter()
+                .collect(),
             )?;
         }
-        res.mapping = Some(hashmap! {id => mappings});
+        res.mapping = Some(vec![(id, mappings)].into_iter().collect());
         Ok(res)
     }
 

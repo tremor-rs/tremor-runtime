@@ -26,8 +26,8 @@ use crate::codec::Codec;
 use crate::errors::*;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
-use crate::{Event, EventValue, OpConfig};
-use hashbrown::HashMap;
+use crate::{Event, OpConfig};
+use halfbrown::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct StdErr {
@@ -44,7 +44,7 @@ impl OfframpImpl for StdErr {
 impl Offramp for StdErr {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            if let Ok(EventValue::Raw(raw)) = codec.encode(event.value) {
+            if let Ok(raw) = codec.encode(event.value) {
                 match String::from_utf8(raw.to_vec()) {
                     Ok(s) => eprintln!("{}", s),
                     Err(_) => eprintln!("{:?}", raw),

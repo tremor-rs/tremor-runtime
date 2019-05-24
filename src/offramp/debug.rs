@@ -27,7 +27,8 @@ use crate::errors::*;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
-use hashbrown::HashMap;
+use halfbrown::HashMap;
+use simd_json::OwnedValue;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -70,13 +71,17 @@ impl Offramp for Debug {
                 println!();
                 self.buckets.clear();
             }
-            let c = if let Some(serde_json::Value::String(s)) = event.meta.get("class") {
-                s.clone()
+            let c = if let Some(OwnedValue::String(s)) = event.meta.get("class") {
+                s.to_string()
             } else {
                 "<unclassified>".into()
             };
-            let entry = self.buckets.entry(c).or_insert(DebugBucket { cnt: 0 });
-            entry.cnt += 1;
+            //TODO: return to entry
+            if let Some(entry) = self.buckets.get_mut(&c) {
+                entry.cnt += 1;
+            } else {
+                self.buckets.insert(c, DebugBucket { cnt: 1 });
+            }
             self.cnt += 1;
         }
     }

@@ -15,24 +15,20 @@
 use super::Codec;
 use crate::errors::*;
 use rmp_serde as rmps;
-use serde_json;
-use tremor_pipeline::EventValue;
+use tremor_script::LineValue;
 
 #[derive(Clone)]
 pub struct MsgPack {}
 
 impl Codec for MsgPack {
-    fn decode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::JSON(_) => Ok(data),
-            EventValue::Raw(data) => Ok(EventValue::JSON(rmps::from_slice(&data)?)),
-            EventValue::None => Ok(EventValue::JSON(serde_json::Value::Null)),
+    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+        let r = LineValue::try_new(Box::new(data), |data| rmps::from_slice(data));
+        match r {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e.0.into()),
         }
     }
-    fn encode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::JSON(data) => Ok(EventValue::Raw(rmps::to_vec(&data)?)),
-            _ => Err("Trying to encode non json data.".into()),
-        }
+    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
+        Ok(rmps::to_vec(&data)?)
     }
 }

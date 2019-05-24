@@ -18,7 +18,7 @@ use crate::onramp::prelude::*;
 
 //NOTE: This is required for StreamHander's stream
 use futures::stream::Stream;
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use hostname::get_hostname;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
@@ -130,7 +130,11 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
         .create_with_context(context)
         .expect("Consumer creation failed");
 
-    let topics: Vec<&str> = config.topics.iter().map(|topic| topic.as_str()).collect();
+    let topics: Vec<&str> = config
+        .topics
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
 
     let stream = consumer.start();
 
@@ -149,7 +153,11 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
     for topic in topics {
         match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
             Ok(m) => {
-                let errors: Vec<_> = m.topics().iter().map(|t| t.error()).collect();
+                let errors: Vec<_> = m
+                    .topics()
+                    .iter()
+                    .map(rdkafka::metadata::MetadataTopic::error)
+                    .collect();
                 match errors.as_slice() {
                     [None] => good_topics.push(topic),
                     [Some(e)] => {
@@ -208,7 +216,7 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
                 if let Some(data) = m.payload_view::<[u8]>() {
                     if let Ok(data) = data {
                         id += 1;
-                        send_event(&pipelines, &codec, id, EventValue::Raw(data.to_vec()));
+                        send_event(&pipelines, &codec, id, data.to_vec());
                     } else {
                         error!("failed to fetch data from kafka")
                     }

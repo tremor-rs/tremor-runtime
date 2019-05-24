@@ -14,9 +14,8 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-use serde_json::json;
-use serde_json::Value::Array as JsonArray;
 use serde_yaml;
+use simd_json::OwnedValue;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
@@ -46,13 +45,19 @@ struct EventHistory {
 impl Operator for EventHistory {
     fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
         match event.meta.get_mut(&self.config.name) {
-            Some(JsonArray(ref mut history)) => {
-                history.push(json!(format!("evt: {}({})", self.config.op, event.id)));
+            Some(OwnedValue::Array(ref mut history)) => {
+                history.push(OwnedValue::from(format!(
+                    "evt: {}({})",
+                    self.config.op, event.id
+                )));
             }
             None => {
                 event.meta.insert(
                     self.config.name.clone(),
-                    json!([format!("evt: {}({})", self.config.op, event.id)]),
+                    OwnedValue::Array(vec![OwnedValue::from(format!(
+                        "evt: {}({})",
+                        self.config.op, event.id
+                    ))]),
                 );
             }
             _ => (),
@@ -65,13 +70,19 @@ impl Operator for EventHistory {
     }
     fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
         match signal.meta.get_mut(&self.config.name) {
-            Some(JsonArray(ref mut history)) => {
-                history.push(json!(format!("sig: {}({})", self.config.op, signal.id)));
+            Some(OwnedValue::Array(ref mut history)) => {
+                history.push(OwnedValue::from(format!(
+                    "sig: {}({})",
+                    self.config.op, signal.id
+                )));
             }
             None => {
                 signal.meta.insert(
                     self.config.name.clone(),
-                    json!([format!("sig: {}({})", self.config.op, signal.id)]),
+                    OwnedValue::Array(vec![OwnedValue::from(format!(
+                        "sig: {}({})",
+                        self.config.op, signal.id
+                    ))]),
                 );
             }
             _ => (),
@@ -83,8 +94,9 @@ impl Operator for EventHistory {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::EventValue;
-    use hashbrown::HashMap;
+    use crate::MetaMap;
+    use simd_json::OwnedValue;
+    use tremor_script::Value;
 
     #[test]
     fn history_op_test() {
@@ -99,8 +111,8 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            meta: MetaMap::new(),
+            value: sjv!(Value::from("badger")),
             kind: None,
         };
 
@@ -115,7 +127,7 @@ mod test {
         let history = event.meta.get(&op.config.name);
 
         match history {
-            Some(JsonArray(ref history)) => {
+            Some(OwnedValue::Array(ref history)) => {
                 assert_eq!(2, history.len());
             }
             _ => assert!(false),

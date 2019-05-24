@@ -12,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-macro_rules! type_error {
-    ($location:expr, $got:expr, $want:expr) => {
-        Err(ErrorKind::TypeError($location.into(), $got, $want).into())
-    };
-}
-
 #[macro_export]
 macro_rules! op {
     ($factory:ident ($node:ident) $constructor:block) => {
@@ -39,5 +33,12 @@ macro_rules! op {
                 Box::new(Self::new())
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! sjv {
+    ($e:expr) => {
+        tremor_script::LineValue::new(Box::new(vec![]), |_| $e)
     };
 }

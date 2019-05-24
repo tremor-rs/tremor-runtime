@@ -1,0 +1,9 @@
+##
+## Documentation comments are single-line and consist of triple-slashes
+##
+
+#
+# Ordinary non-documentation comments are single-line and consist of double-slashes
+#
+
+null ;

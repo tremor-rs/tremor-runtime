@@ -6,15 +6,14 @@
     - name: GET /api-docs redirects to /api-docs/index.html
       command: curl -vs --stderr - http://localhost:9898/api-docs/
       stdout_has:
-        - HTTP/1.1 302 Found
-        - "location: /api-docs/index.html"
+        - HTTP/1.1 200 OK
 - name: REST API - Initial state after empty deployment
   entries:
     - name: GET /version
       command: curl -vs --stderr - http://localhost:9898/version
       stdout_has:
         - HTTP/1.1 200 OK
-        - '{"version":"0.4.0-rc.4"}'
+        - '{"version":"0.5.0-alpha1"}'
     - name: GET /onramp
       command: curl -vs --stderr - http://localhost:9898/onramp
       stdout_has:

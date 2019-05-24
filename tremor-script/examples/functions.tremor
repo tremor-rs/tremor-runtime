@@ -1,0 +1,9 @@
+##
+## Builtin function invovcation
+##
+
+let line := "FOO bar baz bogomips";
+match logstash::grok("${WORD:prefix}${GREEDYDATA:suffix}", line) ->
+    case %{ prefix == "beep" } => "boop"
+    default => "snot"
+end;

@@ -62,11 +62,11 @@
 //! ```
 
 use crate::errors::*;
-use crate::{Event, Operator};
-use hashbrown::HashMap;
+use crate::{Event, MetaMap, Operator};
+use halfbrown::HashMap;
 use lru::LruCache;
-use serde_json;
-use serde_json::{json, Value};
+use simd_json::{json, OwnedValue, ValueTrait};
+use std::borrow::Borrow;
 use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
@@ -91,33 +91,22 @@ pub struct Rate {
 }
 
 impl Rate {
-    pub fn from_meta(meta: &HashMap<String, serde_json::Value>) -> Option<Self> {
-        match meta.get("rate") {
-            Some(serde_json::Value::Number(rate)) if rate.is_u64() => {
-                if let Some(rate) = rate.as_u64() {
-                    let time_range = match meta.get("time_range") {
-                        Some(serde_json::Value::Number(time_range)) if time_range.is_u64() => {
-                            time_range.as_u64().unwrap_or(1000)
-                        }
-                        _ => 1000,
-                    };
-                    let windows: usize = match meta.get("windows") {
-                        Some(serde_json::Value::Number(windows)) if windows.is_u64() => {
-                            windows.as_u64().unwrap_or(100) as usize
-                        }
-                        _ => 100,
-                    };
-                    Some(Rate {
-                        rate,
-                        time_range,
-                        windows,
-                    })
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+    pub fn from_meta(meta: &MetaMap) -> Option<Self> {
+        let rate = meta.get("rate")?.as_u64()?;
+
+        let time_range = meta
+            .get("time_range")
+            .and_then(OwnedValue::as_u64)
+            .unwrap_or(1000);
+        let windows = meta
+            .get("windows")
+            .and_then(OwnedValue::as_u64)
+            .unwrap_or(100) as usize;
+        Some(Rate {
+            rate,
+            time_range,
+            windows,
+        })
     }
 }
 
@@ -149,18 +138,18 @@ impl std::fmt::Debug for BucketGrouper {
 
 impl Operator for BucketGrouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        if let Some(serde_json::Value::String(class)) = event.meta.get("class") {
-            let groups = match self.buckets.get_mut(class) {
+        if let Some(OwnedValue::String(class)) = event.meta.get("class") {
+            let groups = match self.buckets.get_mut(class.borrow() as &str) {
                 Some(g) => g,
                 None => {
-                    let cardinality = match event.meta.get("cardinality") {
-                        Some(serde_json::Value::Number(cardinality)) if cardinality.is_u64() => {
-                            cardinality.as_u64().unwrap_or(1000) as usize
-                        }
-                        _ => 1000,
-                    };
-                    self.buckets.insert(class.clone(), Bucket::new(cardinality));
-                    if let Some(g) = self.buckets.get_mut(class) {
+                    let cardinality = event
+                        .meta
+                        .get("cardinality")
+                        .and_then(OwnedValue::as_u64)
+                        .unwrap_or(1000) as usize;
+                    self.buckets
+                        .insert(class.to_string(), Bucket::new(cardinality));
+                    if let Some(g) = self.buckets.get_mut(class.borrow() as &str) {
                         g
                     } else {
                         unreachable!()
@@ -170,7 +159,7 @@ impl Operator for BucketGrouper {
             let d = if let Some(d) = event.meta.get("dimensions") {
                 d
             } else {
-                &serde_json::Value::Null
+                &OwnedValue::Null
             };
             let dimensions = serde_json::to_string(d)?;
             let window = match groups.cache.get_mut(&dimensions) {
@@ -208,12 +197,17 @@ impl Operator for BucketGrouper {
         }
     }
 
-    fn metrics(&self, mut tags: HashMap<String, String>, timestamp: u64) -> Vec<Value> {
+    fn metrics(
+        &self,
+        mut tags: HashMap<String, String>,
+        timestamp: u64,
+    ) -> Result<Vec<OwnedValue>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
             tags.insert("class".to_owned(), class.to_owned());
 
             tags.insert("action".to_owned(), "pass".to_owned());
+            // TODO: this is ugly
             res.push(json!({
                 "measurement": "bucketing",
                 "tags": tags,
@@ -223,6 +217,7 @@ impl Operator for BucketGrouper {
                 "timestamp": timestamp
             }));
             tags.insert("action".to_owned(), "overflow".to_owned());
+            // TODO: this is ugly
             res.push(json!({
                 "measurement": "bucketing",
                 "tags": tags,
@@ -232,6 +227,6 @@ impl Operator for BucketGrouper {
                 "timestamp": timestamp
             }));
         }
-        res
+        Ok(res)
     }
 }

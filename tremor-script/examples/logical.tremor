@@ -1,0 +1,17 @@
+drop {
+  "or": {
+    "00": false or false,
+    "01": false or true,
+    "10": true or false,
+    "11": true or true,
+  },
+  "and": {
+    "00": false and false,
+    "01": false and true,
+    "10": true and false,
+    "11": true and true,
+  },
+  "assert": {
+    "0": (false or true) == not ( false and true )
+  }
+}

@@ -20,3 +20,8 @@ html
 flamegraph.svg
 out.stacks
 coyote.html
+static/openapi.json
+__pycache__
+tremor-script/_build
+tremor-script/c_src/*.o
+tremor-script/priv

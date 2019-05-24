@@ -70,10 +70,10 @@ fi
 set -ex
 case $build_target in
     debug)
-        cargo build --all --features "${FEATURES}"
+        cargo build -p tremor-server --features "${FEATURES}"
         ;;
     release)
-        cargo build --all --release --features "${FEATURES}"
+        cargo build --p tremor-server --release --features "${FEATURES}"
         ;;
     none)
         ;;

@@ -12,583 +12,1789 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod stage1;
+// NOTE: we use a lot of arguments here, we are aware of that but tough luck
+// FIXME: investigate if re-writing would make code better
+#![allow(clippy::too_many_arguments)]
 
+use crate::ast::{self, Expr};
 use crate::errors::*;
-use crate::{Context, Registry, TremorFn, Value, ValueMap};
-use glob::Pattern;
-use lazy_static::lazy_static;
-use pcre2::bytes::Regex;
-use stage1::{parser, Id, Interface, CIDR};
-use std::fmt;
-use std::str::FromStr;
+use crate::lexer::{self, TokenFuns};
 
-lazy_static! {
-    static ref IP_REGEX: regex::Regex = {
-        regex::Regex::new(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,2})/?(\d{1,2})?")
-            .expect("Failed to create IP regexp")
-    };
+use crate::highlighter::{DumbHighlighter, Highlighter};
+use crate::parser::grammar;
+use crate::registry::{Context, Registry};
+use crate::runtime::NormalizedSegment;
+use halfbrown::hashmap;
+use simd_json::borrowed::{Map, Value};
+use simd_json::value::ValueTrait;
+use std::borrow::Borrow;
+use std::collections::LinkedList;
+use std::io::Write;
+use std::iter::Iterator;
+
+#[derive(Debug, Serialize, PartialEq)]
+pub enum Return<'event> {
+    Emit(Value<'event>),
+    Drop(Value<'event>),
 }
 
-macro_rules! compare_numbers {
-    {$x:expr, $y:expr, $operator:tt} => {
-        {
-            let x = $x;
-            let y = $y;
-
-            if x.is_i64() && y.is_i64() {
-                match (x.as_i64(), y.as_i64()) {
-                    (Some(vx), Some(vy)) => Ok(vx $operator vy),
-                    _ => Ok(false)
-                }
-
-            } else if x.is_f64() && y.is_f64() {
-                // TODO: define a error
-                match (x.as_f64(), y.as_f64()) {
-                    (Some(vx), Some(vy)) => {
-                        #[allow(clippy::float_cmp)]
-                        Ok(vx $operator vy)
-                    }
-                    _ => Ok(false)
-                }
-            } else {
-                Ok(false)
-            }
+pub struct CheekyStack<T> {
+    stack: LinkedList<T>,
+}
+impl<T> std::default::Default for CheekyStack<T> {
+    fn default() -> Self {
+        Self {
+            stack: LinkedList::new(),
         }
     }
 }
-
-#[derive(Debug)]
-pub struct Script<Ctx: Context + 'static> {
-    // TODO: This could become a fixed sized vector
-    locals: ValueMap,
-    interface: Interface,
-    statements: Vec<Stmt<Ctx>>,
-}
-
-impl<Ctx: Context + 'static> Script<Ctx> {
-    pub fn parse(script: &str, registry: &Registry<Ctx>) -> Result<Self> {
-        let stage1 = parser::ScriptParser::new()
-            .parse(script)
-            .map_err(|e| Error::from(ErrorKind::ParserError(format!("{}", e))))?;
-        stage1.bind(&registry)
-    }
-    pub fn run(
-        &mut self,
-        context: &Ctx,
-        value: &mut Value,
-        state: &mut ValueMap,
-    ) -> Result<Option<usize>> {
-        let mut result: Option<usize> = None;
-        let mut i = 0;
-        'outer: for statement in self.statements.iter_mut() {
-            if statement.test(context, value, &mut self.locals, state)? {
-                result = Some(i);
-                i += 1;
-                for action in &mut statement.actions {
-                    if action.execute(context, value, &mut self.locals, state)? {
-                        break 'outer;
-                    }
-                }
-            };
-        }
-        self.locals.clear();
-        Ok(result)
-    }
-    pub fn new(interface: Interface, statements: Vec<Stmt<Ctx>>) -> Self {
-        Script {
-            locals: ValueMap::new(),
-            interface,
-            statements,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Stmt<Ctx: Context + 'static> {
-    item: Item<Ctx>,
-    actions: Vec<Action<Ctx>>,
-}
-
-impl<Ctx: Context + 'static> Stmt<Ctx> {
-    pub fn test(
-        &mut self,
-        context: &Ctx,
-        value: &Value,
-        locals: &mut ValueMap,
-        globals: &mut ValueMap,
-    ) -> Result<bool> {
-        self.item.test(context, value, locals, globals)
-    }
-    pub fn new(item: Item<Ctx>, actions: Vec<Action<Ctx>>) -> Self {
-        Self { item, actions }
-    }
-}
-pub enum RHSValue<Ctx: Context + 'static> {
-    Literal(Value),
-    Lookup(Vec<Id>),
-    LookupLocal(Id),
-    LookupGlobal(Id),
-    List(Vec<RHSValue<Ctx>>, Value), // TODO: Split out const list for optimisation
-    Function(String, String, TremorFn<Ctx>, Vec<RHSValue<Ctx>>, Value),
-}
-
-impl<Ctx: Context + 'static> fmt::Debug for RHSValue<Ctx> {
-    fn fmt(&self, fmter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RHSValue::Literal(v) => write!(fmter, "Literal({:?})", v),
-            RHSValue::Lookup(v) => write!(fmter, "Lookup({:?})", v),
-            RHSValue::LookupLocal(v) => write!(fmter, "LookupLocal({:?})", v),
-            RHSValue::LookupGlobal(v) => write!(fmter, "LookupGlobal({:?})", v),
-            RHSValue::List(v, _) => write!(fmter, "List({:?})", v),
-            RHSValue::Function(m, f, _, args, _) => write!(fmter, "{}::{}({:?})", m, f, args),
-        }
-    }
-}
-
-impl<Ctx: Context + 'static> RHSValue<Ctx> {
-    pub fn reduce<'v, 's: 'v, 'l: 'v, 'g: 'v>(
-        &'s mut self,
-        context: &Ctx,
-        data: &'v Value,
-        locals: &'l ValueMap,
-        globals: &'g ValueMap,
-    ) -> Result<Option<&'v Value>> {
-        match self {
-            RHSValue::Literal(l) => Ok(Some(l)),
-            RHSValue::Lookup(_path) => Ok(self.find(0, data)),
-            RHSValue::LookupLocal(id) => Ok(locals.get(id.id())),
-            RHSValue::LookupGlobal(id) => {
-                // If we hace set an imported variable it's goiung to be in local
-                // and shadow the global one so we need to check here first.
-                if let Some(v) = locals.get(id.id()) {
-                    Ok(Some(v))
-                } else if let Some(v) = globals.get(id.id()) {
-                    Ok(Some(v))
-                } else {
-                    Ok(None)
-                }
-            }
-            RHSValue::List(ref mut list, ref mut computed) => {
-                // Some(&Value::Array(list.map(|e| e.reduce(..).to_owned())))
-                let out = if let Value::Array(a) = computed {
-                    a.clear();
-                    a
-                } else {
-                    unreachable!()
-                };
-                for e in list {
-                    if let Some(v) = e.reduce(context, data, locals, globals)? {
-                        out.push(v.to_owned())
-                    } else {
-                        return Ok(None);
-                    }
-                }
-                Ok(Some(computed))
-            }
-            RHSValue::Function(_, _, f, a, ref mut result) => {
-                let mut args = Vec::new();
-                for e in a {
-                    if let Some(v) = e.reduce(context, data, locals, globals)? {
-                        args.push(v.to_owned())
-                    } else {
-                        return Ok(None);
-                    }
-                }
-                *result = f(context, &args)?;
-                Ok(Some(result))
-            }
-        }
-    }
-    fn find<'v>(&self, i: usize, value: &'v Value) -> Option<&'v Value> {
-        if let RHSValue::Lookup(ks) = self {
-            if let Some(key) = ks.get(i) {
-                let v1 = value.get(key.id())?;
-                self.find(i + 1, v1)
-            } else {
-                Some(value)
-            }
+impl<T> CheekyStack<T> {
+    pub fn push(&self, v: T) -> &T {
+        // We can do this since adding a element will never change existing elements
+        // within a linked list
+        #[allow(mutable_transmutes)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        let s: &mut LinkedList<T> = unsafe { std::mem::transmute(&self.stack) };
+        s.push_front(v);
+        if let Some(v) = s.front() {
+            v
         } else {
-            None
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Item<Ctx: Context + 'static> {
-    Filter(Filter<Ctx>),
-    Not(Box<Item<Ctx>>),
-    And(Box<Item<Ctx>>, Box<Item<Ctx>>),
-    Or(Box<Item<Ctx>>, Box<Item<Ctx>>),
-}
-
-impl<Ctx: Context + 'static> Item<Ctx> {
-    pub fn test(
-        &mut self,
-        context: &Ctx,
-        value: &Value,
-        locals: &mut ValueMap,
-        globals: &mut ValueMap,
-    ) -> Result<bool> {
-        match self {
-            Item::Not(item) => {
-                let res = item.test(context, value, locals, globals)?;
-                Ok(!res)
-            }
-            Item::And(left, right) => {
-                if left.test(context, value, locals, globals)? {
-                    right.test(context, value, locals, globals)
-                } else {
-                    Ok(false)
-                }
-            }
-            Item::Or(left, right) => {
-                if left.test(context, value, locals, globals)? {
-                    Ok(true)
-                } else {
-                    right.test(context, value, locals, globals)
-                }
-            }
-            Item::Filter(filter) => filter.test(context, value, locals, globals),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Action<Ctx: Context + 'static> {
-    Set { path: Vec<Id>, rhs: RHSValue<Ctx> },
-    SetLocal { id: Id, rhs: RHSValue<Ctx> },
-    SetGlobal { id: Id, rhs: RHSValue<Ctx> },
-    Return,
-}
-
-impl<Ctx: Context + 'static> Action<Ctx> {
-    pub fn execute(
-        &mut self,
-        context: &Ctx,
-        json: &mut Value,
-        locals: &mut ValueMap,
-        globals: &mut ValueMap,
-    ) -> Result<bool> {
-        match self {
-            Action::Set { path, rhs } => {
-                // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
-                    Action::<Ctx>::mut_value(json, path, 0, v.to_owned())?;
-                };
-                Ok(false)
-            }
-            Action::SetLocal { id, rhs } => {
-                // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
-                    locals.insert(id.id().clone(), v.to_owned());
-                }
-                Ok(false)
-            }
-            Action::SetGlobal { id, rhs } => {
-                // TODO what do we do if nothing was found?
-                if let Some(v) = rhs.reduce(context, json, locals, globals)? {
-                    //TODO: We kind of need to set both global na and local where
-                    // we export but don't import
-                    let v1 = v.clone();
-                    let v2 = v.clone();
-                    locals.insert(id.id().clone(), v1);
-                    globals.insert(id.id().clone(), v2);
-                }
-                Ok(false)
-            }
-            Action::Return => Ok(true),
-        }
-    }
-
-    fn mut_value(json: &mut Value, ks: &[Id], i: usize, val: Value) -> Result<()> {
-        use serde_json::Map;
-        use serde_json::Value::*;
-        fn make_nested_object(ks: &[Id], i: usize, val: Value) -> Value {
-            if let Some(key) = ks.get(i) {
-                let mut m = Map::new();
-                m.insert(key.to_string(), make_nested_object(ks, i + 1, val));
-                Object(m)
-            } else {
-                val
-            }
-        }
-        if !json.is_object() {
-            Err(ErrorKind::MutationTypeConflict("not an object".into()).into())
-        } else if let Some(key) = ks.get(i) {
-            // This is the last key
-            let last = i + 1 >= ks.len();
-            if last {
-                match json {
-                    Object(ref mut m) => {
-                        m.insert(key.to_string(), val);
-                        Ok(())
-                    }
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
-                }
-            } else if let Some(ref mut v) = json.get_mut(key.id()) {
-                match v {
-                    Object(_) => Action::<Ctx>::mut_value(v, ks, i + 1, val),
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
-                }
-            } else {
-                match json {
-                    Object(ref mut m) => {
-                        m.insert(key.to_string(), make_nested_object(ks, i + 1, val));
-                        Ok(())
-                    }
-                    _ => Err(ErrorKind::MutationTypeConflict("not an object".to_owned()).into()),
-                }
-            }
-        } else {
-            Err(ErrorKind::BadPath("empty".into()).into())
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Filter<Ctx: Context + 'static> {
-    Value(Vec<Id>, Cmp<Ctx>),
-    Local(Id, Cmp<Ctx>),
-    Global(Id, Cmp<Ctx>),
-}
-
-impl<Ctx: Context + 'static> Filter<Ctx> {
-    pub fn test(
-        &mut self,
-        context: &Ctx,
-        value: &Value,
-        locals: &ValueMap,
-        globals: &ValueMap,
-    ) -> Result<bool> {
-        match self {
-            Filter::Value(_path, _rhs) => {
-                self.find_and_test(context, 0, value, value, locals, globals)
-            }
-            Filter::Local(id, rhs) => {
-                if let Some(val) = locals.get(id.id()) {
-                    rhs.test(context, val, value, locals, globals)
-                } else {
-                    Ok(false)
-                }
-            }
-            Filter::Global(id, rhs) => {
-                // We might have to set a local variable that shadows a global one
-                // so we need to cehck this fiorst.
-                if let Some(val) = locals.get(id.id()) {
-                    rhs.test(context, val, value, locals, globals)
-                } else if let Some(val) = globals.get(id.id()) {
-                    rhs.test(context, val, value, locals, globals)
-                } else {
-                    Ok(false)
-                }
-            }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)] // We allow this here since it's a iterator function
-    fn find_and_test(
-        &mut self,
-        context: &Ctx,
-        i: usize,
-        value: &Value,
-        data: &Value,
-        locals: &ValueMap,
-        globals: &ValueMap,
-    ) -> Result<bool> {
-        if let Filter::Value(ks, rhs) = self {
-            if let Some(key) = ks.get(i) {
-                if let Some(v1) = value.get(key.id()) {
-                    self.find_and_test(context, i + 1, v1, data, locals, globals)
-                } else {
-                    Ok(false)
-                }
-            } else {
-                rhs.test(context, value, data, locals, globals)
-            }
-        } else {
-            // we only call find_and test on Filter::Value
+            // NOTE This is OK since we just pushed we know there is a element in the stack.
             unreachable!()
         }
     }
+    pub fn clear(&mut self) {
+        self.stack.clear();
+    }
+}
+pub type ValueStack<'event> = CheekyStack<Value<'event>>;
+pub type LocalMap<'map> = simd_json::value::borrowed::Map<'map>;
+
+pub trait Interpreter<'run, 'event, 'script, Ctx>
+where
+    Ctx: Context + 'static,
+{
+    fn run(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Cont<'event>>;
+
+    fn resolve(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Value<'event>>;
+
+    fn assign(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path,
+        value: &'run Value<'event>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Value<'event>>;
 }
 
 #[derive(Debug)]
-pub enum Cmp<Ctx: Context + 'static> {
-    Exists,
-    Eq(RHSValue<Ctx>),
-    Gt(RHSValue<Ctx>),
-    Gte(RHSValue<Ctx>),
-    Lt(RHSValue<Ctx>),
-    Lte(RHSValue<Ctx>),
-    Contains(RHSValue<Ctx>),
-    Regex(Regex),
-    Glob(Pattern),
-    CIDRMatch(CIDR),
+pub enum Cont<'event> {
+    Cont(Value<'event>),
+    Emit(Value<'event>),
+    Drop(Value<'event>),
 }
-
-fn str_to_ip(ip_str: &str) -> Result<Option<u32>> {
-    if let Some(caps) = IP_REGEX.captures(ip_str) {
-        let a = u32::from_str(caps.get(1).map_or("", |m| m.as_str()))?;
-        let b = u32::from_str(caps.get(2).map_or("", |m| m.as_str()))?;
-        let c = u32::from_str(caps.get(3).map_or("", |m| m.as_str()))?;
-        let d = u32::from_str(caps.get(4).map_or("", |m| m.as_str()))?;
-        let ip = (a << 24) | (b << 16) | (c << 8) | d;
-
-        Ok(Some(ip))
-    } else {
-        Ok(None)
-    }
-}
-impl<Ctx: Context + 'static> Cmp<Ctx> {
-    // the number compairison in a macro increases this over the threshold.
-    // as it's a macro we can ignore it
-    #[allow(clippy::cyclomatic_complexity)]
-    pub fn test(
-        &mut self,
-        context: &Ctx,
-        event_value: &Value,
-        data: &Value,
-        locals: &ValueMap,
-        globals: &ValueMap,
-    ) -> Result<bool> {
-        use serde_json::Value::*;
+impl<'event> Cont<'event> {
+    pub fn into_value(self, expr: &ast::Expr, inner: &ast::Expr) -> Result<Value<'event>> {
         match self {
-            Cmp::Exists => Ok(true),
-            Cmp::Glob(g) => match event_value {
-                String(gmatch) => Ok(g.matches(gmatch)),
-                _ => Ok(false),
-            },
-            Cmp::Regex(rx) => match event_value {
-                String(rxmatch) => rx
-                    .is_match(&rxmatch.as_bytes())
-                    .map_err(|_| ErrorKind::RegexpError(format!("{:?}", rx)).into()),
-
-                _ => Ok(false),
-            },
-            Cmp::CIDRMatch(cidr) => match event_value {
-                String(ip_str) => {
-                    if let Some(ip) = str_to_ip(ip_str)? {
-                        Ok(cidr.contains(ip))
-                    } else {
-                        Ok(false)
-                    }
-                }
-                _ => Ok(false),
-            },
-            Cmp::Eq(expected_value) => {
-                if let Some(v) = expected_value.reduce(context, data, locals, globals)? {
-                    Ok(event_value == v)
-                } else {
-                    Ok(false)
-                }
-            }
-            Cmp::Gt(expected_value) => {
-                match (
-                    event_value,
-                    &expected_value.reduce(context, data, locals, globals)?,
-                ) {
-                    (Number(event_value), Some(Number(expected_value))) => {
-                        compare_numbers!(event_value, expected_value, >)
-                    }
-                    (String(s), Some(String(is))) => Ok(s > is),
-                    _ => Ok(false),
-                }
-            }
-
-            Cmp::Lt(expected_value) => {
-                match (
-                    event_value,
-                    &expected_value.reduce(context, data, locals, globals)?,
-                ) {
-                    (Number(event_value), Some(Number(expected_value))) => {
-                        compare_numbers!(event_value, expected_value, <)
-                    }
-                    (String(s), Some(String(is))) => Ok(s < is),
-                    _ => Ok(false),
-                }
-            }
-
-            Cmp::Gte(expected_value) => {
-                match (
-                    event_value,
-                    &expected_value.reduce(context, data, locals, globals)?,
-                ) {
-                    (Number(event_value), Some(Number(expected_value))) => {
-                        compare_numbers!(event_value, expected_value, >=)
-                    }
-                    (String(s), Some(String(is))) => Ok(s >= is),
-                    _ => Ok(false),
-                }
-            }
-            Cmp::Lte(expected_value) => {
-                match (
-                    event_value,
-                    &expected_value.reduce(context, data, locals, globals)?,
-                ) {
-                    (Number(event_value), Some(Number(expected_value))) => {
-                        compare_numbers!(event_value, expected_value, <=)
-                    }
-                    (String(s), Some(String(is))) => Ok(s <= is),
-                    _ => Ok(false),
-                }
-            }
-            Cmp::Contains(expected_value) => {
-                match (
-                    event_value,
-                    &expected_value.reduce(context, data, locals, globals)?,
-                ) {
-                    (Array(event_value), Some(v)) => Ok(event_value.contains(v)),
-                    (event_value, Some(Array(expected_value))) => {
-                        Ok(expected_value.contains(event_value))
-                    }
-                    _ => Ok(false),
-                }
-            }
+            Cont::Cont(v) => Ok(v),
+            Cont::Emit(_v) => Err(ErrorKind::InvalidEmit(expr.clone(), inner.clone()).into()),
+            Cont::Drop(_v) => Err(ErrorKind::InvalidDrop(expr.clone(), inner.clone()).into()),
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::registry::registry;
-    #[test]
-    fn script_test() {
-        let script = r#"
-            import imported_var;
-            export classification, dimension, rate, index_type, below, timeframe;
+impl<'event> From<Cont<'event>> for Return<'event> {
+    fn from(v: Cont<'event>) -> Self {
+        match v {
+            Cont::Cont(v) => Return::Emit(v),
+            Cont::Emit(v) => Return::Emit(v),
+            Cont::Drop(v) => Return::Drop(v),
+        }
+    }
+}
 
-            _ { $index_type := index; $below := 5; $timeframe := 10000; }
+macro_rules! demit {
+    ($data:expr) => {
+        match $data {
+            Cont::Cont(d) => d,
+            other => return Ok(other),
+        }
+    };
+}
 
-            application="app1 hello" { $classification := "applog_app1"; $rate := 1250; }
-            application="app2" { $classification := "applog_app2"; $rate := 2500; $below := 10; }
-            application="app3" { $classification := "applog_app3"; $rate := 18750; }
-            application="app4" { $classification := "applog_app4"; $rate := 750; $below := 10;   }
-            application="app5" { $classification := "applog_app5"; $rate := 18750; }
-            $classification { $dimension := application; return; }
+#[derive(Debug)]
+pub struct Script<C>
+where
+    C: Context + 'static,
+{
+    pub script: ast::Script,
+    pub registry: Registry<C>,
+    pub source: String, //tokens: Vec<std::result::Result<TokenSpan<'script>, LexerError>>
+}
 
-            index_type="applog_app6" { $dimension := logger_name; $classification := "applog_app6"; $rate := 4500; return; }
+impl<'run, 'event, 'script, Ctx> Script<Ctx>
+where
+    Ctx: Context + 'static,
+    'script: 'event,
+    'event: 'run,
+{
+    pub fn parse(script: &'script str, registry: Registry<Ctx>) -> Result<Self> {
+        let mut script = script.to_string();
+        //FIXME: There is a bug in the lexer that requires a tailing ' ' otherwise
+        //       it will not recognize a singular 'keywkrd'
+        //       Also: darach is a snot badger!
+        script.push(' ');
+        let lexemes: Vec<_> = lexer::tokenizer(&script).collect();
 
-            index_type="syslog_app1" { $classification := "syslog_app1"; $rate := 2500; }
-            tags:"tag1" { $classification := "syslog_app2"; $rate := 125; }
-            index_type="syslog_app2" { $classification := "syslog_app2"; $rate := 125; }
-            index_type="syslog_app3" { $classification := "syslog_app3"; $rate := 1750; }
-            index_type="syslog_app4" { $classification := "syslog_app4"; $rate := 1750; }
-            index_type="syslog_app5" { $classification := "syslog_app5"; $rate := 7500; }
-            index_type="syslog_app6" { $classification := "syslog_app6"; $rate := 125; }
-            $classification { $dimension := syslog_hostname; return; }
+        let mut filtered_tokens = Vec::new();
 
-            index_type="edilog" { $classification := "edilog"; $dimension := syslog_hostname; $rate := 3750; return; }
+        for t in lexemes {
+            let keep = !t.clone()?.value.is_ignorable();
+            if keep {
+                filtered_tokens.push(t);
+            }
+        }
 
-             index_type="sqlserverlog" { $classification := "sqlserverlog"; $dimension := [src_ip, dst_ip]; $rate := 125; return; }
+        let ast = grammar::ScriptParser::new().parse(filtered_tokens)?;
 
-            # type="applog" { $classification := "applog"; $dimension := [src_ip, dst_ip]; $rate := 75; return; }
+        Ok(Script {
+            script: ast,
+            registry,
+            source: script,
+        })
+    }
 
-            _ { $classification := "default"; $rate := 250; }
-"#;
-        let r: Registry<()> = registry();
-        let s = Script::parse(script, &r).expect("Failed to parse script");
-        assert_eq!(&s.interface.imports()[0], "imported_var");
+    pub fn format_error(&self, e: Error) -> String {
+        let mut h = DumbHighlighter::default();
+        if self.format_error_with(&mut h, &e).is_ok() {
+            h.to_string()
+        } else {
+            format!("Failed to extract code for error: {}", e)
+        }
+    }
+
+    pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
+        match e.context() {
+            (Some((start, end)), Some(inner)) => {
+                let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
+                //write!(h.get_writer(), "Error in line {}: {}\n", inner.0.line.0, e)?;
+                //write!(h.get_writer(), "## ... LINE {} ...\n", start.line.0 - 1)?;
+                h.highlight_runtime_error(
+                    tokens,
+                    start,
+                    end,
+                    Some((inner.0, inner.1, format!("{}", e))),
+                )
+            }
+            (Some((start, end)), _inner) => {
+                let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
+                write!(h.get_writer(), "Error in line {}: {}\n", start.line.0, e)?;
+                write!(h.get_writer(), "## .. LINE {} ...\n", start.line.0 - 1)?;
+                h.highlight_runtime_error(tokens, start, end, None)
+            }
+            _other => write!(h.get_writer(), "Error: {}", e),
+        }
+    }
+
+    pub fn run(
+        &'script self,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Return<'event>> {
+        let mut local = simd_json::borrowed::Value::Object(hashmap! {});
+        let exprs = &self.script.exprs;
+        let mut count = 0;
+        let mut val = Value::Null;
+        for expr in exprs {
+            count += 1;
+            match expr.run(&self.registry, context, event, meta, &mut local, stack)? {
+                Cont::Drop(val) => return Ok(Return::Drop(val)),
+                Cont::Emit(val) => return Ok(Return::Emit(val)),
+                Cont::Cont(v) => val = v,
+            }
+        }
+
+        if count == 0 {
+            Err(ErrorKind::EmptyScript.into())
+        } else {
+            Ok(Return::Emit(val))
+        }
+    }
+}
+
+enum PredicateCont {
+    NoMatch,
+    Match,
+}
+
+// Err Free zone
+
+impl<'script, 'event, 'run> ast::Expr
+where
+    'script: 'event,
+    'event: 'run,
+{
+    fn merge_values(
+        &self,
+        inner: &Expr,
+        value: &'run mut Value<'event>,
+        replacement: Value<'event>,
+    ) -> Result<()> {
+        if !replacement.is_object() {
+            *value = replacement.clone();
+            return Ok(());
+        }
+
+        if !value.is_object() {
+            *value = Value::Object(hashmap! {});
+        }
+
+        match value {
+            Value::Object(ref mut map) => {
+                match replacement {
+                    Value::Object(rep) => {
+                        for (k, v) in rep {
+                            if v.is_null() {
+                                map.remove(&k);
+                            } else {
+                                // map.insert(k, v);
+                                match map.get_mut(&k) {
+                                    Some(k) => self.merge_values(inner, k, v)?,
+                                    None => {
+                                        map.insert(k, v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    other => {
+                        return self.error_type_conflict(&inner, other.kind(), ValueType::Object)
+                    }
+                }
+            }
+            other => return self.error_type_conflict(&inner, other.kind(), ValueType::Object),
+        }
+
+        Ok(())
+    }
+
+    fn literal<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Literal,
+    ) -> Result<Value<'event>> {
+        match expr.value {
+            ast::LiteralValue::Native(ref owned) => Ok(owned.clone().into()),
+            ast::LiteralValue::List(ref list) => {
+                let mut r = Vec::with_capacity(list.len());
+                for expr in list {
+                    r.push(
+                        expr.run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?,
+                    )
+                }
+                Ok(Value::Array(r))
+            }
+        }
+    }
+
+    fn invoke<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Invoke,
+    ) -> Result<Value<'event>> {
+        let mut argv: Vec<&simd_json::borrowed::Value> = Vec::new();
+        for arg in &expr.args {
+            let result = arg
+                .run(registry, context, event, meta, local, stack)?
+                .into_value(&self, &arg)?;
+            argv.push(stack.push(result));
+        }
+        let fun = registry.find(&expr.module, &expr.fun)?;
+        fun(context, &argv).map(simd_json::value::borrowed::Value::from)
+    }
+
+    fn unary<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::UnaryExpr,
+    ) -> Result<Value<'event>> {
+        let rhs = expr
+            .expr
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.expr)?;
+        match (&expr.kind, rhs) {
+            (ast::UnaryOpKind::Minus, Value::I64(x)) => Ok(Value::I64(-x)),
+            (ast::UnaryOpKind::Minus, Value::F64(x)) => Ok(Value::F64(-x)),
+            (ast::UnaryOpKind::Plus, Value::I64(x)) => Ok(Value::I64(x)),
+            (ast::UnaryOpKind::Plus, Value::F64(x)) => Ok(Value::F64(x)),
+            (ast::UnaryOpKind::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
+            (op, val) => self.error_invalid_unary(&expr.expr, *op, &val),
+        }
+    }
+
+    fn binary<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::BinExpr,
+    ) -> Result<Value<'event>> {
+        // Lazy Heinz doesn't want to write that 10000 times
+        // - snot badger - Darach
+        use ast::BinOpKind::*;
+        let lhs = expr
+            .lhs
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.lhs)?;
+        let rhs = expr
+            .rhs
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.rhs)?;
+        let error = std::f64::EPSILON;
+        match (&expr.kind, lhs, rhs) {
+            (Eq, Value::Null, Value::Null) => Ok(Value::Bool(true)),
+            (NotEq, Value::Null, Value::Null) => Ok(Value::Bool(false)),
+            (And, Value::Bool(l), Value::Bool(r)) => Ok(Value::Bool(l && r)),
+            (Or, Value::Bool(l), Value::Bool(r)) => Ok(Value::Bool(l || r)),
+            (NotEq, Value::Object(l), Value::Object(r)) => Ok(Value::Bool(l != r)),
+            (NotEq, Value::Array(l), Value::Array(r)) => Ok(Value::Bool(l != r)),
+            (NotEq, Value::Bool(l), Value::Bool(r)) => Ok(Value::Bool(l != r)),
+            (NotEq, Value::String(l), Value::String(r)) => Ok(Value::Bool(l != r)),
+            (NotEq, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l != r)),
+            (NotEq, Value::I64(l), Value::F64(r)) => {
+                Ok(Value::Bool(((l as f64) - r).abs() > error))
+            }
+            (NotEq, Value::F64(l), Value::I64(r)) => {
+                Ok(Value::Bool((l - (r as f64)).abs() > error))
+            }
+            (NotEq, Value::F64(l), Value::F64(r)) => Ok(Value::Bool((l - r).abs() > error)),
+            (Eq, Value::Object(l), Value::Object(r)) => Ok(Value::Bool(l == r)),
+            (Eq, Value::Array(l), Value::Array(r)) => Ok(Value::Bool(l == r)),
+            (Eq, Value::Bool(l), Value::Bool(r)) => Ok(Value::Bool(l == r)),
+            (Eq, Value::String(l), Value::String(r)) => Ok(Value::Bool(l == r)),
+            (Eq, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l == r)),
+            (Eq, Value::I64(l), Value::F64(r)) => Ok(Value::Bool(((l as f64) - r).abs() < error)),
+            (Eq, Value::F64(l), Value::I64(r)) => Ok(Value::Bool((l - (r as f64)).abs() < error)),
+            (Eq, Value::F64(l), Value::F64(r)) => Ok(Value::Bool((l - r).abs() < error)),
+            (Gte, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l >= r)),
+            (Gte, Value::I64(l), Value::F64(r)) => Ok(Value::Bool((l as f64) >= r)),
+            (Gte, Value::F64(l), Value::I64(r)) => Ok(Value::Bool(l >= (r as f64))),
+            (Gte, Value::F64(l), Value::F64(r)) => Ok(Value::Bool(l >= r)),
+            (Gt, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l > r)),
+            (Gt, Value::I64(l), Value::F64(r)) => Ok(Value::Bool((l as f64) > r)),
+            (Gt, Value::F64(l), Value::I64(r)) => Ok(Value::Bool(l > (r as f64))),
+            (Gt, Value::F64(l), Value::F64(r)) => Ok(Value::Bool(l > r)),
+            (Lt, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l < r)),
+            (Lt, Value::I64(l), Value::F64(r)) => Ok(Value::Bool((l as f64) < r)),
+            (Lt, Value::F64(l), Value::I64(r)) => Ok(Value::Bool(l < (r as f64))),
+            (Lt, Value::F64(l), Value::F64(r)) => Ok(Value::Bool(l < r)),
+            (Lte, Value::I64(l), Value::I64(r)) => Ok(Value::Bool(l <= r)),
+            (Lte, Value::I64(l), Value::F64(r)) => Ok(Value::Bool((l as f64) <= r)),
+            (Lte, Value::F64(l), Value::I64(r)) => Ok(Value::Bool(l <= (r as f64))),
+            (Lte, Value::F64(l), Value::F64(r)) => Ok(Value::Bool(l <= r)),
+            (Add, Value::String(l), Value::String(r)) => Ok(format!("{}{}", l, r).into()),
+            (Add, Value::I64(l), Value::I64(r)) => Ok(Value::I64(l + r)),
+            (Add, Value::I64(l), Value::F64(r)) => Ok(Value::F64((l as f64) + r)),
+            (Add, Value::F64(l), Value::I64(r)) => Ok(Value::F64(l + (r as f64))),
+            (Add, Value::F64(l), Value::F64(r)) => Ok(Value::F64(l + r)),
+            (Sub, Value::I64(l), Value::I64(r)) => Ok(Value::I64(l - r)),
+            (Sub, Value::I64(l), Value::F64(r)) => Ok(Value::F64((l as f64) - r)),
+            (Sub, Value::F64(l), Value::I64(r)) => Ok(Value::F64(l - (r as f64))),
+            (Sub, Value::F64(l), Value::F64(r)) => Ok(Value::F64(l - r)),
+            (Mul, Value::I64(l), Value::I64(r)) => Ok(Value::I64(l * r)),
+            (Mul, Value::I64(l), Value::F64(r)) => Ok(Value::F64((l as f64) * r)),
+            (Mul, Value::F64(l), Value::I64(r)) => Ok(Value::F64(l * (r as f64))),
+            (Mul, Value::F64(l), Value::F64(r)) => Ok(Value::F64(l * r)),
+            (Div, Value::I64(l), Value::I64(r)) => Ok(Value::F64((l as f64) / (r as f64))),
+            (Div, Value::I64(l), Value::F64(r)) => Ok(Value::F64((l as f64) / r)),
+            (Div, Value::F64(l), Value::I64(r)) => Ok(Value::F64(l / (r as f64))),
+            (Div, Value::F64(l), Value::F64(r)) => Ok(Value::F64(l / r)),
+            (Mod, Value::I64(l), Value::I64(r)) => Ok(Value::I64(l % r)),
+            (op, left, right) => self.error_invalid_binary(&expr.lhs, *op, &left, &right),
+        }
+    }
+
+    /*
+    fn predicate_expr<'script, 'event, 'run, Ctx>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::BinExpr,
+    ) -> Result<bool>
+    where
+        Ctx: Context + 'static,
+        'script: 'event,
+        'event: 'run,
+    {
+        let pred = expr
+            .lhs
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(self)?;
+        if let Value::Bool(test) = pred {
+            Ok(test)
+        } else {
+            Err(self.error_type_conflict(Some(*expr.lhs.clone()), ValueType::Boolean, pred.into()))
+        }
+    }
+    */
+
+    fn rp<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        target: &'run Value<'event>,
+        rp: &'script ast::RecordPattern,
+    ) -> Result<PredicateCont> {
+        for field in &rp.fields {
+            let pp = &field.pattern;
+            let path = pp.lhs();
+
+            let testee: &Value = match target {
+                Value::Object(ref o) => {
+                    if let Some(v) = o.get(path) {
+                        v
+                    } else {
+                        return Ok(PredicateCont::NoMatch);
+                    }
+                }
+                _ => {
+                    return Ok(PredicateCont::NoMatch);
+                }
+            };
+
+            match pp.borrow() {
+                ast::PredicatePattern::TildeEq { test, .. } => {
+                    if test.extractor.extract(testee).is_err() {
+                        return Ok(PredicateCont::NoMatch);
+                    }
+                }
+                ast::PredicatePattern::Eq { rhs, not, .. } => {
+                    let rhs = rhs
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(self, &rhs)?;
+                    let r = testee == &rhs;
+                    let m = if *not { !r } else { r };
+                    if !m {
+                        return Ok(PredicateCont::NoMatch);
+                    };
+                }
+                ast::PredicatePattern::RecordPatternEq { pattern, .. } => {
+                    self.match_rp_expr(
+                        registry, context, event, meta, local, stack, target, pattern,
+                    )?;
+                }
+                ast::PredicatePattern::ArrayPatternEq { pattern, .. } => {
+                    self.match_ap_expr(
+                        registry, context, event, meta, local, stack, target, pattern,
+                    )?;
+                }
+            }
+        }
+
+        // FIXME possibly missing a case?
+        Ok(PredicateCont::Match)
+    }
+
+    fn match_rp_expr<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        target: &'run Value<'event>,
+        rp: &'script ast::RecordPattern,
+    ) -> Result<Cont<'event>> {
+        let mut acc = hashmap! {};
+        for field in &rp.fields {
+            let pp = &field.pattern;
+            let key = pp.lhs();
+
+            let testee = match target {
+                Value::Object(ref o) => {
+                    if let Some(v) = o.get(key) {
+                        v
+                    } else {
+                        return Ok(Cont::Drop(Value::Bool(true)));
+                    }
+                }
+                _ => return Ok(Cont::Drop(Value::Bool(true))),
+            };
+            match pp.borrow() {
+                ast::PredicatePattern::TildeEq { test, .. } => {
+                    match test.extractor.extract(&testee) {
+                        Ok(x) => {
+                            acc.insert(key.into(), x.clone());
+                        }
+                        // FIXME: We probably don't want to drop here
+                        _ => return Ok(Cont::Drop(Value::Bool(true))),
+                    }
+                }
+                // FIXME: Why are we ignoring the LHS?
+                ast::PredicatePattern::Eq { rhs, not, .. } => {
+                    let rhs = rhs
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(self, &rhs)?;
+                    let r = testee == &rhs;
+                    let m = if *not { !r } else { r };
+
+                    if m {
+                        continue;
+                    } else {
+                        // FIXME: We probably don't want to drop here
+                        return Ok(Cont::Drop(Value::Bool(true)));
+                    }
+                }
+                ast::PredicatePattern::RecordPatternEq { pattern, .. } => {
+                    // FIXME destructure assign so we can get rid of dupe in assign cases
+                    if let o @ Value::Object(_) = testee {
+                        match self.rp(registry, context, event, meta, local, stack, &o, pattern)? {
+                            PredicateCont::Match => {
+                                // NOTE We have to clone here since we duplicating data form one place
+                                // into another
+                                acc.insert(key.into(), o.clone());
+                                continue;
+                            }
+                            PredicateCont::NoMatch => {
+                                // FIXME abusing drop to short circuit and go to next outer(most) case
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                    } else {
+                        // FIXME abusing drop to short circuit and go to next outer(most) case
+                        return Ok(Cont::Drop(Value::Bool(true)));
+                    }
+                }
+                ast::PredicatePattern::ArrayPatternEq { .. } => {
+                    // FIXME: This ius missing
+                    // FIXME abusing drop to short circuit and go to next outer(most) case
+                    return Ok(Cont::Drop(Value::Bool(true)));
+                }
+            }
+        }
+
+        Ok(Cont::Cont(stack.push(Value::Object(acc)).clone()))
+    }
+
+    fn match_ap_expr<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        target: &'run Value<'event>,
+        ap: &'script ast::ArrayPattern,
+    ) -> Result<Cont<'event>> {
+        match target {
+            Value::Array(ref a) => {
+                let mut acc = vec![];
+                let mut idx = 0;
+                for candidate in a {
+                    'inner: for expr in &ap.exprs {
+                        match expr {
+                            ast::ArrayPredicatePattern::Expr(e) => {
+                                let r = e
+                                    .run(registry, context, event, meta, local, stack)?
+                                    .into_value(&self, &e)?;
+                                if candidate == &r {
+                                    acc.push(Value::Array(vec![Value::Array(vec![
+                                        Value::I64(idx),
+                                        r,
+                                    ])]));
+                                }
+                            }
+                            ast::ArrayPredicatePattern::Tilde(test) => {
+                                match test.extractor.extract(&candidate) {
+                                    Ok(r) => {
+                                        acc.push(Value::Array(vec![Value::Array(vec![
+                                            Value::I64(idx),
+                                            r,
+                                        ])]));
+                                    }
+                                    _ => continue 'inner // return Ok(Cont::Drop(Value::Bool(true))),
+                                }
+                            }
+                            ast::ArrayPredicatePattern::Record(rp) => {
+                                match self.match_rp_expr(
+                                    registry, context, event, meta, local, stack, candidate, rp,
+                                )? {
+                                    Cont::Cont(r) => {
+                                        acc.push(Value::Array(vec![Value::Array(vec![
+                                            Value::I64(idx),
+                                            r,
+                                        ])]));
+                                    }
+                                    _ => continue 'inner // return Ok(Cont::Drop(Value::Bool(true))),
+                                }
+                            }
+                            ast::ArrayPredicatePattern::Array(ap) => {
+                                match self.match_ap_expr(
+                                    registry, context, event, meta, local, stack, candidate, ap,
+                                )? {
+                                    Cont::Cont(r) => {
+                                        acc.push(Value::Array(vec![Value::Array(vec![
+                                            Value::I64(idx),
+                                            r,
+                                        ])]));
+                                    }
+                                    _ => continue 'inner // return Ok(Cont::Drop(Value::Bool(true))),
+                                }
+                            }
+                        }
+                    }
+                    idx += 1;
+                }
+                let r = Value::Array(acc);
+                Ok(Cont::Cont(r))
+            }
+            _ => Ok(Cont::Drop(Value::Bool(true))),
+        }
+    }
+
+    fn match_expr<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Match,
+    ) -> Result<Cont<'event>> {
+        let target = expr
+            .target
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.target)?;
+        'predicate: for predicate in &expr.patterns {
+            match predicate.pattern {
+                ast::Pattern::Predicate(ref _pp) => {
+                    //FIXME: How did this even get here?
+                    return self.error_oops();
+                }
+                ast::Pattern::Record(ref rp) => {
+                    match self
+                        .match_rp_expr(registry, context, event, meta, local, stack, &target, &rp)?
+                    {
+                        Cont::Cont(_) => match &predicate.guard {
+                            // FIXME make guard checks a macro ( DRY )
+                            Some(expr) => {
+                                let test = expr
+                                    .run(registry, context, event, meta, local, stack)?
+                                    .into_value(&self, &expr)?;
+                                match test {
+                                    Value::Bool(true) => {
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack,
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                    Value::Bool(false) => {
+                                        continue 'predicate;
+                                    }
+                                    other => return self.error_guard_not_bool(expr, &other),
+                                }
+                            }
+                            None => {
+                                let mut r = Value::Null;
+                                for expr in &predicate.exprs {
+                                    r = demit!(
+                                        expr.run(registry, context, event, meta, local, stack)?
+                                    );
+                                }
+                                return Ok(Cont::Cont(r));
+                            }
+                        },
+                        _ => {
+                            continue 'predicate;
+                        }
+                    }
+                }
+                ast::Pattern::Array(ref ap) => {
+                    match self
+                        .match_ap_expr(registry, context, event, meta, local, stack, &target, &ap)?
+                    {
+                        Cont::Cont(_) => match &predicate.guard {
+                            // FIXME make guard checks a macro ( DRY )
+                            Some(expr) => {
+                                let test = expr
+                                    .run(registry, context, event, meta, local, stack)?
+                                    .into_value(&self, &expr)?;
+                                match test {
+                                    Value::Bool(true) => {
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack,
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                    Value::Bool(false) => {
+                                        continue 'predicate;
+                                    }
+                                    other => return self.error_guard_not_bool(expr, &other),
+                                }
+                            }
+                            None => {
+                                let mut r = Value::Null;
+                                for expr in &predicate.exprs {
+                                    r = demit!(
+                                        expr.run(registry, context, event, meta, local, stack)?
+                                    );
+                                }
+                                return Ok(Cont::Cont(r));
+                            }
+                        },
+                        _ => {
+                            continue 'predicate;
+                        }
+                    }
+                }
+                ast::Pattern::Expr(ref expr) => {
+                    let expr = expr
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(&self, &expr)?;
+
+                    if target == expr {
+                        match &predicate.guard {
+                            Some(expr) => {
+                                let test = expr
+                                    .run(registry, context, event, meta, local, stack)?
+                                    .into_value(&self, &expr)?;
+                                match test {
+                                    Value::Bool(true) => {
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack,
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                    Value::Bool(false) => {
+                                        continue 'predicate;
+                                    }
+                                    other => return self.error_guard_not_bool(expr, &other),
+                                }
+                            }
+                            None => {
+                                let mut r = Value::Null;
+                                for expr in &predicate.exprs {
+                                    r = demit!(
+                                        expr.run(registry, context, event, meta, local, stack)?
+                                    );
+                                }
+                                return Ok(Cont::Cont(r));
+                            }
+                        }
+                    }
+                    continue;
+                }
+                ast::Pattern::Assign(ref a) => {
+                    let path = &a.id;
+                    match *a.pattern {
+                        ast::Pattern::Array(ref ap) => {
+                            match self.match_ap_expr(
+                                registry, context, event, meta, local, stack, &target, &ap,
+                            )? {
+                                Cont::Cont(v) => match &predicate.guard {
+                                    // FIXME make guard checks a macro ( DRY )
+                                    Some(expr) => {
+                                        let test = expr
+                                            .run(registry, context, event, meta, local, stack)?
+                                            .into_value(&self, &expr)?;
+                                        match test {
+                                            Value::Bool(true) => {
+                                                self.assign(
+                                                    registry, context, event, meta, local, &path,
+                                                    &v, stack,
+                                                )?;
+
+                                                let mut r = Value::Null;
+                                                for expr in &predicate.exprs {
+                                                    r = demit!(expr.run(
+                                                        registry, context, event, meta, local,
+                                                        stack,
+                                                    )?);
+                                                }
+                                                return Ok(Cont::Cont(r));
+                                            }
+                                            Value::Bool(false) => {
+                                                continue 'predicate;
+                                            }
+                                            other => {
+                                                return self.error_guard_not_bool(expr, &other)
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        self.assign(
+                                            registry, context, event, meta, local, &path, &v, stack,
+                                        )?;
+
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                },
+                                _ => {
+                                    continue 'predicate;
+                                }
+                            }
+                        }
+                        ast::Pattern::Record(ref rp) => {
+                            match self.match_rp_expr(
+                                registry, context, event, meta, local, stack, &target, &rp,
+                            )? {
+                                Cont::Cont(v) => match &predicate.guard {
+                                    // FIXME make guard checks a macro ( DRY )
+                                    Some(expr) => {
+                                        let test = expr
+                                            .run(registry, context, event, meta, local, stack)?
+                                            .into_value(&self, &expr)?;
+                                        match test {
+                                            Value::Bool(true) => {
+                                                self.assign(
+                                                    registry, context, event, meta, local, &path,
+                                                    &v, stack,
+                                                )?;
+
+                                                let mut r = Value::Null;
+                                                for expr in &predicate.exprs {
+                                                    r = demit!(expr.run(
+                                                        registry, context, event, meta, local,
+                                                        stack,
+                                                    )?);
+                                                }
+                                                return Ok(Cont::Cont(r));
+                                            }
+                                            Value::Bool(false) => {
+                                                continue 'predicate;
+                                            }
+                                            other => {
+                                                return self.error_guard_not_bool(expr, &other)
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        self.assign(
+                                            registry, context, event, meta, local, &path, &v, stack,
+                                        )?;
+
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                },
+                                _ => {
+                                    continue 'predicate;
+                                }
+                            }
+                        }
+                        ast::Pattern::Expr(ref expr) => {
+                            let expr = expr
+                                .run(registry, context, event, meta, local, stack)?
+                                .into_value(&self, &expr)?;
+                            let path = &a.id;
+                            if target == expr {
+                                self.assign(
+                                    registry, context, event, meta, local, &path, &expr, stack,
+                                )?;
+                                match &predicate.guard {
+                                    Some(expr) => {
+                                        let test = expr
+                                            .run(registry, context, event, meta, local, stack)?
+                                            .into_value(&self, expr)?;
+                                        match test {
+                                            Value::Bool(true) => {
+                                                let mut r = Value::Null;
+                                                for expr in &predicate.exprs {
+                                                    r = demit!(expr.run(
+                                                        registry, context, event, meta, local,
+                                                        stack,
+                                                    )?);
+                                                }
+                                                self.assign(
+                                                    registry, context, event, meta, local, &path,
+                                                    &target, stack,
+                                                )?;
+                                                return Ok(Cont::Cont(r));
+                                            }
+                                            Value::Bool(false) => {
+                                                continue 'predicate;
+                                            }
+                                            other => {
+                                                return self.error_guard_not_bool(expr, &other)
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        let mut r = Value::Null;
+                                        for expr in &predicate.exprs {
+                                            r = demit!(expr.run(
+                                                registry, context, event, meta, local, stack,
+                                            )?);
+                                        }
+                                        return Ok(Cont::Cont(r));
+                                    }
+                                }
+                            }
+                        }
+                        _ => return self.error_oops(),
+                    }
+                }
+                ast::Pattern::Default => {
+                    let mut r = Value::Null;
+                    for expr in &predicate.exprs {
+                        r = demit!(expr.run(registry, context, event, meta, local, stack)?);
+                    }
+                    return Ok(Cont::Cont(r));
+                }
+            }
+        }
+        self.error_no_clause_hit()
+    }
+
+    fn patch<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Patch,
+    ) -> Result<Value<'event>> {
+        let mut value = expr
+            .target
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.target)?;
+
+        for op in &expr.operations {
+            // NOTE: This if is inside the for loop to prevent obj to be updated
+            // between iterations and possibly lead to dangling pointers
+            if let Value::Object(ref mut obj) = value {
+                match op {
+                    ast::PatchOperation::Insert { ident, expr } => {
+                        let new_key = std::borrow::Cow::Owned(ident.clone());
+                        let new_value = expr
+                            .run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?;
+                        if obj.contains_key(&new_key) {
+                            return self.error_patch_insert_key_exists(expr, ident.clone());
+                        } else {
+                            obj.insert(new_key, new_value.clone());
+                        }
+                    }
+                    ast::PatchOperation::Update { ident, expr } => {
+                        let new_key = std::borrow::Cow::Owned(ident.clone());
+                        let new_value = expr
+                            .run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?;
+                        if obj.contains_key(&new_key) {
+                            obj.insert(new_key, new_value.clone());
+                        } else {
+                            return self.error_patch_update_key_missing(expr, ident.clone());
+                        }
+                    }
+                    ast::PatchOperation::Upsert { ident, expr } => {
+                        let new_key = std::borrow::Cow::Owned(ident.clone());
+                        let new_value = expr
+                            .run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?;
+                        obj.insert(new_key, new_value.clone());
+                    }
+                    ast::PatchOperation::Erase { ident } => {
+                        let new_key = std::borrow::Cow::Owned(ident.to_string().clone());
+                        obj.remove(&new_key);
+                    }
+                    ast::PatchOperation::Merge { ident, expr } => {
+                        let new_key = std::borrow::Cow::Owned(ident.clone());
+                        let merge_spec = expr
+                            .run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?;
+                        match obj.get_mut(&new_key) {
+                            Some(value @ Value::Object(_)) => {
+                                self.merge_values(&expr, value, merge_spec)?;
+                            }
+                            Some(other) => {
+                                return self.error_patch_merge_type_conflict(
+                                    expr,
+                                    ident.clone(),
+                                    &other,
+                                );
+                            }
+                            None => {
+                                let mut new_value = Value::Object(hashmap! {});
+                                self.merge_values(&expr, &mut new_value, merge_spec)?;
+                                obj.insert(new_key, new_value);
+                            }
+                        }
+                    }
+                    ast::PatchOperation::TupleMerge { expr } => {
+                        let merge_spec = expr
+                            .run(registry, context, event, meta, local, stack)?
+                            .into_value(&self, &expr)?;
+                        self.merge_values(&expr, &mut value, merge_spec)?;
+                    }
+                }
+            } else {
+                return self.error_type_conflict(&expr.target, value.kind(), ValueType::Object);
+            }
+        }
+        Ok(value)
+    }
+
+    fn merge<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Merge,
+    ) -> Result<Value<'event>> {
+        let mut value = expr
+            .target
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &expr.target)?;
+
+        if value.is_object() {
+            let replacement = expr
+                .expr
+                .run(registry, context, event, meta, local, stack)?
+                .into_value(&self, &expr.expr)?;
+
+            if replacement.is_object() {
+                self.merge_values(&expr.expr, &mut value, replacement)?;
+                Ok(value)
+            } else {
+                self.error_type_conflict(&expr.expr, replacement.kind(), ValueType::Object)
+            }
+        } else {
+            self.error_type_conflict(&expr.target, value.kind(), ValueType::Object)
+        }
+    }
+
+    fn comprehension<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+        expr: &'script ast::Comprehension,
+    ) -> Result<Cont<'event>> {
+        let mut value_vec = vec![];
+        let target = &expr.target;
+        let cases = &expr.cases;
+        let mut once = false;
+        let target_value = target
+            .run(registry, context, event, meta, local, stack)?
+            .into_value(&self, &target)?;
+
+        if let Value::Object(target_map) = target_value {
+            // Record comprehension case
+            'comprehension_outer: for x in target_map.iter() {
+                for e in cases {
+                    let new_key = std::borrow::Cow::Owned(e.key_name.clone());
+                    let new_value = std::borrow::Cow::Owned(e.value_name.clone());
+
+                    if let Value::Object(local_map) = local {
+                        if !once {
+                            if local_map.contains_key(&new_key) {
+                                return self.error_overwriting_local_in_comprehension(
+                                    &Expr::dummy_from(e),
+                                    e.key_name.clone(),
+                                );
+                            }
+                            if local_map.contains_key(&new_value) {
+                                return self.error_overwriting_local_in_comprehension(
+                                    &Expr::dummy_from(e),
+                                    e.value_name.clone(),
+                                );
+                            }
+                        } else {
+                            once = true;
+                        }
+
+                        local_map.insert(new_key.clone(), x.0.to_string().into());
+                        local_map.insert(new_value.clone(), x.1.clone());
+                    }
+
+                    match &e.guard {
+                        Some(expr) => {
+                            let test = expr
+                                .run(registry, context, event, meta, local, stack)?
+                                .into_value(&self, &expr)?;
+                            match test {
+                                Value::Bool(true) => {
+                                    let v = demit!(e
+                                        .expr
+                                        .run(registry, context, event, meta, local, stack,)?);
+                                    value_vec.push(v.clone());
+                                    if let Value::Object(local_map) = local {
+                                        local_map.remove(&new_key);
+                                        local_map.remove(&new_value);
+                                    }
+                                    continue 'comprehension_outer;
+                                }
+                                Value::Bool(false) => {
+                                    if let Value::Object(local_map) = local {
+                                        local_map.remove(&new_key);
+                                        local_map.remove(&new_value);
+                                    }
+                                    continue;
+                                }
+                                other => {
+                                    return self.error_type_conflict(
+                                        &expr,
+                                        other.kind(),
+                                        ValueType::Bool,
+                                    )
+                                }
+                            }
+                        }
+                        None => {
+                            let v =
+                                demit!(e.expr.run(registry, context, event, meta, local, stack)?);
+                            value_vec.push(v.clone());
+                            if let Value::Object(local_map) = local {
+                                local_map.remove(&new_key);
+                                local_map.remove(&new_value);
+                            }
+                            continue 'comprehension_outer;
+                        }
+                    }
+                }
+            }
+        } else if let Value::Array(target_map) = target_value {
+            // Array comprehension case
+            let mut count = 0;
+            'comp_array_outer: for x in target_map.iter() {
+                for e in cases {
+                    let new_key = std::borrow::Cow::Owned(e.key_name.clone());
+                    let new_value = std::borrow::Cow::Owned(e.value_name.clone());
+
+                    if let Value::Object(local_map) = local {
+                        //                                    let new_key = std::borrow::Cow::Owned(e.key_name.clone());
+                        //                                    let new_value = std::borrow::Cow::Owned(e.value_name.clone());
+                        if !once {
+                            if local_map.contains_key(&new_key) {
+                                return self.error_overwriting_local_in_comprehension(
+                                    &Expr::dummy_from(e),
+                                    e.key_name.clone(),
+                                );
+                            }
+                            if local_map.contains_key(&new_value) {
+                                return self.error_overwriting_local_in_comprehension(
+                                    &Expr::dummy_from(e),
+                                    e.key_name.clone(),
+                                );
+                            }
+                        } else {
+                            once = true;
+                        }
+
+                        local_map.insert(new_key.clone(), Value::I64(count));
+                        local_map.insert(new_value.clone(), x.clone());
+                    }
+
+                    match &e.guard {
+                        Some(expr) => {
+                            let test = expr
+                                .run(registry, context, event, meta, local, stack)?
+                                .into_value(&self, &expr)?;
+                            match test {
+                                Value::Bool(true) => {
+                                    let v = demit!(e
+                                        .expr
+                                        .run(registry, context, event, meta, local, stack,)?);
+                                    value_vec.push(v.clone());
+                                    count += 1;
+                                    if let Value::Object(local_map) = local {
+                                        local_map.remove(&new_key);
+                                        local_map.remove(&new_value);
+                                    }
+                                    continue 'comp_array_outer;
+                                }
+                                Value::Bool(false) => {
+                                    if let Value::Object(local_map) = local {
+                                        local_map.remove(&new_key);
+                                        local_map.remove(&new_value);
+                                    }
+                                    continue;
+                                }
+                                other => {
+                                    return self.error_type_conflict(
+                                        &expr,
+                                        other.kind(),
+                                        ValueType::Bool,
+                                    )
+                                }
+                            }
+                        }
+                        None => {
+                            let v =
+                                demit!(e.expr.run(registry, context, event, meta, local, stack)?);
+                            value_vec.push(v.clone());
+                            count += 1;
+                            if let Value::Object(local_map) = local {
+                                local_map.remove(&new_key);
+                                local_map.remove(&new_value);
+                            }
+                            continue 'comp_array_outer;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Cont::Cont(Value::Array(value_vec)))
+    }
+    fn resolve_path_segments<Ctx: Context + 'static>(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Vec<NormalizedSegment>> {
+        let udp = match path {
+            ast::Path::Local(path) => &path.segments,
+            ast::Path::Meta(path) => &path.segments,
+            ast::Path::Event(path) => &path.segments,
+        };
+
+        let mut segments: Vec<NormalizedSegment> = vec![];
+
+        for segment in udp {
+            match segment {
+                ast::Segment::ElementSelector { expr, start, end } => {
+                    match expr
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(&self, &expr)?
+                    {
+                        Value::I64(n) => segments.push(NormalizedSegment::Index {
+                            idx: n as usize,
+                            start: *start,
+                            end: *end,
+                        }),
+                        Value::String(s) => segments.push(NormalizedSegment::FieldRef {
+                            id: s.to_string(),
+                            start: *start,
+                            end: *end,
+                        }),
+                        other => {
+                            return self.error_type_conflict_mult(
+                                expr,
+                                other.kind(),
+                                vec![ValueType::I64, ValueType::String],
+                            )
+                        }
+                    }
+                }
+                ast::Segment::RangeSelector {
+                    range_start,
+                    range_end,
+                    start_lower,
+                    end_lower,
+                    start_upper,
+                    end_upper,
+                } => {
+                    let s = range_start
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(&self, &range_start)?;
+                    let e = range_end
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(&self, &range_end)?;
+                    match (s, e) {
+                        (Value::I64(range_start), Value::I64(range_end)) => {
+                            let range_start = range_start as usize;
+                            let range_end = range_end as usize;
+                            segments.push(NormalizedSegment::Range {
+                                range_start,
+                                range_end,
+                                start: *start_lower,
+                                end: *end_upper,
+                            });
+                        }
+                        (Value::I64(_), other) => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start_upper, *end_upper),
+                                other.kind(),
+                                ValueType::I64,
+                            );
+                        }
+                        (other, _) => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start_lower, *end_lower),
+                                other.kind(),
+                                ValueType::I64,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(segments)
+    }
+}
+
+impl<'run, 'event, 'script, Ctx> Interpreter<'run, 'event, 'script, Ctx> for ast::Expr
+where
+    Ctx: Context + 'static,
+    'script: 'event,
+    'event: 'run,
+{
+    fn resolve(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Value<'event>> {
+        let segments =
+            self.resolve_path_segments(registry, context, event, meta, local, path, stack)?;
+
+        let mut current: &Value = match path {
+            ast::Path::Local(_path) => local,
+            ast::Path::Meta(_path) => meta,
+            ast::Path::Event(_path) => event,
+        };
+
+        let segments = &mut segments.iter().peekable();
+        'outer: while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                match segment {
+                    NormalizedSegment::FieldRef { id, start, end } => match current {
+                        Value::Object(o) => {
+                            let id = id.as_str();
+                            if let Some(v) = o.get(id) {
+                                return Ok(v.clone());
+                            } else {
+                                return self.error_bad_key(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    id.into(),
+                                );
+                            }
+                        }
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Array,
+                            )
+                        }
+                    },
+                    NormalizedSegment::Index { idx, start, end } => match current {
+                        Value::Array(a) => {
+                            return if let Some(v) = a.get(*idx) {
+                                Ok(v.clone())
+                            } else {
+                                self.error_array_out_of_bound(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    *idx..*idx,
+                                )
+                            }
+                        }
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Array,
+                            )
+                        }
+                    },
+                    NormalizedSegment::Range {
+                        range_start,
+                        range_end,
+                        start,
+                        end,
+                    } => match current {
+                        Value::Array(a) => {
+                            return if let Some(v) = a.get(*range_start..*range_end) {
+                                Ok(Value::Array(v.to_vec()))
+                            } else {
+                                self.error_array_out_of_bound(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    *range_start..*range_end,
+                                )
+                            }
+                        }
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Array,
+                            )
+                        }
+                    },
+                }
+            } else {
+                match segment {
+                    NormalizedSegment::FieldRef { id, start, end } => match current {
+                        Value::Object(o) => match o.get(id.as_str()) {
+                            Some(c @ Value::Object(_)) => {
+                                current = c;
+                                continue 'outer;
+                            }
+                            Some(c @ Value::Array(_)) => {
+                                current = c;
+                                continue 'outer;
+                            }
+                            Some(other) => {
+                                return self.error_type_conflict_mult(
+                                    &ast::Expr::dummy(*start, *end),
+                                    other.kind(),
+                                    vec![ValueType::Object, ValueType::Array],
+                                )
+                            }
+                            None => {
+                                return self.error_bad_key(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    id.clone(),
+                                )
+                            }
+                        },
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Object,
+                            )
+                        }
+                    },
+                    NormalizedSegment::Index { idx, start, end } => match current {
+                        Value::Array(a) => {
+                            if let Some(v) = a.get(*idx) {
+                                current = v;
+                            } else {
+                                return self.error_array_out_of_bound(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    *idx..*idx,
+                                );
+                            }
+
+                            continue;
+                        }
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Array,
+                            )
+                        }
+                    },
+                    NormalizedSegment::Range {
+                        range_start,
+                        range_end,
+                        start,
+                        end,
+                    } => match current {
+                        Value::Array(b) => {
+                            if let Some(v) = b.get(*range_start..*range_end) {
+                                current = stack.push(Value::Array(v.to_vec()));
+                            } else {
+                                return self.error_array_out_of_bound(
+                                    &ast::Expr::dummy(*start, *end),
+                                    &path,
+                                    *range_start..*range_end,
+                                );
+                            }
+                            continue 'outer;
+                        }
+                        other => {
+                            return self.error_type_conflict(
+                                &ast::Expr::dummy(*start, *end),
+                                other.kind(),
+                                ValueType::Array,
+                            )
+                        }
+                    },
+                }
+            }
+        }
+        Ok(current.clone())
+    }
+
+    fn assign(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path,
+        value: &'run Value<'event>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Value<'event>> {
+        let segments =
+            self.resolve_path_segments(registry, context, event, meta, local, path, stack)?;
+
+        let mut current: &mut Value = match path {
+            ast::Path::Local(_path) => local,
+            ast::Path::Meta(_path) => meta,
+            ast::Path::Event(_path) => event,
+        };
+
+        let segments = &mut segments.iter().peekable();
+        'assign_next: while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                match segment {
+                    NormalizedSegment::FieldRef { id, start, end } => {
+                        let id = id.to_string();
+                        match current {
+                            Value::Object(ref mut o) => {
+                                o.insert(id.clone().into(), value.clone());
+                                if let Some(v) = o.get(id.as_str()) {
+                                    return Ok(v.clone());
+                                } else {
+                                    // NOTE We just added this so we know that it is in `o`
+                                    unreachable!()
+                                }
+                            }
+                            other => {
+                                return self.error_type_conflict(
+                                    &Expr::dummy(*start, *end),
+                                    other.kind(),
+                                    ValueType::Object,
+                                )
+                            }
+                        }
+                    }
+                    NormalizedSegment::Index { start, end, .. } => {
+                        return self.error_assign_array(&Expr::dummy(*start, *end))
+                    }
+                    NormalizedSegment::Range { start, end, .. } => {
+                        return self.error_assign_array(&Expr::dummy(*start, *end))
+                    }
+                }
+            } else {
+                match segment {
+                    NormalizedSegment::FieldRef { id, start, end } => {
+                        if let Value::Object(ref mut map) = current {
+                            if map.contains_key(id.as_str()) {
+                                current = if let Some(v) = map.get_mut(id.as_str()) {
+                                    v
+                                } else {
+                                    /* NOTE The code we want here is the following
+                                    but rust does not allow that because it's stupid
+                                    so we have to work around it.
+
+                                      if let Some(v) = map.get_mut(id.as_str()) {
+                                        current = v;
+                                        continue 'assign_next;
+                                      } else { ... }
+
+                                     */
+                                    unreachable!()
+                                };
+                                continue 'assign_next;
+                            } else {
+                                map.insert(id.to_string().into(), Value::Object(hashmap! {}));
+                                // NOTE this is safe because we just added this element
+                                // to the map.
+                                current = if let Some(v) = map.get_mut(id.as_str()) {
+                                    v
+                                } else {
+                                    unreachable!()
+                                };
+                                continue 'assign_next;
+                            }
+                        } else {
+                            return self.error_type_conflict(
+                                &Expr::dummy(*start, *end),
+                                current.kind(),
+                                ValueType::Object,
+                            );
+                        }
+                    }
+                    NormalizedSegment::Index { start, end, .. } => {
+                        return self.error_assign_array(&Expr::dummy(*start, *end))
+                    }
+                    NormalizedSegment::Range { start, end, .. } => {
+                        return self.error_assign_array(&Expr::dummy(*start, *end))
+                    }
+                }
+            }
+        }
+
+        if let ast::Path::Meta(segments) = path {
+            if segments.segments.is_empty() {
+                *meta = value.clone();
+            }
+        }
+
+        if let ast::Path::Event(segments) = path {
+            if segments.segments.is_empty() {
+                *event = value.clone();
+            }
+        }
+
+        Ok(value.clone())
+    }
+
+    fn run(
+        &'script self,
+        registry: &'run Registry<Ctx>,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<Cont<'event>> {
+        match self {
+            ast::Expr::Emit(expr) => Ok(Cont::Emit(demit!(expr
+                .expr
+                .run(registry, context, event, meta, local, stack)?))),
+            ast::Expr::Drop(expr) => Ok(Cont::Drop(demit!(expr
+                .expr
+                .run(registry, context, event, meta, local, stack)?))),
+            ast::Expr::Literal(literal) => self
+                .literal(registry, context, event, meta, local, stack, literal)
+                .map(Cont::Cont),
+            ast::Expr::Assign(expr) => {
+                let value = demit!(expr
+                    .expr
+                    .run(registry, context, event, meta, local, stack)?);
+                self.assign(
+                    registry, context, event, meta, local, &expr.path, &value, stack,
+                )
+                .map(Cont::Cont)
+            }
+            ast::Expr::Path(path) => self
+                .resolve(registry, context, event, meta, local, path, stack)
+                .map(Cont::Cont),
+            ast::Expr::RecordExpr(ref record) => {
+                let mut object: Map = hashmap! {};
+                for field in &record.fields {
+                    let result = field
+                        .value
+                        .run(registry, context, event, meta, local, stack)?
+                        .into_value(&self, &field.value)?;
+                    let key = field.name.clone();
+                    object.insert(key.into(), result.clone());
+                }
+                Ok(Cont::Cont(Value::Object(object)))
+            }
+            ast::Expr::Invoke(ref call) => self
+                .invoke(registry, context, event, meta, local, stack, call)
+                .map(Cont::Cont),
+            ast::Expr::Unary(ref expr) => self
+                .unary(registry, context, event, meta, local, stack, expr)
+                .map(Cont::Cont),
+            ast::Expr::Binary(ref expr) => self
+                .binary(registry, context, event, meta, local, stack, expr)
+                .map(Cont::Cont),
+            ast::Expr::MatchExpr(ref expr) => {
+                self.match_expr(registry, context, event, meta, local, stack, expr)
+            }
+            ast::Expr::PatchExpr(ref expr) => self
+                .patch(registry, context, event, meta, local, stack, expr)
+                .map(Cont::Cont),
+            ast::Expr::MergeExpr(ref expr) => self
+                .merge(registry, context, event, meta, local, stack, expr)
+                .map(Cont::Cont),
+            ast::Expr::Comprehension(ref expr) => {
+                self.comprehension(registry, context, event, meta, local, stack, expr)
+            }
+            // ast::Expr::PatternExpr(ref rp) => {
+            // self.match_rp_expr(registry, context, event, meta, local, stack, rp);
+            //     match self.rp(registry, context, event, meta, local, stack, &target, rp)? {
+            //         PredicateCont::NoMatch => {
+            //             Ok(Cont::Cont(Value::Null));
+            //         }
+            //         PredicateCont::Match => {
+            //             let mut r = Value::Null;
+            //             for expr in &predicate.exprs {
+            //                 r = demit!(expr.run(registry, context, event, meta, local, stack,)?);
+            //             }
+            //             return Ok(Cont::Cont(r));
+            //         }
+            //     }
+            // FIXME
+            // Ok(Cont::Cont(Value::Null))
+            // }
+            _ => {
+                // TODO FIXME replace with an error ( illegal expr )
+                Ok(Cont::Cont(Value::Null))
+            }
+        }
     }
 }

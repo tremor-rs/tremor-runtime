@@ -28,14 +28,13 @@ use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use futures::Future;
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use hostname::get_hostname;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde_yaml;
 use std::fmt;
 use tokio_threadpool as thread_pool;
-use tremor_pipeline::EventValue;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -125,7 +124,7 @@ impl Offramp for Kafka {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            if let Ok(EventValue::Raw(raw)) = codec.encode(event.value) {
+            if let Ok(raw) = codec.encode(event.value) {
                 let mut record = FutureRecord::to(&self.topic);
                 record = record.payload(&raw);
                 //TODO: Key

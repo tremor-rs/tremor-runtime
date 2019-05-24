@@ -1,0 +1,29 @@
+###
+### Literal support in tremor-script
+###
+
+null ; # The absence of a value
+
+true ; # Boolean true
+false ; # Boolean false
+
+1 ; 10; 10123 ; # Integer numerics
+
+1.23 ; 1.23e10 ; -1.23e-10 ; +2.345e+10 ; # Floating point numerics
+
+"string literals support emoji 🌊" ; # UTF-8 encoded string data
+
+"strings
+can span
+multiple
+lines
+" ; # multi-line strings
+
+[] ; # Empty array
+{} ; # Empty object
+
+[ 1, 2, "foobar", true, { "key": "value" } ] ; # Arrays are non-homogenous
+
+{ "foo": "bar", "bar": [ 1, 2, "foobar", true, { "key": "value" } ] } ; # JSON-like object structures
+
+

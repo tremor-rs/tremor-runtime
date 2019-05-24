@@ -1,0 +1,2 @@
+let local := { "turtle": "{\"snot\": \"badger\"}" };
+drop json::decode(local.turtle);

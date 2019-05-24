@@ -57,37 +57,14 @@ that forces any failing test to fail its specification. This drastically reduces
 of QA and developer time required to verify or prove a piece of code works given a suitably
 defined specification.
 
-### Licensing
+Follow the installation steps outlined [here](https://docs.csnzoo.com/tremor/eqc-api-testing/installation/)
 
-In order to function, EQC needs to be licensed.
+### Start tremor
 
-### Install Erlang
-
-Get and install Erlang
+You need to start the tremor to run the tests:
 
 ```bash
-$ brew install kerl
-$ kerl build 21.2 21.2
-$ kerl install 21.2 ~/kerl/21.2
-$ . ~/kerl/21.2/activate
-$ brew install rebar3
-```
-
-Get and install the latest EQC:
-
-```bash
-$ curl -O http://quviq-licencer.com/downloads/eqcR21.zip
-$ unzip eqcR21.zip
-$ cd 'Quviq QuickCheck version 1.44.1'
-$ erl
-```
-
-Install EQC via the Erlang shell:
-
-```erl
-1> eqc_install:install().
-%% ...
-2> eqc:registration("xxxxxxxxxxxx").
+$ cargo run -p tremor-server 
 ```
 
 ### Running EQC
@@ -95,5 +72,5 @@ Install EQC via the Erlang shell:
 In `tremor-runtime/tremor-erl` run:
 
 ```bash
-$ rebar as eqc eqc
+$ rebar3 as eqc eqc
 ```

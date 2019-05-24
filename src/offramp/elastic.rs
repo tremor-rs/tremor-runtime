@@ -38,21 +38,22 @@ use crate::errors::*;
 use crate::system::{PipelineAddr, PipelineMsg};
 use crate::url::TremorURL;
 use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, EventValue, OpConfig};
+use crate::{Event, OpConfig};
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use hostname::get_hostname;
-use serde_json::{json, Value};
 use serde_yaml;
+use simd_json::{json, OwnedValue};
 use std::convert::From;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use std::{fmt, str};
 use threadpool::ThreadPool;
 use tremor_pipeline::MetaMap;
+use tremor_script::{LineValue, Value};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -150,16 +151,16 @@ impl Elastic {
             let r = Self::flush(&destination.client, payload.as_str());
             let mut m = MetaMap::new();
             if let Ok(t) = r {
-                m.insert("time".to_string(), json!(t));
+                m.insert("time".into(), json!(t));
             } else {
                 error!("Elastic search error: {:?}", r);
-                m.insert("error".to_string(), json!("Failed to send to ES"));
+                m.insert("error".into(), json!("Failed to send to ES"));
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
                 meta: m,
-                value: tremor_pipeline::EventValue::None,
+                value: LineValue::new(Box::new(vec![]), |_| Value::Null),
                 ingest_ns: nanotime(),
                 kind: None,
             };
@@ -202,34 +203,34 @@ impl Offramp for Elastic {
         let mut payload = String::from("");
 
         for event in event.into_iter() {
-            let index = if let Some(Value::String(index)) = event.meta.get("index") {
+            let index = if let Some(OwnedValue::String(index)) = event.meta.get("index") {
                 index
             } else {
                 error!("'index' not set for elastic offramp!");
                 return;
             };
-            let doc_type = if let Some(Value::String(doc_type)) = event.meta.get("doc_type") {
+            let doc_type = if let Some(OwnedValue::String(doc_type)) = event.meta.get("doc_type") {
                 doc_type
             } else {
                 error!("'doc-type' not set for elastic offramp!");
                 return;
             };
-            let pipeline = if let Some(Value::String(pipeline)) = event.meta.get("pipeline") {
+            let pipeline = if let Some(OwnedValue::String(pipeline)) = event.meta.get("pipeline") {
                 Some(pipeline)
             } else {
                 None
             };
             match pipeline {
-                None => payload.push_str(
-                    json!({
+                None => {
+                    if let Ok(s) = serde_json::to_string(&json!({
                     "index":
                     {
                         "_index": index,
                         "_type": doc_type
-                    }})
-                    .to_string()
-                    .as_str(),
-                ),
+                    }})) {
+                        payload.push_str(s.as_str())
+                    }
+                }
                 Some(ref pipeline) => payload.push_str(
                     json!({
                     "index":
@@ -243,21 +244,18 @@ impl Offramp for Elastic {
                 ),
             };
             payload.push('\n');
-            match event.value {
-                EventValue::JSON(json) => match serde_json::to_string(&json) {
-                    Ok(s) => {
-                        payload.push_str(s.as_str());
-                        payload.push('\n');
-                    }
-                    Err(e) => error!("Failed to encode json {}", e),
-                },
-                _ => error!("Event data needs to be json"),
+            match serde_json::to_string(&event.value) {
+                Ok(s) => {
+                    payload.push_str(s.as_str());
+                    payload.push('\n');
+                }
+                Err(e) => error!("Failed to encode json {}", e),
             }
         }
         let _ = self.maybe_enque(payload);
     }
     fn default_codec(&self) -> &str {
-        "pass"
+        "json"
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

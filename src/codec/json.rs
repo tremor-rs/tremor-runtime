@@ -15,23 +15,18 @@
 use super::Codec;
 use crate::errors::*;
 use serde_json;
-use tremor_pipeline::EventValue;
+use simd_json;
+use tremor_script::LineValue;
 
 #[derive(Clone)]
 pub struct JSON {}
 
 impl Codec for JSON {
-    fn decode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::JSON(_) => Ok(data),
-            EventValue::Raw(data) => Ok(EventValue::JSON(serde_json::from_slice(&data)?)),
-            EventValue::None => Ok(EventValue::JSON(serde_json::Value::Null)),
-        }
+    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+        LineValue::try_new(Box::new(data), |data| simd_json::to_borrowed_value(data))
+            .map_err(|e| e.0.into())
     }
-    fn encode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::JSON(data) => Ok(EventValue::Raw(serde_json::to_vec(&data)?)),
-            _ => Err("Trying to encode non json data.".into()),
-        }
+    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(&data)?)
     }
 }

@@ -23,8 +23,13 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, dimensions, rate, cardinality;
-            _ { $class := "test"; $dimensions := logger_name; $rate := 1; $cardinality := 2; }
+            let $class = "test";
+            let $dimensions = event.logger_name;
+            let $rate = 1;
+            let $cardinality = 2;
+            let $windows = 1;
+            #let $time_range = 10000;
+            event;
       - id: b
         op: grouper::bucket
     links:

@@ -49,8 +49,9 @@ pub struct OnRamp {
     pub id: ID,
     #[serde(default = "dflt")]
     pub description: String,
-    #[serde(default = "dflt")]
+    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
     pub codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: dynaconfig::ConfigMap,
 }
 
@@ -62,8 +63,9 @@ pub struct OffRamp {
     pub id: ID,
     #[serde(default = "dflt")]
     pub description: String,
-    #[serde(default = "dflt")]
+    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
     pub codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: dynaconfig::ConfigMap,
 }
 

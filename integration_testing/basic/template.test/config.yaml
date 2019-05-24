@@ -18,14 +18,19 @@ pipeline:
         - in
       outputs:
         - out
-    nodes: []
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            event;
     links:
-      in: [ out ]
+      in: [ r ]
+      r: [ out ]
 
 binding:
   - id: test
     links:
       '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
-
 

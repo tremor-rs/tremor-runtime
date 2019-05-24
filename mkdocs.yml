@@ -28,8 +28,12 @@ nav:
       - Overview: tremor-script.md
       - Functions:
           - Overview: tremor-script/functions.md
+          - array: tremor-script/functions/array.md
+          - object: tremor-script/functions/object.md
+          - re: tremor-script/functions/re.md
           - string: tremor-script/functions/string.md
           - system: tremor-script/functions/system.md
+          - type: tremor-script/functions/type.md
     - API: Api.md
     - Tremor Tool: CLI.md
     - Configuration Walkthrough: ConfigurationWalkthrough.md
@@ -43,4 +47,6 @@ nav:
     - Profiling: Profiling.md
     - 'Debugging with LLDB': Debugging.md
     - Benchmarking: Benchmarking.md
+    - Testing: Testing.md
+    - Investigation: IssueInvestigation.md
   - 'Glossary': Glossary.md

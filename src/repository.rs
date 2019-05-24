@@ -231,7 +231,7 @@ impl<A: 'static + Artefact> Handler<PublishArtefact<A>> for Repository<A> {
     type Result = Result<A>;
     fn handle(&mut self, req: PublishArtefact<A>, _ctx: &mut Self::Context) -> Self::Result {
         self.publish(req.id, req.system, req.artefact)
-            .map(|p| p.clone())
+            .map(std::clone::Clone::clone)
     }
 }
 
@@ -264,7 +264,8 @@ impl<A: 'static + Artefact> Message for RegisterInstance<A> {
 impl<A: 'static + Artefact> Handler<RegisterInstance<A>> for Repository<A> {
     type Result = Result<A>;
     fn handle(&mut self, req: RegisterInstance<A>, _ctx: &mut Self::Context) -> Self::Result {
-        self.bind(req.id, req.servant_id).map(|a| a.clone())
+        self.bind(req.id, req.servant_id)
+            .map(std::clone::Clone::clone)
     }
 }
 
@@ -291,7 +292,8 @@ impl<A: 'static + Artefact> Message for UnregisterInstance<A> {
 impl<A: 'static + Artefact> Handler<UnregisterInstance<A>> for Repository<A> {
     type Result = Result<A>;
     fn handle(&mut self, req: UnregisterInstance<A>, _ctx: &mut Self::Context) -> Self::Result {
-        self.unbind(req.id, req.servant_id).map(|a| a.clone())
+        self.unbind(req.id, req.servant_id)
+            .map(std::clone::Clone::clone)
     }
 }
 

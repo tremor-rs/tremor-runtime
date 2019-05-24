@@ -20,7 +20,7 @@ pub use crate::url::TremorURL;
 use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 pub use std::thread;
-pub use tremor_pipeline::{Event, EventValue};
+pub use tremor_pipeline::Event;
 
 // We are borrowing a dyn box as we don't want to pass ownership.
 #[allow(clippy::borrowed_box)]
@@ -28,7 +28,7 @@ pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
     codec: &Box<dyn Codec>,
     id: u64,
-    data: EventValue,
+    data: Vec<u8>,
 ) {
     if let Ok(value) = codec.decode(data) {
         let event = tremor_pipeline::Event {
@@ -39,14 +39,18 @@ pub fn send_event(
             ingest_ns: nanotime(),
             kind: None,
         };
-        // TODO: Only send the last
-        for (input, addr) in pipelines {
+        let len = pipelines.len();
+        for (input, addr) in &pipelines[..len - 1] {
             if let Some(input) = input.instance_port() {
                 let _ = addr.addr.send(PipelineMsg::Event {
                     input,
                     event: event.clone(),
                 });
             }
+        }
+        let (input, addr) = &pipelines[len - 1];
+        if let Some(input) = input.instance_port() {
+            let _ = addr.addr.send(PipelineMsg::Event { input, event });
         }
     }
 }

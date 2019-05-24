@@ -16,4 +16,6 @@ then
     exit 1
 fi
 
+echo "######## $1"
 target/release/tremor-server -c $file bench/link.yaml
+

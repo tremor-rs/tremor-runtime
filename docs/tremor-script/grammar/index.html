@@ -1,0 +1,862 @@
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+   <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+      <meta name="generator" content="Railroad Diagram Generator 1.59.1797">
+      <style type="text/css" xml:space="preserve">
+    ::-moz-selection
+    {
+      color: #F0FAFF;
+      background: #000A0F;
+    }
+    ::selection
+    {
+      color: #F0FAFF;
+      background: #000A0F;
+    }      
+    .ebnf a, .grammar a
+    {
+      text-decoration: none;
+    }
+    .ebnf a:hover, .grammar a:hover
+    {
+      color: #000305;
+      text-decoration: underline;
+    }    
+    .signature
+    {
+      color: #005580;
+      font-size: 11px;
+      text-align: right;
+    }
+    body
+    {
+      font: normal 12px Verdana, sans-serif;
+      color: #000A0F;
+      background: #F0FAFF;
+    }
+    a:link, a:visited
+    {
+      color: #000A0F;
+    }
+    a:link.signature, a:visited.signature
+    {
+      color: #005580;
+    }
+    a.button, #tabs li a
+    {
+      padding: 0.25em 0.5em;
+      border: 1px solid #005580;
+      background: #C6E2F1;
+      color: #005580;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    a.button:hover, #tabs li a:hover
+    {
+      color: #000305;
+      background: #D1F0FF;
+      border-color: #000305;       
+    }     
+    #tabs
+    {
+      padding: 3px 10px;
+      margin-left: 0;
+      margin-top: 58px;
+      border-bottom: 1px solid #000A0F;
+    }  
+    #tabs li
+    {
+      list-style: none;
+      margin-left: 5px;
+      display: inline;
+    }
+    #tabs li a
+    {     
+      border-bottom: 1px solid #000A0F;
+    }
+    #tabs li a.active
+    {
+      color: #000A0F;
+      background: #F0FAFF;
+      border-color: #000A0F;
+      border-bottom: 1px solid #F0FAFF;
+      outline: none;
+    }
+    #divs div
+    {
+      display: none;
+      overflow:auto;
+    }
+    #divs div.active
+    {
+      display: block;
+    }
+    #text
+    {
+      border-color: #005580;
+      background: #FAFDFF;
+      color: #000305;
+    }
+    .small
+    {
+      vertical-align: top;
+      text-align: right;
+      font-size: 9px;
+      font-weight: normal;
+      line-height: 120%;
+    }
+    td.small
+    {
+      padding-top: 0px;
+    }
+    .hidden
+    {
+      visibility: hidden;
+    }
+    td:hover .hidden 
+    {
+      visibility: visible;
+    }
+    div.download
+    {
+      display: none;
+      background: #F0FAFF;
+      position: absolute;
+      right: 34px;
+      top: 94px;
+      padding: 10px;
+      border: 1px dotted #000A0F;
+    }
+    #divs div.ebnf, .ebnf code
+    {
+      display: block;
+      padding: 10px;
+      background: #D1F0FF;
+      width: 992px;
+    }
+    #divs div.grammar
+    {
+      display: block;
+      padding-left: 16px;
+      padding-top: 2px;
+      padding-bottom: 2px;
+      background: #D1F0FF;
+    }
+    pre
+    {
+      margin: 0px;
+    }
+    .ebnf div
+    {
+      padding-left: 13ch;
+      text-indent: -13ch;
+    }
+    .ebnf code, .grammar code, textarea, pre
+    {
+      font:12px SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+    }
+    tr.option-line td:first-child
+    {
+      text-align: right
+    }
+    tr.option-text td
+    {
+      padding-bottom: 10px
+    }
+    table.palette
+    {
+      border-top: 1px solid #000305;
+      border-right: 1px solid #000305;
+      margin-bottom: 4px
+    }
+    td.palette
+    {
+      border-bottom: 1px solid #000305;
+      border-left: 1px solid #000305;
+    }
+    a.palette
+    {
+      padding: 2px 3px 2px 10px;
+      text-decoration: none;
+    }
+    .palette
+    {
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -o-user-select: none;
+      -ms-user-select: none;
+    }
+  </style>
+   </head>
+   <body>
+      
+      <p style="font-size: 14px; font-weight:bold"><a name="Script" shape="rect">Script:</a></p><img border="0" src="diagram/Script.png" height="97" width="231" usemap="#Script.map"><map name="Script.map"><area shape="rect" coords="69,17,117,49" href="#Expr" title="Expr"><area shape="rect" coords="49,61,97,93" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Script" title="Script" shape="rect">Script</a>&nbsp;&nbsp;&nbsp;::= ( <a href="#Expr" title="Expr" shape="rect">Expr</a> ';' )+</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Expr" shape="rect">Expr:</a></p><img border="0" src="diagram/Expr.png" height="81" width="171" usemap="#Expr.map"><map name="Expr.map"><area shape="rect" coords="49,45,121,77" href="#AndExpr" title="AndExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Expr" title="Expr" shape="rect">Expr</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#AndExpr" title="AndExpr" shape="rect">AndExpr</a> ( 'or' <a href="#AndExpr" title="AndExpr" shape="rect">AndExpr</a> )*</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Array" title="Array" shape="rect">Array</a></li>
+            <li><a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a></li>
+            <li><a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a></li>
+            <li><a href="#Drop" title="Drop" shape="rect">Drop</a></li>
+            <li><a href="#Effectors" title="Effectors" shape="rect">Effectors</a></li>
+            <li><a href="#Emit" title="Emit" shape="rect">Emit</a></li>
+            <li><a href="#ExprCase" title="ExprCase" shape="rect">ExprCase</a></li>
+            <li><a href="#FnCall" title="FnCall" shape="rect">FnCall</a></li>
+            <li><a href="#For" title="For" shape="rect">For</a></li>
+            <li><a href="#ForCaseClause" title="ForCaseClause" shape="rect">ForCaseClause</a></li>
+            <li><a href="#Guard" title="Guard" shape="rect">Guard</a></li>
+            <li><a href="#Match" title="Match" shape="rect">Match</a></li>
+            <li><a href="#Merge" title="Merge" shape="rect">Merge</a></li>
+            <li><a href="#Patch" title="Patch" shape="rect">Patch</a></li>
+            <li><a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a></li>
+            <li><a href="#Script" title="Script" shape="rect">Script</a></li>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="AndExpr" shape="rect">AndExpr:</a></p><img border="0" src="diagram/AndExpr.png" height="69" width="311" usemap="#AndExpr.map"><map name="AndExpr.map"><area shape="rect" coords="29,1,93,33" href="#EqExpr" title="EqExpr"><area shape="rect" coords="197,33,261,65" href="#EqExpr" title="EqExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#AndExpr" title="AndExpr" shape="rect">AndExpr</a>&nbsp;&nbsp;::= <a href="#EqExpr" title="EqExpr" shape="rect">EqExpr</a> ( 'and' <a href="#EqExpr" title="EqExpr" shape="rect">EqExpr</a> )?</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Expr" title="Expr" shape="rect">Expr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="EqExpr" shape="rect">EqExpr:</a></p><img border="0" src="diagram/EqExpr.png" height="113" width="371" usemap="#EqExpr.map"><map name="EqExpr.map"><area shape="rect" coords="29,1,105,33" href="#CmpExpr" title="CmpExpr"><area shape="rect" coords="245,33,321,65" href="#CmpExpr" title="CmpExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#EqExpr" title="EqExpr" shape="rect">EqExpr</a>&nbsp;&nbsp;&nbsp;::= <a href="#CmpExpr" title="CmpExpr" shape="rect">CmpExpr</a> ( ( '==' | '!=' ) <a href="#CmpExpr" title="CmpExpr" shape="rect">CmpExpr</a> )?</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#AndExpr" title="AndExpr" shape="rect">AndExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="CmpExpr" shape="rect">CmpExpr:</a></p><img border="0" src="diagram/CmpExpr.png" height="201" width="363" usemap="#CmpExpr.map"><map name="CmpExpr.map"><area shape="rect" coords="29,1,101,33" href="#AddExpr" title="AddExpr"><area shape="rect" coords="241,33,313,65" href="#AddExpr" title="AddExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#CmpExpr" title="CmpExpr" shape="rect">CmpExpr</a>&nbsp;&nbsp;::= <a href="#AddExpr" title="AddExpr" shape="rect">AddExpr</a> ( ( '&gt;=' | '&gt;' | '&lt;=' | '&lt;' ) <a href="#AddExpr" title="AddExpr" shape="rect">AddExpr</a> )?</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#EqExpr" title="EqExpr" shape="rect">EqExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="AddExpr" shape="rect">AddExpr:</a></p><img border="0" src="diagram/AddExpr.png" height="113" width="349" usemap="#AddExpr.map"><map name="AddExpr.map"><area shape="rect" coords="29,1,99,33" href="#MulExpr" title="MulExpr"><area shape="rect" coords="229,33,299,65" href="#MulExpr" title="MulExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#AddExpr" title="AddExpr" shape="rect">AddExpr</a>&nbsp;&nbsp;::= <a href="#MulExpr" title="MulExpr" shape="rect">MulExpr</a> ( ( '+' | '-' ) <a href="#MulExpr" title="MulExpr" shape="rect">MulExpr</a> )?</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#CmpExpr" title="CmpExpr" shape="rect">CmpExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="MulExpr" shape="rect">MulExpr:</a></p><img border="0" src="diagram/MulExpr.png" height="157" width="381" usemap="#MulExpr.map"><map name="MulExpr.map"><area shape="rect" coords="29,1,113,33" href="#UnaryExpr" title="UnaryExpr"><area shape="rect" coords="247,33,331,65" href="#UnaryExpr" title="UnaryExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#MulExpr" title="MulExpr" shape="rect">MulExpr</a>&nbsp;&nbsp;::= <a href="#UnaryExpr" title="UnaryExpr" shape="rect">UnaryExpr</a> ( ( '*' | '/' | '%' ) <a href="#UnaryExpr" title="UnaryExpr" shape="rect">UnaryExpr</a> )?</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#AddExpr" title="AddExpr" shape="rect">AddExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="UnaryExpr" shape="rect">UnaryExpr:</a></p><img border="0" src="diagram/UnaryExpr.png" height="81" width="219" usemap="#UnaryExpr.map"><map name="UnaryExpr.map"><area shape="rect" coords="119,1,189,33" href="#NotExpr" title="NotExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#UnaryExpr" title="UnaryExpr" shape="rect">UnaryExpr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( '+' | '-' ) <a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MulExpr" title="MulExpr" shape="rect">MulExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="NotExpr" shape="rect">NotExpr:</a></p><img border="0" src="diagram/NotExpr.png" height="37" width="211" usemap="#NotExpr.map"><map name="NotExpr.map"><area shape="rect" coords="91,1,181,33" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a>&nbsp;&nbsp;::= 'not' <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#UnaryExpr" title="UnaryExpr" shape="rect">UnaryExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="SimpleExpr" shape="rect">SimpleExpr:</a></p><img border="0" src="diagram/SimpleExpr.png" height="521" width="239" usemap="#SimpleExpr.map"><map name="SimpleExpr.map"><area shape="rect" coords="49,1,109,33" href="#Literal" title="Literal"><area shape="rect" coords="95,45,143,77" href="#Expr" title="Expr"><area shape="rect" coords="49,89,97,121" href="#Path" title="Path"><area shape="rect" coords="49,133,113,165" href="#Record" title="Record"><area shape="rect" coords="49,177,105,209" href="#Match" title="Match"><area shape="rect" coords="49,221,103,253" href="#Patch" title="Patch"><area shape="rect" coords="49,265,107,297" href="#Merge" title="Merge"><area shape="rect" coords="49,309,107,341" href="#FnCall" title="FnCall"><area shape="rect" coords="49,353,89,385" href="#For" title="For"><area shape="rect" coords="49,397,89,429" href="#Let" title="Let"><area shape="rect" coords="49,441,99,473" href="#Drop" title="Drop"><area shape="rect" coords="49,485,97,517" href="#Emit" title="Emit"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#Literal" title="Literal" shape="rect">Literal</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| '(' <a href="#Expr" title="Expr" shape="rect">Expr</a> ')'</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Path" title="Path" shape="rect">Path</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Record" title="Record" shape="rect">Record</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Match" title="Match" shape="rect">Match</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Patch" title="Patch" shape="rect">Patch</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Merge" title="Merge" shape="rect">Merge</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#FnCall" title="FnCall" shape="rect">FnCall</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#For" title="For" shape="rect">For</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Let" title="Let" shape="rect">Let</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Drop" title="Drop" shape="rect">Drop</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Emit" title="Emit" shape="rect">Emit</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Let" title="Let" shape="rect">Let</a></li>
+            <li><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a></li>
+            <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Literal" shape="rect">Literal:</a></p><img border="0" src="diagram/Literal.png" height="257" width="173" usemap="#Literal.map"><map name="Literal.map"><area shape="rect" coords="49,45,97,77" href="#Bool" title="Bool"><area shape="rect" coords="49,89,123,121" href="#INTEGER" title="INTEGER"><area shape="rect" coords="49,133,107,165" href="#FLOAT" title="FLOAT"><area shape="rect" coords="49,177,107,209" href="#String" title="String"><area shape="rect" coords="49,221,103,253" href="#Array" title="Array"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Literal" title="Literal" shape="rect">Literal</a>&nbsp;&nbsp;::= 'null'</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Bool" title="Bool" shape="rect">Bool</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#INTEGER" title="INTEGER" shape="rect">INTEGER</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#FLOAT" title="FLOAT" shape="rect">FLOAT</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#String" title="String" shape="rect">String</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Array" title="Array" shape="rect">Array</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Array" shape="rect">Array:</a></p><img border="0" src="diagram/Array.png" height="97" width="279" usemap="#Array.map"><map name="Array.map"><area shape="rect" coords="115,45,163,77" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Array" title="Array" shape="rect">Array</a>&nbsp;&nbsp;&nbsp;&nbsp;::= '[' ( <a href="#Expr" title="Expr" shape="rect">Expr</a> ( ',' <a href="#Expr" title="Expr" shape="rect">Expr</a> )* )? ']'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Literal" title="Literal" shape="rect">Literal</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Bool" shape="rect">Bool:</a></p><img border="0" src="diagram/Bool.png" height="81" width="151"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Bool" title="Bool" shape="rect">Bool</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'true'</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 'false'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Literal" title="Literal" shape="rect">Literal</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Let" shape="rect">Let:</a></p><img border="0" src="diagram/Let.png" height="37" width="325" usemap="#Let.map"><map name="Let.map"><area shape="rect" coords="87,1,135,33" href="#Path" title="Path"><area shape="rect" coords="205,1,295,33" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Let" title="Let" shape="rect">Let</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'let' <a href="#Path" title="Path" shape="rect">Path</a> '=' <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Emit" shape="rect">Emit:</a></p><img border="0" src="diagram/Emit.png" height="37" width="177" usemap="#Emit.map"><map name="Emit.map"><area shape="rect" coords="99,1,147,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Emit" title="Emit" shape="rect">Emit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'emit' <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Drop" shape="rect">Drop:</a></p><img border="0" src="diagram/Drop.png" height="37" width="177" usemap="#Drop.map"><map name="Drop.map"><area shape="rect" coords="99,1,147,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Drop" title="Drop" shape="rect">Drop</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'drop' <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Match" shape="rect">Match:</a></p><img border="0" src="diagram/Match.png" height="81" width="497" usemap="#Match.map"><map name="Match.map"><area shape="rect" coords="111,45,159,77" href="#Expr" title="Expr"><area shape="rect" coords="251,45,383,77" href="#MatchCaseClause" title="MatchCaseClause"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Match" title="Match" shape="rect">Match</a>&nbsp;&nbsp;&nbsp;&nbsp;::= 'match' <a href="#Expr" title="Expr" shape="rect">Expr</a> 'of' <a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a> ( ',' <a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a> )* 'end'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="MatchCaseClause" shape="rect">MatchCaseClause:</a></p><img border="0" src="diagram/MatchCaseClause.png" height="125" width="479" usemap="#MatchCaseClause.map"><map name="MatchCaseClause.map"><area shape="rect" coords="119,1,215,33" href="#RecordCase" title="RecordCase"><area shape="rect" coords="119,45,205,77" href="#ArrayCase" title="ArrayCase"><area shape="rect" coords="119,89,199,121" href="#ExprCase" title="ExprCase"><area shape="rect" coords="275,33,333,65" href="#Guard" title="Guard"><area shape="rect" coords="373,1,449,33" href="#Effectors" title="Effectors"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'case' ( <a href="#RecordCase" title="RecordCase" shape="rect">RecordCase</a> | <a href="#ArrayCase" title="ArrayCase" shape="rect">ArrayCase</a> | <a href="#ExprCase" title="ExprCase" shape="rect">ExprCase</a> ) <a href="#Guard" title="Guard" shape="rect">Guard</a>? <a href="#Effectors" title="Effectors" shape="rect">Effectors</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Match" title="Match" shape="rect">Match</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="RecordCase" shape="rect">RecordCase:</a></p><img border="0" src="diagram/RecordCase.png" height="69" width="311" usemap="#RecordCase.map"><map name="RecordCase.map"><area shape="rect" coords="49,33,81,65" href="#Id" title="Id"><area shape="rect" coords="171,1,281,33" href="#RecordPattern" title="RecordPattern"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#RecordCase" title="RecordCase" shape="rect">RecordCase</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( <a href="#Id" title="Id" shape="rect">Id</a> '=' )? <a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="RecordPattern" shape="rect">RecordPattern:</a></p><img border="0" src="diagram/RecordPattern.png" height="37" width="317" usemap="#RecordPattern.map"><map name="RecordPattern.map"><area shape="rect" coords="93,1,239,33" href="#RecordPatternFields" title="RecordPatternFields"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '%{' <a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a> '}'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a></li>
+            <li><a href="#RecordCase" title="RecordCase" shape="rect">RecordCase</a></li>
+            <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="RecordPatternFields" shape="rect">RecordPatternFields:</a></p><img border="0" src="diagram/RecordPatternFields.png" height="213" width="503" usemap="#RecordPatternFields.map"><map name="RecordPatternFields.map"><area shape="rect" coords="29,1,61,33" href="#Id" title="Id"><area shape="rect" coords="171,33,203,65" href="#Id" title="Id"><area shape="rect" coords="323,1,397,33" href="#TestExpr" title="TestExpr"><area shape="rect" coords="323,45,433,77" href="#RecordPattern" title="RecordPattern"><area shape="rect" coords="323,89,423,121" href="#ArrayPattern" title="ArrayPattern"><area shape="rect" coords="201,133,291,165" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#Id" title="Id" shape="rect">Id</a> ( ( '=' <a href="#Id" title="Id" shape="rect">Id</a> )? '~=' ( <a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a> | <a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a> | <a href="#ArrayPattern" title="ArrayPattern" shape="rect">ArrayPattern</a> ) | ( '==' | '!=' ) <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a> )</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ArrayCase" shape="rect">ArrayCase:</a></p><img border="0" src="diagram/ArrayCase.png" height="69" width="301" usemap="#ArrayCase.map"><map name="ArrayCase.map"><area shape="rect" coords="49,33,81,65" href="#Id" title="Id"><area shape="rect" coords="171,1,271,33" href="#ArrayPattern" title="ArrayPattern"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ArrayCase" title="ArrayCase" shape="rect">ArrayCase</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( <a href="#Id" title="Id" shape="rect">Id</a> '=' )? <a href="#ArrayPattern" title="ArrayPattern" shape="rect">ArrayPattern</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ArrayPattern" shape="rect">ArrayPattern:</a></p><img border="0" src="diagram/ArrayPattern.png" height="81" width="355" usemap="#ArrayPattern.map"><map name="ArrayPattern.map"><area shape="rect" coords="111,45,243,77" href="#ArrayPatternFilter" title="ArrayPatternFilter"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ArrayPattern" title="ArrayPattern" shape="rect">ArrayPattern</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '%[' <a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a> ( ',' <a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a> )* '%]'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#ArrayCase" title="ArrayCase" shape="rect">ArrayCase</a></li>
+            <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ArrayPatternFilter" shape="rect">ArrayPatternFilter:</a></p><img border="0" src="diagram/ArrayPatternFilter.png" height="125" width="223" usemap="#ArrayPatternFilter.map"><map name="ArrayPatternFilter.map"><area shape="rect" coords="99,1,173,33" href="#TestExpr" title="TestExpr"><area shape="rect" coords="49,45,97,77" href="#Expr" title="Expr"><area shape="rect" coords="49,89,159,121" href="#RecordPattern" title="RecordPattern"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '~' <a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Expr" title="Expr" shape="rect">Expr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#ArrayPattern" title="ArrayPattern" shape="rect">ArrayPattern</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ExprCase" shape="rect">ExprCase:</a></p><img border="0" src="diagram/ExprCase.png" height="69" width="249" usemap="#ExprCase.map"><map name="ExprCase.map"><area shape="rect" coords="49,33,81,65" href="#Id" title="Id"><area shape="rect" coords="171,1,219,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ExprCase" title="ExprCase" shape="rect">ExprCase</a>&nbsp;::= ( <a href="#Id" title="Id" shape="rect">Id</a> '=' )? <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Guard" shape="rect">Guard:</a></p><img border="0" src="diagram/Guard.png" height="37" width="183" usemap="#Guard.map"><map name="Guard.map"><area shape="rect" coords="105,1,153,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Guard" title="Guard" shape="rect">Guard</a>&nbsp;&nbsp;&nbsp;&nbsp;::= 'when' <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Effectors" shape="rect">Effectors:</a></p><img border="0" src="diagram/Effectors.png" height="85" width="331" usemap="#Effectors.map"><map name="Effectors.map"><area shape="rect" coords="193,33,241,65" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Effectors" title="Effectors" shape="rect">Effectors</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '=&gt;' ( ',' <a href="#Expr" title="Expr" shape="rect">Expr</a> )?*</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#MatchCaseClause" title="MatchCaseClause" shape="rect">MatchCaseClause</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Patch" shape="rect">Patch:</a></p><img border="0" src="diagram/Patch.png" height="81" width="477" usemap="#Patch.map"><map name="Patch.map"><area shape="rect" coords="105,45,153,77" href="#Expr" title="Expr"><area shape="rect" coords="245,45,363,77" href="#PatchOperation" title="PatchOperation"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Patch" title="Patch" shape="rect">Patch</a>&nbsp;&nbsp;&nbsp;&nbsp;::= 'patch' <a href="#Expr" title="Expr" shape="rect">Expr</a> 'of' <a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a> ( ',' <a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a> )* 'end'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="PatchOperation" shape="rect">PatchOperation:</a></p><img border="0" src="diagram/PatchOperation.png" height="257" width="425" usemap="#PatchOperation.map"><map name="PatchOperation.map"><area shape="rect" coords="195,1,227,33" href="#Id" title="Id"><area shape="rect" coords="327,1,375,33" href="#Expr" title="Expr"><area shape="rect" coords="125,221,157,253" href="#Id" title="Id"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( ( 'insert' | 'upsert' | 'update' | 'merge' ) <a href="#Id" title="Id" shape="rect">Id</a> | 'merge' ) '=&gt;' <a href="#Expr" title="Expr" shape="rect">Expr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 'erase' <a href="#Id" title="Id" shape="rect">Id</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Patch" title="Patch" shape="rect">Patch</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Merge" shape="rect">Merge:</a></p><img border="0" src="diagram/Merge.png" height="37" width="373" usemap="#Merge.map"><map name="Merge.map"><area shape="rect" coords="111,1,159,33" href="#Expr" title="Expr"><area shape="rect" coords="231,1,279,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Merge" title="Merge" shape="rect">Merge</a>&nbsp;&nbsp;&nbsp;&nbsp;::= 'merge' <a href="#Expr" title="Expr" shape="rect">Expr</a> 'of' <a href="#Expr" title="Expr" shape="rect">Expr</a> 'end'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="For" shape="rect">For:</a></p><img border="0" src="diagram/For.png" height="37" width="415" usemap="#For.map"><map name="For.map"><area shape="rect" coords="87,1,135,33" href="#Expr" title="Expr"><area shape="rect" coords="207,1,321,33" href="#ForCaseClause" title="ForCaseClause"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#For" title="For" shape="rect">For</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'for' <a href="#Expr" title="Expr" shape="rect">Expr</a> 'of' <a href="#ForCaseClause" title="ForCaseClause" shape="rect">ForCaseClause</a> 'end'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ForCaseClause" shape="rect">ForCaseClause:</a></p><img border="0" src="diagram/ForCaseClause.png" height="69" width="661" usemap="#ForCaseClause.map"><map name="ForCaseClause.map"><area shape="rect" coords="145,1,177,33" href="#Id" title="Id"><area shape="rect" coords="241,1,273,33" href="#Id" title="Id"><area shape="rect" coords="435,33,483,65" href="#Expr" title="Expr"><area shape="rect" coords="583,1,631,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ForCaseClause" title="ForCaseClause" shape="rect">ForCaseClause</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'case' '(' <a href="#Id" title="Id" shape="rect">Id</a> ',' <a href="#Id" title="Id" shape="rect">Id</a> ')' ( 'when' <a href="#Expr" title="Expr" shape="rect">Expr</a> '=&gt;' )? <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#For" title="For" shape="rect">For</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="FnCall" shape="rect">FnCall:</a></p><img border="0" src="diagram/FnCall.png" height="125" width="433" usemap="#FnCall.map"><map name="FnCall.map"><area shape="rect" coords="29,45,61,77" href="#Id" title="Id"><area shape="rect" coords="151,45,183,77" href="#Id" title="Id"><area shape="rect" coords="269,45,317,77" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#FnCall" title="FnCall" shape="rect">FnCall</a>&nbsp;&nbsp;&nbsp;::= <a href="#Id" title="Id" shape="rect">Id</a> '::' ( <a href="#Id" title="Id" shape="rect">Id</a> '(' <a href="#Expr" title="Expr" shape="rect">Expr</a> ( ',' <a href="#Expr" title="Expr" shape="rect">Expr</a> )* | '(' ) ')'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Path" shape="rect">Path:</a></p><img border="0" src="diagram/Path.png" height="271" width="735" usemap="#Path.map"><map name="Path.map"><area shape="rect" coords="117,33,255,65" href="#QualifiedSegments" title="QualifiedSegments"><area shape="rect" coords="191,109,329,141" href="#QualifiedSegments" title="QualifiedSegments"><area shape="rect" coords="49,175,81,207" href="#Id" title="Id"><area shape="rect" coords="205,175,311,207" href="#PathSegment" title="PathSegment"><area shape="rect" coords="207,219,317,251" href="#ArraySegment" title="ArraySegment"><area shape="rect" coords="509,175,619,207" href="#ArraySegment" title="ArraySegment"><area shape="rect" coords="507,219,613,251" href="#PathSegment" title="PathSegment"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Path" title="Path" shape="rect">Path</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '$' <a href="#QualifiedSegments" title="QualifiedSegments" shape="rect">QualifiedSegments</a>?</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 'event' ( '.' <a href="#QualifiedSegments" title="QualifiedSegments" shape="rect">QualifiedSegments</a> )?</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Id" title="Id" shape="rect">Id</a> ( '.' <a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a> | '[' <a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a> ']' )* ( '[' <a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a> ']' | '.' <a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a> )</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Let" title="Let" shape="rect">Let</a></li>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="QualifiedSegments" shape="rect">QualifiedSegments:</a></p><img border="0" src="diagram/QualifiedSegments.png" height="113" width="603" usemap="#QualifiedSegments.map"><map name="QualifiedSegments.map"><area shape="rect" coords="75,17,185,49" href="#ArraySegment" title="ArraySegment"><area shape="rect" coords="355,17,461,49" href="#PathSegment" title="PathSegment"><area shape="rect" coords="357,61,467,93" href="#ArraySegment" title="ArraySegment"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#QualifiedSegments" title="QualifiedSegments" shape="rect">QualifiedSegments</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '[' <a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a> ']' ( '.' <a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a> | '[' <a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a> ']' )*</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Path" title="Path" shape="rect">Path</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="PathSegment" shape="rect">PathSegment:</a></p><img border="0" src="diagram/PathSegment.png" height="37" width="91" usemap="#PathSegment.map"><map name="PathSegment.map"><area shape="rect" coords="29,1,61,33" href="#Id" title="Id"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#Id" title="Id" shape="rect">Id</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Path" title="Path" shape="rect">Path</a></li>
+            <li><a href="#QualifiedSegments" title="QualifiedSegments" shape="rect">QualifiedSegments</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ArraySegment" shape="rect">ArraySegment:</a></p><img border="0" src="diagram/ArraySegment.png" height="81" width="147" usemap="#ArraySegment.map"><map name="ArraySegment.map"><area shape="rect" coords="49,45,97,77" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#ArraySegment" title="ArraySegment" shape="rect">ArraySegment</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#Expr" title="Expr" shape="rect">Expr</a> ( ':' <a href="#Expr" title="Expr" shape="rect">Expr</a> )*</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Path" title="Path" shape="rect">Path</a></li>
+            <li><a href="#QualifiedSegments" title="QualifiedSegments" shape="rect">QualifiedSegments</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="STRING_LITERAL" shape="rect">STRING_LITERAL:</a></p><img border="0" src="diagram/STRING_LITERAL.png" height="113" width="519" usemap="#STRING_LITERAL.map"><map name="STRING_LITERAL.map"><area shape="rect" coords="135,61,259,93" href="#STRING_ESCAPE" title="STRING_ESCAPE"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#STRING_LITERAL" title="STRING_LITERAL" shape="rect">STRING_LITERAL</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '"' ( [^#x0022#x005C#x000A#x000D] | <a href="#STRING_ESCAPE" title="STRING_ESCAPE" shape="rect">STRING_ESCAPE</a> )* '"'</div></code></div>
+         </p>
+      
+      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="STRING_ESCAPE" shape="rect">STRING_ESCAPE:</a></p><img border="0" src="diagram/STRING_ESCAPE.png" height="345" width="175"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#STRING_ESCAPE" title="STRING_ESCAPE" shape="rect">STRING_ESCAPE</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '\' [tbnrf\"']</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#STRING_LITERAL" title="STRING_LITERAL" shape="rect">STRING_LITERAL</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_LITERAL" shape="rect">TEST_LITERAL:</a></p><img border="0" src="diagram/TEST_LITERAL.png" height="113" width="519" usemap="#TEST_LITERAL.map"><map name="TEST_LITERAL.map"><area shape="rect" coords="135,61,241,93" href="#TEST_ESCAPE" title="TEST_ESCAPE"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#TEST_LITERAL" title="TEST_LITERAL" shape="rect">TEST_LITERAL</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '|' ( [^#x0022#x005C#x000A#x000D] | <a href="#TEST_ESCAPE" title="TEST_ESCAPE" shape="rect">TEST_ESCAPE</a> )* '|'</div></code></div>
+         </p>
+      
+      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_ESCAPE" shape="rect">TEST_ESCAPE:</a></p><img border="0" src="diagram/TEST_ESCAPE.png" height="81" width="175"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#TEST_ESCAPE" title="TEST_ESCAPE" shape="rect">TEST_ESCAPE</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '\' [|\]</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#TEST_LITERAL" title="TEST_LITERAL" shape="rect">TEST_LITERAL</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Id" shape="rect">Id:</a></p><img border="0" src="diagram/Id.png" height="151" width="613" usemap="#Id.map"><map name="Id.map"><area shape="rect" coords="495,99,523,131" href="#_" title="_"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Id" title="Id" shape="rect">Id</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '`' [^`]* '`'</div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| [a-z] [A-Z] ( [a-z] [A-Z] [0-9] <a href="#_" title="_" shape="rect">_</a> )*</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#ArrayCase" title="ArrayCase" shape="rect">ArrayCase</a></li>
+            <li><a href="#ExprCase" title="ExprCase" shape="rect">ExprCase</a></li>
+            <li><a href="#FnCall" title="FnCall" shape="rect">FnCall</a></li>
+            <li><a href="#ForCaseClause" title="ForCaseClause" shape="rect">ForCaseClause</a></li>
+            <li><a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a></li>
+            <li><a href="#Path" title="Path" shape="rect">Path</a></li>
+            <li><a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a></li>
+            <li><a href="#RecordCase" title="RecordCase" shape="rect">RecordCase</a></li>
+            <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="INTEGER" shape="rect">INTEGER:</a></p><img border="0" src="diagram/INTEGER.png" height="53" width="161"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#INTEGER" title="INTEGER" shape="rect">INTEGER</a>&nbsp;&nbsp;::= [0-9]+</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Literal" title="Literal" shape="rect">Literal</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="DECIMAL" shape="rect">DECIMAL:</a></p><img border="0" src="diagram/DECIMAL.png" height="71" width="327"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#DECIMAL" title="DECIMAL" shape="rect">DECIMAL</a>&nbsp;&nbsp;::= [0-9]* '.' [0-9]+</div></code></div>
+         </p>
+      
+      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="FLOAT" shape="rect">FLOAT:</a></p><img border="0" src="diagram/FLOAT.png" height="153" width="513" usemap="#FLOAT.map"><map name="FLOAT.map"><area shape="rect" coords="397,35,483,67" href="#EXPONENT" title="EXPONENT"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#FLOAT" title="FLOAT" shape="rect">FLOAT</a>&nbsp;&nbsp;&nbsp;&nbsp;::= ( [0-9]+ ( '.' [0-9]* )? | '.' [0-9]+ ) <a href="#EXPONENT" title="EXPONENT" shape="rect">EXPONENT</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Literal" title="Literal" shape="rect">Literal</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="EXPONENT" shape="rect">EXPONENT:</a></p><img border="0" src="diagram/EXPONENT.png" height="129" width="339"><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#EXPONENT" title="EXPONENT" shape="rect">EXPONENT</a>&nbsp;::= [eE] [+#x2D]? [0-9]+</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#FLOAT" title="FLOAT" shape="rect">FLOAT</a></li>
+         </ul>
+         </p><br clear="none"><hr>
+      
+      <p>
+         
+         <table border="0" class="signature">
+            <tr>
+               <td style="width: 100%" rowspan="1" colspan="1">&nbsp;</td>
+               <td valign="top" rowspan="1" colspan="1">
+                  
+                  <nobr class="signature">... generated by <a name="Railroad-Diagram-Generator" class="signature" title="https://www.bottlecaps.de/rr/ui" href="https://www.bottlecaps.de/rr/ui" target="_blank" shape="rect">Railroad Diagram Generator</a></nobr>
+                  </td>
+               <td rowspan="1" colspan="1"><a name="Railroad-Diagram-Generator" title="https://www.bottlecaps.de/rr/ui" href="https://www.bottlecaps.de/rr/ui" target="_blank" shape="rect"><img border="0" src="diagram/rr-1.59.1797.png" height="16" width="16"></a></td>
+            </tr>
+         </table>
+         </p>
+      </body>
+</html>

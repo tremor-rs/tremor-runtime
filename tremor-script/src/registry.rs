@@ -2,7 +2,7 @@
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// You may obtain a cstd::result::Result::Err(*right_val)::Result::Err(*right_val)License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
@@ -14,116 +14,56 @@
 
 use crate::errors::*;
 use crate::tremor_fn;
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use hostname::get_hostname;
+use simd_json::BorrowedValue;
+use simd_json::OwnedValue;
 use std::default::Default;
 
-pub type TremorFn<Ctx> = fn(&Ctx, &[Value]) -> Result<Value>;
+pub type TremorFn<Ctx> = fn(&Ctx, &[&BorrowedValue]) -> Result<OwnedValue>;
 
-use serde_json::Value;
 use std::fmt;
 
 #[allow(unused_variables)]
 pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
     let mut registry = Registry::default();
 
-    #[allow(unused_variables)]
-    fn format<Ctx: Context + 'static>(context: &Ctx, args: &[Value]) -> Result<Value> {
-        match args.len() {
-            0 => Err(ErrorKind::RuntimeError(
-                "string".to_string(),
-                "format".to_string(),
-                args.len(),
-                "format requires at least 1 parameter, 0 are supplied".into(),
-            )
-            .into()),
-            _ => {
-                match &args[0] {
-                    Value::String(format) => {
-                        let mut arg_stack = if args.is_empty() {
-                            vec![]
-                        } else {
-                            args[1..].to_vec()
-                        };
-                        arg_stack.reverse();
-
-                        let mut out = String::new();
-                        let mut iter = format.chars().enumerate();
-                        while let Some(char) = iter.next() {
-                            match char {
-                        (pos, '{')  => match iter.next() {
-                            Some((_, '}')) => {
-                                let arg = match arg_stack.pop() {
-                                    Some(a) => a,
-                                    None => return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)).into()),
-                                };
-
-                                if let Value::String(s) = arg {
-                                    out.push_str(s.as_str())
-                                } else {
-                                    out.push_str(format!("{}", arg).as_str());
-                                }
-                            }
-                            Some((_, '{')) => {
-                                out.push('{');
-                            }
-                            _ => {
-                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format". to_owned(), args.len(), format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)).into())
-                            }
-                        },
-                        (pos, '}') => match iter.next() {
-                            Some((pos, '}')) => out.push('}'),
-                            _ => {
-                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)).into());
-                            }
-                        },
-                        (_, c) => out.push(c),
-                    }
-                        }
-
-                        if arg_stack.is_empty() {
-                            Ok(Value::String(out))
-                        } else {
-                            Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()).into())
-                        }
-                    }
-                    _ => {
-                        Err(ErrorKind::RuntimeError("string".to_owned(), "fprmat".to_owned(), args.len(), "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()).into())
-
-                    }
-                }
-            }
-        }
-    }
     registry
-        .insert(tremor_fn! (math::max(_context, a: Number, b: Number){
-            if a.as_f64() > b.as_f64() {
-                Ok(Value::Number(a.to_owned()))
-            } else {
-                Ok(Value::Number(b.to_owned()))
+        .insert(tremor_fn! (math::max(_context, a, b) {
+            match (a, b) {
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a > *b as f64 => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) > *b => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                _ => Err(ErrorKind::BadType("math".to_string(), "max".to_string(), 2).into()),
             }
         }))
-        .insert(tremor_fn!(math::min(_context, a: Number, b: Number) {
-            if a.as_f64() < b.as_f64() {
-                Ok(Value::Number(a.to_owned()))
-
-            } else {
-                Ok(Value::Number(b.to_owned()))
+        .insert(tremor_fn!(math::min(_context, a, b) {
+            match (a, b) {
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a < *b as f64 => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) < *b => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                _ => Err(ErrorKind::BadType("math".to_string(), "min".to_string(), 2).into()),
             }
         }))
         .insert(tremor_fn!(system::hostname(_context) {
             if let Some(hostname) = get_hostname(){
-                Ok(Value::String(hostname))
+                Ok(Value::from(hostname))
             } else {
                 Err(ErrorKind::RuntimeError("system".to_owned(), "hostname".to_owned(), 0, "could not get hostname".into()).into())
             }
 
-        }))
-        .insert(TremorFnWrapper {
-            module: "string".to_owned(),
-            name: "format".to_string(),
-            fun: format,
-        });
+        }));
+    crate::std_lib::load(&mut registry);
     registry
 }
 
@@ -138,12 +78,13 @@ pub struct TremorFnWrapper<Ctx: Context> {
     pub fun: TremorFn<Ctx>,
 }
 
-pub struct Registry<Ctx: Context> {
+#[derive(Debug, Clone)]
+pub struct Registry<Ctx: Context + 'static> {
     functions: HashMap<String, HashMap<String, TremorFnWrapper<Ctx>>>,
 }
 
 impl<Ctx: Context + 'static> TremorFnWrapper<Ctx> {
-    pub fn invoke(&self, context: &Ctx, args: &[Value]) -> Result<Value> {
+    pub fn invoke(&self, context: &Ctx, args: &[&BorrowedValue]) -> Result<OwnedValue> {
         (self.fun)(context, args)
     }
 }
@@ -161,20 +102,19 @@ impl<Ctx: Context + 'static> PartialEq for TremorFnWrapper<Ctx> {
 
 #[macro_export]
 macro_rules! tremor_fn {
-    ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+
+    ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
-            use serde_json::Value;
-            use $crate::{TremorFnWrapper, Context};
-            fn $name<'c, 'a, Ctx: Context + 'static>($context: &'c Ctx, args: &'a [Value]) -> Result<Value>{
+            use simd_json::OwnedValue as Value;
+            use simd_json::BorrowedValue;
+            use $crate::TremorFnWrapper;
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{
                 // rust claims that the pattern is unreachable even
                 // though it isn't, so linting it
                 match args {
                     [$(
-                        Value::$type($arg),
-                    )*] => {$code}
-                    [$(
                         $arg,
-                    )*] => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadType(stringify!($module).to_string(), stringify!($name).to_string(), args.len()))),
+                    )*] => {$code}
                     _ => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadArrity(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
                 }
             }
@@ -186,12 +126,40 @@ macro_rules! tremor_fn {
         }
     };
 
-        ($module:ident :: $name:ident($context:ident) $code:block) => {
+    ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
-            use serde_json::Value;
-            use $crate::{TremorFnWrapper, Context};
-            fn $name<'c, 'a, Ctx: Context + 'static>($context: &'c Ctx, args: &'a [Value]) -> Result<Value>{
+            use simd_json::OwnedValue as Value;
+            use simd_json::BorrowedValue;
+            use $crate::TremorFnWrapper;
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{
                 // rust claims that the pattern is unreachable even
+                // though it isn't, so linting it
+                match args {
+                    [$(
+                        BorrowedValue::$type($arg),
+                    )*] => {$code}
+                    [$(
+                        $arg,
+                    )*] => {
+                        Err($crate::errors::Error::from($crate::errors::ErrorKind::BadType(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
+                    },
+                    _ => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadArrity(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
+                }
+            }
+            TremorFnWrapper {
+                module: stringify!($module).to_string(),
+                name: stringify!($name).to_string(),
+                fun: $name
+            }
+        }
+    };
+
+    ($module:ident :: $name:ident($context:ident) $code:block) => {
+        {
+            use simd_json::OwnedValue as Value;
+            use simd_json::BorrowedValue;
+            use $crate::TremorFnWrapper;
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{                // rust claims that the pattern is unreachable even
                 // though it isn't, so linting it
                 match args {
                     [] => {$code}
@@ -244,50 +212,57 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
                 self.functions.insert(module_name, module);
             }
         }
-
         self
     }
+}
+
+// Test utility to grab a function from the registry
+#[cfg(test)]
+pub fn fun(m: &str, f: &str) -> impl Fn(&[&BorrowedValue]) -> Result<OwnedValue> {
+    let f = registry().find(m, f).expect("could not find function");
+    move |args: &[&BorrowedValue]| -> Result<OwnedValue> { f(&(), &args) }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry;
-    use serde_json::json;
+    use simd_json::BorrowedValue as Value;
 
-    fn fun<Ctx: Context + 'static>(m: &str, f: &str) -> TremorFn<Ctx> {
-        registry().find(m, f).expect("could not find function")
-    }
     #[test]
     pub fn call_a_function_from_a_registry_works() {
         let max = fun("math", "max");
-        assert_eq!(Ok(json!(2)), max(&(), &[json!(1), json!(2)]));
+        let one = BorrowedValue::from(1);
+        let two = BorrowedValue::from(2);
+        assert_eq!(Ok(OwnedValue::from(2)), max(&[&one, &two]));
     }
 
     #[test]
     pub fn bad_arrity() {
-        let f = tremor_fn! (module::name(_context, _a: Number){
+        let f = tremor_fn! (module::name(_context, _a: I64){
             Ok(format!("{}", _a).into())
         });
-        let args = &[json!(1), json!(2)];
+        let one = BorrowedValue::from(1);
+        let two = BorrowedValue::from(2);
 
-        assert!(f.invoke(&(), args).is_err());
+        assert!(f.invoke(&(), &[&one, &two]).is_err());
     }
 
     #[test]
     pub fn bad_type() {
-        let f = tremor_fn!(module::name(_context, _a: Number){
+        let f = tremor_fn!(module::name(_context, _a: I64){
             Ok(format!("{}", _a).into())
         });
 
-        assert!(f.invoke(&(), &[json!("1")]).is_err());
+        let one = BorrowedValue::from("1");
+        assert!(f.invoke(&(), &[&one]).is_err());
     }
 
     #[test]
     pub fn add() {
-        let f = tremor_fn!(math::add(_context, _a: Number, _b: Number){
-            match (_a.as_f64(), _b.as_f64()) {
-                (Some(a), Some(b)) =>             Ok(json!(a + b)),
+        let f = tremor_fn!(math::add(_context, _a, _b){
+            match (_a, _b) {
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(a + b)),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(a + b)),
                 _ => Err(ErrorKind::RuntimeError(
                     "math".to_string(),
                     "add".to_string(),
@@ -299,99 +274,97 @@ mod tests {
 
         });
 
-        assert_eq!(Ok(json!(5.0)), f.invoke(&(), &[json!(2), json!(3)]));
+        let two = BorrowedValue::from(2);
+        let three = BorrowedValue::from(3);
+        assert_eq!(Ok(OwnedValue::from(5)), f.invoke(&(), &[&two, &three]));
     }
 
     #[test]
     pub fn t3() {
-        let f = tremor_fn!(math::add(_context, _a: Number, _b: Number, _c: Number){
-            match (_a.as_f64(), _b.as_f64(), _c.as_f64()) {
-                (Some(a), Some(b), Some(c)) => Ok(json!(a + b + c)),
-                _ => Err(ErrorKind::RuntimeError(
-                    "math".to_string(),
-                    "add".to_string(),
-                    3,
-                    "could not add numbers".into(),
-                ).into())
-
-            }
-
+        let f = tremor_fn!(math::add(_context, _a: I64, _b: I64, _c: I64){
+            Ok(OwnedValue::from(_a + _b + _c))
         });
-        let args = &[json!(1), json!(2), json!(3)];
+        let one = BorrowedValue::from(1);
+        let two = BorrowedValue::from(2);
+        let three = BorrowedValue::from(3);
 
-        assert_eq!(Ok(json!(6.0)), f.invoke(&(), args));
+        assert_eq!(
+            Ok(OwnedValue::from(6)),
+            f.invoke(&(), &[&one, &two, &three])
+        );
     }
 
     #[test]
     pub fn registry_format_with_3_args() {
         let f = fun("math", "max");
 
-        assert!(f(&(), &[json!(1), json!(2), json!(3)]).is_err());
+        let one = BorrowedValue::from(1);
+        let two = BorrowedValue::from(2);
+        let three = BorrowedValue::from(3);
+        assert!(f(&[&one, &two, &three]).is_err());
     }
 
     #[test]
     pub fn format() {
         let format = fun("string", "format");
-        assert_eq!(Ok(json!("empty")), format(&(), &[json!("empty")]));
+        let empty = Value::from("empty");
+        assert_eq!(Ok(OwnedValue::from("empty")), format(&[&empty]));
         let format = fun("string", "format");
-        assert_eq!(
-            Ok(json!("12")),
-            format(&(), &[json!("{}{}"), json!(1), json!(2)])
-        );
+        let one = BorrowedValue::from(1);
+        let two = BorrowedValue::from(2);
+        let fmt = BorrowedValue::from("{}{}");
+        assert_eq!(Ok(OwnedValue::from("12")), format(&[&fmt, &one, &two]));
         let format = fun("string", "format");
-        assert_eq!(
-            Ok(json!("1 + 2")),
-            format(&(), &[json!("{} + {}"), json!(1), json!(2)])
-        );
+        let fmt = BorrowedValue::from("{} + {}");
+        assert_eq!(Ok(OwnedValue::from("1 + 2")), format(&[&fmt, &one, &two]));
     }
 
     #[test]
     pub fn format_literal_curlies() {
         let format = fun("string", "format");
-        assert_eq!(Ok(json!("{}")), (format(&(), &[json!("{{}}")])));
+        let s = Value::from("{{}}");
+        assert_eq!(Ok(OwnedValue::from("{}")), (format(&[&s])));
     }
 
     #[test]
     pub fn format_literal_curlies_with_other_curlies_in_same_line() {
         let format = fun("string", "format");
+        let v1 = Value::from("a string with {} in it has {} {{}}");
+        let v2 = Value::from("{}");
+        let v3 = Value::from(1);
         assert_eq!(
-            Ok(json!("a string with {} in it has 1 {}")),
-            format(
-                &(),
-                &[
-                    json!("a string with {} in it has {} {{}}"),
-                    json!("{}"),
-                    json!(1)
-                ]
-            )
+            Ok(OwnedValue::from("a string with {} in it has 1 {}")),
+            format(&[&v1, &v2, &v3])
         );
     }
 
     #[test]
     pub fn format_evil_test() {
         let format = fun("string", "format");
-        assert_eq!(Ok(json!("}")), format(&(), &[json!("}}")]));
+        let v = Value::from("}}");
+        assert_eq!(Ok(OwnedValue::from("}")), format(&[&v]));
     }
 
     #[test]
     pub fn format_escaped_foo() {
         let format = fun("string", "format");
-        assert_eq!(Ok(json!("{foo}")), format(&(), &[json!("{{foo}}")]));
+        let v = Value::from("{{foo}}");
+        assert_eq!(Ok(OwnedValue::from("{foo}")), format(&[&v]));
     }
 
     #[test]
     pub fn format_three_parenthesis() {
         let format = fun("string", "format");
-        assert_eq!(
-            Ok(json!("{foo}")),
-            format(&(), &[json!("{{{}}}"), json!("foo")])
-        );
+        let v1 = Value::from("{{{}}}");
+        let v2 = Value::from("foo");
+        assert_eq!(Ok(OwnedValue::from("{foo}")), format(&[&v1, &v2]));
     }
 
     #[test]
     pub fn umatched_parenthesis() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{")]);
+        let v = Value::from("{");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -399,7 +372,8 @@ mod tests {
     #[test]
     pub fn unmatched_3_parenthesis() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{{{")]);
+        let v = Value::from("{{{");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -407,7 +381,8 @@ mod tests {
     #[test]
     pub fn unmatched_closed_parenthesis() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("}")]);
+        let v = Value::from("}");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -415,7 +390,8 @@ mod tests {
     #[test]
     pub fn unmatched_closed_3_parenthesis() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("}}}")]);
+        let v = Value::from("}}}");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -423,7 +399,8 @@ mod tests {
     #[test]
     pub fn unmatched_parenthesis_with_string() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{foo}")]);
+        let v = Value::from("{foo}");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -431,15 +408,17 @@ mod tests {
     #[test]
     pub fn unmatched_parenthesis_with_argument() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{foo}"), json!("1")]);
-
+        let v1 = Value::from("{foo}");
+        let v2 = Value::from("1");
+        let res = format(&[&v1, &v2]);
         assert!(res.is_err());
     }
 
     #[test]
     pub fn unmatched_parenthesis_too_few() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{}")]);
+        let v = Value::from("{}");
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }
@@ -447,15 +426,18 @@ mod tests {
     #[test]
     pub fn unmatched_parenthesis_too_many() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!("{}"), json!("1"), json!("2")]);
-
+        let v1 = Value::from("{}");
+        let v2 = Value::from("1");
+        let v3 = Value::from("2");
+        let res = format(&[&v1, &v2, &v3]);
         assert!(res.is_err());
     }
 
     #[test]
     pub fn bad_format() {
         let format = fun("string", "format");
-        let res = format(&(), &[json!(7)]);
+        let v = Value::from(7);
+        let res = format(&[&v]);
 
         assert!(res.is_err());
     }

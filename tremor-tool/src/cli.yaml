@@ -33,6 +33,25 @@ subcommands:
                   - DATA:
                       required: false
                       help: JSON-per-line data log to replay
+    - grok:
+        about: Tremor support for logstash grok patterns
+        subcommands:
+          - run:
+              about: Run tremor grok matcher against stdin or a json data archive
+              args:
+                  - patterns:
+                      short: p
+                      long: patterns
+                      help: Extra patterns ( or alternative builtins if ignoring builtin patterns )
+                      required: false
+                      multiple: false
+                      takes_value: true
+                  - TEST_PATTERN:
+                      help: The grok pattern under test for this run
+                      required: true
+                  - DATA:
+                      required: false
+                      help: line by line data log to replay, or stdin otherwise
     - pipe:
         about: Tremor pipeline tool
         subcommands:

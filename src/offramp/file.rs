@@ -26,11 +26,10 @@ use crate::errors::*;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use serde_yaml;
 use std::fs::File as FSFile;
 use std::io::Write;
-use tremor_pipeline::EventValue;
 
 /// An offramp that write a given file
 #[derive(Debug)]
@@ -64,7 +63,7 @@ impl Offramp for File {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            if let Ok(EventValue::Raw(ref raw)) = codec.encode(event.value) {
+            if let Ok(ref raw) = codec.encode(event.value) {
                 //TODO: Error handling
                 if let Err(e) = self
                     .file

@@ -21,16 +21,17 @@ use crate::rest::HttpC;
 use crate::system::{PipelineAddr, PipelineMsg};
 use crate::url::TremorURL;
 use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, EventValue, OpConfig};
-use hashbrown::HashMap;
-use serde_json::json;
+use crate::{Event, OpConfig};
+use halfbrown::HashMap;
 use serde_yaml;
+use simd_json::json;
 use std::convert::From;
 use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
 use tremor_pipeline::MetaMap;
+use tremor_script::{LineValue, Value};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -113,16 +114,16 @@ impl Rest {
             let r = Self::flush(&destination, config, payload.as_str());
             let mut m = MetaMap::new();
             if let Ok(t) = r {
-                m.insert("time".to_string(), json!(t));
+                m.insert("time".into(), json!(t));
             } else {
                 error!("Elastic search error: {:?}", r);
-                m.insert("error".to_string(), json!("Failed to send to ES"));
+                m.insert("error".into(), json!("Failed to send to ES"));
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
                 meta: m,
-                value: tremor_pipeline::EventValue::None,
+                value: LineValue::new(Box::new(vec![]), |_| Value::Null),
                 ingest_ns: nanotime(),
                 kind: None,
             };
@@ -164,7 +165,7 @@ impl Offramp for Rest {
         let mut payload = String::from("");
         for event in event.into_iter() {
             match codec.encode(event.value) {
-                Ok(EventValue::Raw(raw)) => {
+                Ok(raw) => {
                     if let Ok(s) = str::from_utf8(&raw) {
                         payload.push_str(s);
                         payload.push('\n');

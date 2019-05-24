@@ -18,6 +18,8 @@
 
 -record(state,{
                connection,
+               root,
+               schema,
                %% All created VMs in this run
                offramps = []
               }).
@@ -25,8 +27,12 @@
 
 -spec initial_state() -> eqc_statem:symbolic_state().
 initial_state() ->
+    {ok, Root} = jsg_jsonschema:read_schema("../static/openapi.json"),
+    {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "offramp"], Root),
     #state{
-       connection = tremor_api:new()
+       connection = tremor_api:new(),
+       root = Root,
+       schema = Schema
       }.
 
 command_precondition_common(_S, _Command) ->
@@ -38,19 +44,15 @@ precondition_common(_S, _Call) ->
 id() ->
     ?SUCHTHAT(Id, ?LET(Id, list(choose($a, $z)), list_to_binary(Id) ), byte_size(Id) > 0).
 
-offramp() ->
-    ?LET(Id, id(), offramp_with_id([Id])).
+offramp(#state{root = Root, schema = Schema}) ->
+    ?LET(V, jsongen:json(Schema, [{root, Root}, {depth, 3}]), tremor_http:decode(list_to_binary(jsg_json:encode(V)))).
 
-offramp_with_id(Ids) ->
+
+offramp_with_id(State = #state{offramps = Offramps}) ->
     ?LET(Id,
-         elements(Ids),
-         #{
-           id => Id,
-           type => <<"file">>,
-           config => #{
-                       source => <<"file.txt">>
-                      }
-          }).
+         elements(Offramps),
+         ?LET(Artefact, offramp(State),
+              maps:put(<<"id">>, Id, Artefact))).
 
 %% -----------------------------------------------------------------------------
 %% Grouped operator: list_offramp
@@ -82,24 +84,27 @@ list_offramp_next(S, _Result, _Args) ->
 %% We add the Id to the offramps we keep track off.
 %% -----------------------------------------------------------------------------
 
-publish_offramp_args(#state{connection = C}) ->
-    [C, offramp()].
+publish_offramp_args(S = #state{connection = C}) ->
+    [C, offramp(S)].
 
 publish_offramp_pre(#state{}) ->
     true.
 
-publish_offramp_pre(#state{offramps = Offramps}, [_C, #{id := Id}]) ->
+publish_offramp_pre(#state{offramps = Offramps}, [_C, #{<<"id">> := Id}]) ->
     not lists:member(Id, Offramps).
 
 publish_offramp(C, Offramp) ->
     tremor_offramp:publish(Offramp, C).
 
-publish_offramp_post(#state{}, [_C, #{id := Id}], {ok, #{<<"id">> := Id}}) ->
-    true;
+publish_offramp_post(#state{schema = Schema, root = Root},
+                     [_C, #{<<"id">> := Id}],
+                     {ok, Resp =  #{<<"id">> := Id}}) ->
+    jesse_validator:validate(Schema, Root, jsone:encode(Resp));
+
 publish_offramp_post(_, _, _) ->
     false.
 
-publish_offramp_next(S = #state{offramps = Offramps}, _Result, [_C, #{id := Id}]) ->
+publish_offramp_next(S = #state{offramps = Offramps}, _Result, [_C, #{<<"id">> := Id}]) ->
     S#state{offramps = [Id | Offramps]}.
 
 %% -----------------------------------------------------------------------------
@@ -108,15 +113,15 @@ publish_offramp_next(S = #state{offramps = Offramps}, _Result, [_C, #{id := Id}]
 %% (conflict) error.
 %% -----------------------------------------------------------------------------
 
-publish_existing_offramp_args(#state{connection = C, offramps = Offramps}) ->
-    [C, offramp_with_id(Offramps)].
+publish_existing_offramp_args(S = #state{connection = C}) ->
+    [C, offramp_with_id(S)].
 
 publish_existing_offramp_pre(#state{offramps = []}) ->
     false;
 publish_existing_offramp_pre(#state{}) ->
     true.
 
-publish_existing_offramp_pre(#state{offramps = Offramps}, [_C, #{id := Id}]) ->
+publish_existing_offramp_pre(#state{offramps = Offramps}, [_C, #{<<"id">> := Id}]) ->
     lists:member(Id, Offramps).
 
 publish_existing_offramp(C, Offramp) ->
@@ -180,14 +185,72 @@ unpublish_offramp_pre(#state{offramps = Offramps}, [_C, Id]) ->
 unpublish_offramp(C, Id) ->
     tremor_offramp:unpublish(Id, C).
 
-unpublish_offramp_post(#state{}, [_, Id], {ok, #{<<"id">> := Id}}) ->
-    true;
+unpublish_offramp_post(#state{schema = Schema, root = Root}, [_, Id], {ok, Resp = #{<<"id">> := Id}}) ->
+    jesse_validator:validate(Schema, Root, jsone:encode(Resp));
 
 unpublish_offramp_post(_, _, _) ->
     false.
 
 unpublish_offramp_next(S = #state{offramps = Offramps}, _Result, [_C, Deleted]) ->
     S#state{offramps = [Id || Id <- Offramps, Id =/= Deleted]}.
+
+%% -----------------------------------------------------------------------------
+%% Grouped operator: find_nonexisting_offramp_args
+%% Find an offramp that was not published first, this should return a 404
+%% (not found) error.
+%% -----------------------------------------------------------------------------
+
+find_nonexisting_offramp_args(#state{connection = C}) ->
+    [C, id()].
+
+find_nonexisting_offramp_pre(#state{}) ->
+    true.
+
+find_nonexisting_offramp_pre(#state{offramps = Offramps}, [_C, Id]) ->
+    not lists:member(Id, Offramps).
+
+find_nonexisting_offramp(C, Id) ->
+    tremor_offramp:find(Id, C).
+
+find_nonexisting_offramp_post(#state{}, [_, _Submitted], {error, 404}) ->
+    true;
+
+find_nonexisting_offramp_post(_, _, _) ->
+    false.
+
+find_nonexisting_next(S, _, _) ->
+    S.
+
+%% -----------------------------------------------------------------------------
+%% Grouped operator: find_offramp_args
+%% Findes an offramp that we know exists. This should return the
+%% artefact with the matchign id along with it's instances.
+%% -----------------------------------------------------------------------------
+
+find_offramp_args(#state{connection = C, offramps = Offramps}) ->
+    [C, elements(Offramps)].
+
+find_offramp_pre(#state{offramps = []}) ->
+    false;
+find_offramp_pre(#state{}) ->
+    true.
+
+find_offramp_pre(#state{offramps = Offramps}, [_C, Id]) ->
+    lists:member(Id, Offramps).
+
+find_offramp(C, Id) ->
+    tremor_offramp:find(Id, C).
+
+find_offramp_post(#state{root = Root}, [_, Id], {ok, Resp = #{<<"artefact">> := #{<<"id">> := Id}}}) ->
+    {ok, S} = jsg_jsonref:deref(["components", "schemas", "offramp_state"], Root),
+    jesse_validator:validate(S, Root, jsone:encode(Resp));
+
+find_offramp_post(_, _, _) ->
+    io:format("Error: bad body"),
+    false.
+
+find_offramp_next(S, _Result, [_C, _Offramp]) ->
+    S.
 
 %% -----------------------------------------------------------------------------
 %% Final property

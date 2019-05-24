@@ -23,8 +23,9 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, rate;
-            _ { $class := "default"; $rate := 250; }
+            let $class = "default";
+            let $rate = 250;
+            event;
       - id: b
         op: grouper::bucket
     links:

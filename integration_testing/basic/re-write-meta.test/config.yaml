@@ -1,0 +1,36 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: {in}
+      close_on_done: true
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            let $ = {"new": "data"};
+            $;
+    links:
+      in: [ r ]
+      r: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]

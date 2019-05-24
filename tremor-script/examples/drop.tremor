@@ -1,0 +1,6 @@
+##
+## Drop
+##
+
+drop 20; # we return here
+drop 30;  # never gets executed

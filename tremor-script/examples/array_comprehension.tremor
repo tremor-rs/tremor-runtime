@@ -1,0 +1,21 @@
+let a = [ { "a": "zero" }, { "a": "ein" }, { "a":  "zwei" }];
+
+let actual = {
+  "indices": let ii = for a of case (i,e) => i end,
+  "identity": for a of case (i,e) => e end,
+  "elements_keys": let kk = for a of case (i,e) => let r = object::keys(e) end,
+  "elements_paths": let vv = for a of case (i,e) => e.a end,
+  "zipped": let zz = array::zip(vv, for kk of case (i,e) => e[0] end), # BUG investigate e[0] correctness
+  "original": for zz of case (i, e) => { "a": e[0] } end
+};
+
+let expected = {
+    "indices": [ 0, 1, 2 ],
+    "identity": [ { "a": "zero" }, { "a": "ein" }, { "a": "zwei" } ],
+    "elements_keys": [ [ "a" ], [ "a" ], [ "a" ] ],
+    "elements_paths": [ "zero", "ein", "zwei" ],
+    "zipped": [ [ "zero", "a" ], [ "ein", "a" ], [ "zwei", "a" ] ],
+    "original": a
+};
+
+match expected == actual of case true => "ok" case false => "ko" end;

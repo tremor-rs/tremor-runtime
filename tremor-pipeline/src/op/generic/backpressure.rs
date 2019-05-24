@@ -27,8 +27,8 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-use serde_json::{self, Value};
 use serde_yaml;
+use simd_json::{OwnedValue, ValueTrait};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -93,25 +93,26 @@ impl Operator for Backpressure {
     }
 
     fn on_contraflow(&mut self, insight: &mut Event) {
-        if let Some(Value::String(_s)) = insight.meta.get("error") {
+        if let Some(OwnedValue::String(_s)) = insight.meta.get("error") {
             self.next_backoff();
-        } else if let Some(Value::Number(v)) = insight.meta.get("time") {
-            if let Some(vf) = v.as_f64() {
-                if vf > self.config.timeout {
-                    self.next_backoff();
-                } else {
-                    self.backoff = 0;
-                }
+        } else if let Some(v) = insight.meta.get("time").and_then(OwnedValue::cast_f64) {
+            if v > self.config.timeout {
+                self.next_backoff();
+            } else {
+                self.backoff = 0;
             }
-        }
+        } else {
+            return;
+        };
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{EventValue, MetaMap};
-    use serde_json::json;
+    use crate::MetaMap;
+    use simd_json::json;
+    use tremor_script::Value;
 
     #[test]
     fn pass_wo_error() {
@@ -131,7 +132,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
         let mut r = op
@@ -148,7 +149,7 @@ mod test {
             id: 2,
             ingest_ns: 2,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("badge")),
             kind: None,
         };
         let mut r = op
@@ -177,7 +178,7 @@ mod test {
             id: 1,
             ingest_ns: 1_000_000,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
         let mut r = op
@@ -197,7 +198,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             meta: m,
-            value: EventValue::None,
+            value: sjv!(Value::Null),
             kind: None,
         };
 
@@ -214,7 +215,7 @@ mod test {
             id: 2,
             ingest_ns: 2_000_000 - 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("badger")),
             kind: None,
         };
         let mut r = op
@@ -231,7 +232,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("boo")),
             kind: None,
         };
         let mut r = op
@@ -248,7 +249,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000 + 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("badger")),
             kind: None,
         };
         let mut r = op
@@ -278,7 +279,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             meta: m,
-            value: EventValue::None,
+            value: sjv!(Value::Null),
             kind: None,
         };
 
@@ -291,7 +292,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             meta: m.clone(),
-            value: EventValue::None,
+            value: sjv!(Value::Null),
             kind: None,
         };
 

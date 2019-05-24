@@ -1,0 +1,9 @@
+match "dont-care" of
+  case 1 => drop "ko"
+  default => match . of
+    case 1 => drop "ko"
+    default => match . of
+      default => drop "ok"
+    end
+  end
+end

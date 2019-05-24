@@ -90,7 +90,10 @@ impl TremorURL {
     pub fn parse(url: &str) -> Result<Self> {
         let (r, relative) = Self::parse_url(url, false)?;
 
-        if let Some(parts) = r.path_segments().map(|c| c.collect::<Vec<_>>()) {
+        if let Some(parts) = r
+            .path_segments()
+            .map(std::iter::Iterator::collect::<Vec<_>>)
+        {
             let (scope, resource_type, artefact, instance, instance_port) = if relative {
                 // TODO: This is not correct!
                 match parts.as_slice() {

@@ -1,0 +1,6 @@
+let $arma := "arma";
+let dillo := "dillo";
+drop [
+    string::format("hello {} {}", $arma, dillo ),
+    system::hostname()
+];

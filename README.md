@@ -1,4 +1,4 @@
-# Tremor
+# Tremor [![Build Status](https://badge.buildkite.com/61fabc7d2e79dbab6eb504b311d840d31fa81d41814952792b.svg?branch=master)](https://buildkite.com/wayfair/tremor-runtime)
 
 This tool allows configuring a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 

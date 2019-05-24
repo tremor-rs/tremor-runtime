@@ -21,6 +21,11 @@ RUN source $HOME/.cargo/env &&\
   cargo build --all-features --release --all
 
 FROM centos:7
+ARG rust_version=stable
+
+# Debug / perf tooling
+RUN yum install lldb git make gcc clang openssl-static libstdc++-static bison autoconf perf -y && yum clean all
+RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 
 COPY --from=builder target/release/tremor-server /tremor-server
 COPY --from=builder target/release/tremor-tool /tremor-tall

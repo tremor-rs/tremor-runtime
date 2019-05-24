@@ -14,9 +14,10 @@
 
 use crate::config::dflt;
 use crate::errors::*;
-use crate::{Event, EventValue, MetaMap, Operator};
-use serde_json::{self, Value::Array as JsonArray};
+use crate::{Event, MetaMap, Operator};
 use serde_yaml;
+use simd_json::OwnedValue;
+use tremor_script::{LineValue, Value};
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
@@ -29,7 +30,7 @@ pub struct Config {
 #[derive(Debug, Clone)]
 struct Batch {
     pub config: Config,
-    data: Vec<serde_json::Value>,
+    data: Vec<OwnedValue>,
     max_delay_ns: Option<u64>,
     first_ns: u64,
     id: String,
@@ -60,7 +61,8 @@ op!(BatchFactory(node) {
 impl Operator for Batch {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let ingest_ns = event.ingest_ns;
-        self.data.push(serde_json::to_value(event)?);
+        // TODO: This is ugly
+        self.data.push(simd_json::serde::to_owned_value(event)?);
         let l = self.data.len();
         if l == 1 {
             self.first_ns = ingest_ns;
@@ -70,11 +72,13 @@ impl Operator for Batch {
             _ => l == self.config.count,
         };
         if flush {
-            let out = self.data.drain(0..).collect();
+            //TODO: This is ugly
+            let out: Vec<Value> = self.data.drain(0..).map(std::convert::Into::into).collect();
+            let value = LineValue::new(Box::new(vec![]), |_| Value::Array(out));
             let event = Event {
                 id: self.event_id,
                 meta: MetaMap::new(),
-                value: EventValue::JSON(JsonArray(out)),
+                value,
                 ingest_ns: self.first_ns,
                 kind: None,
                 is_batch: true,
@@ -95,11 +99,12 @@ impl Operator for Batch {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
                 // create a new event.
-                let out = self.data.drain(0..).collect();
+                let out: Vec<Value> = self.data.drain(0..).map(std::convert::Into::into).collect();
+                let value = LineValue::new(Box::new(vec![]), |_| Value::Array(out));
                 let event = Event {
                     id: self.event_id,
                     meta: MetaMap::new(),
-                    value: EventValue::JSON(JsonArray(out)),
+                    value,
                     ingest_ns: self.first_ns,
                     kind: None,
                     is_batch: true,
@@ -118,8 +123,8 @@ impl Operator for Batch {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{EventValue, MetaMap};
-    use serde_json::json;
+    use crate::MetaMap;
+    use tremor_script::Value;
 
     #[test]
     fn size() {
@@ -139,7 +144,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -153,7 +158,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("badger")),
             kind: None,
         };
 
@@ -171,7 +176,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -197,7 +202,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -211,7 +216,7 @@ mod test {
             id: 1,
             ingest_ns: 2_000_000,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("badger")),
+            value: sjv!(Value::from("badger")),
             kind: None,
         };
 
@@ -230,7 +235,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -242,7 +247,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -268,7 +273,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -282,7 +287,7 @@ mod test {
             id: 1,
             ingest_ns: 2_000_000,
             meta: MetaMap::new(),
-            value: EventValue::None,
+            value: OwnedValue::Null.into(),
             kind: None,
         };
 
@@ -299,7 +304,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 
@@ -311,7 +316,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             meta: MetaMap::new(),
-            value: EventValue::JSON(json!("snot")),
+            value: sjv!(Value::from("snot")),
             kind: None,
         };
 

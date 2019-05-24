@@ -23,16 +23,25 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, dimensions, rate;
-            _ { $class := "default"; $dimensions := application; $rate := 5; }
+            let $class = "default";
+            let $dimensions = match object::contains(event, "application") of
+              case true => event.application
+              default =>  null
+            end;
+            let $rate = 5;
+            event;
       - id: b1
         op: grouper::bucket
       - id: r2
         op: runtime::tremor
         config:
           script: |
-            export dimensions, rate;
-            _ { $dimensions := host; $rate := 1; }
+            match object::contains(event, "host") of
+              case true => let $dimensions = event.host
+              default => null
+            end;
+            let $rate = 1;
+            event;
       - id: b2
         op: grouper::bucket
     links:

@@ -1,27 +1,52 @@
 [package]
-build = "build.rs"
 name = "tremor-script"
-version = "0.1.1"
-authors = ["Ivan Monov <imonov@wayfair.com>", "Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
+version = "0.1.0"
+authors = ["Darach Ennis <dennis@wayfair.com>"]
 edition = "2018"
-license = "Apache-2.0"
+build = "build.rs"
+
+[[bin]]
+name = "tremor-script"
+test=false
+
+[lib]
+name = "tremor_script"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
+rental = "0.5"
+simd-json = "0.1"
 error-chain="0.12"
+ansi_term = "0.11.0"
 lalrpop-util = "0.16"
+proc-macro2 = { version="0.4.27", features=["span-locations"] }
+syn = "0.15.30"
+quote = "0.6.10"
 regex = "0.2"
-serde_json = { git = "https://github.com/Licenser/json", branch="hashbrown", features=["hashbrown"] }
 pcre2 = "0.1"
+serde_json = "1"
+serde_derive = "1.0.91"
+serde = "1.0.90"
 glob = "0.2"
 lazy_static = "1"
-lalrpop = "0.16"
-codespan = "0.2.0"
 hostname = "0.1"
-hashbrown = { version = "0.1", features = ["serde"] }
-
+codespan = "0.2"
+codespan-reporting = "0.2.1"
+termcolor = "1.0.4"
+unicode-xid = "0.1"
+failure = "0.1.5"
+halfbrown = "0.1"
+base64 = "0.10.1"
+kv = { path = "../kv" }
+dissect = { path = "../dissect" }
+distance = "0.4"
+chrono = "0.4"
 
 [build-dependencies]
 lalrpop = "0.16"
+version_check = "0.1.5"
 
 [dev-dependencies]
 criterion = "0.2"
+matches = "0.1.8"
+

@@ -12,22 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//NOTE: error_chain
 #![allow(deprecated)]
+#![allow(clippy::large_enum_variant)]
+
 use crate::async_sink;
 use actix;
 use base64;
+use chrono;
 use elastic;
 use error_chain::*;
+use grok;
 use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
-use prometheus;
 use rdkafka;
+use rental;
 use rmp_serde;
 use serde_json;
 use serde_yaml;
 use std;
-use tokio_sync::mpsc::error as tokio_sync_error;
 use tremor_pipeline;
+//use tremor_script::LineValue;
 use url;
 
 impl Clone for Error {
@@ -39,11 +44,6 @@ impl Clone for Error {
 impl From<actix::MailboxError> for Error {
     fn from(m: actix::MailboxError) -> Error {
         ErrorKind::MailboxError(m).into()
-    }
-}
-impl From<tokio_sync_error::SendError> for Error {
-    fn from(e: tokio_sync_error::SendError) -> Error {
-        Error::from(format!("{}", e))
     }
 }
 
@@ -76,6 +76,12 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
+impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
+    fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Error {
+        Error::from("Ernatal Error".to_string())
+    }
+}
+
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {
@@ -84,15 +90,6 @@ impl PartialEq for Error {
     }
 }
 
-/*
-impl From<std::option::NoneError> for Error {
-    fn from(e: std::option::NoneError) -> Error {
-        Error::from(format!("Expected Some but got None: {:?}", e))
-    }
-}
-*/
-//impl actix_web::error::ResponseError for Error {}
-
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
@@ -100,10 +97,10 @@ error_chain! {
     }
     foreign_links {
         Base64Error(base64::DecodeError);
-        YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
-        JSONError(serde_json::Error);
+        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        JSONError(simd_json::Error);
+        SerdeError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
-        Prometheus(prometheus::Error);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
         HTTPClientError(reqwest::Error);
@@ -118,13 +115,14 @@ error_chain! {
         ChannelReceiveError(std::sync::mpsc::RecvError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
+        GrokError(grok::Error);
+        DateTimeParseError(chrono::ParseError);
     }
 
     errors {
         MailboxError(e: actix::MailboxError) {
             description("Actix mailbox error")
                 display("Actix mailbox error: {:?}", e)
-
         }
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
@@ -176,11 +174,6 @@ error_chain! {
             description("Operator config has a bad syntax")
                 display("Operator config has a bad syntax: {}", e)
         }
-
-        // TypeError(l: String, expected: ValueType, got: ValueType) {
-        //     description("Type error")
-        //         display("expected type '{}' but found type '{}' in {}", expected, got, l)
-        // }
 
         UnknownNamespace(n: String) {
             description("Unknown namespace")

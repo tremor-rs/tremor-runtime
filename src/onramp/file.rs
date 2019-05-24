@@ -52,7 +52,9 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
     let codec = codec::lookup(&codec)?;
-    let ext = Path::new(&config.source).extension().map(|x| x.to_str());
+    let ext = Path::new(&config.source)
+        .extension()
+        .map(std::ffi::OsStr::to_str);
     let reader: Box<dyn BufRead> = if ext == Some(Some("xz")) {
         Box::new(BufReader::new(XzDecoder::new(source_data_file)))
     } else {
@@ -84,18 +86,13 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
             }
         };
 
-        send_event(
-            &pipelines,
-            &codec,
-            id,
-            EventValue::Raw(line?.as_bytes().to_vec()),
-        );
+        send_event(&pipelines, &codec, id, line?.as_bytes().to_vec());
         id += 1;
     }
 
-    //FIXME: This is super gugly:
+    //TODO: This is super gugly:
     if config.close_on_done {
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(500));
         process::exit(0);
     }
     Ok(())

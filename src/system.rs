@@ -28,7 +28,6 @@ use actix::prelude::*;
 use crossbeam_channel::{bounded, Sender};
 use futures::future::Future;
 use hashbrown::HashMap;
-use maplit::hashmap;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -123,14 +122,16 @@ impl PipelineDest {
 impl Handler<CreatePipeline> for Manager {
     type Result = Result<PipelineAddr>;
     fn handle(&mut self, req: CreatePipeline, _ctx: &mut Self::Context) -> Self::Result {
+        #[inline]
         fn send_events(
-            eventset: Vec<(String, Event)>,
-            dests: &HashMap<String, Vec<(TremorURL, PipelineDest)>>,
+            eventset: &mut Vec<(String, Event)>,
+            dests: &halfbrown::HashMap<String, Vec<(TremorURL, PipelineDest)>>,
         ) -> Result<()> {
-            for (output, event) in eventset {
+            for (output, event) in eventset.drain(..) {
                 if let Some(dest) = dests.get(&output) {
                     let len = dest.len();
-                    for (id, offramp) in dest.iter().take(len - 1) {
+                    //We know we have len, so grabbing len - 1 elementsis safe
+                    for (id, offramp) in unsafe { dest.get_unchecked(..len - 1) } {
                         offramp.send_event(
                             id.instance_port()
                                 .ok_or_else(|| {
@@ -140,7 +141,8 @@ impl Handler<CreatePipeline> for Manager {
                             event.clone(),
                         )?;
                     }
-                    let (id, offramp) = &dest[len - 1];
+                    //We know we have len, so grabbing the last elementsis safe
+                    let (id, offramp) = unsafe { dest.get_unchecked(len - 1) };
                     offramp.send_event(
                         id.instance_port()
                             .ok_or_else(|| {
@@ -155,7 +157,9 @@ impl Handler<CreatePipeline> for Manager {
         }
         let config = req.config;
         let id = req.id.clone();
-        let mut dests: HashMap<String, Vec<(TremorURL, PipelineDest)>> = HashMap::new();
+        let mut dests: halfbrown::HashMap<String, Vec<(TremorURL, PipelineDest)>> =
+            halfbrown::HashMap::new();
+        let mut eventset = Vec::new();
         let (tx, rx) = bounded::<PipelineMsg>(self.qsize);
         let mut pipeline = config
             .pipeline
@@ -170,9 +174,9 @@ impl Handler<CreatePipeline> for Manager {
                 for req in rx {
                     match req {
                         PipelineMsg::Event { input, event } => {
-                            match pipeline.enqueue(&input, event) {
-                                Ok(eventset) => {
-                                    if let Err(e) = send_events(eventset, &dests) {
+                            match pipeline.enqueue(&input, event, &mut eventset) {
+                                Ok(()) => {
+                                    if let Err(e) = send_events(&mut eventset, &dests) {
                                         error!("Failed to send event: {}", e)
                                     }
                                 }
@@ -182,34 +186,44 @@ impl Handler<CreatePipeline> for Manager {
                         PipelineMsg::Insight(insight) => {
                             pipeline.contraflow(insight);
                         }
-                        PipelineMsg::Signal(signal) => match pipeline.signalflow(signal) {
-                            Ok(eventset) => {
-                                if let Err(e) = send_events(eventset, &dests) {
-                                    error!("Failed to send event: {}", e)
+                        PipelineMsg::Signal(signal) => {
+                            match pipeline.signalflow(signal, &mut eventset) {
+                                Ok(()) => {
+                                    if let Err(e) = send_events(&mut eventset, &dests) {
+                                        error!("Failed to send event: {}", e)
+                                    }
                                 }
+                                Err(e) => error!("error: {:?}", e),
                             }
-                            Err(e) => error!("error: {:?}", e),
-                        },
+                        }
 
                         PipelineMsg::ConnectOfframp(output, offramp_id, offramp) => {
                             info!(
                                 "[Pipeline:{}] connecting {} to offramp {}",
                                 id, output, offramp_id
                             );
-                            dests
-                                .entry(output)
-                                .or_insert(vec![])
-                                .push((offramp_id, PipelineDest::Offramp(offramp)));
+                            if let Some(offramps) = dests.get_mut(&output) {
+                                offramps.push((offramp_id, PipelineDest::Offramp(offramp)));
+                            } else {
+                                dests.insert(
+                                    output,
+                                    vec![(offramp_id, PipelineDest::Offramp(offramp))],
+                                );
+                            }
                         }
                         PipelineMsg::ConnectPipeline(output, pipeline_id, pipeline) => {
                             info!(
                                 "[Pipeline:{}] connecting {} to pipeline {}",
                                 id, output, pipeline_id
                             );
-                            dests
-                                .entry(output)
-                                .or_insert(vec![])
-                                .push((pipeline_id, PipelineDest::Pipeline(pipeline)));
+                            if let Some(offramps) = dests.get_mut(&output) {
+                                offramps.push((pipeline_id, PipelineDest::Pipeline(pipeline)));
+                            } else {
+                                dests.insert(
+                                    output,
+                                    vec![(pipeline_id, PipelineDest::Pipeline(pipeline))],
+                                );
+                            }
                         }
                         PipelineMsg::Disconnect(output, to_delete) => {
                             let mut remove = false;
@@ -315,11 +329,10 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id.clone(), servant)?;
                 id.set_port("metrics".to_owned());
-                self.link_pipeline(
-                    id,
-                    hashmap! {"metrics".to_string() => METRICS_PIPELINE.clone()
-                    },
-                )?;
+                let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
+                    .into_iter()
+                    .collect();
+                self.link_pipeline(id, m)?;
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -647,9 +660,7 @@ impl World {
         qsize: usize,
         storage_directory: Option<String>,
     ) -> Result<(Self, JoinHandle<i32>)> {
-        use crate::{offramp, onramp};
         use std::sync::mpsc;
-        use std::thread;
 
         let (tx, rx) = mpsc::channel();
         let onramp_t = thread::spawn(|| {

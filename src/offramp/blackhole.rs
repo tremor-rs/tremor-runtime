@@ -27,7 +27,7 @@ use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::utils;
 use crate::{Event, OpConfig};
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
 use serde_yaml;
@@ -115,7 +115,7 @@ impl Offramp for Blackhole {
         }
     }
     fn default_codec(&self) -> &str {
-        "pass"
+        "null"
     }
 }
 

@@ -11,554 +11,367 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#![recursion_limit = "265"]
 #![forbid(warnings)]
-#![cfg_attr(
-    feature = "cargo-clippy",
-    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
-)]
 
+mod ast;
+mod compat;
 pub mod errors;
+#[allow(unused, dead_code)]
+mod highlighter;
 mod interpreter;
-pub mod registry;
+mod lexer;
+#[allow(unused, dead_code)]
+mod parser;
+#[allow(unused, dead_code)]
+mod pos;
+mod registry;
+mod runtime;
+mod std_lib;
+#[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
+mod str_suffix;
+mod tilde;
 
-pub use crate::interpreter::Script;
+#[cfg(test)]
+#[macro_use]
+extern crate matches;
+
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate rental;
+
+use serde::de::{Deserialize, Deserializer};
+use serde::ser::{self, Serialize};
+pub use simd_json::value::borrowed::Map;
+pub use simd_json::value::borrowed::Value;
+use simd_json::OwnedValue;
+
+pub use crate::interpreter::{LocalMap, Return, Script, ValueStack};
 pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
-use hashbrown::HashMap;
-pub use serde_json::Value;
 
-pub type ValueMap = HashMap<String, Value>;
+rental! {
+    pub mod rentals {
+        use simd_json::value::borrowed;
+        use super::*;
+        use std::borrow::Cow;
+
+
+        #[rental_mut(covariant,debug)]
+        pub struct Value {
+            raw: Box<Vec<u8>>,
+            parsed: borrowed::Value<'raw>
+        }
+    }
+}
+
+impl PartialEq<simd_json::OwnedValue> for rentals::Value {
+    fn eq(&self, other: &simd_json::OwnedValue) -> bool {
+        //TODO: This  is ugly but good enough for now as it's only used in tests
+        self.rent(|this| &simd_json::OwnedValue::from(this.clone()) == other)
+    }
+}
+
+impl From<simd_json::OwnedValue> for rentals::Value {
+    fn from(v: simd_json::OwnedValue) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| v.into())
+    }
+}
+
+impl Clone for LineValue {
+    fn clone(&self) -> Self {
+        LineValue::new(Box::new(vec![]), |_| {
+            self.rent(|parsed| -> Value<'static> {
+                Into::<OwnedValue>::into(parsed.clone()).into()
+            })
+        })
+    }
+}
+
+impl Serialize for LineValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        self.rent(|d| d.serialize(serializer))
+    }
+}
+
+impl<'de> Deserialize<'de> for LineValue {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<LineValue, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let r = OwnedValue::deserialize(deserializer)?;
+        Ok(LineValue::new(Box::new(vec![]), |_| r.into()))
+    }
+}
+
+impl PartialEq for LineValue {
+    fn eq(&self, other: &LineValue) -> bool {
+        self.rent(|s| other.rent(|o| s == o))
+    }
+}
+
+pub use rentals::Value as LineValue;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::interpreter::ValueStack;
+    use ast::{Expr, Literal, LiteralValue};
+    use halfbrown::hashmap;
+    use lexer::{LexerError, TokenFuns, TokenSpan};
+    use simd_json::borrowed::{Map, Value};
+    use simd_json::json;
+    use std::iter::FromIterator;
 
-    #[test]
-    fn test_glob() {
-        let json = r#"{"key1": "data"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1=g"da?a""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
+    #[derive(Clone, Debug)]
+    struct FakeContext {}
+    impl Context for FakeContext {}
 
-    #[test]
-    fn test_glob_with_slash() {
-        let json = r#"{"key1": "d/a/ta"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1=g"d*ta""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
+    macro_rules! parse_lit {
+        ($src:expr, $expected:pat) => {{
+            let _vals: Value = json!({}).into();
+            let _r: Registry<()> = registry();
+            let lexed_tokens = Vec::from_iter(lexer::tokenizer($src));
+            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
 
-    #[test]
-    fn test_equals() {
-        let json = r#"{"key1": "data1"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1="data1""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_quote() {
-        let json = r#"{"key1": "da\\u1234ta1"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1="da\u1234ta1""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_subkey_equals() {
-        let json = r#"{"key1": {"sub1": "data1"}}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1.sub1="data1""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_compound_strings() {
-        let json = r#"{
-               "key1": {
-                       "subkey1": "data1"
-                   },
-                   "key2": {
-                       "subkey2": "data2"
-                    },
-                   "key3": "data3"
-                }"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key1.subkey1="data1" or key3="data3" or (key1.subkey1=g"dat*" and key2.subkey2="data2")"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_eq() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=5", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_gt() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key>1 OR key>4", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_negint_gt() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key>-6", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_lt() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10 key<9", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_double_lt() {
-        let json = r#"{"key":5.0}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10.0 key<9.0", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_ltoe() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key<=5 key<=11", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_gtoe() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key >= 3 key >= 4", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_int_gtoe_double() {
-        let json = r#"{"key":5.0}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key >= 3.5 key >= 4.5", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_regex() {
-        let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=/d.*/", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_regex_false() {
-        let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=/e.*/", &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_negregex() {
-        let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("NOT key=/d.*/", &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_regex_bug() {
-        let json = r#"{"key":"\\/"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key=/\\//"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_neg_compound_strings() {
-        let json = r#"{
-               "key1": {
-                       "subkey1": "data1"
-                   },
-                   "key2": {
-                       "subkey2": "data2"
-                    },
-                   "key3": "data3"
-                }"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"!(key1.subkey1:"data1" OR NOT (key3:"data3") OR NOT (key1.subkey1:"dat" and key2.subkey2="data2"))"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_list_contains_str() {
-        let json = r#"{"key":"data"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s =
-            Script::parse(r#"key:["foo", "data", "bar"]"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_list_contains_int() {
-        let json = r#"{"key":4}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key:[3, 4, 5]", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_list_contains_float() {
-        let json = r#"{"key":4.1}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key:[3.1, 4.1, 5.1]", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_jsonlist_contains_str() {
-        let json = r#"{"key":["v1", "v2", "v3"]}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key:"v2""#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_jsonlist_contains_int() {
-        let json = r#"{"key":[3, 4, 5]}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key:4", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_jsonlist_contains_float() {
-        let json = r#"{"key":[3.1, 4.1, 5.1]}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key:4.1", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_bad_rule_syntax() {
-        let r: Registry<()> = registry();
-        assert_eq!(true, Script::parse(r#""key"#, &r).is_err());
-    }
-
-    #[test]
-    fn test_ip_match() {
-        let json = r#"{"key":"10.66.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.77.88", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_cidr_match() {
-        let json = r#"{"key":"10.66.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.0.0/16", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_ip_match_false() {
-        let json = r#"{"key":"10.66.78.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.77.88", &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_cidr_match_false() {
-        let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key=10.66.0.0/16", &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_exists() {
-        let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_missing() {
-        let json = r#"{"key":"10.67.77.88"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("!key", &r).expect("Failed to parse script");
-        assert_eq!(Ok(None), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_add() {
-        let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s =
-            Script::parse(r#"key="val" {key2 := "newval";}"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-        assert_eq!(vals["key2"], json!("newval"));
-    }
-
-    #[test]
-    fn test_add_nested() {
-        let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"key="val" {newkey.newsubkey.other := "newval";}"#, &r)
-            .expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-        assert_eq!(vals["newkey"]["newsubkey"]["other"], json!("newval"));
-    }
-
-    #[test]
-    fn test_update() {
-        let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_ {key := "newval";}"#, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut vals, &mut HashMap::new());
-        //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-        assert_eq!(vals["key"], json!("newval"));
-    }
-
-    #[test]
-    fn test_update_nested() {
-        let json = r#"{"key":{"key1": "val"}}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s =
-            Script::parse(r#"_ {key.key1 := "newval";}"#, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut vals, &mut HashMap::new());
-        //        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-        assert_eq!(vals["key"]["key1"], json!("newval"));
-    }
-
-    #[test]
-    fn test_update_type_conflict() {
-        let json = r#"{"key":"key1"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s =
-            Script::parse(r#"_ {key.key1 := "newval";}"#, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut vals, &mut HashMap::new());
-
-        // assert_eq!(
-        //     Err(ErrorCode::MutationError(MutationError::TypeConflict)),
-        //     s.run(&(), &mut vals, &mut HashMap::new())
-        // );
-        assert_eq!(vals["key"], json!("key1"));
-    }
-
-    #[test]
-    fn test_mut_multi() {
-        let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(
-            r#"key="val" {
-                           newkey.newsubkey.other := "newval";
-                           newkey.newsubkey.other2 := "newval2";
-                         }"#,
-            &r,
-        )
-        .expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-        assert_eq!(
-            Value::String("newval".to_string()),
-            vals["newkey"]["newsubkey"]["other"]
-        );
-        assert_eq!(
-            Value::String("newval2".to_string()),
-            vals["newkey"]["newsubkey"]["other2"]
-        );
-    }
-
-    #[test]
-    fn test_underscore() {
-        let json = r#"{"key":"val"}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(r#"_"#, &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(0)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn doctest_time_test() {
-        let json = r#"{"key":5}"#;
-        let mut vals: Value = serde_json::from_str(json).expect("failed to parse json");
-        let r: Registry<()> = registry();
-        let mut s = Script::parse("key<10 key<9", &r).expect("Failed to parse script");
-        assert_eq!(Ok(Some(1)), s.run(&(), &mut vals, &mut HashMap::new()));
-    }
-
-    #[test]
-    fn test_mutate_var() {
-        let mut m: ValueMap = HashMap::new();
-
-        m.insert("a".to_string(), json!(1));
-        m.insert("b".to_string(), json!(1));
-        m.insert("c".to_string(), json!(1));
-
-        let mut v = Value::Null;
-
-        let script = r#"
-import a, b;
-export b, c, actual, actual1, actual2;
-
-
-_ { $actual1:= false; $actual2 := false; $actual := false; }
-
-$a=1 && $b=1 && !$c { $actual1 := true; }
-
-_ { $a := 2; $b := 3; $c := 4; }
-
-$a=2 && $b=3 && $c=4 && $actual1=true { $actual2 := true; }
-
-$actual1=true && $actual2=true { $actual := true; }
-
-"#;
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut v, &mut m);
-        assert_eq!(m["a"], json!(1));
-        assert_eq!(m["b"], json!(3));
-        assert_eq!(m["c"], json!(4));
-        assert_eq!(m["actual1"], json!(true));
-        assert_eq!(m["actual2"], json!(true));
-        assert_eq!(m["actual"], json!(true));
-    }
-
-    #[test]
-    fn test_mutate() {
-        let mut m: ValueMap = HashMap::new();
-
-        let mut v = json!(
-            {
-                "a": 1,
-                "b": 1,
+            for t in lexed_tokens.clone().into_iter() {
+                let keep = !t.clone().expect("").value.is_ignorable();
+                if keep {
+                    filtered_tokens.push(t.clone());
+                }
             }
+            let actual = parser::grammar::ScriptParser::new()
+                .parse(filtered_tokens.clone())
+                .expect("exeuction failed");
+            assert_matches!(
+                actual.exprs[0],
+                Expr::Literal(Literal {
+                    value: $expected, ..
+                })
+            );
+        }};
+    }
+
+    macro_rules! eval {
+        ($src:expr, $expected:expr) => {{
+            let _vals: Value = json!({}).into();
+            let _r: Registry<()> = registry();
+            let src = format!("{} ", $src);
+            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
+            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+
+            for t in lexed_tokens.clone().into_iter() {
+                let keep = !t.clone().expect("").value.is_ignorable();
+                if keep {
+                    filtered_tokens.push(t.clone());
+                }
+            }
+            let reg: Registry<FakeContext> = registry::registry();
+            let runnable: interpreter::Script<FakeContext> =
+                interpreter::Script::parse($src, reg).expect("parse failed");
+            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let ctx = FakeContext {};
+            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut stack = ValueStack::default();
+            let value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
+            stack.clear();
+            assert_eq!(Ok(Return::Emit($expected)), value);
+        }};
+    }
+
+    macro_rules! eval_global {
+        ($src:expr, $expected:expr) => {{
+            let _vals: Value = json!({}).into();
+            let _r: Registry<()> = registry();
+            let src = format!("{}", $src);
+            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
+            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+
+            for t in lexed_tokens.clone().into_iter() {
+                let keep = !t.clone().expect("").value.is_ignorable();
+                if keep {
+                    filtered_tokens.push(t.clone());
+                }
+            }
+            let reg: Registry<FakeContext> = registry::registry();
+            let runnable: interpreter::Script<FakeContext> =
+                interpreter::Script::parse($src, reg).expect("parse failed");
+            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let ctx = FakeContext {};
+            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut stack = ValueStack::default();
+            let _value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
+            stack.clear();
+            // dbg!(("eval global", value));
+            assert_eq!(global_map, $expected);
+        }};
+    }
+
+    macro_rules! eval_event {
+        ($src:expr, $expected:expr) => {{
+            let _vals: Value = json!({}).into();
+            let _r: Registry<()> = registry();
+            let src = format!("{}", $src);
+            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
+            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+
+            for t in lexed_tokens.clone().into_iter() {
+                let keep = !t.clone().expect("").value.is_ignorable();
+                if keep {
+                    filtered_tokens.push(t.clone());
+                }
+            }
+            let reg: Registry<FakeContext> = registry::registry();
+            let runnable: interpreter::Script<FakeContext> =
+                interpreter::Script::parse($src, reg).expect("parse failed");
+            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let ctx = FakeContext {};
+            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut stack = ValueStack::default();
+            let _value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
+            stack.clear();
+            assert_eq!(event, $expected);
+        }};
+    }
+
+    #[test]
+    fn test_literal_expr() {
+        use simd_json::OwnedValue;
+        use Value::I64;
+        parse_lit!("null;", LiteralValue::Native(OwnedValue::Null));
+        parse_lit!("true;", LiteralValue::Native(OwnedValue::Bool(true)));
+        parse_lit!("false;", LiteralValue::Native(OwnedValue::Bool(false)));
+        parse_lit!("0;", LiteralValue::Native(OwnedValue::I64(0)));
+        parse_lit!("123;", LiteralValue::Native(OwnedValue::I64(123)));
+        parse_lit!("123.456;", LiteralValue::Native(OwnedValue::F64(_))); // 123.456 we can't match aginst float ...
+        parse_lit!(
+            "123.456e10;",
+            LiteralValue::Native(OwnedValue::F64(_)) // 123.456e10 we can't match against float
         );
-        let script = r#"
-export actual, actual1, actual2;
-
-_ { $actual1:= false; $actual2 := false; $actual := false; }
-
-a=1 && b=1 && !c { $actual1 := true; }
-
-_ { b := 3; c := 4; }
-
-a=1 && b=3 && c=4 && $actual1=true { $actual2 := true; }
-
-$actual1=true && $actual2=true { $actual := true; }
-
-"#;
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut v, &mut m);
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(v["b"], json!(3));
-        assert_eq!(v["c"], json!(4));
-        assert_eq!(m["actual1"], json!(true));
-        assert_eq!(m["actual2"], json!(true));
-        assert_eq!(m["actual"], json!(true));
+        parse_lit!("\"hello\";", LiteralValue::Native(OwnedValue::String(_))); // we can't match against a COW
+        eval!("null;", Value::Null);
+        eval!("true;", Value::Bool(true));
+        eval!("false;", Value::Bool(false));
+        eval!("0;", Value::I64(0));
+        eval!("123;", Value::I64(123));
+        eval!("123.456;", Value::F64(123.456));
+        eval!("123.456e10;", Value::F64(123.456e10));
+        eval!("\"hello\";", Value::String("hello".into()));
+        eval!("\"hello\";\"world\";", Value::String("world".into()));
+        eval!(
+            "true;\"hello\";[1,2,3,4,5];",
+            Value::Array(vec![I64(1), I64(2), I64(3), I64(4), I64(5)])
+        );
     }
 
     #[test]
-    fn unknown_key_test() {
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"a": 1});
-        let script = r#"
-export b;
-v:1 { $b := 2; return; }
-_ { $b := 3; }
-"#;
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut v, &mut m);
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(m["b"], json!(3));
+    fn test_let_expr() {
+        //use ast::Assign;
+        //use ast::LocalPath;
+        //use ast::Path;
+        //use ast::Segment;
+        use Value::I64;
+        /*
+                parse!(
+                    "let test = null;",
+                    Expr::Assign(Assign {
+                        path: Path::Local(LocalPath {
+                            segments: vec![Segment::Ident("test".to_string())],
+                            start: pos::Location::new(1,5,5),
+                            end: pos::Location::new(1,9,9),
+                        }),
+                        expr: Box::new(Expr::Literal(Literal::Nil)),
+                        start: pos::Location::new(1,5,5),
+                        end: pos::Location::new(1,17,4),
+                    })
+                );
+        */
+        eval!("let test = null;", Value::Null);
+        eval!("let test = 10;", Value::I64(10));
+        eval!("let test = 10.2345;", Value::F64(10.2345));
+        eval!(
+            "\"hello\"; let test = \"world\";",
+            Value::String(std::borrow::Cow::Borrowed("world"))
+        );
+        eval!(
+            "\"hello\"; let test = [2,4,6,8];",
+            Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])
+        );
+        eval!(
+            "\"hello\"; let $test = \"world\";",
+            Value::String(std::borrow::Cow::Borrowed("world"))
+        );
+        eval!(
+            "\"hello\"; let $test = [2,4,6,8];",
+            Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])
+        );
     }
+
     #[test]
-    #[ignore]
-    fn comment_before_interface() {
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"a": 1});
-
-        let script = r#"
-# comment
-export b;
-_ { $b := 2; }
-"#;
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut v, &mut m);
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(m["b"], json!(2));
+    fn test_assign_local() {
+        use Value::I64;
+        eval_global!(
+            "\"hello\"; let test = [2,4,6,8]; let $out = test;",
+            Value::Object(hashmap! {
+                std::borrow::Cow::Borrowed("out") => Value::Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+            })
+        );
+        eval_global!(
+            "\"hello\"; let test = [2,4,6,8]; let test = [test]; let $out = test;",
+            Value::Object(hashmap! {
+                std::borrow::Cow::Borrowed("out") => Value::Array(vec![Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+            })
+        );
     }
 
     #[test]
-    fn comment_after_interface() {
-        let mut m: ValueMap = HashMap::new();
-        let mut v = json!({"a": 1});
-
-        let script = r#"
-export b;
-# comment
-_ { $b := 2; }
-"#;
-        let r: Registry<()> = registry();
-        let mut s = Script::parse(script, &r).expect("Failed to parse script");
-        let _ = s.run(&(), &mut v, &mut m);
-        assert_eq!(v["a"], json!(1));
-        assert_eq!(m["b"], json!(2));
+    fn test_assign_meta() {
+        use simd_json::borrowed::Value::Array;
+        use simd_json::borrowed::Value::I64;
+        eval_global!(
+            "\"hello\"; let $test = [2,4,6,8];",
+            Value::Object(hashmap! {
+                "test".into() => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+            })
+        );
+        eval_global!(
+            "\"hello\"; let test = [2,4,6,8]; let $test = [test];",
+            Value::Object(hashmap! {
+                "test".into() => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+            })
+        );
     }
 
+    #[test]
+    fn test_assign_event() {
+        use simd_json::borrowed::Value::Array;
+        use simd_json::borrowed::Value::Object;
+        use simd_json::borrowed::Value::I64;
+        eval_event!(
+            "\"hello\"; let event.test = [2,4,6,8];",
+            Object(hashmap! {
+                std::borrow::Cow::Borrowed("test") => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+            })
+        );
+        eval_event!(
+            "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
+            Object(hashmap! {
+                std::borrow::Cow::Borrowed("test") => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+            })
+        );
+    }
+
+    #[test]
+    fn test_single_json_expr_is_valid() {
+        eval!("true", Value::Bool(true));
+        eval!("true;", Value::Bool(true));
+        eval!(
+            "{ \"snot\": \"badger\" }",
+            Value::Object(hashmap! { "snot".into() => "badger".into() })
+        );
+    }
 }

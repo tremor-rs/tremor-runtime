@@ -132,7 +132,9 @@ fn run_dun() -> Result<()> {
         metrics::INSTANCE = forget_s;
     }
 
-    let storage_directory = matches.value_of("storage-directory").map(|s| s.to_string());
+    let storage_directory = matches
+        .value_of("storage-directory")
+        .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
     let (world, handle) = World::start(50, storage_directory)?;
 
@@ -218,7 +220,6 @@ fn run_dun() -> Result<()> {
                 "/api-docs",
                 fs::StaticFiles::new("static")
                     .expect("Missing static directoy")
-                    .show_files_listing()
                     .index_file("index.html"),
             )
             .middleware(middleware::Logger::default())

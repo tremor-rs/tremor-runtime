@@ -33,26 +33,48 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, dimension, rate, index_type;
+            # export class, dimension, rate, index_type;
 
-            _ { $index_type := index; }
+            # _ { $index_type := index; }
 
-            application="app1" { $class := "applog_app1"; $rate := 1250;  $dimension := application; return; }
-            application="app2" { $class := "applog_app2"; $rate := 2500;  $dimension := application; return; }
-            application="app3" { $class := "applog_app3"; $rate := 18750; $dimension := application; return; }
-            application="app4" { $class := "applog_app4"; $rate := 750;   $dimension := application; return;}
-            application="app5" { $class := "applog_app5"; $rate := 18750; $dimension := application; return; }
+            # application="app1" { $class := "applog_app1"; $rate := 1250;  $dimension := application; return; }
+            # application="app2" { $class := "applog_app2"; $rate := 2500;  $dimension := application; return; }
+            # application="app3" { $class := "applog_app3"; $rate := 18750; $dimension := application; return; }
+            # application="app4" { $class := "applog_app4"; $rate := 750;   $dimension := application; return;}
+            # application="app5" { $class := "applog_app5"; $rate := 18750; $dimension := application; return; }
 
-            index_type="applog_app6" { $class := "applog_app6"; $rate := 4500; $dimension := logger_name; return; }
+            # index_type="applog_app6" { $class := "applog_app6"; $rate := 4500; $dimension := logger_name; return; }
 
-            index_type="syslog_app1" { $class := "syslog_app1"; $rate := 2500; $dimension := syslog_hostname; return; }
-            tags:"tag1"              { $class := "syslog_app2"; $rate := 125;  $dimension := syslog_hostname; return; }
-            index_type="syslog_app3" { $class := "syslog_app3"; $rate := 1750; $dimension := syslog_hostname; return; }
-            index_type="syslog_app4" { $class := "syslog_app4"; $rate := 7500; $dimension := syslog_hostname; return; }
-            index_type="syslog_app5" { $class := "syslog_app5"; $rate := 125;  $dimension := syslog_hostname; return; }
-            index_type="syslog_app6" { $class := "syslog_app6"; $rate := 3750; $dimension := syslog_hostname; return; }
+            # index_type="syslog_app1" { $class := "syslog_app1"; $rate := 2500; $dimension := syslog_hostname; return; }
+            # tags:"tag1"              { $class := "syslog_app2"; $rate := 125;  $dimension := syslog_hostname; return; }
+            # index_type="syslog_app3" { $class := "syslog_app3"; $rate := 1750; $dimension := syslog_hostname; return; }
+            # index_type="syslog_app4" { $class := "syslog_app4"; $rate := 7500; $dimension := syslog_hostname; return; }
+            # index_type="syslog_app5" { $class := "syslog_app5"; $rate := 125;  $dimension := syslog_hostname; return; }
+            # index_type="syslog_app6" { $class := "syslog_app6"; $rate := 3750; $dimension := syslog_hostname; return; }
 
-            _ { $class := "default"; $rate := 250; }
+            # _ { $class := "default"; $rate := 250; }
+            let class := "default";
+            let rate := 250;
+            match event.application of
+              case "app1" => let class = "applog_app1" =>  let rate = 1250 => let dimension = event.application => emit event
+              case "app2" => let class = "applog_app1" =>  let rate = 2500 => let dimension = event.application => emit event
+              case "app3" => let class = "applog_app1" =>  let rate = 18750 => let dimension = event.application => emit event
+              case "app4" => let class = "applog_app1" =>  let rate = 750 => let dimension = event.application => emit event
+              case "app5" => let class = "applog_app1" =>  let rate = 18750 => let dimension = event.application => emit event
+              default => null
+            end;
+            match event of
+              case %{index_type == "applog_app6"} => let class = "applog_app6" => let rate = 4500 => let dimensions = event.logger_name
+              case %{index_type == "syslog_app1"} => let class = "syslog_app1" => let rate = 2500 => let dimensions = event.syslog_hostname
+              case %{} when array::contains(event.tags, "tag1") => let class = "syslog_app2" => rate => 125 => let dimensions = event.syslog_hostname
+              case %{index_type == "syslog_app3"} => let class = "syslog_app3" => let rate = 1750 => let dimensions = event.syslog_hostname
+              case %{index_type == "syslog_app4"} => let class = "syslog_app4" => let rate = 7500 => let dimensions = event.syslog_hostname
+              case %{index_type == "syslog_app5"} => let class = "syslog_app5" => let rate = 125 => let dimensions = event.syslog_hostname
+              case %{index_type == "syslog_app6"} => let class = "syslog_app6" => let rate = 3750 => let dimensions = event.syslog_hostname
+              default => let class = "default" => let rate = 250
+            end;
+            let $class := class; let $rate := rate;
+            event;
       - id: group
         op: grouper::bucket
     links:

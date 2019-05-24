@@ -135,7 +135,7 @@ pub struct Interfaces {
 pub struct Node {
     pub id: ID,
     #[serde(default = "dflt")]
-    pub description: Option<String>,
+    pub description: String,
     #[serde(rename = "op")]
     pub node_type: String,
     pub config: ConfigMap,
@@ -147,7 +147,7 @@ pub struct Pipeline {
     pub id: ID,
     pub interface: Interfaces,
     #[serde(default = "dflt")]
-    pub description: Option<String>,
+    pub description: String,
     #[serde(default = "dflt")]
     pub nodes: Vec<Node>,
     #[serde(default = "dflt")]

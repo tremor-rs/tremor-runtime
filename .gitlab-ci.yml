@@ -1,6 +1,6 @@
 test:
   stage: test
-  image: wayfair/tremor/dataeng-rust:1.33.0
+  image: wayfair/tremor/rust:1.35.0
   when: always
   # cache:
   #   paths:
@@ -13,11 +13,54 @@ test:
     - make chk_unwrap_ci
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
-    - cargo test --all-features
-    - cargo test -p tremor-script -p window
-    - cargo clippy --all-features
-    - cp target/debug/native/php-src/libs/* /lib64
+    - cargo test --all-features --all
+    - cargo clippy --all-features --all
+    #- cp target/debug/native/php-src/libs/* /lib64
     - make it
+
+api-tests:
+  stage: test
+  image: wayfair/tremor/ci:1.34.1d
+  when: always
+  # cache:
+  #   paths:
+  #     - target
+  #     - .cargo
+  tags:
+    - docker
+  script:
+    - source $HOME/.cargo/env
+    - export CARGO_HOME=.cargo
+    # we need to translate the api yaml
+    - ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
+    - cargo build -p tremor-server -p tremor-tool
+    # Test API via EQC
+    - target/debug/tremor-server &
+    - sleep 1
+    - pgrep tremor
+    - cd tremor-erl
+    - erl -noshell -eval "eqc:registration(\"${EQC_LICENSE}\")" -eval "eqc:start()" -eval "init:stop()"
+    - rebar3 as eqc eqc
+    - cd ..
+    - pkill tremor-server
+    # Test API via curl
+    - target/debug/tremor-server &
+    - sleep 1
+    - pgrep tremor
+    - cd tremor-api
+    - ~/go/bin/coyote -c tests/coyote.yml
+    - cd ..
+    - pkill tremor-server
+    #  test API via tremor tool
+    - target/debug/tremor-server &
+    - sleep 1
+    - pgrep tremor
+    - cd tremor-tool
+    - ~/go/bin/coyote -c tests/coyote.yml
+    - cd ..
+    - pkill tremor-server
+
+# The bench server got claimed for something else :(
 
 # The bench server got claimed for something else :(
 # doesn't make sense to run bench any more this way.

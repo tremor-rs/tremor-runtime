@@ -13,35 +13,24 @@
 // limitations under the License.
 
 use crate::errors::*;
-use tremor_pipeline::EventValue;
+use tremor_script::LineValue;
 
 pub mod influx;
 pub mod json;
 pub mod msgpack;
+pub mod null;
 
 pub trait Codec: Send {
-    fn decode(&self, data: EventValue) -> Result<EventValue>;
-    fn encode(&self, data: EventValue) -> Result<EventValue>;
-}
-
-#[derive(Clone)]
-struct Pass {}
-
-impl Codec for Pass {
-    fn decode(&self, data: EventValue) -> Result<EventValue> {
-        Ok(data)
-    }
-    fn encode(&self, data: EventValue) -> Result<EventValue> {
-        Ok(data)
-    }
+    fn decode(&self, data: Vec<u8>) -> Result<LineValue>;
+    fn encode(&self, data: LineValue) -> Result<Vec<u8>>;
 }
 
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
         "json" => Ok(Box::new(json::JSON {})),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
-        "pass" => Ok(Box::new(Pass {})),
         "influx" => Ok(Box::new(influx::Influx {})),
+        "null" => Ok(Box::new(null::Null {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }

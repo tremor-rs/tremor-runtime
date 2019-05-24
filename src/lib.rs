@@ -42,6 +42,7 @@ pub mod errors;
 pub mod functions;
 pub mod codec;
 pub mod lifecycle;
+pub mod logstash;
 pub mod metrics;
 pub mod offramp;
 pub mod onramp;
@@ -68,7 +69,6 @@ pub use crate::config::OffRamp;
 pub use crate::config::OnRamp;
 pub use serde_yaml::Value as OpConfig;
 pub use tremor_pipeline::Event;
-pub use tremor_pipeline::EventValue;
 
 #[derive(Debug)]
 pub struct Todo {

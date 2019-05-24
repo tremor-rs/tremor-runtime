@@ -38,98 +38,43 @@
 
 use super::Codec;
 use crate::errors::*;
-use hashbrown::HashMap;
-use serde_json::{json, Number, Value};
+//use serde_json::json;
+use halfbrown::HashMap;
+use simd_json::OwnedValue;
 use std::str::{self, Chars};
-use tremor_pipeline::EventValue;
+use tremor_script::LineValue;
 
 #[derive(Clone)]
 pub struct Influx {}
 
 impl Codec for Influx {
-    fn decode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::Raw(raw) => {
-                let s = str::from_utf8(&raw)?;
-                let parsed = parse(s)?;
-                Ok(EventValue::JSON(json!(parsed)))
-            }
-            EventValue::JSON(_) => Ok(data),
-            EventValue::None => Ok(EventValue::JSON(serde_json::Value::Null)),
-        }
+    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+        LineValue::try_new(Box::new(data), |raw| {
+            let s = str::from_utf8(&raw)?;
+            let parsed = parse(s)?;
+            Ok(simd_json::serde::to_owned_value(parsed)?.into())
+        })
+        .map_err(|e| e.0)
     }
 
-    fn encode(&self, data: EventValue) -> Result<EventValue> {
-        match data {
-            EventValue::JSON(json) => {
-                let measurement = json
-                    .get("measurement")
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                    .as_str()
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?;
-                let mapped_tags = json
-                    .get("tags")
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                    .as_object()
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?;
-
-                let mut tags = HashMap::new();
-                for (key, value) in mapped_tags {
-                    let val = value
-                        .as_str()
-                        .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                        .to_string();
-
-                    tags.insert(key.to_owned(), val.to_owned());
-                }
-                let fields = json
-                    .get("fields")
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                    .as_object()
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                    .iter()
-                    .map(|(key, value)| (key.to_owned(), value.to_owned()))
-                    .collect::<HashMap<String, Value>>();
-
-                let timestamp = json
-                    .get("timestamp")
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?
-                    .as_u64()
-                    .ok_or_else(|| ErrorKind::InvalidInfluxData(json.to_string()))?;
-
-                let influx = InfluxDatapoint::new(measurement, tags, fields, timestamp);
-
-                let bytes = influx.try_to_bytes()?;
-                Ok(EventValue::Raw(bytes.clone()))
-            }
-            _ => Err("Trying to encode non json data.".into()),
-        }
+    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
+        data.rent(|json| {
+            let influx: InfluxDatapoint = simd_json::serde::from_borrowed_value(json.clone())?;
+            let bytes = influx.try_to_bytes()?;
+            Ok(bytes)
+        })
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct InfluxDatapoint {
     measurement: String,
     tags: HashMap<String, String>,
-    fields: HashMap<String, Value>,
+    fields: HashMap<String, OwnedValue>,
     timestamp: u64,
 }
 
 impl InfluxDatapoint {
-    pub fn new(
-        measurement: &str,
-        tags: HashMap<String, String>,
-        fields: HashMap<String, Value>,
-        timestamp: u64,
-    ) -> InfluxDatapoint {
-        InfluxDatapoint {
-            measurement: measurement.to_owned(),
-            tags,
-            fields,
-            timestamp,
-        }
-    }
-
     pub fn try_to_bytes(self) -> Result<Vec<u8>> {
         let mut output = self.measurement.escape();
 
@@ -156,11 +101,12 @@ impl InfluxDatapoint {
 
         for (key, field) in self.fields.iter() {
             let value = match field {
-                Value::String(s) => Ok(process_string(s)),
+                OwnedValue::String(s) => Ok(process_string(s)),
 
-                Value::Number(num) => Ok(num.to_string()),
+                OwnedValue::F64(num) => Ok(num.to_string()),
+                OwnedValue::I64(num) => Ok(num.to_string()),
 
-                Value::Bool(b) => Ok(b.to_string()),
+                OwnedValue::Bool(b) => Ok(b.to_string()),
                 _ => Err(ErrorKind::InvalidInfluxData(
                     "Arrays are not supported for field values".into(),
                 )),
@@ -227,23 +173,23 @@ fn parse(data: &str) -> Result<InfluxDatapoint> {
     })
 }
 
-fn parse_string(chars: &mut Chars) -> Result<(Value, char)> {
+fn parse_string(chars: &mut Chars) -> Result<(OwnedValue, char)> {
     let val = parse_to_char(chars, '"')?;
     match chars.next() {
-        Some(',') => Ok((Value::String(val), ',')),
-        Some(' ') => Ok((Value::String(val), ' ')),
+        Some(',') => Ok((OwnedValue::from(val), ',')),
+        Some(' ') => Ok((OwnedValue::from(val), ' ')),
         _ => Err(ErrorKind::InvalidInfluxData("Unexpected character after string".into()).into()),
     }
 }
 
-fn float_or_bool(s: &str) -> Result<Value> {
+fn float_or_bool(s: &str) -> Result<OwnedValue> {
     match s {
-        "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::Bool(true)),
-        "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::Bool(false)),
-        _ => Ok(num_f(s.parse()?)?),
+        "t" | "T" | "true" | "True" | "TRUE" => Ok(OwnedValue::from(true)),
+        "f" | "F" | "false" | "False" | "FALSE" => Ok(OwnedValue::from(false)),
+        _ => Ok(OwnedValue::F64(s.parse()?)),
     }
 }
-fn parse_value(chars: &mut Chars) -> Result<(Value, char)> {
+fn parse_value(chars: &mut Chars) -> Result<(OwnedValue, char)> {
     let mut res = String::new();
     match chars.next() {
         Some('"') => return parse_string(chars),
@@ -257,8 +203,8 @@ fn parse_value(chars: &mut Chars) -> Result<(Value, char)> {
             ',' => return Ok((float_or_bool(&res)?, ',')),
             ' ' => return Ok((float_or_bool(&res)?, ' ')),
             'i' => match chars.next() {
-                Some(' ') => return Ok((num_i(res.parse()?), ' ')),
-                Some(',') => return Ok((num_i(res.parse()?), ',')),
+                Some(' ') => return Ok((OwnedValue::I64(res.parse()?), ' ')),
+                Some(',') => return Ok((OwnedValue::I64(res.parse()?), ',')),
                 Some(c) => {
                     return Err(ErrorKind::InvalidInfluxData(format!(
                         "Unexpected character '{}', expected ' ' or ','.",
@@ -286,7 +232,7 @@ fn parse_value(chars: &mut Chars) -> Result<(Value, char)> {
     )
 }
 
-fn parse_fields(chars: &mut Chars) -> Result<HashMap<String, Value>> {
+fn parse_fields(chars: &mut Chars) -> Result<HashMap<String, OwnedValue>> {
     let mut res = HashMap::new();
     loop {
         let key = parse_to_char(chars, '=')?;
@@ -368,16 +314,6 @@ fn parse_to_char(chars: &mut Chars, end: char) -> Result<String> {
     Ok(res)
 }
 
-fn num_i(n: i64) -> Value {
-    Value::Number(Number::from(n))
-}
-
-fn num_f(n: f64) -> Result<Value> {
-    Ok(Value::Number(Number::from_f64(n as f64).ok_or_else(
-        || Error::from("number can not be conveted to float."),
-    )?))
-}
-
 trait Escaper {
     type Escaped;
     fn escape(&self) -> Self::Escaped;
@@ -405,15 +341,9 @@ impl Escaper for String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[allow(unused_imports)]
-    use maplit::hashmap;
-    use serde_json::{self, json, Value};
+    use halfbrown::hashmap;
+    use simd_json::{json, OwnedValue};
 
-    //    use test::Bencher;
-
-    fn f(n: f64) -> Value {
-        num_f(n).expect("failed to create float")
-    }
     #[test]
     fn parse_simple() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
@@ -423,7 +353,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::from(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -439,7 +369,7 @@ mod tests {
                 "season".to_string() => "summer".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::from(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -455,8 +385,8 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0),
-                "bug_concentration".to_string() => f(98.0),
+                "temperature".to_string() => OwnedValue::from(82.0),
+                "bug_concentration".to_string() => OwnedValue::from(98.0),
 
             },
             timestamp: 1465839830100400200,
@@ -471,7 +401,7 @@ mod tests {
             measurement: "weather".to_string(),
             tags: HashMap::new(),
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -484,7 +414,7 @@ mod tests {
             measurement: "weather".to_string(),
             tags: HashMap::new(),
             fields: hashmap! {
-                "temperature".to_string() => num_i(82)
+                "temperature".to_string() => OwnedValue::I64(82)
             },
             timestamp: 1465839830100400200,
         };
@@ -499,7 +429,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => Value::String("too warm".to_string())
+                "temperature".to_string() => OwnedValue::from("too warm")
             },
             timestamp: 1465839830100400200,
         };
@@ -520,7 +450,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "too_hot".to_string() => Value::Bool(true)
+                "too_hot".to_string() => OwnedValue::Bool(true)
             },
             timestamp: 1465839830100400200,
         };
@@ -543,7 +473,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "too_hot".to_string() => Value::Bool(false)
+                "too_hot".to_string() => OwnedValue::Bool(false)
             },
             timestamp: 1465839830100400200,
         };
@@ -561,7 +491,7 @@ mod tests {
                 "location".to_string() => "us,midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -577,7 +507,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temp=rature".to_string() => f(82.0)
+                "temp=rature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -592,7 +522,7 @@ mod tests {
                 "location place".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -608,7 +538,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -623,7 +553,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => f(82.0)
+                "temperature".to_string() => OwnedValue::F64(82.0)
             },
             timestamp: 1465839830100400200,
         };
@@ -639,7 +569,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature".to_string() => Value::String("too\"hot\"".to_string())
+                "temperature".to_string() => OwnedValue::from("too\"hot\"")
             },
             timestamp: 1465839830100400200,
         };
@@ -655,7 +585,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot/cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot/cold")
             },
             timestamp: 1465839830100400201,
         };
@@ -671,7 +601,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot\\cold")
             },
             timestamp: 1465839830100400202,
         };
@@ -688,7 +618,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot\\cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot\\cold")
             },
             timestamp: 1465839830100400203,
         };
@@ -705,7 +635,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot\\\\cold")
             },
             timestamp: 1465839830100400204,
         };
@@ -722,7 +652,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot\\\\cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot\\\\cold")
             },
             timestamp: 1_465_839_830_100_400_205,
         };
@@ -737,7 +667,7 @@ mod tests {
                 "location".to_string() => "us-midwest".to_string()
             },
             fields: hashmap! {
-                "temperature_str".to_string() => Value::String("too hot\\\\\\cold".to_string())
+                "temperature_str".to_string() => OwnedValue::from("too hot\\\\\\cold")
             },
             timestamp: 1465839830100400206,
         };
@@ -750,13 +680,13 @@ mod tests {
         let d = parse(s).expect("failed to parse");
         // This is a bit ugly but to make a sensible compairison we got to convert the data
         // from an object to json to an object
-        let j: serde_json::Value = serde_json::from_str(
+        let j: OwnedValue = serde_json::from_str(
             serde_json::to_string(&d)
                 .expect("failed to encode")
                 .as_str(),
         )
         .expect("failed to decode");
-        let e: serde_json::Value = json!({
+        let e: OwnedValue = json!({
             "measurement": "weather",
             "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
@@ -770,17 +700,28 @@ mod tests {
         let s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
         let codec = Influx {};
 
-        let decoded = codec.decode(EventValue::Raw(s)).expect("failed to decode");
+        let decoded = codec.decode(s).expect("failed to decode");
 
-        let e: serde_json::Value = json!({
+        let e: OwnedValue = json!({
             "measurement": "weather",
             "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
             "timestamp": 1465839830100400200i64
         });
-        match &decoded {
-            EventValue::JSON(j) => assert_eq!(j, &e),
-            _ => unreachable!(),
+        assert_eq!(decoded, e)
+    }
+
+    pub fn from_parts(
+        measurement: &str,
+        tags: HashMap<String, String>,
+        fields: HashMap<String, OwnedValue>,
+        timestamp: u64,
+    ) -> InfluxDatapoint {
+        InfluxDatapoint {
+            measurement: measurement.to_owned(),
+            tags,
+            fields,
+            timestamp,
         }
     }
 
@@ -795,9 +736,9 @@ mod tests {
 
         let codec = Influx {};
 
-        let encoded = codec.encode(EventValue::JSON(s)).expect("failed to encode");
+        let encoded = codec.encode(s.into()).expect("failed to encode");
 
-        let influx = InfluxDatapoint::new(
+        let influx = from_parts(
             "weather",
             [("location".to_owned(), "us-midwest".to_owned())]
                 .into_iter()
@@ -810,10 +751,7 @@ mod tests {
             1465839830100400200u64,
         );
 
-        match &encoded {
-            EventValue::Raw(r) => assert_eq!(*r, influx.try_to_bytes().expect("failed to encode")),
-            _ => unreachable!(),
-        }
+        assert_eq!(encoded, influx.try_to_bytes().expect("failed to encode"))
     }
 
     #[test]
@@ -822,27 +760,23 @@ mod tests {
         let s = json!({
             "measurement": r#"wea,\ ther"#,
             "tags": tags,
-            "fields": hashmap!{"temp=erature" => f(82.0), r#"too\ \\\"hot""# => Value::Bool(true)},
+            "fields": hashmap!{"temp=erature" => OwnedValue::F64(82.0), r#"too\ \\\"hot""# => OwnedValue::Bool(true)},
             "timestamp": 1465839830100400200u64
         });
 
         let codec = Influx {};
 
-        let encoded = codec.encode(EventValue::JSON(s)).expect("failed to encode");
+        let encoded = codec.encode(s.into()).expect("failed to encode");
 
-        match &encoded {
-            EventValue::Raw(r) => {
-                let raw =
-                    r#"wea\,\\\ ther temp\=erature=82 too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
+        let raw = r#"wea\,\\\ ther temp\=erature=82 too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
 
-                assert_eq!(str::from_utf8(r).expect("failed to convert utf8"), raw);
-            }
-
-            _ => unreachable!(),
-        }
+        assert_eq!(
+            str::from_utf8(&encoded).expect("failed to convert utf8"),
+            raw
+        );
     }
 
-    pub fn get_data_for_tests() -> [(Vec<u8>, Value, &'static str); 11] {
+    pub fn get_data_for_tests() -> [(Vec<u8>, OwnedValue, &'static str); 11] {
         [
             (
                 b"weather,location=us\\,midwest temperature=82 1465839830100400200".to_vec(),
@@ -913,7 +847,7 @@ mod tests {
                  json!({
                       "measurement": "weather",
                      "tags": hashmap!{"location" => "us-midwest"}, 
-                     "fields": hashmap!{"temperature_str" => Value::String("too\\ hot\\cold".to_string())},
+                     "fields": hashmap!{"temperature_str" => OwnedValue::from("too\\ hot\\cold")},
                      "timestamp": 1465839830100400203i64
                  }),
                  "case 5"
@@ -925,7 +859,7 @@ mod tests {
 
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
-                    "fields": hashmap!{"temperature_str" => Value::String(r#"too hot/cold"#.to_string())},
+                    "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot/cold"#)},
                     "timestamp": 1465839830100400202i64
                 }),
                 "case 6"
@@ -937,7 +871,7 @@ mod tests {
                 json!({
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
-                    "fields": hashmap!{"temperature_str" => Value::String(r#"too hot\cold"#.to_string())},
+                    "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot\cold"#)},
                     "timestamp": 1465839830100400203i64
                 }),
                 "case 7"
@@ -949,7 +883,7 @@ mod tests {
                 json!({
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
-                    "fields": hashmap!{"temperature_str" => Value::String(r#"too hot\\cold"#.to_string())},
+                    "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot\\cold"#)},
                     "timestamp": 1465839830100400204i64
                 }),
                 "case 8"
@@ -962,7 +896,7 @@ mod tests {
                 json!({
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
-                    "fields": hashmap!{"temperature_str" => Value::String("too hot\\\\cold".to_string())},
+                    "fields": hashmap!{"temperature_str" => OwnedValue::from("too hot\\\\cold")},
                     "timestamp": 1465839830100400205i64
                 }),
                 "case 9"
@@ -974,7 +908,7 @@ mod tests {
                 json!({
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
-                    "fields": hashmap!{"temperature_str" => Value::String("too hot\\\\\\cold".to_string())},
+                    "fields": hashmap!{"temperature_str" => OwnedValue::from("too hot\\\\\\cold")},
                     "timestamp": 1465839830100400206i64
                 }),
                 "case 10"
@@ -992,28 +926,16 @@ mod tests {
             let codec = Influx {};
 
             let encoded = codec
-                .encode(EventValue::JSON(case.1.clone()))
+                .encode(case.1.clone().into())
                 .expect("failed to encode");
 
-            match &encoded {
-                EventValue::Raw(r) => {
-                    let decoded = codec
-                        .decode(EventValue::Raw(r.clone()))
-                        .expect("failed to dencode");
+            let decoded = codec.decode(encoded.clone()).expect("failed to dencode");
 
-                    match &decoded {
-                        EventValue::JSON(j) => {
-                            if j != &case.1 {
-                                println!("{} fails while decoding", &case.2);
-                                assert_eq!(j, &case.1);
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                _ => unreachable!(),
+            if decoded != case.1 {
+                println!("{} fails while decoding", &case.2);
+                assert_eq!(decoded, case.1);
             }
-        });
+        })
     }
 
     /*
