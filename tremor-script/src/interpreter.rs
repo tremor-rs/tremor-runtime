@@ -209,8 +209,8 @@ where
             }
             (Some((start, end)), _inner) => {
                 let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
-                write!(h.get_writer(), "Error in line {}: {}\n", start.line.0, e)?;
-                write!(h.get_writer(), "## .. LINE {} ...\n", start.line.0 - 1)?;
+                writeln!(h.get_writer(), "Error in line {}: {}", start.line.0, e)?;
+                writeln!(h.get_writer(), "## .. LINE {} ...", start.line.0 - 1)?;
                 h.highlight_runtime_error(tokens, start, end, None)
             }
             _other => write!(h.get_writer(), "Error: {}", e),

@@ -56,7 +56,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
 }
 
 // We need this since we call objects records
-fn t2s(t: &ValueType) -> &'static str {
+fn t2s(t: ValueType) -> &'static str {
     match t {
         ValueType::Null => "null",
         ValueType::Bool => "boolean",
@@ -95,7 +95,7 @@ impl ErrorKind {
                 Some("Did you mean to use event?".to_owned())
             }
             TypeConflict(_, _, ValueType::F64, expected) => match expected.as_slice() {
-                &[ValueType::I64] => Some(
+                [ValueType::I64] => Some(
                     "You can use math::trunc() and related functions to ensure numbers are integers."
                         .to_owned(),
                 ),
@@ -136,10 +136,10 @@ error_chain! {
         }
         TypeConflict(expr: Expr, inner: Expr, got: ValueType, expected: Vec<ValueType>) {
             description("Conflicting types")
-                display("Conflicting types, got {} but expected {}", t2s(got), if expected.len() == 1 {
-                    format!("{}", t2s(&expected[0]))
+                display("Conflicting types, got {} but expected {}", t2s(*got), if expected.len() == 1 {
+                    t2s(expected[0]).to_string()
                 } else {
-                    let expected:  Vec<&str> = expected.iter().map(|t| t2s(t)).collect();
+                    let expected:  Vec<&str> = expected.iter().map(|t| t2s(*t)).collect();
                     format!("one of {:?}", expected)
                 })
         }
@@ -227,11 +227,11 @@ error_chain! {
          */
         InvalidUnary(expr: Expr, inner: Expr, op: ast::UnaryOpKind, val: ValueType) {
             description("Invalid ynary operation")
-                display("The unary operation operation `{}` is not defined for the type `{}`", op, t2s(&val))
+                display("The unary operation operation `{}` is not defined for the type `{}`", op, t2s(*val))
         }
         InvalidBinary(expr: Expr, inner: Expr, op: ast::BinOpKind, left: ValueType, right: ValueType) {
             description("Invalid ynary operation")
-                display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(&left), t2s(&right))
+                display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
         }
         /*
          * match
@@ -262,7 +262,7 @@ error_chain! {
 
         MergeTypeConflict(expr: Expr, inner: Expr, key:String, val: ValueType) {
             description("Merge can only be performed on keys that either do not exist or are records")
-                display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(&val))
+                display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(*val))
         }
 
         OverwritingLocal(expr: Expr, inner: Expr, val: String) {

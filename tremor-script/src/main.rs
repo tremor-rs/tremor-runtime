@@ -103,7 +103,7 @@ fn main() {
                     Ok(r) => r,
                     Err(e) => {
                         println!("{}", e);
-                        std::process:exit(1);
+                        std::process::exit(1);
                     }
                 };
 

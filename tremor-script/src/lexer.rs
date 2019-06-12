@@ -400,7 +400,7 @@ impl<'input> fmt::Display for Token<'input> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::Whitespace(ref ws) => write!(f, "{}", ws),
-            Token::NewLine => write!(f, "\n"),
+            Token::NewLine => writeln!(f),
             Token::LineToken(n) => write!(f, "{}: ", n),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),

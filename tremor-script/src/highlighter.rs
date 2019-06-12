@@ -83,7 +83,7 @@ pub trait Highlighter {
                             self.set_color(
                                 ColorSpec::new().set_bold(false).set_fg(Some(Color::Red)),
                             )?;
-                            write!(self.get_writer(), "{} {}\n", underline, callout)?;
+                            writeln!(self.get_writer(), "{} {}", underline, callout)?;
                         }
                     }
                     self.set_color(ColorSpec::new().set_bold(true))?;
@@ -237,7 +237,7 @@ pub trait Highlighter {
                 self.set_color(ColorSpec::new().set_bold(true))?;
                 write!(self.get_writer(), "      | {}", prefix)?;
                 self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Red)))?;
-                write!(self.get_writer(), "{} {}\n", underline, callout)?;
+                writeln!(self.get_writer(), "{} {}", underline, callout)?;
             }
         }
 
