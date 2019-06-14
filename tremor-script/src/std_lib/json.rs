@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use serde_json;
@@ -27,13 +26,13 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             println!("{}", &s);
             // Screw you rust
             let mut bytes = unsafe{s.as_bytes_mut()};
-            Ok(to_owned_value(&mut bytes)?)
+            to_owned_value(&mut bytes).map_err(to_runtime_error)
         }))
         .insert(tremor_fn! (json::encode(_context, _input) {
-            Ok(OwnedValue::from(serde_json::to_string(_input)?))
+            serde_json::to_string(_input).map(OwnedValue::from).map_err(to_runtime_error)
         }))
         .insert(tremor_fn! (json::encode_pretty(_context, _input) {
-            Ok(OwnedValue::from(serde_json::to_string_pretty(_input)?))
+            serde_json::to_string_pretty(_input).map(OwnedValue::from).map_err(to_runtime_error)
         }));
 }
 

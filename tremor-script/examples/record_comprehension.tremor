@@ -1,7 +1,7 @@
 
 # let k := "snot";
 # let v := "badger";
-drop for { "0": "zip", "1": "one", "2": "two" } ->
+drop for { "0": "zip", "1": "one", "2": "two" } of
   case (k, v) when false => [k,v]
   case (k, v) => [k,v, "other"]
   case (k, v) => drop "should never get here"

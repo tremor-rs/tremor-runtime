@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use simd_json::{BorrowedValue, OwnedValue};
@@ -28,7 +27,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         .insert(tremor_fn! (array::contains(_context, _input, _contains) {
             match _input {
                 BorrowedValue::Array(input) => Ok(OwnedValue::from(input.contains(&_contains))),
-                _ => Err(ErrorKind::BadType("array".to_string(), "contains".to_string(), 2).into()),
+                _ => Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
             }
         }))
         .insert(tremor_fn! (array::push(_context, _input, _value) {
@@ -40,20 +39,20 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                     input.push(v);
                     Ok(OwnedValue::Array(input))
                 }
-                _ => Err(ErrorKind::BadType("array".to_string(), "contains".to_string(), 2).into()),
+                _ => Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
             }
         }))
         .insert(tremor_fn! (array::unzip(_context, _input: Array) {
-                let r: Result<Vec<(OwnedValue, OwnedValue)>> = _input.iter().map(|a| match a {
+                let r: FResult<Vec<(OwnedValue, OwnedValue)>> = _input.iter().map(|a| match a {
                     BorrowedValue::Array(a) => if a.len() == 2 {
                         let second: OwnedValue = a[0].clone().into();
                         let first: OwnedValue = a[1].clone().into();
                         Ok((first, second))
 
                     } else {
-                        Err(ErrorKind::RuntimeError("array".to_owned(), "unzip". to_owned(), 1, format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained {} elements", a.len())).into())
+                        Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained {} elements", a.len())})
                     }
-                    other => Err(ErrorKind::RuntimeError("array".to_owned(), "unzip". to_owned(), 1, format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", other)).into())
+                    other => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", other)})
                 }).collect();
                 let (r, l): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
                 Ok(OwnedValue::Array(vec![
@@ -63,7 +62,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         }))
         .insert(tremor_fn!(array::zip(_context, _left: Array, _right: Array) {
             if _left.len() != _right.len() {
-                return Err(ErrorKind::RuntimeError("array".to_owned(), "zip". to_owned(), 2, format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())).into());
+                return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())});
             };
             // TODO: Dear rust this is stupi! I don't want to call to_owned I just want consume values
             Ok(OwnedValue::Array(

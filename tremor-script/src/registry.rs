@@ -12,62 +12,113 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::ast::Expr;
 use crate::tremor_fn;
 use halfbrown::HashMap;
 use hostname::get_hostname;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
 use std::default::Default;
-
-pub type TremorFn<Ctx> = fn(&Ctx, &[&BorrowedValue]) -> Result<OwnedValue>;
-
 use std::fmt;
+
+pub type TremorFn<Ctx> = fn(&Ctx, &[&BorrowedValue]) -> FResult<OwnedValue>;
+pub type FResult<T> = std::result::Result<T, FunctionError>;
 
 #[allow(unused_variables)]
 pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
     let mut registry = Registry::default();
 
-    registry
-        .insert(tremor_fn! (math::max(_context, a, b) {
-            match (a, b) {
-                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a > *b as f64 => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) > *b => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                _ => Err(ErrorKind::BadType("math".to_string(), "max".to_string(), 2).into()),
-            }
-        }))
-        .insert(tremor_fn!(math::min(_context, a, b) {
-            match (a, b) {
-                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a < *b as f64 => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::F64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) < *b => Ok(OwnedValue::from(a.to_owned())),
-                (BorrowedValue::I64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
-                _ => Err(ErrorKind::BadType("math".to_string(), "min".to_string(), 2).into()),
-            }
-        }))
-        .insert(tremor_fn!(system::hostname(_context) {
-            if let Some(hostname) = get_hostname(){
-                Ok(Value::from(hostname))
-            } else {
-                Err(ErrorKind::RuntimeError("system".to_owned(), "hostname".to_owned(), 0, "could not get hostname".into()).into())
-            }
-
-        }));
+    registry.insert(tremor_fn!(system::hostname(_context) {
+        if let Some(hostname) = get_hostname(){
+            Ok(Value::from(hostname))
+        } else {
+            Err(FunctionError::RuntimeError{
+                mfa: mfa("system", "hostname", 0),
+                error: "could not get hostname".into()
+            })
+        }
+    }));
     crate::std_lib::load(&mut registry);
     registry
 }
 
-pub trait Context {}
+#[derive(Clone, Debug, PartialEq)]
+pub struct MFA {
+    m: String,
+    f: String,
+    a: usize,
+}
+
+pub fn mfa(m: &str, f: &str, a: usize) -> MFA {
+    MFA {
+        m: m.to_string(),
+        f: f.to_string(),
+        a,
+    }
+}
+
+pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError {
+    FunctionError::RuntimeError {
+        mfa,
+        error: format!("{}", e),
+    }
+}
+#[derive(Debug, PartialEq)]
+pub enum FunctionError {
+    BadArity { mfa: MFA, calling_a: usize },
+    RuntimeError { mfa: MFA, error: String },
+    MissingModule { m: String },
+    MissingFunction { m: String, f: String },
+    BadType { mfa: MFA },
+}
+
+impl FunctionError {
+    pub fn into_err<Ctx: Context>(
+        self,
+        outer: &Expr<Ctx>,
+        inner: &Expr<Ctx>,
+        registry: Option<&Registry<Ctx>>,
+    ) -> crate::errors::Error {
+        use crate::errors::{best_hint, ErrorKind};
+        use FunctionError::*;
+        let outer = outer.into();
+        let inner = inner.into();
+        match self {
+            BadArity { mfa, calling_a } => {
+                ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a, calling_a).into()
+            }
+            RuntimeError { mfa, error } => {
+                ErrorKind::RuntimeError(outer, inner, mfa.m, mfa.f, mfa.a, error).into()
+            }
+            MissingModule { m } => {
+                let suggestion = if let Some(registry) = registry {
+                    let modules: Vec<String> = registry.functions.keys().cloned().collect();
+                    best_hint(&m, &modules, 2)
+                } else {
+                    None
+                };
+                ErrorKind::MissingModule(outer, inner, m, suggestion).into()
+            }
+            MissingFunction { m, f } => {
+                let suggestion = if let Some(registry) = registry {
+                    if let Some(module) = registry.functions.get(&m) {
+                        let functions: Vec<String> = module.keys().cloned().collect();
+                        best_hint(&m, &functions, 2)
+                    } else {
+                        // This should never happen but lets be safe
+                        None
+                    }
+                } else {
+                    None
+                };
+                ErrorKind::MissingFunction(outer, inner, m, f, suggestion).into()
+            }
+            BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
+        }
+    }
+}
+
+pub trait Context: Default {}
 
 impl Context for () {}
 
@@ -76,6 +127,7 @@ pub struct TremorFnWrapper<Ctx: Context> {
     pub module: String,
     pub name: String,
     pub fun: TremorFn<Ctx>,
+    pub argc: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -84,7 +136,7 @@ pub struct Registry<Ctx: Context + 'static> {
 }
 
 impl<Ctx: Context + 'static> TremorFnWrapper<Ctx> {
-    pub fn invoke(&self, context: &Ctx, args: &[&BorrowedValue]) -> Result<OwnedValue> {
+    pub fn invoke(&self, context: &Ctx, args: &[&BorrowedValue]) -> FResult<OwnedValue> {
         (self.fun)(context, args)
     }
 }
@@ -105,22 +157,42 @@ macro_rules! tremor_fn {
 
     ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
+            macro_rules! replace_expr {
+                ($_t:tt $sub:expr) => {
+                    $sub
+                };
+            }
             use simd_json::OwnedValue as Value;
             use simd_json::BorrowedValue;
             use $crate::TremorFnWrapper;
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{
+            #[allow(unused_imports)] // We might not use all of this imports
+            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+
+                fn this_mfa() -> MFA {
+                    mfa(stringify!($module), stringify!($name), ARGC)
+                }
+                #[allow(dead_code)] // We want to expose this
+                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                    to_runtime_error_ext(this_mfa(), error)
+                }
                 // rust claims that the pattern is unreachable even
                 // though it isn't, so linting it
                 match args {
                     [$(
                         $arg,
                     )*] => {$code}
-                    _ => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadArrity(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
+                    _ => Err(FunctionError::BadArity{
+                        mfa: this_mfa(),
+                        calling_a:args.len()
+                    })
                 }
             }
             TremorFnWrapper {
                 module: stringify!($module).to_string(),
                 name: stringify!($name).to_string(),
+                argc: ARGC,
                 fun: $name
             }
         }
@@ -128,10 +200,25 @@ macro_rules! tremor_fn {
 
     ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
+            macro_rules! replace_expr {
+                ($_t:tt $sub:expr) => {
+                    $sub
+                };
+            }
             use simd_json::OwnedValue as Value;
             use simd_json::BorrowedValue;
             use $crate::TremorFnWrapper;
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{
+            #[allow(unused_imports)] // We might not use all of this imports
+            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+                fn this_mfa() -> MFA {
+                    mfa(stringify!($module), stringify!($name), ARGC)
+                }
+                #[allow(dead_code)] // We want to expose this
+                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                    to_runtime_error_ext(this_mfa(), error)
+                }
                 // rust claims that the pattern is unreachable even
                 // though it isn't, so linting it
                 match args {
@@ -140,16 +227,20 @@ macro_rules! tremor_fn {
                     )*] => {$code}
                     [$(
                         $arg,
-                    )*] => {
-                        Err($crate::errors::Error::from($crate::errors::ErrorKind::BadType(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
-                    },
-                    _ => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadArrity(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
+                    )*] => Err(FunctionError::BadType{
+                        mfa: this_mfa(),
+                    }),
+                    _ => Err(FunctionError::BadArity{
+                        mfa: this_mfa(),
+                        calling_a: args.len()
+                    })
                 }
             }
             TremorFnWrapper {
                 module: stringify!($module).to_string(),
                 name: stringify!($name).to_string(),
-                fun: $name
+                fun: $name,
+                argc: ARGC
             }
         }
     };
@@ -159,17 +250,32 @@ macro_rules! tremor_fn {
             use simd_json::OwnedValue as Value;
             use simd_json::BorrowedValue;
             use $crate::TremorFnWrapper;
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> Result<Value>{                // rust claims that the pattern is unreachable even
+            #[allow(unused_imports)] // We might not use all of this imports
+            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            const ARGC: usize = 0;
+            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+                fn this_mfa() -> MFA {
+                    mfa(stringify!($module), stringify!($name), ARGC)
+                }
+                #[allow(dead_code)] // We want to expose this
+                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                    to_runtime_error_ext(this_mfa(), error)
+                }
+                // rust claims that the pattern is unreachable even
                 // though it isn't, so linting it
                 match args {
                     [] => {$code}
-                    _ => Err($crate::errors::Error::from($crate::errors::ErrorKind::BadArrity(stringify!($module).to_string(), stringify!($name).to_string(), args.len())))
+                    _ => Err(FunctionError::BadArity{
+                        mfa: this_mfa(),
+                        calling_a: args.len()
+                    })
                 }
             }
             TremorFnWrapper {
                 module: stringify!($module).to_string(),
                 name: stringify!($name).to_string(),
-                fun: $name
+                fun: $name,
+                argc: 0
             }
         }
     };
@@ -184,7 +290,7 @@ impl<Ctx: Context + 'static> Default for Registry<Ctx> {
 }
 
 impl<Ctx: Context + 'static> Registry<Ctx> {
-    pub fn find(&self, module: &str, function: &str) -> Result<TremorFn<Ctx>> {
+    pub fn find(&self, module: &str, function: &str) -> FResult<TremorFn<Ctx>> {
         if let Some(functions) = self.functions.get(module) {
             if let Some(rf) = functions.get(function) {
                 // TODO: We couldn't return the function wrapper but we can return
@@ -192,10 +298,15 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
                 // know why.
                 Ok(rf.fun)
             } else {
-                Err(ErrorKind::MissingFunction(module.to_string(), function.to_string()).into())
+                Err(FunctionError::MissingFunction {
+                    m: module.to_string(),
+                    f: function.to_string(),
+                })
             }
         } else {
-            Err(ErrorKind::MissingModule(module.to_string()).into())
+            Err(FunctionError::MissingModule {
+                m: module.to_string(),
+            })
         }
     }
 
@@ -218,9 +329,9 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
 
 // Test utility to grab a function from the registry
 #[cfg(test)]
-pub fn fun(m: &str, f: &str) -> impl Fn(&[&BorrowedValue]) -> Result<OwnedValue> {
+pub fn fun(m: &str, f: &str) -> impl Fn(&[&BorrowedValue]) -> FResult<OwnedValue> {
     let f = registry().find(m, f).expect("could not find function");
-    move |args: &[&BorrowedValue]| -> Result<OwnedValue> { f(&(), &args) }
+    move |args: &[&BorrowedValue]| -> FResult<OwnedValue> { f(&(), &args) }
 }
 
 #[cfg(test)]
@@ -237,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    pub fn bad_arrity() {
+    pub fn bad_arity() {
         let f = tremor_fn! (module::name(_context, _a: I64){
             Ok(format!("{}", _a).into())
         });
@@ -263,15 +374,8 @@ mod tests {
             match (_a, _b) {
                 (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(a + b)),
                 (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(a + b)),
-                _ => Err(ErrorKind::RuntimeError(
-                    "math".to_string(),
-                    "add".to_string(),
-                    2,
-                    "could not add numbers".into(),
-                ).into())
-
+                _ =>Err(to_runtime_error("could not add numbers"))
             }
-
         });
 
         let two = BorrowedValue::from(2);

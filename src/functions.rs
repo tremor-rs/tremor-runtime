@@ -19,7 +19,6 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_script::tremor_fn;
 
 pub fn load() -> Result<()> {
-    use tremor_script::errors::*;
     FN_REGISTRY
         .lock()?
         //        .or_ok(Error::from("Could not lock function registry"))?
@@ -34,7 +33,7 @@ pub fn load() -> Result<()> {
                         let v: OwnedValue = j.rent(|j| j.clone().into());
                         Ok(v)
                     },
-                    _ => Err(format!("{} for pattern: `{}` and text `{}`", "logstash::grok failure", _pattern, _text).into()),
+                    _ => Err(to_runtime_error(format!("{} for pattern: `{}` and text `{}`", "logstash::grok failure", _pattern, _text))),
                 }
             }),
         );

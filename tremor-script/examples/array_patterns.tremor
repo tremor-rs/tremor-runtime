@@ -11,26 +11,26 @@ end;
 
 
 match input of
-  case r = %["a"] => r == {"0":"a"},
-  case r = %["a", null] => r == {"0":"a", "4": null},
-  case r = %[%{foo == "bar baz"}] => r == {"3": {}},
-  case r = %[%{foo ~=re|%{a} %{b}|}] => r == {"3": {"foo": {"a": "bar", "b" :"baz"}}},
-  case r = %[~re|potato|] => r == {"1": "stress potato", "5": "foam potato"},
-  case r = %[%{foo ~=re|%{a} %{b}|}, ~re|potato|] => r == {"3", {"foo": {"a": "bar", "b" :"baz"}}, "1": "stress potato", "5": "foam potato"}
+  case r = %["a"] => r == {"0":"a"}
+  case r = %["a", null] => r == {"0":"a", "4": null}
+  case r = %[%{foo == "bar baz"}] => r == {"3": {}}
+  case r = %[%{foo ~=re|%{a} %{b}|}] => r == {"3": {"foo": {"a": "bar", "b" :"baz"}}}
+  case r = %[~re|potato|] => r == {"1": "stress potato", "5": "foam potato"}
+  case r = %[%{foo ~=re|%{a} %{b}|}, ~re|potato|] => r == {"3": {"foo": {"a": "bar", "b" :"baz"}}, "1": "stress potato", "5": "foam potato"}
 end;
 
 # with predicate implied ~=
 match input of
   # == implied
-  case r = %["a"] => r == ["a"],
+  case r = %["a"] => r == ["a"]
   # == implied
-  case r = %["a", null] => r == ["a", null],
+  case r = %["a", null] => r == ["a", null]
   # ~=implied for pattern
-  case r = %[%{foo == "bar baz"}] => r == [{}],
+  case r = %[%{foo == "bar baz"}] => r == [{}]
   # ~=implied for pattern
-  case r = %[%{foo ~=re|%{a} %{b}|}] => r == [{"foo": {"a": "bar", "b" :"baz"}}],
+  case r = %[%{foo ~=re|%{a} %{b}|}] => r == [{"foo": {"a": "bar", "b" :"baz"}}]
   # ~=implied for pattern
-  case r = %[~re|potato|] => r == ["stress potato", "foam potato"],
+  case r = %[~re|potato|] => r == ["stress potato", "foam potato"]
   case r = %[> 2] => r == [3],
   # ~=implied for pattern
   case r = %[%{foo ~=re|%{a} %{b}|}, ~re|potato|] => r == [{"foo": {"a": "bar", "b" :"baz"}}, "stress potato"]
@@ -41,11 +41,11 @@ end
 let input = ["a", "stress potato", 3, {"foo": "bar baz"}, null, "foam potato"];
 # simplest
 match input of
-  case r = %["a"] => r == ["a", null, null, null, null, null],
-  case r = %["a", null] => r == ["a", null, null, null, null, null],
-  case r = %[%{"foo" == "bar baz"}] => r == [null, null, null, {"foo": "bar baz"}, null, null],
-  case r = %[%{"foo" ~=re|%{a} %{b}|}] => r == [null, null, null, {"foo": {"a": "bar", "b" :"baz"}}, null, null],
-  case r = %[~re|potato|] => r == [null, "stress potato", null, null, null, "foam potato"],
+  case r = %["a"] => r == ["a", null, null, null, null, null]
+  case r = %["a", null] => r == ["a", null, null, null, null, null]
+  case r = %[%{"foo" == "bar baz"}] => r == [null, null, null, {"foo": "bar baz"}, null, null]
+  case r = %[%{"foo" ~=re|%{a} %{b}|}] => r == [null, null, null, {"foo": {"a": "bar", "b" :"baz"}}, null, null]
+  case r = %[~re|potato|] => r == [null, "stress potato", null, null, null, "foam potato"]
   case r = %[%{"foo" ~=re|%{a} %{b}|}, ~re|potato|] => r == [null, "stress potato", null, {"foo": {"a": "bar", "b" :"baz"}}, null, null]
 end;
 
@@ -54,14 +54,14 @@ end;
 # with predicate
 match input of
   # == implied for literal
-  case r = %["a"] => r == ["a", null, null, null, null, null],
+  case r = %["a"] => r == ["a", null, null, null, null, null]
   # ~=implied for pattern
-  case r = %[%{"foo" == "bar baz"}] => r == [null, null, null, {"foo": "bar baz"}, null, null],
+  case r = %[%{"foo" == "bar baz"}] => r == [null, null, null, {"foo": "bar baz"}, null, null]
   # ~=implied for pattern
-  case r = %[%{"foo" ~=re|%{a} %{b}|}] => r == [null, null, null, {"foo": {"a": "bar", "b" :"baz"}}],
+  case r = %[%{"foo" ~=re|%{a} %{b}|}] => r == [null, null, null, {"foo": {"a": "bar", "b" :"baz"}}]
   # ~=implied for pattern
-  case r = %[~re|potato|] => r == ["stress potato"],
-  case r = %[> 2] => r == [3],
+  case r = %[~re|potato|] => r == ["stress potato"]
+  case r = %[> 2] => r == [3]
   # ~=implied for pattern
   case r = %[%{"foo" ~=re|%{a} %{b}|}, ~re|potato|] => r == [null, "stress potato", null, {"foo": {"a": "bar", "b" :"baz"}}]
 end;

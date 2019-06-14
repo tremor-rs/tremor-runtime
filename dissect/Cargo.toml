@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 halfbrown = "0.1"
+simd-json = "0.1"

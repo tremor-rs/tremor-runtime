@@ -22,16 +22,17 @@ use crate::registry;
 use crate::registry::Context;
 use simd_json::borrowed::{Map, Value};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct FakeContext {}
 impl Context for FakeContext {}
 
 fn eval(src: &str) -> String {
     let reg: registry::Registry<FakeContext> = registry::registry();
-    let script: ast::Script = serde_json::from_str(src).expect("");
+    let script: ast::Script1 = serde_json::from_str(src).expect("");
+    let script: ast::Script<_> = script.up(&reg).expect("");
+
     let runnable = interpreter::Script {
         script,
-        registry: reg,
         source: String::new(),
     };
     // let runnable: interpreter::Script = interpreter::Script::parse(src, &reg).expect("parse failed");

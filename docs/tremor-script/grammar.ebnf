@@ -29,6 +29,12 @@ SimpleExpr ::= Literal | '(' Expr ')' | Path | Record | Match | Patch | Merge | 
 Literal ::=
     'null' | Bool | INTEGER | FLOAT | String | Array
 
+Record ::= '{' Fields '}'
+
+Fields ::= Fields ',' Field | Field
+
+Field ::= STRING_LITERAL ':' Expr
+
 Array ::= '[' ArrayElements ']' | '[' ']'
 
 ArrayElements ::= Expr ',' ArrayElements | Expr
@@ -49,6 +55,8 @@ MatchCaseClause ::= 'case' ( RecordCase | ArrayCase | ExprCase ) Guard? Effector
 RecordCase ::= ( Id '=' )? RecordPattern
 RecordPattern ::= '%{' RecordPatternFields '}'
 RecordPatternFields ::= ( Id '=' )? Id '~=' ( TestExpr | RecordPattern | ArrayPattern ) | Id ( '==' | '!=' ) SimpleExpr
+
+TestExpr ::= Id TEST_LITERAL
 
 ArrayCase ::= ( Id '=' )? ArrayPattern
 ArrayPattern ::= '%[' ArrayPatternFilters '%]'

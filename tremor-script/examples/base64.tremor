@@ -1,8 +1,8 @@
-drop match { "test": "8J+MiiBzbm90IGJhZGdlcg==", "footle": "bar" } ->
-# drop match { "test": "snot badger" } ->
-  case foo := %{ test ~= base64||, footle == "bat" } => "smashy nicey"
-  case foo := %{ test ~= base64|| } => foo
-  case florp := %{ test == "snot badger" } => florp
-  case fleep := %{ test != "snort ledger" } => fleep
+drop match { "test": "8J+MiiBzbm90IGJhZGdlcg==", "footle": "bar" } of
+# drop match { "test": "snot badger" } of
+  case foo = %{ test ~= base64||, footle == "bat" } => "smashy nicey"
+  case foo = %{ test ~= base64|| } => foo
+  case florp = %{ test == "snot badger" } => florp
+  case fleep = %{ test != "snort ledger" } => fleep
   default => "ko"
 end

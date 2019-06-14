@@ -15,28 +15,38 @@
 
 -module(model).
 
--export([ast_eval/1]).
+-include_lib("pbt.hrl").
 
--spec ast_eval({}) -> integer() | float() | boolean() | binary().
-ast_eval({<<"Add">>, A, B}) when is_binary(A) andalso is_binary(B) -> <<A/binary, B/binary>>;
-ast_eval({<<"Add">>, A, B}) -> A + B;
-ast_eval({<<"Sub">>, A, B}) -> A - B;
-ast_eval({<<"Div">>, A, B}) -> A / B;
-ast_eval({<<"Mul">>, A, B}) -> A * B;
-ast_eval({<<"Mod">>, A, B}) -> util:mod(A,B);
+-export([ast_eval/2]).
 
-ast_eval({<<"Eq">>, A, B}) -> A =:= B;
-ast_eval({<<"NotEq">>, A, B}) -> A =/= B;
-ast_eval({<<"Gte">>, A, B}) -> A >= B;
-ast_eval({<<"Gt">>, A, B}) -> A > B;
-ast_eval({<<"Lt">>, A, B}) -> A < B;
-ast_eval({<<"Lte">>, A, B}) -> B >= A;
-ast_eval({<<"And">>, true, true}) -> true;
-ast_eval({<<"Or">>, true, true}) -> true;
-ast_eval({<<"Or">>, false, true}) -> true;
-ast_eval({<<"Or">>, true, false}) -> true;
-ast_eval({<<"Not">>, A}) when is_boolean(A) -> not A;
-ast_eval({<<"Plus">>, A}) when is_integer(A) orelse is_float(A) -> A;
-ast_eval({<<"Minus">>, A}) when is_integer(A) orelse is_float(A) -> -A;
-ast_eval(_) -> false.
+
+resolve(S,path) ->
+    "a".
+
+-spec ast_eval(#state{}, {}) -> {#state{}, integer() | float() | boolean() | binary()}.
+ast_eval(#state{}=S, {<<"Add">>, A, B}) when is_binary(A) andalso is_binary(B) -> {S, <<A/binary, B/binary>>};
+ast_eval(#state{}=S, {<<"Add">>, A, B}) -> {S, A + B};
+ast_eval(#state{}=S, {<<"Sub">>, A, B}) -> {S, A - B};
+ast_eval(#state{}=S, {<<"Div">>, A, B}) -> {S, A / B};
+ast_eval(#state{}=S, {<<"Mul">>, A, B}) -> {S, A * B};
+ast_eval(#state{}=S, {<<"Mod">>, A, B}) -> {S, util:mod(A,B)};
+
+ast_eval(#state{}=S, {<<"Eq">>, A, B}) -> {S, A =:= B};
+ast_eval(#state{}=S, {<<"NotEq">>, A, B}) -> {S, A =/= B};
+ast_eval(#state{}=S, {<<"Gte">>, A, B}) -> {S, A >= B};
+ast_eval(#state{}=S, {<<"Gt">>, A, B}) -> {S, A > B};
+ast_eval(#state{}=S, {<<"Lt">>, A, B}) -> {S, A < B};
+ast_eval(#state{}=S, {<<"Lte">>, A, B}) -> {S, B >= A};
+ast_eval(#state{}=S, {<<"And">>, true, true}) -> {S, true};
+ast_eval(#state{}=S, {<<"Or">>, true, true}) -> {S, true};
+ast_eval(#state{}=S, {<<"Or">>, false, true}) -> {S, true};
+ast_eval(#state{}=S, {<<"Or">>, true, false}) -> {S, true};
+ast_eval(#state{}=S, {<<"Not">>, A}) when is_boolean(A) -> {S, not A};
+ast_eval(#state{}=S, {<<"Plus">>, A}) when is_integer(A) orelse is_float(A) -> {S,A};
+ast_eval(#state{}=S, {<<"Minus">>, A}) when is_integer(A) orelse is_float(A) -> {S,-A};
+ast_eval(#state{locals=L}=S, {<<"Let">>, Path, Expr}) -> {S1, R} = ast_eval(S,Expr), LL = maps:put(resolve(S1, path), R, L), {S1#state{locals=LL}, R};
+ast_eval(#state{}=S, {emit, A}) -> {S1, R} = ast_eval(S, A), {S1,{emit, R}};
+ast_eval(#state{}=S, {drop, A}) -> {S1, R} = ast_eval(S, A), {S1,{drop, R}};
+
+ast_eval(#state{}=S,_) -> {S, false}.
 

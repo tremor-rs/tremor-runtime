@@ -25,7 +25,7 @@ mod lexer;
 mod parser;
 #[allow(unused, dead_code)]
 mod pos;
-mod registry;
+pub mod registry;
 mod runtime;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
@@ -127,14 +127,14 @@ mod tests {
     use simd_json::json;
     use std::iter::FromIterator;
 
-    #[derive(Clone, Debug)]
-    struct FakeContext {}
+    #[derive(Clone, Debug, Default, Serialize)]
+    pub struct FakeContext {}
     impl Context for FakeContext {}
 
     macro_rules! parse_lit {
         ($src:expr, $expected:pat) => {{
             let _vals: Value = json!({}).into();
-            let _r: Registry<()> = registry();
+            let r: Registry<()> = registry();
             let lexed_tokens = Vec::from_iter(lexer::tokenizer($src));
             let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
 
@@ -146,6 +146,8 @@ mod tests {
             }
             let actual = parser::grammar::ScriptParser::new()
                 .parse(filtered_tokens.clone())
+                .expect("exeuction failed")
+                .up(&r)
                 .expect("exeuction failed");
             assert_matches!(
                 actual.exprs[0],
@@ -172,7 +174,7 @@ mod tests {
             }
             let reg: Registry<FakeContext> = registry::registry();
             let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, reg).expect("parse failed");
+                interpreter::Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());
@@ -199,7 +201,7 @@ mod tests {
             }
             let reg: Registry<FakeContext> = registry::registry();
             let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, reg).expect("parse failed");
+                interpreter::Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());
@@ -227,7 +229,7 @@ mod tests {
             }
             let reg: Registry<FakeContext> = registry::registry();
             let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, reg).expect("parse failed");
+                interpreter::Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());

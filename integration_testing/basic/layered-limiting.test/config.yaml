@@ -24,7 +24,7 @@ pipeline:
         config:
           script: |
             let $class = "default";
-            let $dimensions = match object::contains(event, "application") of
+            let $dimensions = match record::contains(event, "application") of
               case true => event.application
               default =>  null
             end;
@@ -36,7 +36,7 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            match object::contains(event, "host") of
+            match record::contains(event, "host") of
               case true => let $dimensions = event.host
               default => null
             end;

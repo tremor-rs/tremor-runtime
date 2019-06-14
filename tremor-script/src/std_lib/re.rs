@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use regex::Regex;
@@ -22,7 +21,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
         .insert(
             tremor_fn! (re::replace(_context, _re: String, _input: String, _to: String) {
-                let re = Regex::new(_re)?;
+                let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
                 Ok(OwnedValue::String(re.replace(input, to).into()))
@@ -30,7 +29,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         )
         .insert(
             tremor_fn! (re::replace_all(_context, _re: String, _input: String, _to: String) {
-                let re = Regex::new(_re)?;
+                let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
                 Ok(OwnedValue::String(re.replace_all(input, to).into()))
@@ -38,14 +37,14 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         )
         .insert(
             tremor_fn! (re::is_match(_context, _re: String, _input: String) {
-                let re = Regex::new(_re)?;
+                let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 Ok(OwnedValue::Bool(re.is_match(input)))
             }),
         )
         .insert(
             tremor_fn! (re::split(_context, _re: String, _input: String) {
-                let re = Regex::new(_re)?;
+                let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 Ok(OwnedValue::Array(re.split(input).map(OwnedValue::from).collect()))
             }),

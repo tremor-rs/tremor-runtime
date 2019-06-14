@@ -1,4 +1,4 @@
-let input := [
+let input = [
     {"name": "dir1", "type": "d", "children": [
        {"name": "dir2", "type": "d", "children": [
           {"name": "file1", "type": "f"},
@@ -12,27 +12,27 @@ let input := [
 
 ## list all files
 
-let stack := object::to_array(in);
-let result := [];
+let stack = object::to_array(in);
+let result = [];
 while not array::is_empty(stack) ->
-  let current := stack[-1];
-  let stack := stack[..-1];
+  let current = stack[-1];
+  let stack = stack[..-1];
   match current ->
-    case r := %{type == "f"} => let result := array::push(result, c.name);
-    case r := %{type == "d"} => let stack := array::append(stack, c.children)
+    case r = %{type == "f"} => let result := array::push(result, c.name);
+    case r = %{type == "d"} => let stack := array::append(stack, c.children)
     default => break;
   end;
 end
 
 
 
-let stack := object::to_array(in);
-let result := [];
+let stack = object::to_array(in);
+let result = [];
 loop in ->
-  let current := stack[-1];
+  let current = stack[-1];
   match current ->
-    case r := %{type == "f"} => let result := array::push(result, c.name);
-    case r := %{type == "d"} => recurse c.children;
+    case r = %{type == "f"} => let result := array::push(result, c.name);
+    case r = %{type == "d"} => recurse c.children;
     default => break;
   end;
 end

@@ -204,6 +204,8 @@ pub enum Token<'input> {
     Emit,
     For,
     Event,
+    Present,
+    Absent,
     //    Return,
     //   Todo,
     Fun,
@@ -301,6 +303,8 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Merge => true,
             Token::For => true,
             Token::Event => true,
+            Token::Present => true,
+            Token::Absent => true,
             _ => false,
         }
     }
@@ -411,7 +415,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::StringLiteral(value) => write!(f, "\"{}\"", value),
             Token::TestLiteral(value) => write!(f, "|{}|", value),
             Token::BoolLiteral(value) => write!(f, "{}", value),
-            Token::BadToken(value) => write!(f, "\"{}\"", value),
+            Token::BadToken(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
             Token::Match => write!(f, "match"),
             Token::Patch => write!(f, "patch"),
@@ -422,6 +426,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Merge => write!(f, "merge"),
             Token::For => write!(f, "for"),
             Token::Event => write!(f, "event"),
+            Token::Present => write!(f, "present"),
+            Token::Absent => write!(f, "absent"),
             //            Token::Return => write!(f, "return"),
             //            Token::Todo => write!(f, "todo"),
             Token::Drop => write!(f, "drop"),
@@ -750,6 +756,8 @@ impl<'input> Lexer<'input> {
             "merge" => Token::Merge,
             "for" => Token::For,
             "event" => Token::Event,
+            "present" => Token::Present,
+            "absent" => Token::Absent,
             "true" => Token::BoolLiteral(true),
             "false" => Token::BoolLiteral(false),
             "and" => Token::And,
@@ -797,8 +805,11 @@ impl<'input> Lexer<'input> {
 
         loop {
             match self.bump() {
-                Some((end, b'`')) => {
+                Some((mut end, b'`')) => {
                     let token = Token::Ident(string, true);
+                    // we got to bump end by one so we claim the tailing `"`
+                    end.column.0 += 1;
+                    end.absolute.0 += 1;
                     return Ok(spanned2(start, end, token));
                 }
                 Some((e, other)) => {
@@ -822,7 +833,9 @@ impl<'input> Lexer<'input> {
                 }
                 Some((mut end, b'"')) => {
                     let token = Token::StringLiteral(string);
-                    end.column.0 += 1; // we got to bump end by one so we claim the tailing `"`
+                    // we got to bump end by one so we claim the tailing `"`
+                    end.column.0 += 1;
+                    end.absolute.0 += 1;
                     return Ok(spanned2(start, end, token));
                 }
                 Some((e, other)) => {
@@ -855,7 +868,9 @@ impl<'input> Lexer<'input> {
                     string.push(self.test_escape_code()? as char);
                     end = e;
                 }
-                Some((end, b'|')) => {
+                Some((mut end, b'|')) => {
+                    end.absolute.0 += 1;
+                    end.column.0 += 1;
                     let token = Token::TestLiteral(string);
                     return Ok(spanned2(start, end, token));
                 }
@@ -1052,6 +1067,11 @@ fn i64_from_hex(hex: &str, is_positive: bool) -> Result<i64, LexerError> {
     Ok(result)
 }
 
+fn inc_loc(mut l: Location) -> Location {
+    l.column.0 += 1;
+    l.absolute.0 += 1;
+    l
+}
 impl<'input> Iterator for Lexer<'input> {
     type Item = Result<TokenSpan<'input>, LexerError>;
 
@@ -1073,11 +1093,11 @@ impl<'input> Iterator for Lexer<'input> {
                     '*' => Some(Ok(spanned2(start, start, Token::Mul))),
                     '\\' => Some(Ok(spanned2(start, start, Token::BSlash))),
                     '(' => Some(Ok(spanned2(start, start, Token::LParen))),
-                    ')' => Some(Ok(spanned2(start, start, Token::RParen))),
+                    ')' => Some(Ok(spanned2(start, inc_loc(start), Token::RParen))),
                     '{' => Some(Ok(spanned2(start, start, Token::LBrace))),
-                    '}' => Some(Ok(spanned2(start, start, Token::RBrace))),
+                    '}' => Some(Ok(spanned2(start, inc_loc(start), Token::RBrace))),
                     '[' => Some(Ok(spanned2(start, start, Token::LBracket))),
-                    ']' => Some(Ok(spanned2(start, start, Token::RBracket))),
+                    ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
                     '/' => Some(Ok(spanned2(start, start, Token::Div))),
                     ':' => Some(self.cn(start)),
                     '-' => Some(self.sb(start)),

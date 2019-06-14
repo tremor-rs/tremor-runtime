@@ -15,11 +15,12 @@
 use crate::errors::*;
 use crate::FN_REGISTRY;
 use crate::{Event, Operator};
-
+use halfbrown::hashmap;
 use simd_json::borrowed::Value;
+use simd_json::value::ValueTrait;
 use tremor_script::{self, Return, Script};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TremorContext {
     pub ingest_ns: u64,
 }
@@ -29,7 +30,7 @@ op!(TremorFactory(node) {
         if let Some(map) = &node.config {
             let config: Config = serde_yaml::from_value(map.clone())?;
 
-        let runtime = Script::parse(&config.script, FN_REGISTRY.lock()?.clone())?;
+            let runtime = Script::parse(&config.script, &*FN_REGISTRY.lock()?)?;
             Ok(Box::new(Tremor {
                 runtime,
                 config,
@@ -92,7 +93,29 @@ impl Operator for Tremor {
                     unreachable!();
                 }
             }
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                /*
+                *unwind_event = Value::Object(hashmap! {
+                    "error".into() => Value::String(self.runtime.format_error(e).into()),
+                    "event".into() => *unwind_event
+                });
+                 */
+                let event_meta: simd_json::owned::Value = event_meta.into();
+                if let simd_json::owned::Value::Object(map) = event_meta {
+                    event.meta = map;
+                    let mut o = Value::Object(hashmap! {
+                        "error".into() => Value::String(self.runtime.format_error(e).into()),
+                    });
+                    std::mem::swap(&mut o, unwind_event);
+                    if let Some(error) = unwind_event.as_object_mut() {
+                        error.insert("event".into(), o);
+                    };
+                    //*unwind_event = data;
+                    Ok(vec![("drop".to_string(), event)])
+                } else {
+                    unreachable!();
+                }
+            }
         }
     }
 }
@@ -111,7 +134,7 @@ mod test {
         };
         let runtime = Script::parse(
             &config.script,
-            FN_REGISTRY.lock().expect("could not claim lock").clone(),
+            &*FN_REGISTRY.lock().expect("could not claim lock"),
         )
         .expect("failed to parse script");
         let mut op = Tremor {

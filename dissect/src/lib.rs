@@ -17,17 +17,18 @@
 //! strings.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
 //!
-//! let filter = "%{a} %{b}";
+//! let filter = Pattern::try_from("%{a} %{b}").expect("");
 //! let input = "John Doe";
 //!
-//! let output = dissect(filter, input).expect("");
+//! let output = filter.extract(input).expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("a".to_owned(), Value::String("John".to_owned()));
-//! expected.insert("b".to_owned(), Value::String("Doe".to_owned()));
+//! expected.insert("a".into(), Value::String("John".into()));
+//! expected.insert("b".into(), Value::String("Doe".into()));
 //!
-//! assert_eq!(output, expected);
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! ### Categories
@@ -38,14 +39,16 @@
 //! key for the value. The characters between two fields are used as delimiters.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
 //!
-//! let output = dissect("%{name}, %{age}", "John Doe, 22").expect("");
+//! let output = Pattern::try_from("%{name}, %{age}").expect("");
+//! let output = output.extract("John Doe, 22".into()).expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_string(), Value::String("John Doe".to_owned()));
-//! expected.insert("age".to_string(), Value::String("22".to_owned()));
+//! expected.insert("name".into(), Value::String("John Doe".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
 //!
-//! assert_eq!(output, expected);
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! 2) Append (+)
@@ -53,13 +56,15 @@
 //! The append operator will append the value to another value creating an array.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
-//! let output = dissect("%{+name} %{+name}, %{age}", "John Doe, 22").expect("");
+//! use dissect::{ Pattern, Dissect};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from( "%{+name} %{+name}, %{age}").expect("");
+//! let output = output.extract("John Doe, 22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_owned(), Value::String("John Doe".to_owned()));
-//! expected.insert("age".to_owned(), Value::String("22".to_owned()));
+//! expected.insert("name".into(), Value::String("John Doe".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
 //!
-//! assert_eq!(output, expected);
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! Append works only on strings and doesn't support other types. Using append with any non-string
@@ -78,11 +83,13 @@
 //!
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
-//! let output = dissect("%{?name}, %{&name}", "John Doe, 22").expect("");
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from("%{?name}, %{&name}").expect("");
+//! let output = output.extract( "John Doe, 22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("John Doe".to_owned(), Value::String("22".to_owned()));
-//! assert_eq!(output, expected);
+//! expected.insert("John Doe".into(), Value::String("22".into()));
+//! assert_eq!(output, Dissect(expected));
 //!
 //! ```
 //!
@@ -91,13 +98,15 @@
 //! Fields  will return an empty value if no data is present in the input.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
 //!
-//! let output = dissect("%{name}, %{age}", ", 22").expect("");
+//! let output = Pattern::try_from("%{name}, %{age}").expect("");
+//! let output = output.extract(", 22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_owned(), Value::String("".to_owned()));
-//! expected.insert("age".to_owned(), Value::String("22".to_owned()));
-//! assert_eq!(output, expected);
+//! expected.insert("name".into(), Value::String("".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! 5) Skipped fields (?)
@@ -105,12 +114,14 @@
 //! The operator will prevent the value from being stored in the output, effectively skipping it.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
-//! let output = dissect("%{?first_name} %{last_name}, %{age}", "John Doe, 22").expect("");
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from("%{?first_name} %{last_name}, %{age}").expect("");
+//! let output = output.extract("John Doe, 22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("last_name".to_owned(), Value::String("Doe".to_owned()));
-//! expected.insert("age".to_owned(), Value::String("22".to_owned()));
-//! assert_eq!(output, expected);
+//! expected.insert("last_name".into(), Value::String("Doe".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! 6) Types
@@ -121,12 +132,14 @@
 //!
 //! ```rust
 //!
-//! use dissect::{dissect, Value};
-//! let output = dissect("%{name}, %{age:int}", "John Doe, 22").expect("");
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from("%{name}, %{age:int}").expect("");
+//! let output = output.extract( "John Doe, 22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_owned(), Value::String("John Doe".to_owned()));
-//! expected.insert("age".to_owned(), Value::Integer(22));
-//! assert_eq!(output, expected);
+//! expected.insert("name".into(), Value::String("John Doe".into()));
+//! expected.insert("age".into(),Value::I64(22));
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! 7) Padding (_)
@@ -135,37 +148,72 @@
 //! skipped character as a parameter to `_`. It will use ` ` by default.
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
-//!
-//! let output = dissect("%{name}, %{_}%{age}", "John Doe,            22").expect("");
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from("%{name}, %{_}%{age}").expect("");
+//! let output = output.extract("John Doe,                22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_owned(), Value::String("John Doe".to_owned()));
-//! expected.insert("age".to_owned(), Value::String("22".to_string()));
-//! assert_eq!(output, expected);
+//! expected.insert("name".into(), Value::String("John Doe".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 //! ```rust
-//! use dissect::{dissect, Value};
-//! let output = dissect("%{name}, %{_(-)}%{age}", "John Doe, ------------22").expect("");
+//! use dissect::{Dissect, Pattern};
+//! use simd_json::borrowed::Value;
+//! let output = Pattern::try_from("%{name}, %{_(-)}%{age}").expect("");
+//! let output = output.extract("John Doe, -----------------------22").expect("");
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".to_owned(), Value::String("John Doe".to_owned()));
-//! expected.insert("age".to_owned(), Value::String("22".to_owned()));
-//! assert_eq!(output, expected);
+//! expected.insert("name".into(), Value::String("John Doe".into()));
+//! expected.insert("age".into(), Value::String("22".into()));
+//! assert_eq!(output, Dissect(expected));
 //! ```
 //!
 use halfbrown::HashMap;
+use simd_json::borrowed::Value as SimdValue;
+use std::borrow::Cow;
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+
 pub type Result<T> = std::result::Result<T, DissectError>;
-pub type Pattern = Vec<Token>;
 
 // dissect parses the pattern and returns the token extracted from the input string. It will return
 // an error if either the parsing or the extracting fails, and will return an error if it it doesn't
 // match the token.
 
-pub fn dissect(pattern: &str, input: &str) -> Result<HashMap<String, Value>> {
-    let tokens = lex(pattern)?;
-    extract(tokens, input)
+#[derive(Clone, PartialEq, Debug)]
+pub struct Pattern {
+    tokens: Vec<Token>,
+}
+
+impl Pattern {
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Pattern { tokens }
+    }
+
+    pub fn try_from(pattern: &str) -> Result<Self> {
+        Ok(Pattern::new(lex(pattern)?))
+    }
+
+    pub fn extract<'dissect>(&'dissect self, input: &str) -> Result<Dissect<'dissect>> {
+        Ok(Dissect(
+            extract(&self.tokens, input)?
+                .iter()
+                .map(|(pat, x)| (pat.clone(), (x.to_owned().into())))
+                .collect(),
+        ))
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Dissect<'dissect>(pub HashMap<Cow<'dissect, str>, SimdValue<'dissect>>);
+
+impl<'dissect> std::ops::Deref for Dissect<'dissect> {
+    type Target = HashMap<Cow<'dissect, str>, SimdValue<'dissect>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -228,6 +276,16 @@ pub enum Value {
     String(String),
     Integer(i32),
     Float(f32),
+}
+
+impl<'dissect> From<Value> for SimdValue<'dissect> {
+    fn from(x: Value) -> SimdValue<'dissect> {
+        match x {
+            Value::String(s) => SimdValue::String(s.into()),
+            Value::Integer(i) => SimdValue::I64(i.into()),
+            Value::Float(f) => SimdValue::F64(f.into()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -463,16 +521,19 @@ pub fn lex(pattern: &str) -> Result<Vec<Token>> {
     }
 }
 
-pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>> {
+pub fn extract<'dissect>(
+    tokens: &'dissect [Token],
+    input: &str,
+) -> Result<HashMap<Cow<'dissect, str>, Value>> {
     let iter = tokens.iter();
     let mut data = input;
     let mut iter = iter.enumerate().peekable();
-    let mut output = HashMap::<String, Value>::new();
+    let mut output = HashMap::<Cow<'dissect, str>, Value>::new();
     let mut skipped_values = vec![];
     let mut delimiters = vec![];
     while let Some((idx, token)) = iter.next() {
         match token {
-            Token::Field(ref pat) => {
+            Token::Field(pat) => {
                 let (extract, d) = match iter.peek() {
                     Some((_, Token::Delimiter(delim))) => match data.find(delim.as_str()) {
                         Some(x) => {
@@ -572,13 +633,19 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
                             _ => Value::String(extract.to_owned()),
                         };
 
-                        output.insert(pat.value.to_owned(), value);
+                        output.insert(
+                            Into::<Cow<'dissect, str>>::into(pat.value.to_string()),
+                            value,
+                        );
                     }
 
                     Some(FieldCategory::Named) => {
                         match skipped_values.iter().rev().find(|(x, _)| *x == pat.value) {
-                            Some((_, match_left)) => {
-                                output.insert(match_left.to_string(), Value::String(extract));
+                            Some((_, field)) => {
+                                output.insert(
+                                    field.to_string().into(),
+                                    Value::String(extract.clone()),
+                                );
                             }
                             None => {
                                 return Err(DissectError::RuntimeError(
@@ -590,7 +657,7 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
 
                     Some(FieldCategory::NamedTyped(ref datatype)) => {
                         match skipped_values.iter().rev().find(|(x, _)| *x == pat.value) {
-                            Some((_, match_left)) => {
+                            Some((_, field)) => {
                                 let value = match datatype {
                                     SupportedType::Integer => extract
                                         .parse::<i32>()
@@ -617,7 +684,7 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
                                     SupportedType::String => Value::String(extract.to_string()),
                                 };
 
-                                output.insert(match_left.to_owned(), value);
+                                output.insert(field.to_string().into(), value.clone());
                             }
                             None => {
                                 return Err(DissectError::RuntimeError(
@@ -626,7 +693,9 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
                             }
                         }
                     }
-                    Some(FieldCategory::Append(_)) => match output.get_mut(&pat.value) {
+                    Some(FieldCategory::Append(_)) => match output
+                        .get_mut(&Cow::Borrowed(pat.value.as_str()))
+                    {
                         Some(entry) => match entry {
                             Value::String(s) => {
                                 let en = match iter.peek() {
@@ -651,16 +720,19 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
                                     }
                                     _ => unreachable!(),
                                 };
-                                output.insert(pat.value.to_owned(), en);
+                                output.insert(pat.value.to_string().into(), en);
                             }
                             _ => unreachable!(),
                         },
                         _ => {
-                            output.insert(pat.value.to_owned(), Value::String(extract.to_string()));
+                            output.insert(
+                                pat.value.clone().into(),
+                                Value::String(extract.to_string()),
+                            );
                         }
                     },
                     _ => {
-                        output.insert(pat.value.to_owned(), Value::String(extract.to_string()));
+                        output.insert(pat.clone().value.into(), Value::String(extract.to_string()));
                     }
                 }
                 data = d;
@@ -678,16 +750,6 @@ pub fn extract(tokens: Vec<Token>, input: &str) -> Result<HashMap<String, Value>
 
             Token::Padding(pad) => {
                 data = &data.trim_start_matches(pad.as_str());
-                /*
-                match iter.peek() {
-                    Some((_, Token::Field(_))) | SomeToken::Delimiter(d) | None => {
-                        data = &data.trim_start_matches(pad.as_str());
-                    }
-                    x => {
-                        dbg!(x);
-                    }
-                    };
-                    */
             }
         }
     }
@@ -763,6 +825,7 @@ impl Display for RuntimeError {
 
 impl ErrorTrait for ParseError {}
 impl ErrorTrait for RuntimeError {}
+impl ErrorTrait for DissectError {}
 
 #[derive(Debug, PartialEq)]
 pub enum DissectError {
@@ -781,6 +844,7 @@ pub mod acceptance;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use simd_json::borrowed::Value as SimdValue;
 
     fn p(s: &str) -> Token {
         Token::Field(s.into())
@@ -790,10 +854,17 @@ mod tests {
         (Token::Delimiter(s.to_string()))
     }
 
-    fn v(s: &[(&str, &str)]) -> HashMap<String, Value> {
-        s.iter()
-            .map(|(x, y)| (x.to_string(), Value::String(y.to_string())))
-            .collect()
+    fn v<'dissect>(s: &'dissect [(&str, &str)]) -> Dissect<'dissect> {
+        Dissect(
+            s.into_iter()
+                .map(|(x, y)| {
+                    (
+                        Into::<Cow<'dissect, str>>::into(*x),
+                        SimdValue::String(y.to_string().into()),
+                    )
+                })
+                .collect(),
+        )
     }
 
     fn pad(s: &str) -> Token {
@@ -827,11 +898,6 @@ mod tests {
     #[test]
     fn parse_multiple_tokens() {
         let filter = "%{a} %{b}";
-        //        let input = "John Doe";
-
-        //    let output = dissect(filter, input);
-        //   assert_eq!(output, vec![("a", "John"), ("b", "Doe")]);
-
         let output = lex(filter).expect("");
         assert_eq!(output, vec![p("a"), d(" "), p("b")]);
     }
@@ -898,7 +964,7 @@ mod tests {
                     p("test"),
                     d(" case named "),
                     Token::Field(Field {
-                        value: "name".to_string(),
+                        value: "name".into(),
                         category: Some(FieldCategory::Skipped),
                     }),
                 ],
@@ -924,10 +990,11 @@ mod tests {
     #[test]
     fn extract_simple_case() {
         let pattern = vec![p("name")];
-        let output = extract(pattern, "John Doe").expect("");
+        let output = Pattern::new(pattern);
+        let output = output.extract("John Doe").expect("");
         let mut expected = HashMap::new();
-        expected.insert("name".to_string(), Value::String("John Doe".to_string()));
-        assert_eq!(output, expected);
+        expected.insert("name".into(), SimdValue::String("John Doe".into()));
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
@@ -953,7 +1020,7 @@ mod tests {
             (".%{name}", ".John", Ok(v(&[("name", "John")]))),
             (
                 ".%{name}",
-                "John",
+                "John".into(),
                 Err(DissectError::RuntimeError(
                     RuntimeError::NoDelimiterInInput(".".to_owned()),
                 )),
@@ -1062,7 +1129,8 @@ mod tests {
         testcases
             .into_iter()
             .for_each(|(pattern, input, expected)| {
-                let output = dissect(pattern, input);
+                let p = Pattern::try_from(pattern).expect("csnnot create pattern");
+                let output = p.extract(input);
                 assert_eq!(output, expected);
             });
     }
@@ -1071,8 +1139,9 @@ mod tests {
     fn two_pads() {
         let pattern = "%{_}this%{_}%{_(-)}works";
         let input = "this     -----works";
-        let output = dissect(pattern, input).expect("failed to run pettern");
-        let m = HashMap::new();
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("failed to run pettern");
+        let m = Dissect(HashMap::new());
         assert_eq!(output, m)
     }
 
@@ -1124,7 +1193,8 @@ mod tests {
     #[test]
     fn parse_disect_with_padding() {
         let input = "%{name}%{_}%{age}";
-        let output = dissect(input, "John   22").expect("");
+        let output = Pattern::try_from(input).expect("");
+        let output = output.extract("John   22").expect("");
         assert_eq!(output, v(&[("name", "John"), ("age", "22")]));
     }
 
@@ -1133,7 +1203,7 @@ mod tests {
         let pattern = "%{syslog_timestamp} %{wf_host} %{syslog_program}: %{syslog_message}%{_}";
         let input = "2019-04-26 tremor-host tremor: dissect is working fine";
         assert_eq!(
-            dissect(pattern, input),
+            Pattern::try_from(pattern).expect("").extract(input),
             Err(DissectError::RuntimeError(
                 RuntimeError::InputNotCompletelyParsed(39)
             ))
@@ -1144,14 +1214,26 @@ mod tests {
     fn dissect_string_with_padding_as_prefix() {
         let pattern = "%{_}%{name}";
         let input = "    John";
-        assert_eq!(dissect(pattern, input).expect(""), v(&[("name", "John")]));
+        assert_eq!(
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
+            v(&[("name", "John")])
+        );
     }
 
     #[test]
     fn dissect_with_padding_as_a_pattern_but_no_padding_in_the_text() {
         let pattern = "%{name}%{_}";
         let input = "John";
-        assert_eq!(dissect(pattern, input).expect(""), v(&[("name", "John")]));
+        assert_eq!(
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
+            v(&[("name", "John")])
+        );
     }
 
     #[test]
@@ -1159,7 +1241,10 @@ mod tests {
         let pattern = "%{name}%{_}|%{age}";
         let input = "John|22";
         assert_eq!(
-            dissect(pattern, input).expect(""),
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
             v(&[("name", "John"), ("age", "22")])
         );
     }
@@ -1168,14 +1253,26 @@ mod tests {
     fn dissect_custom_padding() {
         let pattern = "%{name}%{_(|)}";
         let input = "John||||";
-        assert_eq!(dissect(pattern, input).expect(""), v(&[("name", "John")]));
+        assert_eq!(
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
+            v(&[("name", "John")])
+        );
     }
 
     #[test]
     fn dissect_custom_optional_padding() {
         let pattern = "%{name}%{_(|)}";
         let input = "John";
-        assert_eq!(dissect(pattern, input).expect(""), v(&[("name", "John")]));
+        assert_eq!(
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
+            v(&[("name", "John")])
+        );
     }
 
     #[test]
@@ -1183,7 +1280,10 @@ mod tests {
         let pattern = "%{name}%{_(|)}%{age}";
         let input = "John||22";
         assert_eq!(
-            dissect(pattern, input).expect(""),
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
             v(&[("name", "John"), ("age", "22")])
         );
     }
@@ -1192,7 +1292,13 @@ mod tests {
     fn dissect_multiple_padding() {
         let pattern = "%{name}%{_}%{_(|)}";
         let input = "John  ||";
-        assert_eq!(dissect(pattern, input).expect(""), v(&[("name", "John")]));
+        assert_eq!(
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
+            v(&[("name", "John")])
+        );
     }
 
     #[test]
@@ -1200,7 +1306,10 @@ mod tests {
         let pattern = "%{name}%{_}%{_(|)}%{age}";
         let input = "John  ||22";
         assert_eq!(
-            dissect(pattern, input).expect(""),
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect(""),
             v(&[("name", "John"), ("age", "22")])
         );
     }
@@ -1209,7 +1318,8 @@ mod tests {
     fn dissect_multiple_padding_in_the_middle_with_delim_err() {
         let pattern = "%{name}%{_}%{_(|)}/ %{age}";
         let input = "John |/ 22";
-        let output = dissect(pattern, input).expect("");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("");
         assert_eq!(output, v(&([("name", "John"), ("age", "22")])));
     }
 
@@ -1218,7 +1328,10 @@ mod tests {
         let pattern = "%{?first_name} %{last_name}";
         let input = "John Doe";
         assert_eq!(
-            dissect(pattern, input).expect("skipped fields doesn't work"),
+            Pattern::try_from(pattern)
+                .expect("")
+                .extract(input)
+                .expect("skipped fields doesn't work"),
             v(&[("last_name", "Doe")])
         );
     }
@@ -1240,15 +1353,21 @@ mod tests {
     fn dissect_skipped_field_alone() {
         let pattern = "%{?foo}";
         let input = "John";
-        let output = dissect(pattern, input).expect("plain skipped field doesnt work");
-        assert_eq!(output, HashMap::new());
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output
+            .extract(input)
+            .expect("plain skipped field doesnt work");
+        assert_eq!(output, Dissect(HashMap::new()));
     }
 
     #[test]
     fn dissect_multiple_skipped_fields() {
         let pattern = "%{?first_name} %{?middle_name} %{last_name}";
         let input = "John Michael Doe";
-        let output = dissect(pattern, input).expect("multiple skipped fields doesn't work");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output
+            .extract(input)
+            .expect("multiple skipped fields doesn't work");
         assert_eq!(output, v(&[("last_name", "Doe")]));
     }
 
@@ -1256,7 +1375,10 @@ mod tests {
     fn dissect_skipped_field_at_eol() {
         let pattern = "%{first_name} %{?last_name}";
         let input = "John Doe";
-        let output = dissect(pattern, input).expect("dissect doesn't skip fields at end of line");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output
+            .extract(input)
+            .expect("dissect doesn't skip fields at end of line");
         assert_eq!(output, v(&[("first_name", "John")]));
     }
 
@@ -1264,43 +1386,49 @@ mod tests {
     fn dissect_with_integer_type() {
         let pattern = "%{name} %{age:int}";
         let input = "John 22";
-        let output = dissect(pattern, input).expect("dissect doesn't do types");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("dissect doesn't do types");
         let mut expected = HashMap::new();
-        expected.insert("name".to_owned(), Value::String("John".to_owned()));
-        expected.insert("age".to_owned(), Value::Integer(22));
-        assert_eq!(output, expected);
+        expected.insert("name".into(), SimdValue::String("John".into()));
+        expected.insert("age".into(), SimdValue::I64(22));
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
     fn dissect_with_float_type() {
         let pattern = "%{name} %{tax:float}";
         let input = "John 414.203";
-        let output = dissect(pattern, input).expect("dissect doesn't float");
-        let mut expected = HashMap::new();
-        expected.insert("name".to_owned(), Value::String("John".to_owned()));
-        expected.insert("tax".to_owned(), Value::Float(414.203));
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("dissect doesn't float");
 
-        assert_eq!(output, expected);
+        assert_eq!(
+            output.0.get("name".into()),
+            Some(&SimdValue::String("John".into()))
+        );
+        match output.0.get("tax".into()) {
+            Some(SimdValue::F64(f)) => assert!((f - 414.203).abs() < 0.001),
+            _ => unreachable!(),
+        };
     }
 
     #[test]
     fn dissect_with_string_is_a_noop() {
         let pattern = "%{name:string}";
         let input = "John";
-        let output = dissect(pattern, input).expect(
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect(
             "dissect doesn't work with string as a type even though it is a string already",
         );
         let mut expected = HashMap::new();
-        expected.insert("name".to_owned(), Value::String("John".to_owned()));
+        expected.insert("name".into(), SimdValue::String("John".into()));
 
-        assert_eq!(output, expected);
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
     fn dissect_with_wrong_type_errors_out() {
         let pattern = "%{name} %{age:wakanda}";
-        let input = "John 33";
-        let output = dissect(pattern, input);
+        let output = Pattern::try_from(pattern);
         assert_eq!(
             output,
             Err(DissectError::ParseError(ParseError::TypeNotSupported(
@@ -1326,7 +1454,10 @@ mod tests {
     fn dissect_with_no_field_name() {
         let pattern = "%{} %{name}";
         let input = "Foo John";
-        let output = dissect(pattern, input).expect("dissect doesn't like empty fields");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output
+            .extract(input)
+            .expect("dissect doesn't like empty fields");
         assert_eq!(output, v(&[("name", "John")]));
     }
 
@@ -1334,7 +1465,8 @@ mod tests {
     fn dissect_append_field() {
         let pattern = "%{+name} %{+name} %{age}";
         let input = "John Doe 22";
-        let output = dissect(pattern, input).expect("dissect doesn't like append");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("dissect doesn't like append");
         assert_eq!(output, v(&[("name", "John Doe"), ("age", "22")]));
     }
 
@@ -1347,13 +1479,13 @@ mod tests {
             output,
             vec![
                 Token::Field(Field {
-                    value: "name".to_owned(),
-                    category: Some(FieldCategory::Append("name".to_string()))
+                    value: "name".into(),
+                    category: Some(FieldCategory::Append("name".into()))
                 }),
                 Token::Delimiter(" ".to_string()),
                 Token::Field(Field {
-                    value: "name".to_owned(),
-                    category: Some(FieldCategory::Append("name".to_string()))
+                    value: "name".into(),
+                    category: Some(FieldCategory::Append("name".into()))
                 })
             ]
         );
@@ -1363,7 +1495,8 @@ mod tests {
     fn dissect_simple_append() {
         let pattern = "%{+name} %{+name}";
         let input = "John Doe";
-        let output = dissect(pattern, input).expect("dissect doesn't append");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("dissect doesn't append");
         assert_eq!(output, v(&[("name", "John Doe")]));
     }
 
@@ -1371,7 +1504,8 @@ mod tests {
     fn dissect_out_of_order_append() {
         let pattern = "%{+name} %{age} %{+name}";
         let input = "John 22 Doe";
-        let output = dissect(pattern, input).expect("out of order");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("out of order");
         assert_eq!(output, v(&[("name", "John Doe"), ("age", "22")]));
     }
 
@@ -1379,7 +1513,9 @@ mod tests {
     fn dissect_multiple_append() {
         let pattern = "%{+name} %{+country}|%{+name} %{+country}";
         let input = "John United|Doe States";
-        let output = dissect(pattern, input).expect("doesn't work with 2 appends");
+        let output = Pattern::try_from(pattern).expect("");
+
+        let output = output.extract(input).expect("doesn't work with 2 appends");
         assert_eq!(
             output,
             v(&[("name", "John Doe"), ("country", "United|States")])
@@ -1393,7 +1529,7 @@ mod tests {
         assert_eq!(
             output,
             Err(DissectError::ParseError(
-                ParseError::AppendDoesNotSupportTypes("age".to_owned(), 0)
+                ParseError::AppendDoesNotSupportTypes("age".into(), 0)
             ))
         );
     }
@@ -1401,11 +1537,11 @@ mod tests {
     #[test]
     fn lex_fails_for_append_with_type_on_append() {
         let pattern = "%{age} %{+age:int}";
-        let output = dissect(pattern, "22 23");
+        let output = Pattern::try_from(pattern);
         assert_eq!(
             output,
             Err(DissectError::ParseError(
-                ParseError::AppendDoesNotSupportTypes("age".to_owned(), 7)
+                ParseError::AppendDoesNotSupportTypes("age".into(), 7)
             ))
         )
     }
@@ -1414,11 +1550,11 @@ mod tests {
     fn lex_fails_for_append_with_type_on_non_append() {
         let pattern = "%{age:int} %{+age}";
 
-        let output = dissect(pattern, "22 23");
+        let output = Pattern::try_from(pattern);
         assert_eq!(
             output,
             Err(DissectError::ParseError(
-                ParseError::AppendDoesNotSupportTypes("age".to_owned(), 11)
+                ParseError::AppendDoesNotSupportTypes("age".into(), 11)
             ))
         );
     }
@@ -1427,7 +1563,10 @@ mod tests {
     fn dissect_named_keys() {
         let pattern = "%{?name}, %{&name}";
         let input = "John Doe, 22";
-        let output = dissect(pattern, input).expect("dissect doesn't work with named values");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output
+            .extract(input)
+            .expect("dissect doesn't work with named values");
         assert_eq!(output, v(&[("John Doe", "22")]));
     }
 
@@ -1435,7 +1574,8 @@ mod tests {
     fn dissect_named_keys_complex_case() {
         let pattern = "%{?name}, %{age} %{&name}";
         let input = "John, 22 Doe";
-        let output = dissect(pattern, input).expect("dissect needs named in order");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input).expect("dissect needs named in order");
         assert_eq!(output, v(&([("age", "22"), ("John", "Doe")])));
     }
 
@@ -1443,11 +1583,13 @@ mod tests {
     fn dissect_named_keys_with_values() {
         let pattern = "%{?name}, %{&name:int}";
         let input = "John Doe, 22";
-        let output = dissect(pattern, input).expect("dissect doesn't do named types");
+        let output = Pattern::try_from(pattern).expect("");
+        let output = output.extract(input);
+        let output = output.expect("dissect doesn't do named types");
         let mut expected = HashMap::new();
-        expected.insert("John Doe".to_owned(), Value::Integer(22));
+        expected.insert("John Doe".into(), SimdValue::I64(22));
 
-        assert_eq!(output, expected);
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
@@ -1667,23 +1809,32 @@ mod tests {
                 ];
 
         patterns.iter().for_each(|(pattern, input, expected)| {
-            let output = dissect(pattern, input).expect("");
-            assert_eq!(output, *expected);
+            assert_eq!(
+                Pattern::try_from(pattern)
+                    .expect("")
+                    .extract(input)
+                    .expect(""),
+                *expected
+            );
         });
     }
 
     #[test]
     pub fn dissect_empty() {
-        let output = dissect("", "").expect("");
-        assert_eq!(output, HashMap::new());
+        let output = Pattern::try_from("").expect("");
+        let output = output.extract("").expect("");
+        assert_eq!(output, Dissect(HashMap::new()));
     }
 
     #[test]
     pub fn multi_pad() {
         let pattern = "|%{n}%{_}|";
         let input = "|foo |";
-        let output = dissect(pattern, input).expect("");
-        let second_op = dissect(pattern, "|foo|").expect("");
+        let pt = Pattern::try_from(pattern).expect("cannot parse pattern");
+
+        let output = pt.extract(input).expect("");
+        let second_op = pt.extract("|foo|").expect("");
+
         assert_eq!(output, v(&[("n", "foo")]));
         assert_eq!(second_op, v(&[("n", "foo")]));
     }
@@ -1692,7 +1843,9 @@ mod tests {
     pub fn extract_with_padding_specific() {
         let pattern = "this is a %{what}%{_( case)} named %{name}";
         let input = "this is a test case named cake";
-        let output = dissect(pattern, input).expect("");
+        let output = Pattern::try_from(pattern).expect("cannot parse pattern");
+        let output = output.extract(input).expect("");
+
         assert_eq!(output, v(&[("what", "test"), ("name", "cake")]));
     }
 
@@ -1700,7 +1853,8 @@ mod tests {
     pub fn do_kv() {
         let pattern = "this is a %{?name} case named %{&name}";
         let input = "this is a test case named cake";
-        let output = dissect(pattern, input).expect("");
+        let output = Pattern::try_from(pattern).expect("cannot parse pattern");
+        let output = output.extract(input).expect("");
         assert_eq!(output, v(&[("test", "cake")]));
     }
 
@@ -1708,18 +1862,21 @@ mod tests {
     pub fn do_repeat_kv() {
         let pattern = "%{?count}: %{&count:int}, %{?count}: %{&count:int}";
         let input = "tremor: 1, logstash: 0";
-        let output = dissect(pattern, input).expect("");
+        let output = Pattern::try_from(pattern).expect("cannot parse pattern");
+        let output = output.extract(input).expect("");
         let mut expected = HashMap::new();
-        expected.insert("tremor".to_owned(), Value::Integer(1));
-        expected.insert("logstash".to_owned(), Value::Integer(0));
-        assert_eq!(output, expected);
+        expected.insert("tremor".into(), SimdValue::I64(1));
+        expected.insert("logstash".into(), SimdValue::I64(0));
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
     pub fn parsing_wrong_value_returns_error() {
         let pattern = "%{foo:int}";
         let input = "abcdef";
-        let output = dissect(pattern, input);
+        let p = Pattern::try_from(pattern).expect("cannot parse pattern");
+        let output = p.extract(input);
+
         assert_eq!(
             output,
             Err(DissectError::RuntimeError(
@@ -1732,73 +1889,17 @@ mod tests {
     pub fn consecutive_padding_first_one_optional() {
         let pattern = "%{name}%{_}%{_(|)}%{age}";
         let input = "John|22";
-        let output = dissect(pattern, input).expect("");
+        let p = Pattern::try_from(pattern).expect("cannot parse pattern");
+        let output = p.extract(input).expect("");
         let mut expected = HashMap::new();
-        expected.insert("name".to_owned(), Value::String("John".to_string()));
-        expected.insert("age".to_owned(), Value::String("22".to_string()));
-        assert_eq!(output, expected);
+        expected.insert("name".into(), SimdValue::String("John".into()));
+        expected.insert("age".into(), SimdValue::String("22".into()));
+        assert_eq!(output, Dissect(expected));
     }
 
     #[test]
     fn empty() {
         assert_eq!(lex("").expect("failed to compile pattern"), vec![]);
-    }
-
-    #[test]
-    fn type_float() {
-        let pattern = "%{f:float}";
-        let p = lex(pattern).expect("failed to compile pattern");
-        assert_eq!(
-            p,
-            vec![Token::Field(Field {
-                value: "f".to_owned(),
-                category: Some(FieldCategory::Typed(SupportedType::Float))
-            })]
-        );
-
-        let mut m = HashMap::new();
-        m.insert("f".to_string(), Value::Float(1.0));
-
-        assert_eq!(dissect(pattern, "1.0").expect(""), m.clone());
-        assert_eq!(dissect(pattern, "1").expect(""), m);
-        assert_eq!(
-            dissect(pattern, "one"),
-            Err(DissectError::RuntimeError(
-                RuntimeError::CannotParseValueToType("one".to_string(), SupportedType::Float)
-            ))
-        );
-    }
-
-    #[test]
-    fn type_int() {
-        let pattern = "%{f:int}";
-        let p = lex(pattern).expect("failed to compile pattern");
-        assert_eq!(
-            p,
-            vec![Token::Field(Field {
-                value: "f".to_owned(),
-                category: Some(FieldCategory::Typed(SupportedType::Integer))
-            })]
-        );
-
-        let mut m = HashMap::new();
-        m.insert("f".to_string(), Value::Integer(1));
-
-        assert_eq!(
-            dissect(pattern, "1.0"),
-            Err(DissectError::RuntimeError(
-                RuntimeError::CannotParseValueToType("1.0".to_string(), SupportedType::Integer)
-            ))
-        );
-
-        assert_eq!(dissect(pattern, "1").expect(""), m);
-
-        assert_eq!(
-            dissect(pattern, "one"),
-            Err(DissectError::RuntimeError(
-                RuntimeError::CannotParseValueToType("one".to_string(), SupportedType::Integer)
-            ))
-        );
     }
 
     #[test]
@@ -1841,12 +1942,14 @@ mod tests {
             ),
         ];
 
-        combinations.iter().for_each(|c| match dissect(c.0, c.1) {
-            Ok(x) => assert_eq!(x, HashMap::new()),
-            Err(e) => match e {
-                DissectError::RuntimeError(p) => assert_eq!(p.to_string(), c.2),
-                _ => {}
-            },
-        });
+        combinations
+            .iter()
+            .for_each(|c| match Pattern::try_from(c.0).expect("").extract(c.1) {
+                Ok(x) => assert_eq!(x, Dissect(HashMap::new())),
+                Err(e) => match e {
+                    DissectError::RuntimeError(p) => assert_eq!(p.to_string(), c.2),
+                    _ => {}
+                },
+            });
     }
 }

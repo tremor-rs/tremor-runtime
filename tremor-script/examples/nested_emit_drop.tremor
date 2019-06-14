@@ -1,8 +1,8 @@
 match "dont-care" of
   case 1 => emit "ko"
-  default => match . of
+  default => match event of
     case 1 => emit "ko"
-    default => match . of
+    default => match event of
       default => emit "ok"
     end
   end

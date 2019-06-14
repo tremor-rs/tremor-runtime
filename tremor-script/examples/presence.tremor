@@ -1,0 +1,22 @@
+let actual = {
+  "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" default => "ko" end,
+  "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" default => "ko" end,
+  "both-present": match { "superhero": "superman", "human": "clark kent" } of case %{ present superhero, present human } => "ok" default => "ko" end,
+  "both-present-nomatch": match {} of case %{ present superhero, present human } => "ko" default => "ok" end,
+  "both-absent": match {} of case %{ absent superhero, absent human } => "ok" default => "ko" end,
+  "both-absent-nomatch": match { "superhero": "superman", "human": "clark kent" } of case %{ absent superhero, absent human } => "ko" default => "ok" end,
+};
+
+let expected = {
+    "present": "ok",
+    "absent": "ok",
+    "both-present": "ok",
+    "both-present-nomatch": "ok",
+    "both-absent": "ok",
+    "both-absent-nomatch": "ok"
+};
+
+match expected == actual of
+  case true => "ok"
+  default => "ko"
+end;

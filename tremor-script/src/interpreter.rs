@@ -22,6 +22,7 @@ use crate::lexer::{self, TokenFuns};
 
 use crate::highlighter::{DumbHighlighter, Highlighter};
 use crate::parser::grammar;
+use crate::pos::Range;
 use crate::registry::{Context, Registry};
 use crate::runtime::NormalizedSegment;
 use halfbrown::hashmap;
@@ -63,6 +64,7 @@ impl<T> CheekyStack<T> {
             unreachable!()
         }
     }
+    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
     pub fn clear(&mut self) {
         self.stack.clear();
     }
@@ -76,7 +78,6 @@ where
 {
     fn run(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
@@ -86,23 +87,21 @@ where
 
     fn resolve(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
-        path: &'script ast::Path,
+        path: &'script ast::Path<Ctx>,
         stack: &'run ValueStack<'event>,
     ) -> Result<Value<'event>>;
 
     fn assign(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
-        path: &'script ast::Path,
+        path: &'script ast::Path<Ctx>,
         value: &'run Value<'event>,
         stack: &'run ValueStack<'event>,
     ) -> Result<Value<'event>>;
@@ -115,11 +114,15 @@ pub enum Cont<'event> {
     Drop(Value<'event>),
 }
 impl<'event> Cont<'event> {
-    pub fn into_value(self, expr: &ast::Expr, inner: &ast::Expr) -> Result<Value<'event>> {
+    pub fn into_value<Ctx: Context>(
+        self,
+        expr: &ast::Expr<Ctx>,
+        inner: &ast::Expr<Ctx>,
+    ) -> Result<Value<'event>> {
         match self {
             Cont::Cont(v) => Ok(v),
-            Cont::Emit(_v) => Err(ErrorKind::InvalidEmit(expr.clone(), inner.clone()).into()),
-            Cont::Drop(_v) => Err(ErrorKind::InvalidDrop(expr.clone(), inner.clone()).into()),
+            Cont::Emit(_v) => Err(ErrorKind::InvalidEmit(expr.into(), inner.into()).into()),
+            Cont::Drop(_v) => Err(ErrorKind::InvalidDrop(expr.into(), inner.into()).into()),
         }
     }
 }
@@ -144,12 +147,11 @@ macro_rules! demit {
 }
 
 #[derive(Debug)]
-pub struct Script<C>
+pub struct Script<Ctx>
 where
-    C: Context + 'static,
+    Ctx: Context + 'static,
 {
-    pub script: ast::Script,
-    pub registry: Registry<C>,
+    pub script: ast::Script<Ctx>,
     pub source: String, //tokens: Vec<std::result::Result<TokenSpan<'script>, LexerError>>
 }
 
@@ -159,7 +161,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(script: &'script str, registry: Registry<Ctx>) -> Result<Self> {
+    pub fn parse(script: &'script str, registry: &Registry<Ctx>) -> Result<Self> {
         let mut script = script.to_string();
         //FIXME: There is a bug in the lexer that requires a tailing ' ' otherwise
         //       it will not recognize a singular 'keywkrd'
@@ -179,12 +181,44 @@ where
         let ast = grammar::ScriptParser::new().parse(filtered_tokens)?;
 
         Ok(Script {
-            script: ast,
-            registry,
+            script: ast.up(registry)?,
             source: script,
         })
     }
 
+    /*
+    pub fn format_parser_error(script: &str, e: Error) -> String {
+        let mut h = DumbHighlighter::default();
+        if Self::format_error_from_script(script, &mut h, &e).is_ok() {
+            h.to_string()
+        } else {
+            format!("Failed to extract code for error: {}", e)
+        }
+    }
+     */
+    pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
+        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        h.highlight(tokens)
+    }
+
+    pub fn format_error_from_script<H: Highlighter>(
+        script: &str,
+        h: &mut H,
+        e: &Error,
+    ) -> std::io::Result<()> {
+        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        match e.context() {
+            (Some(Range(start, end)), _) => {
+                h.highlight_runtime_error(tokens, start, end, Some(e.into()))
+            }
+
+            _other => {
+                let _ = write!(h.get_writer(), "Error: {}", e);
+                h.finalize()
+            }
+        }
+    }
+    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
     pub fn format_error(&self, e: Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
@@ -195,26 +229,7 @@ where
     }
 
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
-        match e.context() {
-            (Some((start, end)), Some(inner)) => {
-                let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
-                //write!(h.get_writer(), "Error in line {}: {}\n", inner.0.line.0, e)?;
-                //write!(h.get_writer(), "## ... LINE {} ...\n", start.line.0 - 1)?;
-                h.highlight_runtime_error(
-                    tokens,
-                    start,
-                    end,
-                    Some((inner.0, inner.1, format!("{}", e))),
-                )
-            }
-            (Some((start, end)), _inner) => {
-                let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
-                writeln!(h.get_writer(), "Error in line {}: {}", start.line.0, e)?;
-                writeln!(h.get_writer(), "## .. LINE {} ...", start.line.0 - 1)?;
-                h.highlight_runtime_error(tokens, start, end, None)
-            }
-            _other => write!(h.get_writer(), "Error: {}", e),
-        }
+        Self::format_error_from_script(&self.source, h, e)
     }
 
     pub fn run(
@@ -230,7 +245,7 @@ where
         let mut val = Value::Null;
         for expr in exprs {
             count += 1;
-            match expr.run(&self.registry, context, event, meta, &mut local, stack)? {
+            match expr.run(context, event, meta, &mut local, stack)? {
                 Cont::Drop(val) => return Ok(Return::Drop(val)),
                 Cont::Emit(val) => return Ok(Return::Emit(val)),
                 Cont::Cont(v) => val = v,
@@ -252,14 +267,14 @@ enum PredicateCont {
 
 // Err Free zone
 
-impl<'script, 'event, 'run> ast::Expr
+impl<'script, 'event, 'run, Ctx: Context> ast::Expr<Ctx>
 where
     'script: 'event,
     'event: 'run,
 {
     fn merge_values(
         &self,
-        inner: &Expr,
+        inner: &Expr<Ctx>,
         value: &'run mut Value<'event>,
         replacement: Value<'event>,
     ) -> Result<()> {
@@ -301,15 +316,14 @@ where
         Ok(())
     }
 
-    fn literal<Ctx: Context + 'static>(
+    fn literal(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Literal,
+        expr: &'script ast::Literal<Ctx>,
     ) -> Result<Value<'event>> {
         match expr.value {
             ast::LiteralValue::Native(ref owned) => Ok(owned.clone().into()),
@@ -317,7 +331,7 @@ where
                 let mut r = Vec::with_capacity(list.len());
                 for expr in list {
                     r.push(
-                        expr.run(registry, context, event, meta, local, stack)?
+                        expr.run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?,
                     )
                 }
@@ -326,40 +340,39 @@ where
         }
     }
 
-    fn invoke<Ctx: Context + 'static>(
+    fn invoke(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Invoke,
+        expr: &'script ast::Invoke<Ctx>,
     ) -> Result<Value<'event>> {
         let mut argv: Vec<&simd_json::borrowed::Value> = Vec::new();
         for arg in &expr.args {
             let result = arg
-                .run(registry, context, event, meta, local, stack)?
+                .run(context, event, meta, local, stack)?
                 .into_value(&self, &arg)?;
             argv.push(stack.push(result));
         }
-        let fun = registry.find(&expr.module, &expr.fun)?;
-        fun(context, &argv).map(simd_json::value::borrowed::Value::from)
+        (expr.invocable)(context, &argv)
+            .map(simd_json::value::borrowed::Value::from)
+            .map_err(|e| e.into_err(&self, &self, None))
     }
 
-    fn unary<Ctx: Context + 'static>(
+    fn unary(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::UnaryExpr,
+        expr: &'script ast::UnaryExpr<Ctx>,
     ) -> Result<Value<'event>> {
         let rhs = expr
             .expr
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.expr)?;
         match (&expr.kind, rhs) {
             (ast::UnaryOpKind::Minus, Value::I64(x)) => Ok(Value::I64(-x)),
@@ -371,26 +384,25 @@ where
         }
     }
 
-    fn binary<Ctx: Context + 'static>(
+    fn binary(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::BinExpr,
+        expr: &'script ast::BinExpr<Ctx>,
     ) -> Result<Value<'event>> {
         // Lazy Heinz doesn't want to write that 10000 times
         // - snot badger - Darach
         use ast::BinOpKind::*;
         let lhs = expr
             .lhs
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.lhs)?;
         let rhs = expr
             .rhs
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.rhs)?;
         let error = std::f64::EPSILON;
         match (&expr.kind, lhs, rhs) {
@@ -459,7 +471,6 @@ where
     /*
     fn predicate_expr<'script, 'event, 'run, Ctx>(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
@@ -474,7 +485,7 @@ where
     {
         let pred = expr
             .lhs
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(self)?;
         if let Value::Bool(test) = pred {
             Ok(test)
@@ -484,43 +495,53 @@ where
     }
     */
 
-    fn rp<Ctx: Context + 'static>(
+    fn rp(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
         target: &'run Value<'event>,
-        rp: &'script ast::RecordPattern,
+        rp: &'script ast::RecordPattern<Ctx>,
     ) -> Result<PredicateCont> {
-        for field in &rp.fields {
-            let pp = &field.pattern;
+        for pp in &rp.fields {
             let path = pp.lhs();
-
-            let testee: &Value = match target {
-                Value::Object(ref o) => {
-                    if let Some(v) = o.get(path) {
-                        v
-                    } else {
-                        return Ok(PredicateCont::NoMatch);
-                    }
-                }
-                _ => {
-                    return Ok(PredicateCont::NoMatch);
-                }
-            };
 
             match pp.borrow() {
                 ast::PredicatePattern::TildeEq { test, .. } => {
+                    let testee: &Value = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(path) {
+                                v
+                            } else {
+                                return Ok(PredicateCont::NoMatch);
+                            }
+                        }
+                        _ => {
+                            return Ok(PredicateCont::NoMatch);
+                        }
+                    };
+
                     if test.extractor.extract(testee).is_err() {
                         return Ok(PredicateCont::NoMatch);
                     }
                 }
                 ast::PredicatePattern::Eq { rhs, not, .. } => {
+                    let testee: &Value = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(path) {
+                                v
+                            } else {
+                                return Ok(PredicateCont::NoMatch);
+                            }
+                        }
+                        _ => {
+                            return Ok(PredicateCont::NoMatch);
+                        }
+                    };
                     let rhs = rhs
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(self, &rhs)?;
                     let r = testee == &rhs;
                     let m = if *not { !r } else { r };
@@ -529,15 +550,27 @@ where
                     };
                 }
                 ast::PredicatePattern::RecordPatternEq { pattern, .. } => {
-                    self.match_rp_expr(
-                        registry, context, event, meta, local, stack, target, pattern,
-                    )?;
+                    self.match_rp_expr(context, event, meta, local, stack, target, pattern)?;
                 }
                 ast::PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                    self.match_ap_expr(
-                        registry, context, event, meta, local, stack, target, pattern,
-                    )?;
+                    self.match_ap_expr(context, event, meta, local, stack, target, pattern)?;
                 }
+                ast::PredicatePattern::FieldPresent { lhs } => match target {
+                    Value::Object(ref o) => {
+                        if !o.contains_key(lhs.as_str()) {
+                            return Ok(PredicateCont::NoMatch);
+                        }
+                    }
+                    _ => return Ok(PredicateCont::NoMatch),
+                },
+                ast::PredicatePattern::FieldAbsent { lhs } => match target {
+                    Value::Object(ref o) => {
+                        if o.contains_key(lhs.as_str()) {
+                            return Ok(PredicateCont::NoMatch);
+                        }
+                    }
+                    _ => return Ok(PredicateCont::NoMatch),
+                },
             }
         }
 
@@ -545,34 +578,32 @@ where
         Ok(PredicateCont::Match)
     }
 
-    fn match_rp_expr<Ctx: Context + 'static>(
+    fn match_rp_expr(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
         target: &'run Value<'event>,
-        rp: &'script ast::RecordPattern,
+        rp: &'script ast::RecordPattern<Ctx>,
     ) -> Result<Cont<'event>> {
         let mut acc = hashmap! {};
-        for field in &rp.fields {
-            let pp = &field.pattern;
+        for pp in &rp.fields {
             let key = pp.lhs();
 
-            let testee = match target {
-                Value::Object(ref o) => {
-                    if let Some(v) = o.get(key) {
-                        v
-                    } else {
-                        return Ok(Cont::Drop(Value::Bool(true)));
-                    }
-                }
-                _ => return Ok(Cont::Drop(Value::Bool(true))),
-            };
             match pp.borrow() {
                 ast::PredicatePattern::TildeEq { test, .. } => {
+                    let testee = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(key) {
+                                v
+                            } else {
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                        _ => return Ok(Cont::Drop(Value::Bool(true))),
+                    };
                     match test.extractor.extract(&testee) {
                         Ok(x) => {
                             acc.insert(key.into(), x.clone());
@@ -583,8 +614,18 @@ where
                 }
                 // FIXME: Why are we ignoring the LHS?
                 ast::PredicatePattern::Eq { rhs, not, .. } => {
+                    let testee = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(key) {
+                                v
+                            } else {
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                        _ => return Ok(Cont::Drop(Value::Bool(true))),
+                    };
                     let rhs = rhs
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(self, &rhs)?;
                     let r = testee == &rhs;
                     let m = if *not { !r } else { r };
@@ -596,10 +637,40 @@ where
                         return Ok(Cont::Drop(Value::Bool(true)));
                     }
                 }
+                ast::PredicatePattern::FieldPresent { lhs } => match target {
+                    Value::Object(ref o) => {
+                        if o.contains_key(lhs.as_str()) {
+                            continue;
+                        } else {
+                            return Ok(Cont::Drop(Value::Bool(true)));
+                        }
+                    }
+                    _ => return Ok(Cont::Drop(Value::Bool(true))),
+                },
+                ast::PredicatePattern::FieldAbsent { lhs } => match target {
+                    Value::Object(ref o) => {
+                        if !o.contains_key(lhs.as_str()) {
+                            continue;
+                        } else {
+                            return Ok(Cont::Drop(Value::Bool(true)));
+                        }
+                    }
+                    _ => return Ok(Cont::Drop(Value::Bool(true))),
+                },
                 ast::PredicatePattern::RecordPatternEq { pattern, .. } => {
+                    let testee = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(key) {
+                                v
+                            } else {
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                        _ => return Ok(Cont::Drop(Value::Bool(true))),
+                    };
                     // FIXME destructure assign so we can get rid of dupe in assign cases
                     if let o @ Value::Object(_) = testee {
-                        match self.rp(registry, context, event, meta, local, stack, &o, pattern)? {
+                        match self.rp(context, event, meta, local, stack, &o, pattern)? {
                             PredicateCont::Match => {
                                 // NOTE We have to clone here since we duplicating data form one place
                                 // into another
@@ -616,10 +687,38 @@ where
                         return Ok(Cont::Drop(Value::Bool(true)));
                     }
                 }
-                ast::PredicatePattern::ArrayPatternEq { .. } => {
-                    // FIXME: This ius missing
-                    // FIXME abusing drop to short circuit and go to next outer(most) case
-                    return Ok(Cont::Drop(Value::Bool(true)));
+                ast::PredicatePattern::ArrayPatternEq { pattern, .. } => {
+                    dbg!("snot badger");
+                    let testee = match target {
+                        Value::Object(ref o) => {
+                            if let Some(v) = o.get(key) {
+                                v
+                            } else {
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                        _ => return Ok(Cont::Drop(Value::Bool(true))),
+                    };
+                    // FIXME destructure assign so we can get rid of dupe in assign cases
+                    if let a @ Value::Array(_) = testee {
+                        match self.match_ap_expr(context, event, meta, local, stack, &a, pattern)? {
+                            Cont::Emit(r) => {
+                                acc.insert(key.into(), r);
+                                continue;
+                            }
+                            Cont::Cont(r) => {
+                                acc.insert(key.into(), r);
+                                continue;
+                            }
+                            Cont::Drop(_) => {
+                                // FIXME abusing drop to short circuit and go to next outer(most) case
+                                return Ok(Cont::Drop(Value::Bool(true)));
+                            }
+                        }
+                    } else {
+                        // FIXME abusing drop to short circuit and go to next outer(most) case
+                        return Ok(Cont::Drop(Value::Bool(true)));
+                    }
                 }
             }
         }
@@ -627,16 +726,15 @@ where
         Ok(Cont::Cont(stack.push(Value::Object(acc)).clone()))
     }
 
-    fn match_ap_expr<Ctx: Context + 'static>(
+    fn match_ap_expr(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
         target: &'run Value<'event>,
-        ap: &'script ast::ArrayPattern,
+        ap: &'script ast::ArrayPattern<Ctx>,
     ) -> Result<Cont<'event>> {
         match target {
             Value::Array(ref a) => {
@@ -647,7 +745,7 @@ where
                         match expr {
                             ast::ArrayPredicatePattern::Expr(e) => {
                                 let r = e
-                                    .run(registry, context, event, meta, local, stack)?
+                                    .run(context, event, meta, local, stack)?
                                     .into_value(&self, &e)?;
                                 if candidate == &r {
                                     acc.push(Value::Array(vec![Value::Array(vec![
@@ -669,7 +767,7 @@ where
                             }
                             ast::ArrayPredicatePattern::Record(rp) => {
                                 match self.match_rp_expr(
-                                    registry, context, event, meta, local, stack, candidate, rp,
+                                    context, event, meta, local, stack, candidate, rp,
                                 )? {
                                     Cont::Cont(r) => {
                                         acc.push(Value::Array(vec![Value::Array(vec![
@@ -682,7 +780,7 @@ where
                             }
                             ast::ArrayPredicatePattern::Array(ap) => {
                                 match self.match_ap_expr(
-                                    registry, context, event, meta, local, stack, candidate, ap,
+                                    context, event, meta, local, stack, candidate, ap,
                                 )? {
                                     Cont::Cont(r) => {
                                         acc.push(Value::Array(vec![Value::Array(vec![
@@ -704,19 +802,18 @@ where
         }
     }
 
-    fn match_expr<Ctx: Context + 'static>(
+    fn match_expr(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Match,
+        expr: &'script ast::Match<Ctx>,
     ) -> Result<Cont<'event>> {
         let target = expr
             .target
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.target)?;
         'predicate: for predicate in &expr.patterns {
             match predicate.pattern {
@@ -725,22 +822,20 @@ where
                     return self.error_oops();
                 }
                 ast::Pattern::Record(ref rp) => {
-                    match self
-                        .match_rp_expr(registry, context, event, meta, local, stack, &target, &rp)?
-                    {
+                    match self.match_rp_expr(context, event, meta, local, stack, &target, &rp)? {
                         Cont::Cont(_) => match &predicate.guard {
                             // FIXME make guard checks a macro ( DRY )
                             Some(expr) => {
                                 let test = expr
-                                    .run(registry, context, event, meta, local, stack)?
+                                    .run(context, event, meta, local, stack)?
                                     .into_value(&self, &expr)?;
                                 match test {
                                     Value::Bool(true) => {
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack,
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack,)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -753,9 +848,7 @@ where
                             None => {
                                 let mut r = Value::Null;
                                 for expr in &predicate.exprs {
-                                    r = demit!(
-                                        expr.run(registry, context, event, meta, local, stack)?
-                                    );
+                                    r = demit!(expr.run(context, event, meta, local, stack)?);
                                 }
                                 return Ok(Cont::Cont(r));
                             }
@@ -766,22 +859,20 @@ where
                     }
                 }
                 ast::Pattern::Array(ref ap) => {
-                    match self
-                        .match_ap_expr(registry, context, event, meta, local, stack, &target, &ap)?
-                    {
+                    match self.match_ap_expr(context, event, meta, local, stack, &target, &ap)? {
                         Cont::Cont(_) => match &predicate.guard {
                             // FIXME make guard checks a macro ( DRY )
                             Some(expr) => {
                                 let test = expr
-                                    .run(registry, context, event, meta, local, stack)?
+                                    .run(context, event, meta, local, stack)?
                                     .into_value(&self, &expr)?;
                                 match test {
                                     Value::Bool(true) => {
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack,
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack,)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -794,9 +885,7 @@ where
                             None => {
                                 let mut r = Value::Null;
                                 for expr in &predicate.exprs {
-                                    r = demit!(
-                                        expr.run(registry, context, event, meta, local, stack)?
-                                    );
+                                    r = demit!(expr.run(context, event, meta, local, stack)?);
                                 }
                                 return Ok(Cont::Cont(r));
                             }
@@ -808,22 +897,22 @@ where
                 }
                 ast::Pattern::Expr(ref expr) => {
                     let expr = expr
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(&self, &expr)?;
 
                     if target == expr {
                         match &predicate.guard {
                             Some(expr) => {
                                 let test = expr
-                                    .run(registry, context, event, meta, local, stack)?
+                                    .run(context, event, meta, local, stack)?
                                     .into_value(&self, &expr)?;
                                 match test {
                                     Value::Bool(true) => {
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack,
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack,)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -836,9 +925,7 @@ where
                             None => {
                                 let mut r = Value::Null;
                                 for expr in &predicate.exprs {
-                                    r = demit!(
-                                        expr.run(registry, context, event, meta, local, stack)?
-                                    );
+                                    r = demit!(expr.run(context, event, meta, local, stack)?);
                                 }
                                 return Ok(Cont::Cont(r));
                             }
@@ -850,28 +937,25 @@ where
                     let path = &a.id;
                     match *a.pattern {
                         ast::Pattern::Array(ref ap) => {
-                            match self.match_ap_expr(
-                                registry, context, event, meta, local, stack, &target, &ap,
-                            )? {
+                            match self
+                                .match_ap_expr(context, event, meta, local, stack, &target, &ap)?
+                            {
                                 Cont::Cont(v) => match &predicate.guard {
                                     // FIXME make guard checks a macro ( DRY )
                                     Some(expr) => {
                                         let test = expr
-                                            .run(registry, context, event, meta, local, stack)?
+                                            .run(context, event, meta, local, stack)?
                                             .into_value(&self, &expr)?;
                                         match test {
                                             Value::Bool(true) => {
                                                 self.assign(
-                                                    registry, context, event, meta, local, &path,
-                                                    &v, stack,
+                                                    context, event, meta, local, &path, &v, stack,
                                                 )?;
 
                                                 let mut r = Value::Null;
                                                 for expr in &predicate.exprs {
-                                                    r = demit!(expr.run(
-                                                        registry, context, event, meta, local,
-                                                        stack,
-                                                    )?);
+                                                    r = demit!(expr
+                                                        .run(context, event, meta, local, stack,)?);
                                                 }
                                                 return Ok(Cont::Cont(r));
                                             }
@@ -884,15 +968,13 @@ where
                                         }
                                     }
                                     None => {
-                                        self.assign(
-                                            registry, context, event, meta, local, &path, &v, stack,
-                                        )?;
+                                        self.assign(context, event, meta, local, &path, &v, stack)?;
 
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -903,28 +985,25 @@ where
                             }
                         }
                         ast::Pattern::Record(ref rp) => {
-                            match self.match_rp_expr(
-                                registry, context, event, meta, local, stack, &target, &rp,
-                            )? {
+                            match self
+                                .match_rp_expr(context, event, meta, local, stack, &target, &rp)?
+                            {
                                 Cont::Cont(v) => match &predicate.guard {
                                     // FIXME make guard checks a macro ( DRY )
                                     Some(expr) => {
                                         let test = expr
-                                            .run(registry, context, event, meta, local, stack)?
+                                            .run(context, event, meta, local, stack)?
                                             .into_value(&self, &expr)?;
                                         match test {
                                             Value::Bool(true) => {
                                                 self.assign(
-                                                    registry, context, event, meta, local, &path,
-                                                    &v, stack,
+                                                    context, event, meta, local, &path, &v, stack,
                                                 )?;
 
                                                 let mut r = Value::Null;
                                                 for expr in &predicate.exprs {
-                                                    r = demit!(expr.run(
-                                                        registry, context, event, meta, local,
-                                                        stack,
-                                                    )?);
+                                                    r = demit!(expr
+                                                        .run(context, event, meta, local, stack,)?);
                                                 }
                                                 return Ok(Cont::Cont(r));
                                             }
@@ -937,15 +1016,13 @@ where
                                         }
                                     }
                                     None => {
-                                        self.assign(
-                                            registry, context, event, meta, local, &path, &v, stack,
-                                        )?;
+                                        self.assign(context, event, meta, local, &path, &v, stack)?;
 
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -957,30 +1034,26 @@ where
                         }
                         ast::Pattern::Expr(ref expr) => {
                             let expr = expr
-                                .run(registry, context, event, meta, local, stack)?
+                                .run(context, event, meta, local, stack)?
                                 .into_value(&self, &expr)?;
                             let path = &a.id;
                             if target == expr {
-                                self.assign(
-                                    registry, context, event, meta, local, &path, &expr, stack,
-                                )?;
+                                self.assign(context, event, meta, local, &path, &expr, stack)?;
                                 match &predicate.guard {
                                     Some(expr) => {
                                         let test = expr
-                                            .run(registry, context, event, meta, local, stack)?
+                                            .run(context, event, meta, local, stack)?
                                             .into_value(&self, expr)?;
                                         match test {
                                             Value::Bool(true) => {
                                                 let mut r = Value::Null;
                                                 for expr in &predicate.exprs {
-                                                    r = demit!(expr.run(
-                                                        registry, context, event, meta, local,
-                                                        stack,
-                                                    )?);
+                                                    r = demit!(expr
+                                                        .run(context, event, meta, local, stack,)?);
                                                 }
                                                 self.assign(
-                                                    registry, context, event, meta, local, &path,
-                                                    &target, stack,
+                                                    context, event, meta, local, &path, &target,
+                                                    stack,
                                                 )?;
                                                 return Ok(Cont::Cont(r));
                                             }
@@ -995,9 +1068,9 @@ where
                                     None => {
                                         let mut r = Value::Null;
                                         for expr in &predicate.exprs {
-                                            r = demit!(expr.run(
-                                                registry, context, event, meta, local, stack,
-                                            )?);
+                                            r = demit!(
+                                                expr.run(context, event, meta, local, stack,)?
+                                            );
                                         }
                                         return Ok(Cont::Cont(r));
                                     }
@@ -1010,7 +1083,7 @@ where
                 ast::Pattern::Default => {
                     let mut r = Value::Null;
                     for expr in &predicate.exprs {
-                        r = demit!(expr.run(registry, context, event, meta, local, stack)?);
+                        r = demit!(expr.run(context, event, meta, local, stack)?);
                     }
                     return Ok(Cont::Cont(r));
                 }
@@ -1019,19 +1092,18 @@ where
         self.error_no_clause_hit()
     }
 
-    fn patch<Ctx: Context + 'static>(
+    fn patch(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Patch,
+        expr: &'script ast::Patch<Ctx>,
     ) -> Result<Value<'event>> {
         let mut value = expr
             .target
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.target)?;
 
         for op in &expr.operations {
@@ -1042,7 +1114,7 @@ where
                     ast::PatchOperation::Insert { ident, expr } => {
                         let new_key = std::borrow::Cow::Owned(ident.clone());
                         let new_value = expr
-                            .run(registry, context, event, meta, local, stack)?
+                            .run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?;
                         if obj.contains_key(&new_key) {
                             return self.error_patch_insert_key_exists(expr, ident.clone());
@@ -1053,7 +1125,7 @@ where
                     ast::PatchOperation::Update { ident, expr } => {
                         let new_key = std::borrow::Cow::Owned(ident.clone());
                         let new_value = expr
-                            .run(registry, context, event, meta, local, stack)?
+                            .run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?;
                         if obj.contains_key(&new_key) {
                             obj.insert(new_key, new_value.clone());
@@ -1064,7 +1136,7 @@ where
                     ast::PatchOperation::Upsert { ident, expr } => {
                         let new_key = std::borrow::Cow::Owned(ident.clone());
                         let new_value = expr
-                            .run(registry, context, event, meta, local, stack)?
+                            .run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?;
                         obj.insert(new_key, new_value.clone());
                     }
@@ -1075,7 +1147,7 @@ where
                     ast::PatchOperation::Merge { ident, expr } => {
                         let new_key = std::borrow::Cow::Owned(ident.clone());
                         let merge_spec = expr
-                            .run(registry, context, event, meta, local, stack)?
+                            .run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?;
                         match obj.get_mut(&new_key) {
                             Some(value @ Value::Object(_)) => {
@@ -1097,7 +1169,7 @@ where
                     }
                     ast::PatchOperation::TupleMerge { expr } => {
                         let merge_spec = expr
-                            .run(registry, context, event, meta, local, stack)?
+                            .run(context, event, meta, local, stack)?
                             .into_value(&self, &expr)?;
                         self.merge_values(&expr, &mut value, merge_spec)?;
                     }
@@ -1109,25 +1181,24 @@ where
         Ok(value)
     }
 
-    fn merge<Ctx: Context + 'static>(
+    fn merge(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Merge,
+        expr: &'script ast::Merge<Ctx>,
     ) -> Result<Value<'event>> {
         let mut value = expr
             .target
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &expr.target)?;
 
         if value.is_object() {
             let replacement = expr
                 .expr
-                .run(registry, context, event, meta, local, stack)?
+                .run(context, event, meta, local, stack)?
                 .into_value(&self, &expr.expr)?;
 
             if replacement.is_object() {
@@ -1141,22 +1212,21 @@ where
         }
     }
 
-    fn comprehension<Ctx: Context + 'static>(
+    fn comprehension(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
-        expr: &'script ast::Comprehension,
+        expr: &'script ast::Comprehension<Ctx>,
     ) -> Result<Cont<'event>> {
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
         let mut once = false;
         let target_value = target
-            .run(registry, context, event, meta, local, stack)?
+            .run(context, event, meta, local, stack)?
             .into_value(&self, &target)?;
 
         if let Value::Object(target_map) = target_value {
@@ -1191,13 +1261,12 @@ where
                     match &e.guard {
                         Some(expr) => {
                             let test = expr
-                                .run(registry, context, event, meta, local, stack)?
+                                .run(context, event, meta, local, stack)?
                                 .into_value(&self, &expr)?;
                             match test {
                                 Value::Bool(true) => {
-                                    let v = demit!(e
-                                        .expr
-                                        .run(registry, context, event, meta, local, stack,)?);
+                                    let v =
+                                        demit!(e.expr.run(context, event, meta, local, stack,)?);
                                     value_vec.push(v.clone());
                                     if let Value::Object(local_map) = local {
                                         local_map.remove(&new_key);
@@ -1222,8 +1291,7 @@ where
                             }
                         }
                         None => {
-                            let v =
-                                demit!(e.expr.run(registry, context, event, meta, local, stack)?);
+                            let v = demit!(e.expr.run(context, event, meta, local, stack)?);
                             value_vec.push(v.clone());
                             if let Value::Object(local_map) = local {
                                 local_map.remove(&new_key);
@@ -1269,13 +1337,12 @@ where
                     match &e.guard {
                         Some(expr) => {
                             let test = expr
-                                .run(registry, context, event, meta, local, stack)?
+                                .run(context, event, meta, local, stack)?
                                 .into_value(&self, &expr)?;
                             match test {
                                 Value::Bool(true) => {
-                                    let v = demit!(e
-                                        .expr
-                                        .run(registry, context, event, meta, local, stack,)?);
+                                    let v =
+                                        demit!(e.expr.run(context, event, meta, local, stack,)?);
                                     value_vec.push(v.clone());
                                     count += 1;
                                     if let Value::Object(local_map) = local {
@@ -1301,8 +1368,7 @@ where
                             }
                         }
                         None => {
-                            let v =
-                                demit!(e.expr.run(registry, context, event, meta, local, stack)?);
+                            let v = demit!(e.expr.run(context, event, meta, local, stack)?);
                             value_vec.push(v.clone());
                             count += 1;
                             if let Value::Object(local_map) = local {
@@ -1317,14 +1383,13 @@ where
         }
         Ok(Cont::Cont(Value::Array(value_vec)))
     }
-    fn resolve_path_segments<Ctx: Context + 'static>(
+    fn resolve_path_segments(
         &'script self,
-        registry: &'run Registry<Ctx>,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
-        path: &'script ast::Path,
+        path: &'script ast::Path<Ctx>,
         stack: &'run ValueStack<'event>,
     ) -> Result<Vec<NormalizedSegment>> {
         let udp = match path {
@@ -1339,7 +1404,7 @@ where
             match segment {
                 ast::Segment::ElementSelector { expr, start, end } => {
                     match expr
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(&self, &expr)?
                     {
                         Value::I64(n) => segments.push(NormalizedSegment::Index {
@@ -1370,10 +1435,10 @@ where
                     end_upper,
                 } => {
                     let s = range_start
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(&self, &range_start)?;
                     let e = range_end
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(&self, &range_end)?;
                     match (s, e) {
                         (Value::I64(range_start), Value::I64(range_end)) => {
@@ -1408,7 +1473,7 @@ where
     }
 }
 
-impl<'run, 'event, 'script, Ctx> Interpreter<'run, 'event, 'script, Ctx> for ast::Expr
+impl<'run, 'event, 'script, Ctx> Interpreter<'run, 'event, 'script, Ctx> for ast::Expr<Ctx>
 where
     Ctx: Context + 'static,
     'script: 'event,
@@ -1416,16 +1481,15 @@ where
 {
     fn resolve(
         &'script self,
-        registry: &'run Registry<Ctx>,
+
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
-        path: &'script ast::Path,
+        path: &'script ast::Path<Ctx>,
         stack: &'run ValueStack<'event>,
     ) -> Result<Value<'event>> {
-        let segments =
-            self.resolve_path_segments(registry, context, event, meta, local, path, stack)?;
+        let segments = self.resolve_path_segments(context, event, meta, local, path, stack)?;
 
         let mut current: &Value = match path {
             ast::Path::Local(_path) => local,
@@ -1595,17 +1659,16 @@ where
 
     fn assign(
         &'script self,
-        registry: &'run Registry<Ctx>,
+
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut Value<'event>,
-        path: &'script ast::Path,
+        path: &'script ast::Path<Ctx>,
         value: &'run Value<'event>,
         stack: &'run ValueStack<'event>,
     ) -> Result<Value<'event>> {
-        let segments =
-            self.resolve_path_segments(registry, context, event, meta, local, path, stack)?;
+        let segments = self.resolve_path_segments(context, event, meta, local, path, stack)?;
 
         let mut current: &mut Value = match path {
             ast::Path::Local(_path) => local,
@@ -1712,7 +1775,7 @@ where
 
     fn run(
         &'script self,
-        registry: &'run Registry<Ctx>,
+
         context: &'run Ctx,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
@@ -1722,31 +1785,27 @@ where
         match self {
             ast::Expr::Emit(expr) => Ok(Cont::Emit(demit!(expr
                 .expr
-                .run(registry, context, event, meta, local, stack)?))),
+                .run(context, event, meta, local, stack)?))),
             ast::Expr::Drop(expr) => Ok(Cont::Drop(demit!(expr
                 .expr
-                .run(registry, context, event, meta, local, stack)?))),
+                .run(context, event, meta, local, stack)?))),
             ast::Expr::Literal(literal) => self
-                .literal(registry, context, event, meta, local, stack, literal)
+                .literal(context, event, meta, local, stack, literal)
                 .map(Cont::Cont),
             ast::Expr::Assign(expr) => {
-                let value = demit!(expr
-                    .expr
-                    .run(registry, context, event, meta, local, stack)?);
-                self.assign(
-                    registry, context, event, meta, local, &expr.path, &value, stack,
-                )
-                .map(Cont::Cont)
+                let value = demit!(expr.expr.run(context, event, meta, local, stack)?);
+                self.assign(context, event, meta, local, &expr.path, &value, stack)
+                    .map(Cont::Cont)
             }
             ast::Expr::Path(path) => self
-                .resolve(registry, context, event, meta, local, path, stack)
+                .resolve(context, event, meta, local, path, stack)
                 .map(Cont::Cont),
             ast::Expr::RecordExpr(ref record) => {
                 let mut object: Map = hashmap! {};
                 for field in &record.fields {
                     let result = field
                         .value
-                        .run(registry, context, event, meta, local, stack)?
+                        .run(context, event, meta, local, stack)?
                         .into_value(&self, &field.value)?;
                     let key = field.name.clone();
                     object.insert(key.into(), result.clone());
@@ -1754,36 +1813,36 @@ where
                 Ok(Cont::Cont(Value::Object(object)))
             }
             ast::Expr::Invoke(ref call) => self
-                .invoke(registry, context, event, meta, local, stack, call)
+                .invoke(context, event, meta, local, stack, call)
                 .map(Cont::Cont),
             ast::Expr::Unary(ref expr) => self
-                .unary(registry, context, event, meta, local, stack, expr)
+                .unary(context, event, meta, local, stack, expr)
                 .map(Cont::Cont),
             ast::Expr::Binary(ref expr) => self
-                .binary(registry, context, event, meta, local, stack, expr)
+                .binary(context, event, meta, local, stack, expr)
                 .map(Cont::Cont),
             ast::Expr::MatchExpr(ref expr) => {
-                self.match_expr(registry, context, event, meta, local, stack, expr)
+                self.match_expr(context, event, meta, local, stack, expr)
             }
             ast::Expr::PatchExpr(ref expr) => self
-                .patch(registry, context, event, meta, local, stack, expr)
+                .patch(context, event, meta, local, stack, expr)
                 .map(Cont::Cont),
             ast::Expr::MergeExpr(ref expr) => self
-                .merge(registry, context, event, meta, local, stack, expr)
+                .merge(context, event, meta, local, stack, expr)
                 .map(Cont::Cont),
             ast::Expr::Comprehension(ref expr) => {
-                self.comprehension(registry, context, event, meta, local, stack, expr)
+                self.comprehension(context, event, meta, local, stack, expr)
             }
             // ast::Expr::PatternExpr(ref rp) => {
-            // self.match_rp_expr(registry, context, event, meta, local, stack, rp);
-            //     match self.rp(registry, context, event, meta, local, stack, &target, rp)? {
+            // self.match_rp_expr(context, event, meta, local, stack, rp);
+            //     match self.rp(context, event, meta, local, stack, &target, rp)? {
             //         PredicateCont::NoMatch => {
             //             Ok(Cont::Cont(Value::Null));
             //         }
             //         PredicateCont::Match => {
             //             let mut r = Value::Null;
             //             for expr in &predicate.exprs {
-            //                 r = demit!(expr.run(registry, context, event, meta, local, stack,)?);
+            //                 r = demit!(expr.run(context, event, meta, local, stack,)?);
             //             }
             //             return Ok(Cont::Cont(r));
             //         }

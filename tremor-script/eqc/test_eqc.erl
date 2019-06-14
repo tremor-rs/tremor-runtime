@@ -18,15 +18,50 @@
 -include_lib("pbt.hrl").
 -compile([export_all]).
 
+
 -spec initial_state() -> eqc_statem:symbol_state().
 initial_state() ->
   #state{
+    locals = #{ <<"a">> => 1, <<"b">> => 2, <<"c">> => 3, <<"d">> => 4, <<"e">> => 5 },
+    globals = #{ <<"a">> => 5, <<"b">> => 4, <<"c">> => 3, <<"d">> => 2, <<"e">> => 1 },
     event = #{ <<"foo">> => <<"bar">> }
-}.
+  }.
 
 
-spec() ->
-    oneof([spec_bop_real(),spec_bop_int(),spec_bop_bool(), spec_uop_bool(), spec_uop_int(), spec_uop_real(), spec_bop_string()]).
+command_precondition_common(_State, _Cmd) ->
+    true.
+
+precondition_common(_State, _Call) ->
+    true.
+
+id() ->
+    ?SUCHTHAT(Id, ?LET(Id, list(choose($a, $e)), list_to_binary(Id)), byte_size(Id) > 0).
+
+enqueue_args(#state{} = S) ->
+    [spec(S)].
+
+enqueue_pre(#state{} = S) ->
+    true.
+
+enqueue(Ast) ->
+    tremor_script_eval(Ast).
+
+enqueue_post(#state{} = S, [Ast], RustResult) ->
+    {S1, ModelResult} = model_eval(S, Ast),
+    ModelResult =:= RustResult.
+
+enqueue_next(#state{} = S, Eval, [Ast]) ->
+    {S1, ModelResult} = model_eval(S, Ast),
+    S.
+
+spec(S) ->
+    frequency([{1, {emit, spec_inner(S)}}, {1, {drop, spec_inner(S)}}, {8, spec_inner(S)}]).
+
+spec_inner(#state{locals = _, globals = _G, event = _E}=S) ->
+    oneof([spec_bop_real(),spec_bop_int(),spec_bop_bool(), spec_uop_bool(), spec_uop_int(), spec_uop_real(), spec_bop_string(), spec_let_expr(S)]).
+
+spec_let_expr(S) ->
+    {<<"Let">>,id(),?LAZY(spec_inner(S))}.
 
 spec_uop_real() ->
     {oneof([<<"Plus">>,<<"Minus">>]), ?SUCHTHAT(X, real(), X =/= 0.0)}.
@@ -39,7 +74,6 @@ spec_uop_bool() ->
 
 spec_bop_string() ->
     {oneof([<<"Add">>]), utf8(10), utf8(10)}.
-%%      {<<"Add">>, oneof([<<"snot">>, <<"cookie">>]), oneof([<<"badger">>, <<"monster">>])}.
 
 spec_bop_bool() ->
     {oneof([<<"And">>, <<"Or">>,<<"Eq">>,<<"NotEq">>]), bool(), oneof([true,false])}.
@@ -63,23 +97,30 @@ spec_bop_int() ->
 tremor_script_eval(Spec) ->
     Testcase = gen_ast:gen_ast(Spec),
     JsonAst = jsx:encode(Testcase),
-    %% io:format("~p~n", [JsonAst]),
     RustResult = ts:eval(jsx:encode(Testcase)),
     ErlangResult = jsx:decode(RustResult),
-    [{ _ , RustValue }] = ErlangResult,
-    util:clamp(RustValue,13).
+    case ErlangResult of
+        [{ <<"Emit">> , RustValue }] -> { emit, util:clamp(RustValue, 13) };
+        [{ <<"Drop">>, RustValue }] -> { drop, util:clamp(RustValue, 13) };
+        Error -> { error, Error}
+    end.
 
 %% We run the model specification through a simple implementation of
 %% tremor-script implemented in Erlang natively.
-model_eval(Spec) ->
-    util:clamp(model:ast_eval(Spec),13).
+model_eval(#state{}=SNOT, Spec) ->
+    case model:ast_eval(SNOT,Spec) of
+      {S,{emit, X}} -> {S, {emit, util:clamp(X,13)}};
+      {S,{drop, X}} -> {S, {drop, util:clamp(X,13)}};
+      {S,Y} -> {S, {emit, util:clamp(Y,13)}}
+    end.
 
 -spec prop_simple_expr() -> eqc:property().
 prop_simple_expr() ->
-    ?FORALL(Params, spec(), 
+    S = initial_state(),
+    ?FORALL(Params, spec(S), 
             begin 
                 RustResult = tremor_script_eval(Params),
-                ModelResult = model_eval(Params),
+                { #state{}, ModelResult } = model_eval(S, Params),
                 ?WHENFAIL(
                    io:format("SIMPLE EXPR MODEL FAILED! ~p ~p ~p", 
                              [Params, ModelResult, RustResult]), 
@@ -88,3 +129,19 @@ prop_simple_expr() ->
                   )
             end).
 
+-spec prop_simple_expr_with_state() -> eqc:property().
+prop_simple_expr_with_state() ->
+    ?FORALL(Cmds, commands(?MODULE),
+        begin
+            {History, State, Result} = run_commands(Cmds, []),
+            Success =
+                case Result of
+                    ok ->
+                        true;
+                    _ ->
+                        io:format("[~p] Res1: ~p~n", [?LINE, Result]),
+                        false
+               end,
+            pretty_commands(?MODULE, Cmds, {History, State, Result}, Success)
+        end
+    ).

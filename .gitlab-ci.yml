@@ -20,7 +20,7 @@ test:
 
 api-tests:
   stage: test
-  image: wayfair/tremor/ci:1.34.1d
+  image: wayfair/tremor/ci:1.35.0
   when: always
   # cache:
   #   paths:

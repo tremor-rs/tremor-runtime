@@ -56,10 +56,10 @@ lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
     pub static ref FN_REGISTRY: Mutex<Registry<TremorContext>> = {
-        use tremor_script::errors::*;
+        use tremor_script::registry::FResult;
         let mut registry: Registry<TremorContext> = tremor_script::registry();
         #[allow(unused_variables)]
-        fn ingest_ns(ctx: &TremorContext, _args: &[&BorrowedValue]) -> Result<OwnedValue> {
+        fn ingest_ns(ctx: &TremorContext, _args: &[&BorrowedValue]) -> FResult<OwnedValue> {
             Ok(OwnedValue::I64(ctx.ingest_ns as i64))
         }
         registry
@@ -67,6 +67,7 @@ lazy_static! {
                 module: "system".to_owned(),
                 name: "ingest_ns".to_string(),
                 fun: ingest_ns,
+                argc: 0
             });
         Mutex::new(registry)
     };

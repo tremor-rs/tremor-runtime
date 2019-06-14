@@ -1,9 +1,9 @@
-let aa := { "aa": 1, "bb": 2, "ee": "florp", "flork": { "snot": "badger"} };
+let aa = { "aa": 1, "bb": 2, "ee": "florp", "flork": { "snot": "badger"} };
 
-let bb := "snot";
+let bb = "snot";
 
-let aa := patch aa ->
-  insert cc => patch {} -> insert fleek => "florp" end,
+let aa = patch aa of
+  insert cc => patch {} of insert fleek => "florp" end,
   update bb =>  3,
   upsert aa => 4,
   upsert dd => 5,
@@ -12,7 +12,7 @@ let aa := patch aa ->
   insert aa => "bar"
 end;
 
-drop patch merge aa -> { "foo": "bar" } end -> update foo => "badger" end;
-drop merge patch {} -> erase `does-not-exist` end -> {} end;
+drop patch merge aa of { "foo": "bar" } end of update foo => "badger" end;
+drop merge patch {} of erase `does-not-exist` end of {} end;
 
 # drop { "aa": aa, "bb": bb };

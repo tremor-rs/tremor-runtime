@@ -219,6 +219,7 @@
             <li><a href="#Effectors" title="Effectors" shape="rect">Effectors</a></li>
             <li><a href="#Emit" title="Emit" shape="rect">Emit</a></li>
             <li><a href="#ExprCase" title="ExprCase" shape="rect">ExprCase</a></li>
+            <li><a href="#Field" title="Field" shape="rect">Field</a></li>
             <li><a href="#FnCall" title="FnCall" shape="rect">FnCall</a></li>
             <li><a href="#For" title="For" shape="rect">For</a></li>
             <li><a href="#ForCaseClause" title="ForCaseClause" shape="rect">ForCaseClause</a></li>
@@ -376,6 +377,30 @@
          <ul>
             <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
          </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Record" shape="rect">Record:</a></p><img border="0" src="diagram/Record.png" height="81" width="245" usemap="#Record.map"><map name="Record.map"><area shape="rect" coords="97,45,147,77" href="#Field" title="Field"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Record" title="Record" shape="rect">Record</a>&nbsp;&nbsp;&nbsp;::= '{' <a href="#Field" title="Field" shape="rect">Field</a> ( ',' <a href="#Field" title="Field" shape="rect">Field</a> )* '}'</div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Field" shape="rect">Field:</a></p><img border="0" src="diagram/Field.png" height="37" width="295" usemap="#Field.map"><map name="Field.map"><area shape="rect" coords="29,1,153,33" href="#STRING_LITERAL" title="STRING_LITERAL"><area shape="rect" coords="217,1,265,33" href="#Expr" title="Expr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Field" title="Field" shape="rect">Field</a>&nbsp;&nbsp;&nbsp;&nbsp;::= <a href="#STRING_LITERAL" title="STRING_LITERAL" shape="rect">STRING_LITERAL</a> ':' <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Record" title="Record" shape="rect">Record</a></li>
+         </ul>
          </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Array" shape="rect">Array:</a></p><img border="0" src="diagram/Array.png" height="97" width="279" usemap="#Array.map"><map name="Array.map"><area shape="rect" coords="115,45,163,77" href="#Expr" title="Expr"></map><p>
          
          <div class="ebnf"><code>
@@ -507,6 +532,19 @@
          
          <ul>
             <li><a href="#RecordPattern" title="RecordPattern" shape="rect">RecordPattern</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TestExpr" shape="rect">TestExpr:</a></p><img border="0" src="diagram/TestExpr.png" height="37" width="219" usemap="#TestExpr.map"><map name="TestExpr.map"><area shape="rect" coords="29,1,61,33" href="#Id" title="Id"><area shape="rect" coords="81,1,189,33" href="#TEST_LITERAL" title="TEST_LITERAL"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a>&nbsp;::= <a href="#Id" title="Id" shape="rect">Id</a> <a href="#TEST_LITERAL" title="TEST_LITERAL" shape="rect">TEST_LITERAL</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#ArrayPatternFilter" title="ArrayPatternFilter" shape="rect">ArrayPatternFilter</a></li>
+            <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
          </ul>
          </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="ArrayCase" shape="rect">ArrayCase:</a></p><img border="0" src="diagram/ArrayCase.png" height="69" width="301" usemap="#ArrayCase.map"><map name="ArrayCase.map"><area shape="rect" coords="49,33,81,65" href="#Id" title="Id"><area shape="rect" coords="171,1,271,33" href="#ArrayPattern" title="ArrayPattern"></map><p>
          
@@ -741,7 +779,12 @@
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '"' ( [^#x0022#x005C#x000A#x000D] | <a href="#STRING_ESCAPE" title="STRING_ESCAPE" shape="rect">STRING_ESCAPE</a> )* '"'</div></code></div>
          </p>
       
-      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="STRING_ESCAPE" shape="rect">STRING_ESCAPE:</a></p><img border="0" src="diagram/STRING_ESCAPE.png" height="345" width="175"><p>
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#Field" title="Field" shape="rect">Field</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="STRING_ESCAPE" shape="rect">STRING_ESCAPE:</a></p><img border="0" src="diagram/STRING_ESCAPE.png" height="345" width="175"><p>
          
          <div class="ebnf"><code>
                
@@ -764,7 +807,12 @@
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '|' ( [^#x0022#x005C#x000A#x000D] | <a href="#TEST_ESCAPE" title="TEST_ESCAPE" shape="rect">TEST_ESCAPE</a> )* '|'</div></code></div>
          </p>
       
-      <p>no references</p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_ESCAPE" shape="rect">TEST_ESCAPE:</a></p><img border="0" src="diagram/TEST_ESCAPE.png" height="81" width="175"><p>
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_ESCAPE" shape="rect">TEST_ESCAPE:</a></p><img border="0" src="diagram/TEST_ESCAPE.png" height="81" width="175"><p>
          
          <div class="ebnf"><code>
                
@@ -799,6 +847,7 @@
             <li><a href="#PathSegment" title="PathSegment" shape="rect">PathSegment</a></li>
             <li><a href="#RecordCase" title="RecordCase" shape="rect">RecordCase</a></li>
             <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
+            <li><a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a></li>
          </ul>
          </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="INTEGER" shape="rect">INTEGER:</a></p><img border="0" src="diagram/INTEGER.png" height="53" width="161"><p>
          

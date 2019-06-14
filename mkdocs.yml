@@ -29,7 +29,7 @@ nav:
       - Functions:
           - Overview: tremor-script/functions.md
           - array: tremor-script/functions/array.md
-          - object: tremor-script/functions/object.md
+          - record: tremor-script/functions/record.md
           - re: tremor-script/functions/re.md
           - string: tremor-script/functions/string.md
           - system: tremor-script/functions/system.md

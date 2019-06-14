@@ -11,11 +11,36 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use crate::errors::Error;
 use crate::lexer::{LexerError, Token, TokenFuns, TokenSpan};
 use crate::pos::*;
 use lalrpop_util::ParseError;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HighlighterError {
+    pub start: Location,
+    pub end: Location,
+    pub callout: String,
+    pub hint: Option<String>,
+}
+
+impl From<&Error> for HighlighterError {
+    fn from(error: &Error) -> Self {
+        let (start, end) = match error.context() {
+            (_, Some(inner)) => (inner.0, inner.1),
+            _ => (Location::default(), Location::default()),
+        };
+        Self {
+            start,
+            end,
+            callout: format!("{}", error),
+            hint: error.hint(),
+        }
+    }
+}
 
 pub trait Highlighter {
     type W: Write;
@@ -35,15 +60,7 @@ pub trait Highlighter {
         &mut self,
         tokens: Vec<Result<TokenSpan, LexerError>>,
     ) -> Result<(), std::io::Error> {
-        self.highlight_errors(tokens, None, None)
-    }
-
-    fn highlight_parser_error(
-        &mut self,
-        tokens: Vec<Result<TokenSpan, LexerError>>,
-        error: ParseError<Location, Token, LexerError>,
-    ) -> Result<(), std::io::Error> {
-        self.highlight_errors(tokens, None, None)
+        self.highlight_errors(tokens, None)
     }
 
     fn highlight_runtime_error(
@@ -51,17 +68,16 @@ pub trait Highlighter {
         tokens: Vec<Result<TokenSpan, LexerError>>,
         expr_start: Location,
         expr_end: Location,
-        error: Option<(Location, Location, String)>,
+        error: Option<HighlighterError>,
     ) -> Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
-        self.highlight_errors(extracted, None, error)
+        self.highlight_errors(extracted, error)
     }
 
     fn highlight_errors(
         &mut self,
         tokens: Vec<Result<TokenSpan, LexerError>>,
-        error: Option<ParseError<Location, Token, LexerError>>,
-        runtime_error: Option<(Location, Location, String)>,
+        error: Option<HighlighterError>,
     ) -> Result<(), std::io::Error> {
         let mut printed_error = false;
         let mut line = 0;
@@ -72,11 +88,18 @@ pub trait Highlighter {
                 let t = t.expect("expected a legal token");
                 if t.span.start().line.0 != line {
                     line = t.span.start().line.0;
-                    if let Some((start, end, callout)) = &runtime_error {
+                    if let Some(HighlighterError {
+                        start,
+                        end,
+                        callout,
+                        hint,
+                    }) = &error
+                    {
                         if start.line.0 == line - 1 {
                             printed_error = true;
-                            let len = (end.column.0 - start.column.0) as usize;
-                            let prefix = String::from(" ").repeat(start.column.0 as usize - 1);
+                            let len = std::cmp::max((end.column.0 - start.column.0) as usize, 1);
+                            let prefix = String::from(" ")
+                                .repeat(start.column.0.checked_sub(1).unwrap_or(0) as usize);
                             let underline = String::from("^").repeat(len);
                             self.set_color(ColorSpec::new().set_bold(true))?;
                             write!(self.get_writer(), "      | {}", prefix)?;
@@ -84,164 +107,106 @@ pub trait Highlighter {
                                 ColorSpec::new().set_bold(false).set_fg(Some(Color::Red)),
                             )?;
                             writeln!(self.get_writer(), "{} {}", underline, callout)?;
+                            self.reset()?;
+                            if let Some(hint) = hint {
+                                let prefix =
+                                    String::from(" ").repeat(start.column.0 as usize + len);
+                                self.set_color(ColorSpec::new().set_bold(true))?;
+                                write!(self.get_writer(), "      | {}", prefix)?;
+                                self.set_color(
+                                    ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)),
+                                )?;
+                                writeln!(self.get_writer(), "NOTE: {}", hint)?;
+                            }
                         }
+                        self.reset()?;
                     }
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     write!(self.get_writer(), "{:5} | ", line)?;
                     self.reset()?;
                 }
-                /*
-                if let Some((start, end, _callout)) = &runtime_error {
-                    if t.span.start().absolute >= start.absolute
-                        && t.span.end().absolute <= end.absolute
-                    {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Green))
-                                .set_fg(Some(Color::Blue)),
-                        )?;
-                        in_error = true;
-                    } else {
-                        in_error = false;
-                    }
-                }
-                */
-                match (t, error.clone()) {
-                    (ref tt, Some(ParseError::InvalidToken { location: loc }))
-                        if loc == tt.span.start() =>
-                    {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Blue))
-                                .set_fg(Some(Color::White)),
-                        )?;
-                        write!(self.get_writer(), "{}", tt.value.to_string())?;
-                    }
-                    (
-                        ref tt,
-                        Some(ParseError::UnrecognizedToken {
-                            token: Some((start, Token::BadToken(ref lexeme), _end)),
-                            ..
-                        }),
-                    ) if start == tt.span.start() => {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Red))
-                                .set_fg(Some(Color::White)),
-                        )?;
-                        write!(self.get_writer(), "{}", lexeme)?;
-                    }
-                    (
-                        ref tt,
-                        Some(ParseError::UnrecognizedToken {
-                            token: Some((start, ref legal_token, _end)),
-                            ..
-                        }),
-                    ) if start == tt.span.start() => {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Green))
-                                .set_fg(Some(Color::Black)),
-                        )?;
-                        write!(self.get_writer(), "{}", legal_token.to_string())?;
-                    }
-                    (ref t, Some(ParseError::ExtraToken { .. })) => {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Magenta))
-                                .set_fg(Some(Color::White)),
-                        )?;
-                        write!(self.get_writer(), "{}", t.value.to_string())?;
-                    }
-                    (
-                        ref t,
-                        Some(ParseError::User {
-                            error: ref _lexer_error,
-                        }),
-                    ) => {
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(true)
-                                .set_intense(true)
-                                .set_bg(Some(Color::Red))
-                                .set_fg(Some(Color::White)),
-                        )?;
-                        write!(self.get_writer(), "{}", t)?;
-                    }
-                    (ref t, _) => {
-                        let x = t;
-                        let mut c = ColorSpec::new();
-                        if x.value.is_keyword() {
-                            c.set_bold(true)
-                                .set_intense(true)
-                                .set_fg(Some(Color::Green));
-                        }
-                        if x.value.is_operator() || x.value.is_symbol() {
-                            c.set_bold(true)
-                                .set_intense(true)
-                                .set_fg(Some(Color::White));
-                        }
-                        if x.value.is_literal() && !x.value.is_string_like() {
-                            c.set_intense(true).set_fg(Some(Color::Red));
-                        }
-                        match &x.value {
-                            Token::SingleLineComment(_) => {
-                                c.set_intense(true).set_fg(Some(Color::Blue));
-                            }
-                            Token::DocComment(_) => {
-                                c.set_intense(true).set_fg(Some(Color::Cyan));
-                            }
-                            Token::TestLiteral(_) => {
-                                c.set_intense(true).set_fg(Some(Color::Magenta));
-                            }
 
-                            Token::StringLiteral(_) => {
-                                c.set_intense(true).set_fg(Some(Color::Magenta));
-                            }
-                            Token::BadToken(_) => {
-                                c.set_bold(true)
-                                    .set_intense(true)
-                                    .set_bg(Some(Color::Red))
-                                    .set_fg(Some(Color::White));
-                            }
-                            Token::Ident(_, _) => {
-                                c.set_intense(true).set_fg(Some(Color::Yellow));
-                            }
-                            _other => (), // Just an empty spec
-                        }
-                        self.set_color(&mut c)?;
-
-                        write!(self.get_writer(), "{}", x.value)?;
-                        self.reset()?;
-                    }
+                let x = t;
+                let mut c = ColorSpec::new();
+                if x.value.is_keyword() {
+                    c.set_bold(true)
+                        .set_intense(true)
+                        .set_fg(Some(Color::Green));
                 }
+                if x.value.is_operator() || x.value.is_symbol() {
+                    c.set_bold(true)
+                        .set_intense(true)
+                        .set_fg(Some(Color::White));
+                }
+                if x.value.is_literal() && !x.value.is_string_like() {
+                    c.set_intense(true).set_fg(Some(Color::Red));
+                }
+                match &x.value {
+                    Token::SingleLineComment(_) => {
+                        c.set_intense(true).set_fg(Some(Color::Blue));
+                    }
+                    Token::DocComment(_) => {
+                        c.set_intense(true).set_fg(Some(Color::Cyan));
+                    }
+                    Token::TestLiteral(_) => {
+                        c.set_intense(true).set_fg(Some(Color::Magenta));
+                    }
+
+                    Token::StringLiteral(_) => {
+                        c.set_intense(true).set_fg(Some(Color::Magenta));
+                    }
+                    Token::BadToken(_) => {
+                        c.set_bold(true)
+                            .set_intense(true)
+                            .set_bg(Some(Color::Red))
+                            .set_fg(Some(Color::White));
+                    }
+                    Token::Ident(_, _) => {
+                        c.set_intense(true).set_fg(Some(Color::Yellow));
+                    }
+                    _other => (), // Just an empty spec
+                }
+                self.set_color(&mut c)?;
+
+                write!(self.get_writer(), "{}", x.value)?;
+                self.reset()?;
             };
         }
-        if let Some((start, end, callout)) = &runtime_error {
-            if !printed_error && start.line.0 == line {
-                //write!(self.get_writer(), "\n")?;
+        if let Some(HighlighterError {
+            start,
+            end,
+            callout,
+            hint,
+        }) = &error
+        {
+            if !printed_error || start.line.0 == line {
+                while start.line.0 > line {
+                    line += 1;
+                    self.set_color(ColorSpec::new().set_bold(true))?;
+                    writeln!(self.get_writer(), "{:5} | ", line)?;
+                    self.reset()?;
+                }
                 printed_error = true;
-                let len = (end.column.0 - start.column.0) as usize;
+                let len = std::cmp::max((end.column.0 - start.column.0) as usize, 1);
                 let prefix = String::from(" ").repeat(start.column.0 as usize - 1);
                 let underline = String::from("^").repeat(len);
                 self.set_color(ColorSpec::new().set_bold(true))?;
                 write!(self.get_writer(), "      | {}", prefix)?;
                 self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Red)))?;
                 writeln!(self.get_writer(), "{} {}", underline, callout)?;
+                self.reset()?;
+                if let Some(hint) = hint {
+                    let prefix = String::from(" ").repeat(start.column.0 as usize + len);
+                    self.set_color(ColorSpec::new().set_bold(true))?;
+                    write!(self.get_writer(), "      | {}", prefix)?;
+                    self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
+                    writeln!(self.get_writer(), "NOTE: {}", hint)?;
+                }
+                self.reset()?;
             }
         }
 
-        writeln!(&mut self.get_writer(), "\n----")?;
+        self.reset()?;
         self.finalize()
     }
 }

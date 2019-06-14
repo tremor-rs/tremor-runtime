@@ -219,7 +219,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
     };
 
     let context = Context { ingest_ns: 666 };
-    let s = tremor_script::Script::parse(&script, tremor_pipeline::FN_REGISTRY.lock()?.clone())?;
+    let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
     for (num, line) in input.lines().enumerate() {
         let l = line?;
         if l.is_empty() || l.starts_with('#') {

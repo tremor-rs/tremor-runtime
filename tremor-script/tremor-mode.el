@@ -5,7 +5,7 @@
 
 ;; Font-locking definitions and helpers
 (defconst tremor-mode-keywords
-  '("match" "end" "let" "when" "case" "of" "patch" "emit" "drop" "-\\>" "once" "erase" "default" "with" "or" "and" "not" "merge" "for" "null"))
+  '("match" "end" "let" "when" "case" "of" "patch" "emit" "drop" "once" "default"  "or" "and" "not" "merge" "for" "null"))
 
 (defconst tremor-special-types
   '("false" "null" "true"))
@@ -18,7 +18,7 @@
 
 
 (defconst tremor-re-ident "[[:word:][:multibyte:]_][[:word:][:multibyte:]_[:digit:]]*")
-(defconst tremor-re-lc-ident "[[:lower:][:multibyte:]_][[:word:][:multibyte:]_[:digit:]]*")
+(defconst tremor-re-lc-ident "$?[[:lower:][:multibyte:]_][[:word:][:multibyte:]_[:digit:]]*")
 
 (defun tremor-re-word (inner) (concat "\\<" inner "\\>"))
 (defun tremor-re-grab (inner) (concat "\\(" inner "\\)"))
@@ -48,7 +48,7 @@
 
 
 (defun tremor-path-font-lock-matcher (re-ident)
-  "Match occurrences of RE-IDENT followed by a double-colon.
+  "Match occurrences of RE-IDENT followed by a double-colo-n.
 Examples include to match names like \"foo::\" or \"Foo::\".
 Does not match type annotations of the form \"foo::<\"."
   `(lambda (limit)
@@ -196,36 +196,63 @@ should be considered a paired angle bracket."
 ;;     '((assoc "+") (assoc "-") (assoc "*") (assoc "/")))))
 
 
+;; (defvar tremor-smie-grammar
+;;   (smie-prec2->grammar
+;;    (smie-bnf->prec2
+;;     '((id)
+;;       (stmt
+;;        ("let" id ":=" expr)
+;;        ("erase" id)
+;;        ("extend" expr "match" expr "->" cases "end")
+;;        (expr))
+;;       (stmts (stmt ";" stmt))
+;;       (expr
+;;        ("match" expr "->" cases "end")
+;;        ("[" items "]")
+;;        ("{" oitems "}")
+;;        (id))
+;;       (aitems (aitems "," aitems), expr)
+;;       (oitems (oitems "," oitems), (expr ":" expr))
+;;       ;;("case" caselabel "when" exp "=>" stmts)
+;;       (cases (cases ";" cases)
+;;              ("case" caselabel "=>" stmts)))
+;;     '((assoc "extend" "match"))
+;;     '((assoc  "=>"))
+;;     '((assoc ";"))
+;;     '((assoc ","))
+;;     '((assoc ":"))
+;;     ;;'((assoc ":"))
+;;     ;;'((assoc "_" "->"))
+;;     '((assoc "+") (assoc "-") (assoc "*") (assoc "/")))))
+
+
+
 (defvar tremor-smie-grammar
   (smie-prec2->grammar
    (smie-bnf->prec2
     '((id)
       (stmt
-       ("let" id ":=" expr)
-       ("erase" id)
-       ("extend" expr "match" expr "->" cases "end")
+       ("let" id "=" expr)
        (expr))
       (stmts (stmt ";" stmt))
+      (case-stmts (stmt "," stmt))
       (expr
-       ("match" expr "->" cases "end")
+       ("match" expr "of" cases "default" "=>" case-stmts "end")
+       ("patch" expr "of" patches "end")
+       ("for" expr "of" cases "end")
+       ("merge" expr "of" expr "end")
        ("[" items "]")
        ("{" oitems "}")
        (id))
       (aitems (aitems "," aitems), expr)
       (oitems (oitems "," oitems), (expr ":" expr))
-      ;;("case" caselabel "when" exp "=>" stmts)
-      (cases (cases ";" cases)
-             ("case" caselabel "=>" stmts)))
-    '((assoc "extend" "match"))
-    '((assoc  "=>"))
+      (cases (cases " " cases)
+             ("case" caselabel "=>" case-stmts)))
+    '((assoc "=>"))
     '((assoc ";"))
     '((assoc ","))
     '((assoc ":"))
-    ;;'((assoc ":"))
-    ;;'((assoc "_" "->"))
     '((assoc "+") (assoc "-") (assoc "*") (assoc "/")))))
-
-
 (defun tremor-smie-rules (kind token)
   (pcase (cons kind token)
     (`(:elem . basic) tremor-indent-basic)

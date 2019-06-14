@@ -15,6 +15,8 @@
 // Copyright of original code is with original authors. Source cited below:
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
+use crate::ast::{BaseExpr, Expr};
+use crate::registry::Context;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::fmt;
@@ -30,6 +32,36 @@ pub struct Location {
     pub line: Line,
     pub column: Column,
     pub absolute: BytePos,
+}
+
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+pub struct Range(pub Location, pub Location);
+
+impl Range {
+    fn expand_lines(&self, lines: u32) -> Self {
+        let mut new = *self;
+        new.0 = new.0.move_up_lines(lines);
+        new.1 = new.1.move_down_lines(lines);
+        new
+    }
+}
+
+impl<Ctx: Context> From<&Expr<Ctx>> for Range {
+    fn from(expr: &Expr<Ctx>) -> Range {
+        expr.extent()
+    }
+}
+
+impl<Ctx: Context> From<Expr<Ctx>> for Range {
+    fn from(expr: Expr<Ctx>) -> Range {
+        expr.extent()
+    }
+}
+
+impl From<(Location, Location)> for Range {
+    fn from(locs: (Location, Location)) -> Range {
+        Range(locs.0, locs.1)
+    }
 }
 
 impl Serialize for Location {
@@ -159,6 +191,18 @@ impl Location {
             column: Column(column),
             absolute: BytePos(absolute),
         }
+    }
+
+    pub fn move_down_lines(&self, lines: u32) -> Location {
+        let mut new = *self;
+        new.line.0 += lines;
+        new
+    }
+
+    pub fn move_up_lines(&self, lines: u32) -> Location {
+        let mut new = *self;
+        new.line.0 = self.line.0.checked_sub(lines).unwrap_or(0);
+        new
     }
 
     pub fn shift(&mut self, ch: u8) {

@@ -1,4 +1,4 @@
-let $foo.bar.baz := { "snot": "badger" };
+let $foo.bar.baz = { "snot": "badger" };
 # ...
 # let .`event` = 0;
 let $`event`.`event` = "bar";
@@ -6,9 +6,9 @@ let _event.`event` = 0;
 let EVENT.`event` = 0;
 let event.`event` = 0;
 
-# let evem1.foo.bar.baz := $foo.bar.baz;
-let evont.foo.bar.baz := $foo.bar.baz;
-let ewont.foo.bar.baz := $foo.bar.baz;
-let foo.bar.baz := event.`foo`.bar.`baz`;
+# let evem1.foo.bar.baz = $foo.bar.baz;
+let evont.foo.bar.baz = $foo.bar.baz;
+let ewont.foo.bar.baz = $foo.bar.baz;
+let foo.bar.baz = event.`foo`.bar.`baz`;
 
 drop { "foo": $foo.bar.baz, "bar": event.foo.bar.baz, "baz": foo.bar.baz };

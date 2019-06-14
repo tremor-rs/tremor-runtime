@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use simd_json::OwnedValue;
@@ -23,28 +22,54 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             match _input {
                 BorrowedValue::I64(v) => Ok(OwnedValue::I64(*v)),
                 BorrowedValue::F64(v) => Ok(OwnedValue::I64(v.floor() as i64)),
-                _ => Err(ErrorKind::BadType("math".to_string(), "floor".to_string(), 1).into()),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
         .insert(tremor_fn! (math::ceil(_context, _input) {
             match _input {
                 BorrowedValue::I64(v) => Ok(OwnedValue::I64(*v)),
                 BorrowedValue::F64(v) => Ok(OwnedValue::I64(v.ceil() as i64)),
-                _ => Err(ErrorKind::BadType("math".to_string(), "ceil".to_string(), 1).into()),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
         .insert(tremor_fn! (math::round(_context, _input) {
             match _input {
                 BorrowedValue::I64(v) => Ok(OwnedValue::I64(*v)),
                 BorrowedValue::F64(v) => Ok(OwnedValue::I64(v.round() as i64)),
-                _ => Err(ErrorKind::BadType("math".to_string(), "round".to_string(), 1).into()),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
         .insert(tremor_fn! (math::trunc(_context, _input) {
             match _input {
                 BorrowedValue::I64(v) => Ok(OwnedValue::I64(*v)),
                 BorrowedValue::F64(v) => Ok(OwnedValue::I64(v.trunc() as i64)),
-                _ => Err(ErrorKind::BadType("math".to_string(), "trunc".to_string(), 1).into()),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+            }
+        }))
+        .insert(tremor_fn! (math::max(_context, a, b) {
+            match (a, b) {
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(_a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a > b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(_a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a > *b as f64 => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(_a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) > *b => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(_a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+            }
+        }))
+        .insert(tremor_fn!(math::min(_context, a, b) {
+            match (a, b) {
+                (BorrowedValue::F64(a), BorrowedValue::F64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(_a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::I64(b)) if a < b  => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(_a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::F64(a), BorrowedValue::I64(b)) if *a < *b as f64 => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::F64(_a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                (BorrowedValue::I64(a), BorrowedValue::F64(b)) if (*a as f64) < *b => Ok(OwnedValue::from(a.to_owned())),
+                (BorrowedValue::I64(_a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(b.to_owned())),
+                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }));
 }

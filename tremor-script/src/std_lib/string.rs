@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
-use crate::registry::{Context, Registry, TremorFnWrapper};
+use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper, MFA};
 use crate::tremor_fn;
 use simd_json::{BorrowedValue, OwnedValue};
 
@@ -33,16 +32,18 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     fn format<Ctx: Context + 'static>(
         _context: &Ctx,
         args: &[&BorrowedValue],
-    ) -> Result<OwnedValue> {
+    ) -> FResult<OwnedValue> {
+        fn this_mfa() -> MFA {
+            mfa(stringify!($module), stringify!($name), 1)
+        }
+
         match args.len() {
-            0 => Err(ErrorKind::RuntimeError(
-                "string".to_string(),
-                "format".to_string(),
-                args.len(),
-                "format requires at least 1 parameter, 0 are supplied".into(),
-            )
-            .into()),
+            0 => Err(FunctionError::BadArity {
+                mfa: this_mfa(), calling_a: args.len()
+            }),
             _ => {
+
+
                 match &args[0] {
                     BorrowedValue::String(format) => {
                         let mut arg_stack = if args.is_empty() {
@@ -60,7 +61,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                             Some((_, '}')) => {
                                 let arg = match arg_stack.pop() {
                                     Some(a) => a,
-                                    None => return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)).into()),
+                                    None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)}),
                                 };
 
                                 if let BorrowedValue::String(s) = arg {
@@ -73,13 +74,13 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                                 out.push('{');
                             }
                             _ => {
-                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format". to_owned(), args.len(), format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)).into())
+                                return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
                             }
                         },
                         (pos, '}') => match iter.next() {
                             Some((_pos, '}')) => out.push('}'),
                             _ => {
-                                return Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)).into());
+                                return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
                             }
                         },
                         (_, c) => out.push(c),
@@ -89,11 +90,11 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                         if arg_stack.is_empty() {
                             Ok(OwnedValue::from(out))
                         } else {
-                            Err(ErrorKind::RuntimeError("string".to_owned(), "format".to_owned(), args.len(), "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()).into())
+                            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()})
                         }
                     }
                     _ => {
-                        Err(ErrorKind::RuntimeError("string".to_owned(), "fprmat".to_owned(), args.len(), "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()).into())
+                        Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()})
 
                     }
                 }
@@ -135,6 +136,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             module: "string".to_owned(),
             name: "format".to_string(),
             fun: format,
+            argc: 2,
         });
 }
 

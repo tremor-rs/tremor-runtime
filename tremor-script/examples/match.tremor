@@ -3,11 +3,11 @@
 ## and interrogated based on structural or predicate/expression based pattern
 ## matching
 
-let $snot := "badger";
-match (let r := { "event": event, "meta": $snot }) ->
-  case rp := %{ meta ~= re|bad(?P<snot>.*)|, `event` != null } => rp
-  case ap := %[ "cookie", "armadillo" ] => "snot badger"
-  case `$snot$sum` := (1 + 2) == 3 when true => 3
+let $snot = "badger";
+match (let r = { "event": event, "meta": $snot }) of
+  case rp = %{ meta ~= re|bad(?P<snot>.*)|, `event` != null } => rp
+  case ap = %[ "cookie", "armadillo" ] => "snot badger"
+  case `$snot$sum` = (1 + 2) == 3 when true => 3
   default => string::format("With target: {}", r)
 end;
 

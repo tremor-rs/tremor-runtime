@@ -23,15 +23,16 @@
 //  '{}' -> json|| => Ok({})
 //  Predicate for json||: "is valid json"
 //  '{blarg' -> json|| =>
-use crate::errors::*;
 use base64;
 use halfbrown::HashMap;
 
+use dissect::Pattern;
 use glob;
 use kv;
 use regex::Regex;
 use simd_json::borrowed::Value;
 use simd_json::OwnedValue;
+use std::fmt;
 use std::iter::Iterator;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -64,14 +65,49 @@ pub enum Extractor {
         rule: String,
         #[serde(skip)]
         compiled: Option<Cidr>,
-    }, //FIXME: Cidr,
-       //FIXME: Dissect,
-       //FIXME: Grok,
-       //FIXME: Influx
+    },
+    Dissect {
+        rule: String,
+        #[serde(skip)]
+        compiled: Option<dissect::Pattern>,
+    },
+    //FIXME: Cidr,
+    //FIXME: Grok,
+    //FIXME: Influx
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ExtractorError {
+    pub msg: String,
+}
+
+impl fmt::Display for ExtractorError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+/// This is a stupid hack because we can't depend on display for E
+/// since rust is being an idiot
+pub trait Snot: fmt::Display {}
+impl Snot for glob::PatternError {}
+impl Snot for regex::Error {}
+impl Snot for String {}
+impl Snot for &str {}
+impl Snot for base64::DecodeError {}
+impl Snot for simd_json::Error {}
+impl Snot for dissect::DissectError {}
+
+impl<E: Snot> From<E> for ExtractorError {
+    fn from(e: E) -> Self {
+        ExtractorError {
+            msg: format!("{}", e),
+        }
+    }
 }
 
 impl Extractor {
-    pub fn new(id: String, rule_text: &str) -> Result<Extractor> {
+    pub fn new(id: &str, rule_text: &str) -> Result<Extractor, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
             //FIXME: "cidr" => Some(Extractor::Cidr),
@@ -86,7 +122,10 @@ impl Extractor {
             "base64" => Extractor::Base64,
             "kv" => Extractor::Kv, //FIXME: How to handle different seperators?
             "json" => Extractor::Json,
-            // FIXME: "dissect" => Extractor::Dissect,
+            "dissect" => Extractor::Dissect {
+                rule: rule_text.to_string(),
+                compiled: Pattern::try_from(rule_text).ok(),
+            },
             // FIXME: "grok" => Extractor::Grok,
             // FIXME: "json" => Extractor::Json,
             // FIXME: "influx" => Extractor::Influx,
@@ -97,7 +136,7 @@ impl Extractor {
     pub fn extract<'event, 'run, 'script>(
         &'script self,
         v: &'run Value<'event>,
-    ) -> Result<Value<'event>>
+    ) -> Result<Value<'event>, ExtractorError>
     where
         'script: 'event,
         'event: 'run,
@@ -160,12 +199,41 @@ impl Extractor {
                     Ok(decoded.into())
                 }
                 Extractor::Cidr { .. } => unimplemented!(),
+                Extractor::Dissect {
+                    compiled: Some(ref pattern),
+                    ..
+                } => Ok(Value::Object(pattern.extract(s)?.0)),
+                Extractor::Dissect { .. } => Err("invalid dissect operation".into()),
             },
             _ => Err("Extractors are currently only supported against Strings".into()),
         }
     }
 }
 
+impl PartialEq<Extractor> for Extractor {
+    fn eq(&self, other: &Extractor) -> bool {
+        match (&self, other) {
+            (Extractor::Base64, Extractor::Base64) => true,
+            (Extractor::Kv, Extractor::Kv) => true,
+            (Extractor::Json, Extractor::Json) => true,
+            (Extractor::Re { rule: rule_l, .. }, Extractor::Re { rule: rule_r, .. }) => {
+                rule_l == rule_r
+            }
+            (Extractor::Glob { rule: rule_l, .. }, Extractor::Glob { rule: rule_r, .. }) => {
+                rule_l == rule_r
+            }
+            (Extractor::Dissect { rule: rule_l, .. }, Extractor::Dissect { rule: rule_r, .. }) => {
+                rule_l == rule_r
+            }
+            //FIXME: (Extractor::Cidr, Extractor::Cidr) => true,
+            //FIXME: (Extractor::Grok, Extractor::Grok) => true,
+            //FIXME: (Extractor::Json, Extractor::Json) => true,
+            //FIXME: (Extractor::Kv, Extractor::Kv) => true,
+            //FIXME: (Extractor::Influx, Extractor::Influx) => true,
+            _ => false,
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,7 +241,7 @@ mod tests {
     use simd_json::borrowed::Value;
     #[test]
     fn test_re_extractor() {
-        let ex = Extractor::new("re".to_string(), "(snot)?foo(?P<snot>.*)").expect("bad extractor");
+        let ex = Extractor::new("re", "(snot)?foo(?P<snot>.*)").expect("bad extractor");
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
@@ -188,7 +256,7 @@ mod tests {
     }
     #[test]
     fn test_kv_extractor() {
-        let ex = Extractor::new("kv".to_string(), "").expect("bad extractor");
+        let ex = Extractor::new("kv", "").expect("bad extractor");
         match ex {
             Extractor::Kv { .. } => {
                 assert_eq!(
@@ -205,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_json_extractor() {
-        let ex = Extractor::new("json".to_string(), "").expect("bad extractor");
+        let ex = Extractor::new("json", "").expect("bad extractor");
         match ex {
             Extractor::Json => {
                 assert_eq!(
@@ -222,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_glob_extractor() {
-        let ex = Extractor::new("glob".to_string(), "*INFO*").expect("bad extractor");
+        let ex = Extractor::new("glob", "*INFO*").expect("bad extractor");
         match ex {
             Extractor::Glob { .. } => {
                 assert_eq!(
@@ -236,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_base64_extractor() {
-        let ex = Extractor::new("base64".to_string(), "").expect("bad extractor");
+        let ex = Extractor::new("base64", "").expect("bad extractor");
         match ex {
             Extractor::Base64 => {
                 assert_eq!(
@@ -247,27 +315,20 @@ mod tests {
             _ => unreachable!(),
         };
     }
-}
 
-impl PartialEq<Extractor> for Extractor {
-    fn eq(&self, other: &Extractor) -> bool {
-        match (&self, other) {
-            (Extractor::Base64, Extractor::Base64) => true,
-            (Extractor::Kv, Extractor::Kv) => true,
-            (Extractor::Json, Extractor::Json) => true,
-            (Extractor::Re { rule: rule_l, .. }, Extractor::Re { rule: rule_r, .. }) => {
-                rule_l == rule_r
+    #[test]
+    fn test_dissect_extractor() {
+        let ex = Extractor::new("dissect", "%{name}").expect("bad extractor");
+        match ex {
+            Extractor::Dissect { .. } => {
+                assert_eq!(
+                    ex.extract(&Value::String("John".to_string().into())),
+                    Ok(Value::Object(hashmap! {
+                        "name".into() => "John".into()
+                    }))
+                );
             }
-            (Extractor::Glob { rule: rule_l, .. }, Extractor::Glob { rule: rule_r, .. }) => {
-                rule_l == rule_r
-            }
-            //FIXME: (Extractor::Dissect, Extractor::Dissect) => true,
-            //FIXME: (Extractor::Cidr, Extractor::Cidr) => true,
-            //FIXME: (Extractor::Grok, Extractor::Grok) => true,
-            //FIXME: (Extractor::Json, Extractor::Json) => true,
-            //FIXME: (Extractor::Kv, Extractor::Kv) => true,
-            //FIXME: (Extractor::Influx, Extractor::Influx) => true,
-            _ => false,
+            _ => unreachable!(),
         }
     }
 }
