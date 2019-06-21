@@ -15,8 +15,10 @@
 
 mod ast;
 mod errors;
+mod grok;
 #[allow(unused, dead_code)]
 mod highlighter;
+mod influx;
 mod interpreter;
 mod lexer;
 #[allow(unused, dead_code)]
@@ -31,7 +33,7 @@ mod str_suffix;
 mod tilde;
 
 use crate::highlighter::{Highlighter, TermHighlighter};
-use crate::interpreter::ValueStack;
+use crate::interpreter::Return;
 use clap::{App, Arg};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
@@ -59,6 +61,18 @@ fn main() {
                 .index(1),
         )
         .arg(
+            Arg::with_name("event")
+                .short("e")
+                .takes_value(true)
+                .help("The event to load."),
+        )
+        .arg(
+            Arg::with_name("string")
+                .long("string")
+                .takes_value(true)
+                .help("A string to load."),
+        )
+        .arg(
             Arg::with_name("highlight-source")
                 .short("s")
                 .takes_value(false)
@@ -75,6 +89,12 @@ fn main() {
                 .short("r")
                 .takes_value(false)
                 .help("Prints the ast with no highlighting."),
+        )
+        .arg(
+            Arg::with_name("print-result-raw")
+                .short("x")
+                .takes_value(false)
+                .help("Prints the result with no highlighting."),
         )
         .arg(
             Arg::with_name("quiet")
@@ -97,6 +117,11 @@ fn main() {
 
     match interpreter::Script::parse(&raw, &reg) {
         Ok(runnable) => {
+            let mut h = TermHighlighter::new();
+            runnable
+                .format_warnings_with(&mut h)
+                .expect("failed to format error");
+
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
@@ -125,17 +150,56 @@ fn main() {
                 std::process::exit(0);
             }
 
+            let mut bytes = Vec::new();
+            let mut event = if let Some(event_file) = matches.value_of("event") {
+                let input = File::open(&event_file);
+                input.expect("bad input").read_to_end(&mut bytes).expect("");
+                simd_json::to_borrowed_value(&mut bytes).expect("Invalid event data")
+            } else if let Some(string_file) = matches.value_of("string") {
+                let input = File::open(&string_file);
+                let mut raw = String::new();
+                input
+                    .expect("bad input")
+                    .read_to_string(&mut raw)
+                    .expect("");
+                let raw = raw.trim_end().to_string();
+
+                simd_json::borrowed::Value::String(raw.into())
+            } else {
+                simd_json::borrowed::Value::Object(hashmap! {})
+            };
+
             let mut global_map = Value::Object(interpreter::LocalMap::new());
-            let mut event =
-                simd_json::borrowed::Value::Object(hashmap! { "snot".into() => "bar".into() });
             let ctx = FakeContext {};
             let _expr = Value::Null;
-            let stack: ValueStack = ValueStack::default();
-            let expr = runnable.run(&ctx, &mut event, &mut global_map, &stack);
+            let expr = runnable.run(&ctx, &mut event, &mut global_map);
             match expr {
+                Ok(Return::EmitEvent { port }) => {
+                    println!("Interpreter ran ok");
+                    if matches.is_present("quiet") {
+                    } else if matches.is_present("print-result-raw") {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&Return::Emit { value: event, port })
+                                .expect("")
+                        );
+                    } else {
+                        let result = format!(
+                            "{} ",
+                            serde_json::to_string_pretty(&Return::Emit { value: event, port })
+                                .expect("")
+                        );
+                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                        let mut h = TermHighlighter::new();
+                        h.highlight(lexed_tokens).expect("Failed to highliht error");
+                    }
+                }
                 Ok(result) => {
                     println!("Interpreter ran ok");
-                    if !matches.is_present("quiet") {
+                    if matches.is_present("quiet") {
+                    } else if matches.is_present("print-result-raw") {
+                        println!("{}", serde_json::to_string_pretty(&result).expect(""));
+                    } else {
                         let result =
                             format!("{} ", serde_json::to_string_pretty(&result).expect(""));
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
@@ -154,8 +218,9 @@ fn main() {
         }
         Err(e) => {
             let mut h = TermHighlighter::new();
-            interpreter::Script::<()>::format_error_from_script(&raw, &mut h, &e)
-                .expect("Highlighter failed");
+            if let Err(e) = interpreter::Script::<()>::format_error_from_script(&raw, &mut h, &e) {
+                dbg!(e);
+            };
             std::process::exit(1);
         }
     };

@@ -29,11 +29,62 @@ pub struct Script1 {
     pub exprs: Exprs1,
 }
 
-impl Script1 {
-    pub fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Script<Ctx>> {
-        let exprs: Result<Exprs<Ctx>> = self.exprs.into_iter().map(|p| p.up(reg)).collect();
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Warning {
+    pub outer: Range,
+    pub inner: Range,
+    pub msg: String,
+}
 
-        Ok(Script { exprs: exprs? })
+pub struct Helper<'h, Ctx>
+where
+    Ctx: Context + 'static,
+{
+    reg: &'h Registry<Ctx>,
+    warnings: Vec<Warning>,
+}
+
+impl<'h, Ctx> Helper<'h, Ctx>
+where
+    Ctx: Context + 'static,
+{
+    pub fn new(reg: &'h Registry<Ctx>) -> Self {
+        Helper {
+            reg,
+            warnings: Vec::new(),
+        }
+    }
+    pub fn into_warnings(self) -> Vec<Warning> {
+        self.warnings
+    }
+}
+impl Script1 {
+    pub fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Script<Ctx>> {
+        use std::borrow::Borrow;
+        let exprs: Result<Exprs<Ctx>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
+        let mut exprs = exprs?;
+        // We make sure the if we return `event` we turn it into `emit event`
+        // While this is not required logically it allows us to
+        // take advantage of the `emit event` optiisation
+        if let Some(e) = exprs.pop() {
+            match e.borrow() {
+                Expr::Emit(_) => exprs.push(e),
+                Expr::Path(Path::Event(EventPath { segments, .. })) if segments.is_empty() => {
+                    let expr = EmitExpr {
+                        start: e.s(),
+                        end: e.e(),
+                        expr: e,
+                        port: None,
+                    };
+                    exprs.push(Expr::Emit(Box::new(expr)))
+                }
+                _ => exprs.push(e),
+            }
+        } else {
+            return Err(ErrorKind::EmptyScript.into());
+        }
+
+        Ok(Script { exprs })
     }
 }
 
@@ -99,12 +150,12 @@ pub struct Field1 {
 }
 
 impl Field1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Field<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Field<Ctx>> {
         Ok(Field {
             start: self.start,
             end: self.end,
             name: self.name,
-            value: self.value.up(reg)?,
+            value: self.value.up(helper)?,
         })
     }
 }
@@ -127,8 +178,8 @@ pub struct Record1 {
 impl_expr1!(Record1);
 
 impl Record1 {
-    pub fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Record<Ctx>> {
-        let fields: Result<Fields<Ctx>> = self.fields.into_iter().map(|p| p.up(reg)).collect();
+    pub fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Record<Ctx>> {
+        let fields: Result<Fields<Ctx>> = self.fields.into_iter().map(|p| p.up(helper)).collect();
         Ok(Record {
             start: self.start,
             end: self.end,
@@ -153,11 +204,11 @@ pub struct Literal1 {
 }
 
 impl Literal1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Literal<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Literal<Ctx>> {
         Ok(Literal {
             start: self.start,
             end: self.end,
-            value: self.value.up(reg)?,
+            value: self.value.up(helper)?,
         })
     }
 }
@@ -178,12 +229,12 @@ pub enum LiteralValue1 {
 }
 
 impl LiteralValue1 {
-    pub fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<LiteralValue<Ctx>> {
+    pub fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<LiteralValue<Ctx>> {
         use LiteralValue1::*;
         Ok(match self {
             Native(v) => LiteralValue::Native(v),
             List(exprs) => {
-                let exprs: Result<Exprs<Ctx>> = exprs.into_iter().map(|p| p.up(reg)).collect();
+                let exprs: Result<Exprs<Ctx>> = exprs.into_iter().map(|p| p.up(helper)).collect();
                 let exprs = exprs?;
                 if exprs.iter().all(is_lit) {
                     let elements: Result<Vec<OwnedValue>> = exprs
@@ -196,7 +247,7 @@ impl LiteralValue1 {
                             let stack: ValueStack = ValueStack::default();
                             expr.run(&c, &mut event, &mut meta, &mut local, &stack)
                                 .and_then(|v| v.into_value(&expr, &expr))
-                                .map(OwnedValue::from)
+                                .map(|v| OwnedValue::from(v.clone()))
                         })
                         .collect();
                     LiteralValue::Native(OwnedValue::Array(elements?))
@@ -227,16 +278,16 @@ pub enum Expr1 {
     //Let(Let<Ctx>),
     Assign(Assign1),
     Comprehension(Comprehension1),
-    Drop(DropExpr1),
+    Drop { start: Location, end: Location },
     Emit(EmitExpr1),
     Test(TestExpr),
 }
 
 impl Expr1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Expr<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Expr<Ctx>> {
         Ok(match self {
             Expr1::RecordExpr(r) => {
-                let r1 = r.up(reg)?;
+                let r1 = r.up(helper)?;
                 if r1.fields.iter().all(|e| is_lit(&e.value)) {
                     let obj: Result<OwnedMap> = r1
                         .fields
@@ -250,7 +301,7 @@ impl Expr1 {
                             f.value
                                 .run(&c, &mut event, &mut meta, &mut local, &stack)
                                 .and_then(|v| v.into_value(&Expr::dummy_from(&r1), &f.value))
-                                .map(|v| (f.name.clone(), OwnedValue::from(v)))
+                                .map(|v| (f.name.clone(), OwnedValue::from(v.clone())))
                         })
                         .collect();
                     Expr::Literal(Literal {
@@ -262,12 +313,12 @@ impl Expr1 {
                     Expr::RecordExpr(r1)
                 }
             }
-            Expr1::MatchExpr(m) => Expr::MatchExpr(Box::new(m.up(reg)?)),
-            Expr1::PatchExpr(p) => Expr::PatchExpr(Box::new(p.up(reg)?)),
-            Expr1::MergeExpr(m) => Expr::MergeExpr(Box::new(m.up(reg)?)),
-            Expr1::Path(p) => Expr::Path(p.up(reg)?),
-            Expr1::Literal(l) => Expr::Literal(l.up(reg)?),
-            Expr1::Binary(b) => match b.up(reg)? {
+            Expr1::MatchExpr(m) => Expr::MatchExpr(Box::new(m.up(helper)?)),
+            Expr1::PatchExpr(p) => Expr::PatchExpr(Box::new(p.up(helper)?)),
+            Expr1::MergeExpr(m) => Expr::MergeExpr(Box::new(m.up(helper)?)),
+            Expr1::Path(p) => Expr::Path(p.up(helper)?),
+            Expr1::Literal(l) => Expr::Literal(l.up(helper)?),
+            Expr1::Binary(b) => match b.up(helper)? {
                 b1 @ BinExpr {
                     lhs: Expr::Literal(_),
                     rhs: Expr::Literal(_),
@@ -287,13 +338,26 @@ impl Expr1 {
                     let lit = Literal {
                         start,
                         end,
-                        value: LiteralValue::Native(value.into()),
+                        value: LiteralValue::Native(value.clone().into()),
                     };
                     Expr::Literal(lit)
                 }
+                b1 @ BinExpr {
+                    lhs: Expr::Drop { .. },
+                    ..
+                } => {
+                    let r: Range = Expr::Binary(Box::new(b1)).into();
+                    return Err(ErrorKind::BinaryDrop(r.expand_lines(2), r).into());
+                }
+                b1 @ BinExpr {
+                    lhs: Expr::Emit(_), ..
+                } => {
+                    let r: Range = Expr::Binary(Box::new(b1)).into();
+                    return Err(ErrorKind::BinaryEmit(r.expand_lines(2), r).into());
+                }
                 b1 => Expr::Binary(Box::new(b1)),
             },
-            Expr1::Unary(u) => match u.up(reg)? {
+            Expr1::Unary(u) => match u.up(helper)? {
                 u1 @ UnaryExpr {
                     expr: Expr::Literal(_),
                     ..
@@ -312,18 +376,18 @@ impl Expr1 {
                     let lit = Literal {
                         start,
                         end,
-                        value: LiteralValue::Native(value.into()),
+                        value: LiteralValue::Native(value.clone().into()),
                     };
                     Expr::Literal(lit)
                 }
                 u1 => Expr::Unary(Box::new(u1)),
             },
-            Expr1::Invoke(i) => Expr::Invoke(i.up(reg)?),
+            Expr1::Invoke(i) => Expr::Invoke(i.up(helper)?),
             //Expr1::Let(l) => Expr::Let(l),
-            Expr1::Assign(a) => Expr::Assign(a.up(reg)?),
-            Expr1::Comprehension(c) => Expr::Comprehension(c.up(reg)?),
-            Expr1::Drop(d) => Expr::Drop(d.up(reg)?),
-            Expr1::Emit(e) => Expr::Emit(e.up(reg)?),
+            Expr1::Assign(a) => Expr::Assign(a.up(helper)?),
+            Expr1::Comprehension(c) => Expr::Comprehension(c.up(helper)?),
+            Expr1::Drop { start, end } => Expr::Drop { start, end },
+            Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             Expr1::Test(t) => Expr::Test(t),
         })
     }
@@ -343,8 +407,8 @@ pub enum Expr<Ctx: Context + 'static> {
     Let(Let<Ctx>),
     Assign(Assign<Ctx>),
     Comprehension(Comprehension<Ctx>),
-    Drop(DropExpr<Ctx>),
-    Emit(EmitExpr<Ctx>),
+    Drop { start: Location, end: Location },
+    Emit(Box<EmitExpr<Ctx>>),
     Test(TestExpr),
 }
 
@@ -395,7 +459,7 @@ impl<Ctx: Context + 'static> BaseExpr for Expr<Ctx> {
             Expr::Let(e) => e.s(),
             Expr::Assign(e) => e.s(),
             Expr::Comprehension(e) => e.s(),
-            Expr::Drop(e) => e.s(),
+            Expr::Drop { start, .. } => *start,
             Expr::Emit(e) => e.s(),
             Expr::Test(e) => e.s(),
         }
@@ -414,50 +478,27 @@ impl<Ctx: Context + 'static> BaseExpr for Expr<Ctx> {
             Expr::Let(e) => e.e(),
             Expr::Assign(e) => e.e(),
             Expr::Comprehension(e) => e.e(),
-            Expr::Drop(e) => e.e(),
+            Expr::Drop { end, .. } => *end,
             Expr::Emit(e) => e.e(),
             Expr::Test(e) => e.e(),
-            //            Expr::PatternExpr(e) => Location::default(), //FIXME: e.e(),
         }
     }
 }
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DropExpr1 {
-    pub start: Location,
-    pub end: Location,
-    pub expr: Box<Expr1>,
-}
-
-impl DropExpr1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<DropExpr<Ctx>> {
-        Ok(DropExpr {
-            start: self.start,
-            end: self.end,
-            expr: Box::new(self.expr.up(reg)?),
-        })
-    }
-}
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct DropExpr<Ctx: Context + 'static> {
-    pub start: Location,
-    pub end: Location,
-    pub expr: Box<Expr<Ctx>>,
-}
-impl_expr!(DropExpr);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EmitExpr1 {
     pub start: Location,
     pub end: Location,
     pub expr: Box<Expr1>,
+    pub port: Option<String>,
 }
 impl EmitExpr1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<EmitExpr<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<EmitExpr<Ctx>> {
         Ok(EmitExpr {
             start: self.start,
             end: self.end,
-            expr: Box::new(self.expr.up(reg)?),
+            expr: self.expr.up(helper)?,
+            port: self.port,
         })
     }
 }
@@ -465,7 +506,8 @@ impl EmitExpr1 {
 pub struct EmitExpr<Ctx: Context + 'static> {
     pub start: Location,
     pub end: Location,
-    pub expr: Box<Expr<Ctx>>,
+    pub expr: Expr<Ctx>,
+    pub port: Option<String>,
 }
 impl_expr!(EmitExpr);
 
@@ -486,12 +528,12 @@ pub struct Assign1 {
 }
 
 impl Assign1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Assign<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Assign<Ctx>> {
         Ok(Assign {
             start: self.start,
             end: self.end,
-            path: self.path.up(reg)?,
-            expr: Box::new(self.expr.up(reg)?),
+            path: self.path.up(helper)?,
+            expr: Box::new(self.expr.up(helper)?),
         })
     }
 }
@@ -515,14 +557,19 @@ pub struct Invoke1 {
 impl_expr1!(Invoke1);
 
 impl Invoke1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Invoke<Ctx>> {
-        let args: Result<Exprs<Ctx>> = self.args.clone().into_iter().map(|p| p.up(reg)).collect();
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Invoke<Ctx>> {
+        let args: Result<Exprs<Ctx>> = self
+            .args
+            .clone()
+            .into_iter()
+            .map(|p| p.up(helper))
+            .collect();
         let args = args?;
-        let invocable = reg.find(&self.module, &self.fun).map_err(|e| {
+        let invocable = helper.reg.find(&self.module, &self.fun).map_err(|e| {
             e.into_err(
                 &Expr::dummy_extend_from(&self),
                 &Expr::dummy_from(&self),
-                Some(&reg),
+                Some(&helper.reg),
             )
         })?;
 
@@ -586,7 +633,7 @@ pub struct TestExpr1 {
 impl_expr1!(TestExpr1);
 
 impl TestExpr1 {
-    fn up<Ctx: Context + 'static>(self, _reg: &Registry<Ctx>) -> Result<TestExpr> {
+    fn up<Ctx: Context + 'static>(self, _helper: &mut Helper<Ctx>) -> Result<TestExpr> {
         match Extractor::new(&self.id, &self.test) {
             Ok(ex) => Ok(TestExpr {
                 id: self.id,
@@ -616,15 +663,32 @@ pub struct Match1 {
 }
 
 impl Match1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Match<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Match<Ctx>> {
         let patterns: Result<Predicates<Ctx>> =
-            self.patterns.into_iter().map(|p| p.up(reg)).collect();
+            self.patterns.into_iter().map(|p| p.up(helper)).collect();
+        let patterns = patterns?;
+
+        let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
+        match defaults {
+            0 => helper.warnings.push(Warning{
+                outer: Range(self.start, self.end),
+                inner: Range(self.start, self.end),
+                msg: "This match expression has no default clause, if the other clauses do not cover all posiblities this will lead to events being discarded with runtime errors.".into()
+            }),
+            x if x > 1 => helper.warnings.push(Warning{
+                outer: Range(self.start, self.end),
+                inner: Range(self.start, self.end),
+                msg: "A match statement with more then one default clause will enver reach any but the first default clause.".into()
+            }),
+
+            _ => ()
+        }
 
         Ok(Match {
             start: self.start,
             end: self.end,
-            target: self.target.up(reg)?,
-            patterns: patterns?,
+            target: self.target.up(helper)?,
+            patterns,
         })
     }
 }
@@ -640,21 +704,25 @@ impl_expr!(Match);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PredicateClause1 {
+    pub start: Location,
+    pub end: Location,
     pub pattern: Pattern1,
-    pub guard: Option<Box<Expr1>>,
+    pub guard: Option<Expr1>,
     pub exprs: Exprs1,
 }
 
 impl PredicateClause1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<PredicateClause<Ctx>> {
-        let exprs: Result<Exprs<Ctx>> = self.exprs.into_iter().map(|p| p.up(reg)).collect();
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<PredicateClause<Ctx>> {
+        let exprs: Result<Exprs<Ctx>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
         let guard = if let Some(guard) = self.guard {
-            Some(Box::new(guard.up(reg)?))
+            Some(guard.up(helper)?)
         } else {
             None
         };
         Ok(PredicateClause {
-            pattern: self.pattern.up(reg)?,
+            start: self.start,
+            end: self.end,
+            pattern: self.pattern.up(helper)?,
             guard,
             exprs: exprs?,
         })
@@ -662,10 +730,13 @@ impl PredicateClause1 {
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PredicateClause<Ctx: Context + 'static> {
+    pub start: Location,
+    pub end: Location,
     pub pattern: Pattern<Ctx>,
-    pub guard: Option<Box<Expr<Ctx>>>,
+    pub guard: Option<Expr<Ctx>>,
     pub exprs: Exprs<Ctx>,
 }
+impl_expr!(PredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Patch1 {
@@ -676,14 +747,14 @@ pub struct Patch1 {
 }
 
 impl Patch1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Patch<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Patch<Ctx>> {
         let operations: Result<PatchOperations<Ctx>> =
-            self.operations.into_iter().map(|p| p.up(reg)).collect();
+            self.operations.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Patch {
             start: self.start,
             end: self.end,
-            target: self.target.up(reg)?,
+            target: self.target.up(helper)?,
             operations: operations?,
         })
     }
@@ -708,28 +779,31 @@ pub enum PatchOperation1 {
 }
 
 impl PatchOperation1 {
-    pub fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<PatchOperation<Ctx>> {
+    pub fn up<Ctx: Context + 'static>(
+        self,
+        helper: &mut Helper<Ctx>,
+    ) -> Result<PatchOperation<Ctx>> {
         use PatchOperation1::*;
         Ok(match self {
             Insert { ident, expr } => PatchOperation::Insert {
                 ident,
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
             Upsert { ident, expr } => PatchOperation::Upsert {
                 ident,
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
             Update { ident, expr } => PatchOperation::Update {
                 ident,
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
             Erase { ident } => PatchOperation::Erase { ident },
             Merge { ident, expr } => PatchOperation::Merge {
                 ident,
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
             TupleMerge { expr } => PatchOperation::TupleMerge {
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
         })
     }
@@ -753,14 +827,14 @@ pub struct Merge1 {
     pub expr: Expr1,
 }
 impl Merge1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Merge<Ctx>> {
-        //let patterns: Result<Predicates> = self.patterns.into_iter().map(|p| p.up(reg)).collect();
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Merge<Ctx>> {
+        //let patterns: Result<Predicates> = self.patterns.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Merge {
             start: self.start,
             end: self.end,
-            target: self.target.up(reg)?,
-            expr: self.expr.up(reg)?,
+            target: self.target.up(helper)?,
+            expr: self.expr.up(helper)?,
         })
     }
 }
@@ -783,14 +857,14 @@ pub struct Comprehension1 {
 }
 
 impl Comprehension1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Comprehension<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Comprehension<Ctx>> {
         let cases: Result<ComprehensionCases<Ctx>> =
-            self.cases.into_iter().map(|p| p.up(reg)).collect();
+            self.cases.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Comprehension {
             start: self.start,
             end: self.end,
-            target: Box::new(self.target.up(reg)?),
+            target: Box::new(self.target.up(helper)?),
             cases: cases?,
         })
     }
@@ -810,14 +884,17 @@ pub struct ComprehensionCase1 {
     pub end: Location,
     pub key_name: String,
     pub value_name: String,
-    pub guard: Option<Box<Expr1>>,
+    pub guard: Option<Expr1>,
     pub expr: Box<Expr1>,
 }
 
 impl ComprehensionCase1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<ComprehensionCase<Ctx>> {
+    fn up<Ctx: Context + 'static>(
+        self,
+        helper: &mut Helper<Ctx>,
+    ) -> Result<ComprehensionCase<Ctx>> {
         let guard = if let Some(guard) = self.guard {
-            Some(Box::new(guard.up(reg)?))
+            Some(Box::new(guard.up(helper)?))
         } else {
             None
         };
@@ -828,7 +905,7 @@ impl ComprehensionCase1 {
             key_name: self.key_name,
             value_name: self.value_name,
             guard,
-            expr: Box::new(self.expr.up(reg)?),
+            expr: Box::new(self.expr.up(helper)?),
         })
     }
 }
@@ -857,14 +934,14 @@ pub enum Pattern1 {
     Default,
 }
 impl Pattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Pattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Pattern<Ctx>> {
         use Pattern1::*;
         Ok(match self {
-            Predicate(pp) => Pattern::Predicate(pp.up(reg)?),
-            Record(rp) => Pattern::Record(rp.up(reg)?),
-            Array(ap) => Pattern::Array(ap.up(reg)?),
-            Expr(expr) => Pattern::Expr(expr.up(reg)?),
-            Assign(ap) => Pattern::Assign(ap.up(reg)?),
+            Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
+            Record(rp) => Pattern::Record(rp.up(helper)?),
+            Array(ap) => Pattern::Array(ap.up(helper)?),
+            Expr(expr) => Pattern::Expr(expr.up(helper)?),
+            Assign(ap) => Pattern::Assign(ap.up(helper)?),
             Default => Pattern::Default,
         })
     }
@@ -882,6 +959,15 @@ pub enum Pattern<Ctx: Context + 'static> {
     Expr(Expr<Ctx>),
     Assign(AssignPattern<Ctx>),
     Default,
+}
+impl<Ctx: Context + 'static> Pattern<Ctx> {
+    fn is_default(&self) -> bool {
+        if let Pattern::Default = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub trait BasePattern {}
@@ -913,27 +999,28 @@ pub enum PredicatePattern1 {
         lhs: String,
     },
 }
+
 impl PredicatePattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<PredicatePattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<PredicatePattern<Ctx>> {
         use PredicatePattern1::*;
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
                 assign,
                 lhs,
-                test: test.up(reg)?,
+                test: test.up(helper)?,
             },
             Eq { lhs, rhs, not } => PredicatePattern::Eq {
                 lhs,
-                rhs: rhs.up(reg)?,
+                rhs: rhs.up(helper)?,
                 not,
             },
             RecordPatternEq { lhs, pattern } => PredicatePattern::RecordPatternEq {
                 lhs,
-                pattern: pattern.up(reg)?,
+                pattern: pattern.up(helper)?,
             },
             ArrayPatternEq { lhs, pattern } => PredicatePattern::ArrayPatternEq {
                 lhs,
-                pattern: pattern.up(reg)?,
+                pattern: pattern.up(helper)?,
             },
             FieldPresent { lhs } => PredicatePattern::FieldPresent { lhs },
             FieldAbsent { lhs } => PredicatePattern::FieldAbsent { lhs },
@@ -990,9 +1077,9 @@ pub struct RecordPattern1 {
 }
 
 impl RecordPattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<RecordPattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<RecordPattern<Ctx>> {
         let fields: Result<PatternFields<Ctx>> =
-            self.fields.into_iter().map(|p| p.up(reg)).collect();
+            self.fields.into_iter().map(|p| p.up(helper)).collect();
         Ok(RecordPattern {
             start: self.start,
             end: self.end,
@@ -1017,12 +1104,15 @@ pub enum ArrayPredicatePattern1 {
     //Array(ArrayPattern),
 }
 impl ArrayPredicatePattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<ArrayPredicatePattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(
+        self,
+        helper: &mut Helper<Ctx>,
+    ) -> Result<ArrayPredicatePattern<Ctx>> {
         use ArrayPredicatePattern1::*;
         Ok(match self {
-            Expr(expr) => ArrayPredicatePattern::Expr(expr.up(reg)?),
-            Tilde(te) => ArrayPredicatePattern::Tilde(te.up(reg)?),
-            Record(rp) => ArrayPredicatePattern::Record(rp.up(reg)?),
+            Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
+            Tilde(te) => ArrayPredicatePattern::Tilde(te.up(helper)?),
+            Record(rp) => ArrayPredicatePattern::Record(rp.up(helper)?),
             //Array(ap) => ArrayPredicatePattern::Array(ap),
         })
     }
@@ -1044,9 +1134,9 @@ pub struct ArrayPattern1 {
 }
 
 impl ArrayPattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<ArrayPattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<ArrayPattern<Ctx>> {
         let exprs: Result<Vec<ArrayPredicatePattern<Ctx>>> =
-            self.exprs.into_iter().map(|p| p.up(reg)).collect();
+            self.exprs.into_iter().map(|p| p.up(helper)).collect();
         Ok(ArrayPattern {
             start: self.start,
             end: self.end,
@@ -1061,6 +1151,8 @@ pub struct ArrayPattern<Ctx: Context + 'static> {
     pub exprs: ArrayPredicatePatterns<Ctx>,
 }
 
+impl_expr!(ArrayPattern);
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AssignPattern1 {
     pub id: Path1,
@@ -1068,10 +1160,10 @@ pub struct AssignPattern1 {
 }
 
 impl AssignPattern1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<AssignPattern<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<AssignPattern<Ctx>> {
         Ok(AssignPattern {
-            id: self.id.up(reg)?,
-            pattern: Box::new(self.pattern.up(reg)?),
+            id: self.id.up(helper)?,
+            pattern: Box::new(self.pattern.up(helper)?),
         })
     }
 }
@@ -1089,12 +1181,12 @@ pub enum Path1 {
 }
 
 impl Path1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Path<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Path<Ctx>> {
         use Path1::*;
         Ok(match self {
-            Local(p) => Path::Local(p.up(reg)?),
-            Event(p) => Path::Event(p.up(reg)?),
-            Meta(p) => Path::Meta(p.up(reg)?),
+            Local(p) => Path::Local(p.up(helper)?),
+            Event(p) => Path::Event(p.up(helper)?),
+            Meta(p) => Path::Meta(p.up(helper)?),
         })
     }
 }
@@ -1123,6 +1215,7 @@ impl<Ctx: Context + 'static> BaseExpr for Path<Ctx> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Segment1 {
     ElementSelector {
@@ -1141,13 +1234,13 @@ pub enum Segment1 {
 }
 
 impl Segment1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<Segment<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<Segment<Ctx>> {
         use Segment1::*;
         Ok(match self {
             ElementSelector { expr, start, end } => Segment::ElementSelector {
                 start,
                 end,
-                expr: expr.up(reg)?,
+                expr: expr.up(helper)?,
             },
             RangeSelector {
                 start_lower,
@@ -1158,10 +1251,10 @@ impl Segment1 {
                 end_upper,
             } => Segment::RangeSelector {
                 start_lower,
-                range_start: range_start.up(reg)?,
+                range_start: range_start.up(helper)?,
                 end_lower,
                 start_upper,
-                range_end: range_end.up(reg)?,
+                range_end: range_end.up(helper)?,
                 end_upper,
             },
         })
@@ -1179,6 +1272,7 @@ impl Segment1 {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Segment<Ctx: Context + 'static> {
     ElementSelector {
@@ -1217,9 +1311,9 @@ pub struct LocalPath1 {
     pub segments: Segments1,
 }
 impl LocalPath1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<LocalPath<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<LocalPath<Ctx>> {
         let segments: Result<Segments<Ctx>> =
-            self.segments.into_iter().map(|p| p.up(reg)).collect();
+            self.segments.into_iter().map(|p| p.up(helper)).collect();
         Ok(LocalPath {
             start: self.start,
             end: self.end,
@@ -1243,9 +1337,9 @@ pub struct MetadataPath1 {
     pub segments: Segments1,
 }
 impl MetadataPath1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<MetadataPath<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<MetadataPath<Ctx>> {
         let segments: Result<Segments<Ctx>> =
-            self.segments.into_iter().map(|p| p.up(reg)).collect();
+            self.segments.into_iter().map(|p| p.up(helper)).collect();
         Ok(MetadataPath {
             start: self.start,
             end: self.end,
@@ -1269,9 +1363,9 @@ pub struct EventPath1 {
     pub segments: Segments1,
 }
 impl EventPath1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<EventPath<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<EventPath<Ctx>> {
         let segments: Result<Segments<Ctx>> =
-            self.segments.into_iter().map(|p| p.up(reg)).collect();
+            self.segments.into_iter().map(|p| p.up(helper)).collect();
         Ok(EventPath {
             start: self.start,
             end: self.end,
@@ -1337,13 +1431,13 @@ pub struct BinExpr1 {
     pub rhs: Box<Expr1>,
 }
 impl BinExpr1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<BinExpr<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<BinExpr<Ctx>> {
         Ok(BinExpr {
             start: self.start,
             end: self.end,
             kind: self.kind,
-            lhs: self.lhs.up(reg)?,
-            rhs: self.rhs.up(reg)?,
+            lhs: self.lhs.up(helper)?,
+            rhs: self.rhs.up(helper)?,
         })
     }
 }
@@ -1383,12 +1477,12 @@ pub struct UnaryExpr1 {
 }
 
 impl UnaryExpr1 {
-    fn up<Ctx: Context + 'static>(self, reg: &Registry<Ctx>) -> Result<UnaryExpr<Ctx>> {
+    fn up<Ctx: Context + 'static>(self, helper: &mut Helper<Ctx>) -> Result<UnaryExpr<Ctx>> {
         Ok(UnaryExpr {
             start: self.start,
             end: self.end,
             kind: self.kind,
-            expr: self.expr.up(reg)?,
+            expr: self.expr.up(helper)?,
         })
     }
 }

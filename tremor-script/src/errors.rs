@@ -18,6 +18,7 @@
 #![allow(unused_imports)]
 
 use crate::ast::{self, BaseExpr, Expr};
+use crate::errors;
 use crate::lexer;
 use crate::pos;
 use crate::pos::{Location, Range};
@@ -26,6 +27,7 @@ use base64;
 use dissect;
 use error_chain::error_chain;
 use glob;
+use grok;
 use lalrpop_util;
 use lalrpop_util::ParseError as LalrpopError;
 use regex;
@@ -43,14 +45,8 @@ impl PartialEq for Error {
     }
 }
 
-impl From<lexer::LexerError> for Error {
-    fn from(error: lexer::LexerError) -> Self {
-        ErrorKind::LexerError(error).into()
-    }
-}
-
 type ParserError<'screw_lalrpop> =
-    lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, lexer::LexerError>;
+    lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, errors::Error>;
 
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
@@ -127,31 +123,58 @@ impl ErrorKind {
             BadAccessInLocal(expr, inner, _) => (Some(*expr), Some(*inner)),
             BadArity(expr, inner, _, _, _, _) => (Some(*expr), Some(*inner)),
             BadType(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
+            BinaryDrop(expr, inner) => (Some(*expr), Some(*inner)),
+            BinaryEmit(expr, inner) => (Some(*expr), Some(*inner)),
             ExtraToken(outer, inner, _) => (Some(*outer), Some(*inner)),
             InsertKeyExists(expr, inner, _) => (Some(*expr), Some(*inner)),
+            InvalidAssign(expr, inner) => (Some(*expr), Some(*inner)),
             InvalidBinary(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
             InvalidDrop(expr, inner) => (Some(*expr), Some(*inner)),
             InvalidEmit(expr, inner) => (Some(*expr), Some(*inner)),
             InvalidExtractor(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
+            InvalidFloatLiteral(expr, inner) => (Some(*expr), Some(*inner)),
+            InvalidHexLiteral(expr, inner) => (Some(*expr), Some(*inner)),
+            InvalidIntLiteral(expr, inner) => (Some(*expr), Some(*inner)),
             InvalidToken(outer, inner) => (Some(*outer), Some(*inner)),
             InvalidUnary(expr, inner, _, _) => (Some(*expr), Some(*inner)),
             MergeTypeConflict(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            MissingEffectors(expr, inner) => (Some(*expr), Some(*inner)),
             MissingFunction(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
             MissingModule(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            NoClauseHit(expr) => (Some(*expr), Some(*expr)),
-            Oops(expr) => (Some(*expr), None),
+            NoClauseHit(expr) => (Some(expr.expand_lines(2)), Some(*expr)),
+            Oops(expr) => (Some(expr.expand_lines(2)), Some(*expr)),
             OverwritingLocal(expr, inner, _) => (Some(*expr), Some(*inner)),
             RuntimeError(expr, inner, _, _, _, _) => (Some(*expr), Some(*inner)),
             TypeConflict(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            UnexpectedCharacter(expr, inner, _) => (Some(*expr), Some(*inner)),
+            UnexpectedEscapeCode(expr, inner, _, _) => (Some(*expr), Some(*inner)),
             UnrecognizedToken(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            UnterminatedExtractor(expr, inner, _) => (Some(*expr), Some(*inner)),
+            UnterminatedIdentLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
+            UnterminatedStringLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
             UpdateKeyMissing(expr, inner, _) => (Some(*expr), Some(*inner)),
 
             // Special cases
-            Msg(_) => (Some(Range::default()), None),
-            EmptyScript => (Some(Range::default()), None),
-            ParserError(_) => (Some(Range::default()), None),
-            LexerError(_) => (None, None), // We can't highlight this since we can't lex the source
-            __Nonexhaustive {} => (None, None), // WTF error_chain?
+            EmptyScript
+            | Grok(_)
+            | InvalidInfluxData(_)
+            | Io(_)
+            | Msg(_)
+            | ParseIntError(_)
+            | ParserError(_)
+            | UnexpectedEndOfStream
+            | Utf8Error(_) => (Some(Range::default()), None),
+            ErrorKind::__Nonexhaustive { .. } => (Some(Range::default()), None),
+        }
+    }
+    pub fn token(&self) -> Option<String> {
+        use ErrorKind::*;
+        match self {
+            UnterminatedExtractor(_, _, token) => Some(token.to_string()),
+            UnterminatedStringLiteral(_, _, token) => Some(token.to_string()),
+            UnterminatedIdentLiteral(_, _, token) => Some(token.to_string()),
+            UnexpectedEscapeCode(_, _, s, _) => Some(s.to_string()),
+            _ => None,
         }
     }
     pub fn hint(&self) -> Option<String> {
@@ -168,8 +191,11 @@ impl ErrorKind {
                 ),
                 _ => None
             },
-            MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),                 MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
+            MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
+            MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
+            MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
             UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as parth of a path, consider quoting it as `event` to make it an ident oruse array like acces such as [\"event\"].".into()),
+            UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_) => Some("Please take the error output script and idealy data and open a ticket, this should not happen.".into()),
             _ => None,
@@ -183,6 +209,9 @@ impl Error {
     }
     pub fn hint(&self) -> Option<String> {
         self.0.hint()
+    }
+    pub fn token(&self) -> Option<String> {
+        self.0.token()
     }
 }
 
@@ -206,13 +235,10 @@ where
 
 error_chain! {
     foreign_links {
-        //RegexError(regex::Error);
-        //SerdeError(serde_json::Error);
-        //ParseIntError(num::ParseIntError);
-        //SIMDError(simd_json::Error);
-        //GlobError(glob::PatternError);
-        //Base64Error(base64::DecodeError);
-        //DissectError(dissect::DissectError);
+        Io(std::io::Error);
+        Grok(grok::Error);
+        Utf8Error(std::str::Utf8Error);
+        ParseIntError(num::ParseIntError);
     }
     errors {
         /*
@@ -271,10 +297,61 @@ error_chain! {
         /*
          * Lexer and Parser
          */
-        LexerError(e: crate::lexer::LexerError) {
-            description("Lexical error tokenizing tremor-script")
-                display("Lexical error tokenizing treor-script {}", e)
+        UnterminatedExtractor(expr: Range, inner: Range, extractor: String) {
+            description("Unterminated extractor")
+                display("It looks like you forgot to terminate an extractor")
         }
+
+        UnterminatedStringLiteral(expr: Range, inner: Range, extractor: String) {
+            description("Unterminated string")
+                display("It looks like you forgot to terminate a string")
+        }
+
+        UnterminatedIdentLiteral(expr: Range, inner: Range, extractor: String)
+        {
+            description("Unterminated ident")
+                display("It looks like you forgot to terminate an ident")
+
+        }
+
+        UnexpectedCharacter(expr: Range, inner: Range, found: char){
+            description("An unexpected character was found")
+                display("An unexpected character '{}' was found", found)
+        }
+
+
+        UnexpectedEscapeCode(expr: Range, inner: Range, token: String, found: char){
+            description("An unexpected escape code was found")
+                display("An unexpected escape code '{}' was found", found)
+
+        }
+
+        InvalidHexLiteral(expr: Range, inner: Range){
+            description("An invalid hexadecimal")
+                display("An invalid hexadecimal")
+
+        }
+
+        InvalidIntLiteral(expr: Range, inner: Range) {
+            description("An invalid integer literal")
+                display("An invalid integer literal")
+
+        }
+        InvalidFloatLiteral(expr: Range, inner: Range) {
+            description("An invalid float literal")
+                display("An invalid float literal")
+
+        }
+
+        UnexpectedEndOfStream {
+            description("An unexpected end of stream was found")
+                display("An unexpected end of stream was found")
+
+        }
+
+        /*
+         * Parser
+         */
         ParserError(pos: String) {
             description("Parser user error")
                 display("Parser user error: {}", pos)
@@ -307,6 +384,10 @@ error_chain! {
             description("Can not assign tinto a array")
                 display("It is not supported to assign value into an array")
         }
+        InvalidAssign(expor: Range, inner: Range) {
+            description("You can not assign that")
+                display("You are trying to assing to a value that isn't valid")
+        }
         /*
          * Emit & Drop
          */
@@ -320,6 +401,14 @@ error_chain! {
                 display("Can not drop from this location")
 
         }
+        BinaryEmit(expr: Range, inner: Range) {
+            description("Please enclose the value you want to emit")
+                display("The expression can be read as a binary expression, please put the value you wan to emit in parentheses.")
+        }
+        BinaryDrop(expr: Range, inner: Range) {
+            description("Please enclose the value you want to rop")
+                display("The expression can be read as a binary expression, please put the value you wan to drop in parentheses.")
+        }
         /*
          * Operators
          */
@@ -331,6 +420,7 @@ error_chain! {
             description("Invalid ynary operation")
                 display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
         }
+
         /*
          * match
          */
@@ -341,6 +431,10 @@ error_chain! {
         NoClauseHit(expr: Range){
             description("A match expression executed bu no clause matched")
                 display("A match expression executed bu no clause matched")
+        }
+        MissingEffectors(expr: Range, inner: Range) {
+            description("The clause has no effectors")
+                display("The clause is missing a body")
         }
         /*
          * Patch
@@ -363,6 +457,11 @@ error_chain! {
             description("Trying to overwrite a local variable in a comprehension case")
                 display("Trying to overwrite the local variable `{}` in a comprehension case", val)
         }
+        InvalidInfluxData(s: String) {
+            description("Invalid Influx Line Protocol data")
+                display("Invalid Influx Line Protocol data: {}", s)
+        }
+
     }
 }
 
@@ -451,6 +550,9 @@ impl<Ctx: Context> Expr<Ctx> {
     pub fn error_patch_update_key_missing<T>(&self, inner: &Expr<Ctx>, key: String) -> Result<T> {
         Err(ErrorKind::UpdateKeyMissing(self.into(), inner.into(), key).into())
     }
+    pub fn error_missing_effector<T>(&self, inner: &Expr<Ctx>) -> Result<T> {
+        Err(ErrorKind::MissingEffectors(self.into(), inner.into()).into())
+    }
     pub fn error_overwriting_local_in_comprehension<T>(
         &self,
         inner: &Expr<Ctx>,
@@ -470,5 +572,10 @@ impl<Ctx: Context> Expr<Ctx> {
 
     pub fn error_assign_array<T>(&self, inner: &Expr<Ctx>) -> Result<T> {
         Err(ErrorKind::AssignIntoArray(self.into(), inner.into()).into())
+    }
+    pub fn error_invalid_assign_target<T>(&self) -> Result<T> {
+        let inner: Range = self.into();
+
+        Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
     }
 }

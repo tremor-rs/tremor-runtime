@@ -25,7 +25,7 @@ pipeline:
           script: |
             let $class = "default";
             let $rate = 250;
-            event;
+            event
       - id: b
         op: grouper::bucket
     links:

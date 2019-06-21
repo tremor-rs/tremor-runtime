@@ -42,6 +42,8 @@ dissect = { path = "../dissect" }
 distance = "0.4"
 chrono = "0.4"
 clap = "2.33.0"
+grok = "1"
+cidr-utils = "0.3"
 
 [build-dependencies]
 lalrpop = "0.16"

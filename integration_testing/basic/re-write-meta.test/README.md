@@ -1,1 +1,1 @@
-We can replace the metadata object ($) with new data
+When replacing $ we get an error put to the error ouput

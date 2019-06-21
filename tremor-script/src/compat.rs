@@ -17,7 +17,6 @@ use std::os::raw::c_char;
 
 use crate::ast;
 use crate::interpreter;
-use crate::interpreter::ValueStack;
 use crate::registry;
 use crate::registry::Context;
 use simd_json::borrowed::{Map, Value};
@@ -28,24 +27,24 @@ impl Context for FakeContext {}
 
 fn eval(src: &str) -> String {
     let reg: registry::Registry<FakeContext> = registry::registry();
+    let mut helper = ast::Helper::new(&reg);
     let script: ast::Script1 = serde_json::from_str(src).expect("");
-    let script: ast::Script<_> = script.up(&reg).expect("");
+    let script: ast::Script<_> = script.up(&mut helper).expect("");
 
     let runnable = interpreter::Script {
         script,
         source: String::new(),
+        warnings: helper.into_warnings(),
     };
     // let runnable: interpreter::Script = interpreter::Script::parse(src, &reg).expect("parse failed");
     let mut event = simd_json::borrowed::Value::Object(Map::new());
     let ctx = FakeContext {};
     let mut global_map = Value::Object(interpreter::LocalMap::new());
-    let mut stack = ValueStack::default();
-    let value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
+    let value = runnable.run(&ctx, &mut event, &mut global_map);
     let result = format!(
         "{} ",
         serde_json::to_string_pretty(&value.expect("")).expect("")
     );
-    stack.clear();
     result
 }
 

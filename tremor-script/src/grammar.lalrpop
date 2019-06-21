@@ -14,7 +14,7 @@
 
 use crate::ast::*;
 use crate::lexer;
-use crate::lexer::{Token, LexerError};
+use crate::lexer::{Token};
 use crate::pos::Location;
 use crate::tilde::Extractor;
 use simd_json::OwnedValue;
@@ -23,7 +23,6 @@ grammar<'input>;
 
 pub Script : Script1 = {
     <exprs:Exprs> "<end-of-stream>"? => Script1{exprs},
-    <expr:Expr> "<end-of-stream>" => Script1{exprs: vec![expr]},
 }
 
 Exprs: Exprs1 = {
@@ -32,7 +31,7 @@ Exprs: Exprs1 = {
         list.insert(0,expr);
         list
     },
-    <item:Expr> ";" => vec![item],
+    <item:Expr> ";"? => vec![item],
 }
 
 Expr: Expr1 = {
@@ -97,13 +96,13 @@ MulExpr: Expr1 = {
 }
 
 UnaryExpr: Expr1 = {
-    <s:@L> "+" <expr:UnarySimpleExpr> <e:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: Box::new(expr), start: s, end: e }),
-    <s:@L> "-" <expr:UnarySimpleExpr> <e:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: Box::new(expr), start: s, end: e }),
+    <start:@L> "+" <expr:UnarySimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: Box::new(expr), start, end }),
+    <start:@L> "-" <expr:UnarySimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: Box::new(expr), start, end }),
     UnarySimpleExpr => <>,
 }
 
 UnarySimpleExpr: Expr1 = {
-    <s:@L> "not" <expr:SimpleExpr> <e:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(expr), start: s, end: e }),
+    <start:@L> "not" <expr:SimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(expr), start, end }),
     SimpleExpr => <>,
 }
 
@@ -122,13 +121,25 @@ SimpleExpr: Expr1 = {
     Emit => <>,
 }
 
+SimpleExprNoSideffect: Expr1 = {
+    <literal:Literal> => Expr1::Literal(literal),
+    "(" <expr:Expr> ")" => expr,
+    <path:Path> => Expr1::Path(path),
+    <record:Record> => Expr1::RecordExpr(record),
+    <pp:Match> => Expr1::MatchExpr(Box::new(pp)),
+    <pp:Patch> => Expr1::PatchExpr(Box::new(pp)),
+    <pp:Merge> => Expr1::MergeExpr(Box::new(pp)),
+    <call:Invoke> => Expr1::Invoke(call),
+    <comprehension:Foreach> => Expr1::Comprehension(comprehension),
+}
+
 Literal: Literal1 = {
-    <s:@L> <v:Nil> <e:@L> => Literal1{value: v, start: s, end: e},
-    <s:@L> <v:Bool> <e:@L> => Literal1{value: v, start: s, end: e},
-    <s:@L> <v:Int> <e:@L> => Literal1{value: v, start: s, end: e},
-    <s:@L> <v:Float> <e:@L> => Literal1{value: v, start: s, end: e},
-    <s:@L> <v:String> <e:@L> => Literal1{value: v, start: s, end: e},
-    <s:@L> <v:List> <e:@L> => Literal1{value: v, start: s, end: e},
+    <start:@L> <v:Nil> <end:@L> => Literal1{value: v, start, end},
+    <start:@L> <v:Bool> <end:@L> => Literal1{value: v, start, end},
+    <start:@L> <v:Int> <end:@L> => Literal1{value: v, start, end},
+    <start:@L> <v:Float> <end:@L> => Literal1{value: v, start, end},
+    <start:@L> <v:String> <end:@L> => Literal1{value: v, start, end},
+    <start:@L> <v:List> <end:@L> => Literal1{value: v, start, end},
 }
 
 AssignOp: Token<'input> = {
@@ -137,8 +148,8 @@ AssignOp: Token<'input> = {
 
 Let: Expr1 = {
 // TODO FIXME investigate multi-let after `event` keyword +change
-//    <s:@L> "let" <exprs:Assignments> <e:@L> "end" => Expr::Let(Let { exprs, start: s, end: e }),
-    <s:@L> "let" <expr:Assignment> <e:@L> => expr, // Expr::Let(Let { exprs: vec![expr], start: s, end: e }),
+//    <start:@L> "let" <exprs:Assignments> <end:@L> "end" => Expr::Let(Let { exprs, start, end }),
+    <start:@L> "let" <expr:Assignment> <end:@L> => expr, // Expr::Let(Let { exprs: vec![expr], start, end }),
 }
 
 // Assignments: Exprs = {
@@ -151,17 +162,19 @@ Let: Expr1 = {
 // }
 
 Assignment: Expr1 = {
-    <s:@L> <path:Path> @L AssignOp @R <expr:SimpleExpr> <e:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start: s, end: e }),
+    <start:@L> <path:Path> @L AssignOp @R <expr:SimpleExpr> <end:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start, end }),
 }
 
 Drop: Expr1 = {
-    <s:@L> "drop" <expr:SimpleExpr> <e:@L> => Expr1::Drop(DropExpr1{ expr: Box::new(expr), start: s, end: e }),
-    <s:@L> "drop" <e:@L> => Expr1::Drop(DropExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start: s, end: e }))), start: s, end: e }) ,
+    <start:@L> "drop" <end:@L> => Expr1::Drop{start, end } ,
 }
 
 Emit: Expr1 = {
-    <s:@L> "emit" <expr:SimpleExpr> <e:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(expr), start: s, end: e }),
-    <s:@L> "emit" <e:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start: s, end: e }))), start: s, end: e }) ,
+    <start:@L> "emit" <expr:SimpleExprNoSideffect> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(expr), start, end, port: Some(port) }),
+    <start:@L> "emit" <expr:SimpleExprNoSideffect>  <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(expr), start, end, port: None }),
+
+    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end }))), start, end, port: Some(port) }) ,
+    <start:@L> "emit" <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end }))), start, end, port: None }) ,
 }
 
 Nil: LiteralValue1 = {
@@ -177,7 +190,7 @@ Int: LiteralValue1 = {
 }
 
 Float: LiteralValue1 = {
-    <literal:"float"> => LiteralValue1::Native( OwnedValue::from(literal) ),
+    <literal:"float"> => LiteralValue1::Native( OwnedValue::from(literal.0) ),
 }
 
 String: LiteralValue1 = {
@@ -185,17 +198,17 @@ String: LiteralValue1 = {
 }
 
 Path: Path1 = {
-    <s:@L> "$" <segments:QualifiedSegments> <e:@L> => Path1::Meta(MetadataPath1 { segments, start: s, end: e }),
-    <s:@L> "event" "." <segments:QualifiedSegments> <e:@L> => Path1::Event(EventPath1 { segments, start: s, end: e }),
-    <s:@L> "event" <e:@R> => Path1::Event(EventPath1 { segments: vec![], start: s, end: e }),
-    <s:@L> "$" <e:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start: s, end: e }),
-    <s:@L> <segment:PathSegment> <segments:LocalSegments> <e:@L> => {
+    <start:@L> "$" <segments:QualifiedSegments> <end:@L> => Path1::Meta(MetadataPath1 { segments, start, end }),
+    <start:@L> "event" <segments:LocalSegments> <end:@L> => Path1::Event(EventPath1 { segments, start, end }),
+    <start:@L> "event" <end:@L> => Path1::Event(EventPath1 { segments: vec![], start, end }),
+    <start:@L> "$" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start, end }),
+    <start:@L> <segment:PathSegment> <segments:LocalSegments> <end:@L> => {
         let mut list = segments;
         list.insert(0, segment);
-        Path1::Local(LocalPath1 { segments: list, start: s, end: e })
+        Path1::Local(LocalPath1 { segments: list, start, end })
     },
-    <s:@L> <segment:PathSegment> <e:@L> => {
-        Path1::Local(LocalPath1 { segments:  vec![segment], start: s, end: e })
+    <start:@L> <segment:PathSegment> <end:@L> => {
+        Path1::Local(LocalPath1 { segments:  vec![segment], start, end })
     },
 }
 
@@ -230,13 +243,13 @@ QualifiedSegments: Segments1 = {
         list.push(segment);
         list
     },
-    "["<s:@L> <segment:Selector> <e:@L>"]" => vec![segment],
+    "["<start:@L> <segment:Selector> <end:@L>"]" => vec![segment],
     <segment:PathSegment> => vec![segment],
 }
 
 #[inline]
 PathSegment: Segment1 = {
-    <s:@L> <id:Ident> <e:@L> => Segment1::from_id(id, s, e),
+    <start:@L> <id:Ident> <end:@L> => Segment1::from_id(id, start, end),
 }
 // ArraySegment: Exprs = {
 //     <expr:Expr> ":" <exprs:ArraySegment> => {
@@ -267,20 +280,20 @@ ExprOf: Token<'input> = {
 }
 
 Match: Match1 = {
-  <s:@L> "match" <target:Expr> ExprOf <patterns:Predicates> "end" <e:@L> => Match1 { target, patterns, start: s, end: e },
+  <start:@L> "match" <target:Expr> ExprOf <patterns:Predicates> "end" <end:@L> => Match1 { target, patterns, start, end },
 }
 
 Patch: Patch1 = {
   // NOTE: ASSUMPTION array and literal targets are banned
-  <s:@L> "patch" <target:Expr> <e:@L> ExprOf <operations:PatchOperations> "end" => Patch1 { target, operations, start: s, end: e }
+  <start:@L> "patch" <target:Expr> <end:@L> ExprOf <operations:PatchOperations> "end" => Patch1 { target, operations, start, end }
 }
 
 Merge: Merge1 = {
-  <s:@L> "merge" <target:Expr> ExprOf <expr:Expr> "end" <e:@L> => Merge1 { target, expr, start: s, end: e }
+  <start:@L> "merge" <target:Expr> ExprOf <expr:Expr> "end" <end:@L> => Merge1 { target, expr, start, end }
 }
 
 Foreach: Comprehension1 = {
-    <s:@L> "for" <target:Expr> ExprOf <cases:ForeachCaseClauses> "end" <e:@L> => Comprehension1{target: Box::new(target), cases: cases, start: s, end: e},
+    <start:@L> "for" <target:Expr> ExprOf <cases:ForeachCaseClauses> "end" <end:@L> => Comprehension1{target: Box::new(target), cases: cases, start, end},
 }
 
 ForeachCaseClauses: ComprehensionCases1 = {
@@ -319,7 +332,7 @@ PatchOperationClause: PatchOperation1 = {
 }
 
 MatchTarget: Expr1 = {
-    <s:@L> <path:Path> AssignOp <expr:Expr> <e:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start: s, end: e }),
+    <start:@L> <path:Path> AssignOp <expr:Expr> <end:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start, end }),
     <expr:Expr> => <>,
 }
 
@@ -333,32 +346,32 @@ Predicates: Predicates1 = {
 }
 
 PredicateClause: PredicateClause1 = {
-    "case" <rp:RecordCaseClause> <exprs:Effectors> => PredicateClause1 { pattern: rp, exprs, guard: None },
-    "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:Effectors> => PredicateClause1 { pattern: rp, exprs, guard },
-    "case" <ap:ArrayCaseClause> <exprs:Effectors> => PredicateClause1 { pattern: ap, exprs, guard: None },
-    "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:Effectors> => PredicateClause1 { pattern: ap, exprs, guard },
-    "case" <lhs:ExprCaseClause> <rhs:Effectors> => PredicateClause1 { pattern: lhs, exprs: rhs, guard: None },
-    "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:Effectors> => PredicateClause1 { pattern: lhs, exprs: rhs, guard},
-    "default" <exprs:Effectors> => PredicateClause1 { pattern: Pattern1::Default, exprs, guard: None },
+    <start:@L> "case" <rp:RecordCaseClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: rp, exprs, guard: None, start, end },
+    <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: rp, exprs, guard, start, end },
+    <start:@L> "case" <ap:ArrayCaseClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: ap, exprs, guard: None, start, end },
+    <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: ap, exprs, guard, start, end },
+    <start:@L> "case" <lhs:ExprCaseClause> <rhs:Effectors> <end:@L> => PredicateClause1 { pattern: lhs, exprs: rhs, guard: None, start, end },
+    <start:@L> "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:Effectors> <end:@L> => PredicateClause1 { pattern: lhs, exprs: rhs, guard, start, end},
+    <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: Pattern1::Default, exprs, guard: None, start, end },
 }
 
 RecordCaseClause: Pattern1 = {
-    <s:@L> <segment:PathSegment> AssignOp <rp:RecordPattern> <e:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start: s, end: e}), pattern: Box::new(Pattern1::Record(rp)) }),
+    <start:@L> <segment:PathSegment> AssignOp <rp:RecordPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Record(rp)) }),
     <rp:RecordPattern> => Pattern1::Record(rp),
 }
 
 ArrayCaseClause: Pattern1 = {
-    <s:@L> <segment:PathSegment> AssignOp <ap:ArrayPattern> <e:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start: s, end: e}), pattern: Box::new(Pattern1::Array(ap)) }),
+    <start:@L> <segment:PathSegment> AssignOp <ap:ArrayPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Array(ap)) }),
     <ap:ArrayPattern> => Pattern1::Array(ap),
 }
 
 ExprCaseClause: Pattern1 = {
-    <s:@L> <segment:PathSegment> AssignOp <expr:Expr> <e:@L> => Pattern1::Assign(AssignPattern1 { id:  Path1::Local( LocalPath1 { segments: vec![segment], start: s, end: e}), pattern: Box::new(Pattern1::Expr(expr)) }),
-    <expr:Expr> => Pattern1::Expr(expr),
+    <start:@L> <segment:PathSegment> AssignOp <expr:SimpleExprNoSideffect> <end:@L> => Pattern1::Assign(AssignPattern1 { id:  Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Expr(expr)) }),
+    <expr:SimpleExprNoSideffect> => Pattern1::Expr(expr),
 }
 
-WhenClause: Option<Box<Expr1>> = {
-    "when" <expr:Expr> => Some(Box::new(expr)),
+WhenClause: Option<Expr1> = {
+    "when" <expr:SimpleExprNoSideffect> => Some(expr),
 }
 
 Effectors: Exprs1 = {
@@ -375,31 +388,31 @@ Block: Exprs1 = {
 }
 
 PredicateFieldPattern: PredicatePattern1 = {
-    <s:@L> <lhs:Ident> <op:"~="> <expr:TestExpr> <e:@L> => PredicatePattern1::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
-    <s:@L> <assign:Ident> AssignOp <lhs:Ident> <op:"~="> <expr:TestExpr> <e:@L> => PredicatePattern1::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
+    <start:@L> <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePattern1::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
+    <start:@L> <assign:Ident> AssignOp <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePattern1::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
 
-    <s:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <e:@L> => PredicatePattern1::RecordPatternEq { lhs: lhs.id, pattern: rp },
-    <s:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <e:@L> => PredicatePattern1::ArrayPatternEq { lhs: lhs.id, pattern: ap },
+    <start:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <end:@L> => PredicatePattern1::RecordPatternEq { lhs: lhs.id, pattern: rp },
+    <start:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <end:@L> => PredicatePattern1::ArrayPatternEq { lhs: lhs.id, pattern: ap },
     // FIXME: should this be op ~ since the assign is seperate?
-    <s:@L> "present" <lhs:Ident> <e:@L> => PredicatePattern1::FieldPresent { lhs: lhs.id },
-    <s:@L> "absent" <lhs:Ident> <e:@L> => PredicatePattern1::FieldAbsent { lhs: lhs.id },
+    <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePattern1::FieldPresent { lhs: lhs.id },
+    <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePattern1::FieldAbsent { lhs: lhs.id },
     <lhs:Ident> <op:"=="> <expr:SimpleExpr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: false },
     <lhs:Ident> <op:"!="> <expr:SimpleExpr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: true },
 }
 
 TestExpr: TestExpr1 = {
-    <s:@L> <id:Ident> <tl: TestLiteral> <e:@L> => {
-        TestExpr1 { id: id.id, test: tl, start: s, end: e}
+    <start:@L> <id:Ident> <tl: TestLiteral> <end:@L> => {
+        TestExpr1 { id: id.id, test: tl, start, end}
     },
 }
 
 RecordPattern: RecordPattern1 = {
-    <s:@L> "%{" <fields:PatternFields> "}" <e:@L> => RecordPattern1 { fields: fields, start: s, end: e },
-    <s:@L> "%{" "}" <e:@L> => RecordPattern1 { fields: vec![], start: s, end: e },
+    <start:@L> "%{" <fields:PatternFields> "}" <end:@L> => RecordPattern1 { fields: fields, start, end },
+    <start:@L> "%{" "}" <end:@L> => RecordPattern1 { fields: vec![], start, end },
 }
 
 ArrayPattern: ArrayPattern1 = {
-    <s:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <e:@L> => ArrayPattern1 { exprs, start:s, end: e },
+    <start:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <end:@L> => ArrayPattern1 { exprs, start, end },
 }
 
 ArrayPredicatePattern: ArrayPredicatePattern1 = {
@@ -423,19 +436,19 @@ PatternFields: PatternFields1 = {
 }
 
 Record: Record1 = {
-    <s:@L> "{" <fields:Fields> "}" <e:@L> => Record1 { fields: fields, start: s, end: e },
-    <s:@L> "{" "}" <e:@L> => Record1 { fields: vec![], start: s, end: e }
+    <start:@L> "{" <fields:Fields> "}" <end:@L> => Record1 { fields: fields, start, end },
+    <start:@L> "{" "}" <end:@L> => Record1 { fields: vec![], start, end }
 }
 
 Field: Box<Field1> = {
-    <s:@L> <name:StringLiteral> ":" <value:Expr> <e:@L> => {
-        Box::new(Field1 { name, value: Box::new(value), start: s, end: e })
+    <start:@L> <name:StringLiteral> ":" <value:Expr> <end:@L> => {
+        Box::new(Field1 { name, value: Box::new(value), start, end })
     }
 }
 
 Invoke: Invoke1 = {
-    <s:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <e:@L> => Invoke1 { module: module.id, fun: fun.id, args, start: s, end: e },
-    <s:@L> <module:Ident> "::" <fun:Ident> "(" ")" <e:@L> => Invoke1 { module: module.id, fun: fun.id, args: vec![], start: s, end: e },
+    <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => Invoke1 { module: module.id, fun: fun.id, args, start, end },
+    <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => Invoke1 { module: module.id, fun: fun.id, args: vec![], start, end },
 }
 
 InvokeArgs: Exprs1 = {
@@ -479,18 +492,18 @@ Sep<L, T, D>: L = {
 
 #[inline]
 BinOp<Op, Current, Next>: Expr1 = {
-    <s:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <e:@L> => Expr1::Binary(BinExpr1 {
+    <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => Expr1::Binary(BinExpr1 {
         kind: op,
         lhs: Box::new(lhs),
         rhs: Box::new(rhs),
-        start: s,
-        end: e,
+        start,
+        end,
     }),
 }
 
 extern {
     type Location = Location;
-    type Error = LexerError;
+    type Error = crate::errors::Error;
     enum Token<'input> {
         "<doc-comment>" => lexer::Token::DocComment(<&'input str>),
         "<single-line-comment>" => lexer::Token::SingleLineComment(<&'input str>),
@@ -550,7 +563,7 @@ extern {
         "~" => lexer::Token::Tilde,
         "bool" => lexer::Token::BoolLiteral(<bool>),
         "int" => lexer::Token::IntLiteral(<i64>),
-        "float" => lexer::Token::FloatLiteral(<f64>),
+        "float" => lexer::Token::FloatLiteral(<f64>, <String>),
         "string" => lexer::Token::StringLiteral(<String>),
         "test" => lexer::Token::TestLiteral(<String>),
         "<ident>" => lexer::Token::Ident(<String>, <bool>),

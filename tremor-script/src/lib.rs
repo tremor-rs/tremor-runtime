@@ -17,8 +17,10 @@
 mod ast;
 mod compat;
 pub mod errors;
+pub mod grok;
 #[allow(unused, dead_code)]
 mod highlighter;
+pub mod influx;
 mod interpreter;
 mod lexer;
 #[allow(unused, dead_code)]
@@ -63,7 +65,8 @@ rental! {
             raw: Box<Vec<u8>>,
             parsed: borrowed::Value<'raw>
         }
-    }
+
+}
 }
 
 impl PartialEq<simd_json::OwnedValue> for rentals::Value {
@@ -119,13 +122,12 @@ pub use rentals::Value as LineValue;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interpreter::ValueStack;
-    use ast::{Expr, Literal, LiteralValue};
+    use crate::errors::*;
+    use ast::{Expr, Helper, Literal, LiteralValue};
     use halfbrown::hashmap;
-    use lexer::{LexerError, TokenFuns, TokenSpan};
+    use lexer::{TokenFuns, TokenSpan};
     use simd_json::borrowed::{Map, Value};
     use simd_json::json;
-    use std::iter::FromIterator;
 
     #[derive(Clone, Debug, Default, Serialize)]
     pub struct FakeContext {}
@@ -135,19 +137,21 @@ mod tests {
         ($src:expr, $expected:pat) => {{
             let _vals: Value = json!({}).into();
             let r: Registry<()> = registry();
-            let lexed_tokens = Vec::from_iter(lexer::tokenizer($src));
-            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens = lexed_tokens.expect("");
+            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
-            for t in lexed_tokens.clone().into_iter() {
-                let keep = !t.clone().expect("").value.is_ignorable();
+            for t in lexed_tokens {
+                let keep = !t.value.is_ignorable();
                 if keep {
-                    filtered_tokens.push(t.clone());
+                    filtered_tokens.push(Ok(t));
                 }
             }
+            let mut helper = Helper::new(&r);
             let actual = parser::grammar::ScriptParser::new()
-                .parse(filtered_tokens.clone())
+                .parse(filtered_tokens)
                 .expect("exeuction failed")
-                .up(&r)
+                .up(&mut helper)
                 .expect("exeuction failed");
             assert_matches!(
                 actual.exprs[0],
@@ -162,14 +166,15 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
             let _r: Registry<()> = registry();
-            let src = format!("{} ", $src);
-            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
-            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+            //let src = format!("{} ", $src);
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens = lexed_tokens.expect("");
+            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
-            for t in lexed_tokens.clone().into_iter() {
-                let keep = !t.clone().expect("").value.is_ignorable();
+            for t in lexed_tokens {
+                let keep = !t.value.is_ignorable();
                 if keep {
-                    filtered_tokens.push(t.clone());
+                    filtered_tokens.push(Ok(t));
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
@@ -178,10 +183,14 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());
-            let mut stack = ValueStack::default();
-            let value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
-            stack.clear();
-            assert_eq!(Ok(Return::Emit($expected)), value);
+            let value = runnable.run(&ctx, &mut event, &mut global_map);
+            assert_eq!(
+                Ok(Return::Emit {
+                    value: $expected,
+                    port: None
+                }),
+                value
+            );
         }};
     }
 
@@ -189,14 +198,15 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
             let _r: Registry<()> = registry();
-            let src = format!("{}", $src);
-            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
-            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+            //let src = format!("{}", $src);
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens = lexed_tokens.expect("");
+            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
-            for t in lexed_tokens.clone().into_iter() {
-                let keep = !t.clone().expect("").value.is_ignorable();
+            for t in lexed_tokens {
+                let keep = !t.value.is_ignorable();
                 if keep {
-                    filtered_tokens.push(t.clone());
+                    filtered_tokens.push(Ok(t));
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
@@ -205,9 +215,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());
-            let mut stack = ValueStack::default();
-            let _value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
-            stack.clear();
+            let _value = runnable.run(&ctx, &mut event, &mut global_map);
             // dbg!(("eval global", value));
             assert_eq!(global_map, $expected);
         }};
@@ -217,14 +225,15 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
             let _r: Registry<()> = registry();
-            let src = format!("{}", $src);
-            let lexed_tokens = Vec::from_iter(lexer::tokenizer(src.as_str()));
-            let mut filtered_tokens = Vec::<Result<TokenSpan, LexerError>>::new();
+            //let src = format!("{}", $src);
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens = lexed_tokens.expect("");
+            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
-            for t in lexed_tokens.clone().into_iter() {
-                let keep = !t.clone().expect("").value.is_ignorable();
+            for t in lexed_tokens {
+                let keep = !t.value.is_ignorable();
                 if keep {
-                    filtered_tokens.push(t.clone());
+                    filtered_tokens.push(Ok(t));
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
@@ -233,9 +242,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
             let mut global_map = Value::Object(interpreter::LocalMap::new());
-            let mut stack = ValueStack::default();
-            let _value = runnable.run(&ctx, &mut event, &mut global_map, &stack);
-            stack.clear();
+            let _value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(event, $expected);
         }};
     }

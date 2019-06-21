@@ -1,0 +1,4 @@
+let foo = { "meta": 82 };
+let bar = { "meta" : 82.0 };
+emit (foo.meta == bar.meta);
+foo == bar

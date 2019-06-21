@@ -1,0 +1,33 @@
+
+# validate that cidr target in field 'meta' is a valid IPv4 or IPv6 network address and extract the CIDR prefix and mask
+let bare_cidr = match { "meta": "192.168.1.1" } of
+  case rp = %{ meta ~= cidr|| } => rp
+  default => "no match"
+end;
+
+let pinned_cidr = match { "meta": "10.22.0.254" } of
+  case rp = %{ meta ~= cidr|10.22.0.0/24| } => rp
+  default => "no match"
+end;
+
+let actual = {"bare": bare_cidr, "pinned": pinned_cidr };
+
+let expected = {
+  "bare": {
+    "meta": {
+      "prefix": [ 192, 168, 1, 1 ],
+      "mask": [ 255, 255, 255, 255 ]
+    }
+  },
+  "pinned": {
+    "meta": {
+      "prefix": [ 10, 22, 0, 254 ],
+      "mask": [ 255, 255, 255, 255 ]
+    }
+  }
+};
+
+match expected == actual of
+  case true => "ok"
+  default => "ko"
+end;

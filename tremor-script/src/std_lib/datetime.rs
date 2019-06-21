@@ -16,14 +16,19 @@
 use crate::errors::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use chrono::{offset::Utc, DateTime, Datelike, NaiveDateTime, SubsecRound, Timelike};
+use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
         .insert(
         tremor_fn! (datetime::parse(_context, _input : String,  _input_fmt: String) {
-            _parse(&_input, & _input_fmt).map(Value::from).map_err(to_runtime_error)
-        }))
+             let res = _parse(&_input, _input_fmt);
+             match res {
+                 Ok(x) => Ok(Value::from(x)),
+                 Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error:  format!("Cannot Parse {} to valid timestamp", e), 
+})
+}}))
+
         .insert(
             tremor_fn!(datetime::iso8601(_context, _datetime: I64) {
               let res = _iso8601(* _datetime as u64);
@@ -63,11 +68,23 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         .insert(tremor_fn!(datetime::today(_context) {
             Ok(Value::from(_today()))
         }))
+        .insert(tremor_fn!(datetime::subsecond(_context, _value: I64) {
+            Ok(Value::from(_subsecond(*_value as u64)))
+        }))
+        .insert(tremor_fn!(datetime::to_nearest_millisecond(_context, _value: I64) {
+            Ok(Value::from(_to_nearest_millisecond(*_value as u64)))
+        }))
+        .insert(tremor_fn!(datetime::to_nearest_microsecond(_context, _value: I64) {
+            Ok(Value::from(_to_nearest_microsecond(*_value as u64)))
+        }))
+        .insert(tremor_fn!(datetime::to_nearest_second(_context, _value: I64) {
+              Ok(Value::from(_to_nearest_second(*_value as u64)))
+        }))
         .insert(tremor_fn!(datetime::from_human_format(_context, _value: String) {
             match _from_human_format(_value) {
                 Some(x) => Ok(Value::from(x)),
                 None => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("The human format {} is invalid", _value)})
-            }
+        }
         }))
         .insert(tremor_fn!(datetime::with_nanoseconds(_context, _n: I64) {
             Ok(Value::from(_with_nanoseconds(*_n as u32)))
@@ -101,7 +118,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         }));
 }
 pub fn _parse(datetime: &str, input_fmt: &str) -> Result<u64> {
-    Ok(DateTime::parse_from_str(datetime, input_fmt)
+    Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
         .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
         .timestamp_nanos() as u64)
 }
@@ -142,11 +159,11 @@ pub fn _millisecond(value: u64) -> u32 {
 }
 
 pub fn _microsecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond() / 1_000_000_000
+    to_naive_datetime(value).nanosecond() / 1_000 % 1_000
 }
 
 pub fn _nanosecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond()
+    to_naive_datetime(value).nanosecond() % 1000
 }
 
 pub fn _subsecond(value: u64) -> u32 {
@@ -172,7 +189,7 @@ pub fn _to_nearest_microsecond(value: u64) -> u64 {
 }
 
 pub fn _to_nearest_second(value: u64) -> u64 {
-    let ms = _nanosecond(value);
+    let ms = _subsecond(value);
     if ms < 500_000_000 {
         value - u64::from(ms)
     } else {
@@ -263,18 +280,29 @@ mod tests {
 
     #[test]
     pub fn parse_parses_it_to_ts() {
-        let input = "2019 Apr 20 00:00:00.000 +0000";
-        let output =
-            _parse(input, "%Y %b %d %H:%M:%S%.9f %z").expect("cannot parse datetime string");
+        let output = _parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z")
+            .expect("cannot parse datetime string");
 
-        assert_eq!(output, 1555718400_000_000000u64);
+        assert_eq!(output, 419083754274000000);
     }
 
     #[test]
-    pub fn hour_returns_the_hour() {
-        let input = 1559655782_000_000_000u64;
+    pub fn parse_unix_ts() {
+        let output = _parse("1560777212", "%s").expect("cannot parse datetime string");
+
+        assert_eq!(output, 1560777212000000000);
+    }
+
+    #[test]
+    pub fn hms_returns_the_corresponding_components() {
+        let input = 1559655782_123_456_789u64;
         let output = _hour(input);
         assert_eq!(output, 13);
+        assert_eq!(_minute(input), 43);
+        assert_eq!(_second(input), 2);
+        assert_eq!(_millisecond(input), 123);
+        assert_eq!(_microsecond(input), 456);
+        assert_eq!(_nanosecond(input), 789);
     }
 
     #[test]
@@ -342,6 +370,12 @@ mod tests {
             "2019-06-04".to_owned()
         );
         assert_eq!(_format(123_567_892u64, "%Y-%m-%d"), "1970-01-01".to_owned());
+    }
+
+    #[test]
+    pub fn without_subseconds() {
+        let input = 1559655782_123_456_789u64;
+        assert_eq!(_without_subseconds(input), 1559655782u64);
     }
 
 }

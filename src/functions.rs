@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::errors::*;
-use crate::logstash::grok;
 use simd_json::OwnedValue;
 use tremor_pipeline::FN_REGISTRY;
+use tremor_script::grok;
 use tremor_script::tremor_fn;
 
 pub fn load() -> Result<()> {
@@ -30,7 +30,7 @@ pub fn load() -> Result<()> {
                 let recognizer = grok::resolve(_pattern.to_string());
                 match recognizer.matches(_text.to_string().as_bytes().to_vec()) {
                     Ok(j) => {
-                        let v: OwnedValue = j.rent(|j| j.clone().into());
+                        let v: OwnedValue = j;
                         Ok(v)
                     },
                     _ => Err(to_runtime_error(format!("{} for pattern: `{}` and text `{}`", "logstash::grok failure", _pattern, _text))),

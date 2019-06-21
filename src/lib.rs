@@ -42,7 +42,6 @@ pub mod errors;
 pub mod functions;
 pub mod codec;
 pub mod lifecycle;
-pub mod logstash;
 pub mod metrics;
 pub mod offramp;
 pub mod onramp;

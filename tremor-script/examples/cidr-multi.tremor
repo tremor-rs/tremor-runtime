@@ -1,0 +1,27 @@
+# validate that cidr target in field 'meta' is a valid IPv4 or IPv6 network address and belongs to the CIDR mentioned and extract the CIDR prefix and mask.
+let multi_cidr = match { "meta": "10.22.0.254" } of
+  case rp = %{ meta ~= cidr|10.22.0.0/24, 10.22.1.0/24| } => rp
+  default => "no match"
+end;
+
+let doesnt_match = match { "meta": "10.22.0.254" } of
+  case rp = %{ meta ~= cidr|10.41.0.0/24, 11.41.0.0/24| } => rp
+  default => "no match"
+end;
+
+let actual = {"multi_cidr": multi_cidr, "doesnt_match": doesnt_match };
+
+let expected = {
+  "doesnt_match": "no match",
+  "multi_cidr": {
+    "meta": {
+      "prefix": [ 10, 22, 0, 254 ],
+      "mask": [ 255, 255, 255, 255 ]
+    }
+  }
+};
+
+match expected == actual of
+  case true => "ok"
+  default => "ko"
+end;

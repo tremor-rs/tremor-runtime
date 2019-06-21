@@ -7,6 +7,8 @@
 #
 # To enable this hook, rename this file to "pre-commit".
 
+set -x
+
 if git rev-parse --verify HEAD >/dev/null 2>&1
 then
 	against=HEAD
@@ -21,6 +23,8 @@ allownonascii=$(git config --bool hooks.allownonascii)
 # Redirect output to stderr.
 exec 1>&2
 
+# make sure that when any test fails we fail
+set -e
 make chk_copyright_ci
 make chk_unwrap_ci
 make chk_panic_ci
@@ -28,6 +32,7 @@ cargo fmt --all
 cargo test --all
 cargo clippy --all
 make it
+set +e
 
 
 # Cross platform projects tend to avoid non-ASCII filenames; prevent

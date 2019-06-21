@@ -34,11 +34,13 @@ pub struct Location {
     pub absolute: BytePos,
 }
 
-#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+#[derive(
+    Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
+)]
 pub struct Range(pub Location, pub Location);
 
 impl Range {
-    fn expand_lines(&self, lines: u32) -> Self {
+    pub fn expand_lines(&self, lines: u32) -> Self {
         let mut new = *self;
         new.0 = new.0.move_up_lines(lines);
         new.1 = new.1.move_down_lines(lines);

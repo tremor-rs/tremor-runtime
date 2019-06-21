@@ -14,21 +14,22 @@
 
 use crate::errors::*;
 use grok::Grok;
-use simd_json::json;
+use simd_json::{json, owned::Value};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str;
-use tremor_script::LineValue;
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
+#[allow(unused)]
 pub fn resolve(pattern: String) -> GrokPattern {
     GrokPattern::from_file(PATTERNS_FILE_DEFAULT_PATH.to_string(), pattern)
         .expect("Could not create grok pattern recognizer")
 }
 
+#[derive(Debug)]
 pub struct GrokPattern {
     pub definition: String,
     pub pattern: grok::Pattern,
@@ -91,20 +92,26 @@ impl GrokPattern {
         }
     }
 
-    pub fn matches(&self, data: Vec<u8>) -> Result<LineValue> {
+    pub fn matches(&self, data: Vec<u8>) -> Result<Value> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {
             Some(m) => {
-                dbg!(&m);
                 let mut as_map: HashMap<&str, &str> = HashMap::new();
                 for (a, b) in m.iter() {
                     as_map.insert(a, b);
                 }
-                let as_json = json!(as_map);
-                dbg!(&as_map);
-                Ok(LineValue::new(Box::new(vec![]), |_| as_json.into()))
+                Ok(json!(as_map))
             }
             None => Err(format!("No match for log text: {}", &text).into()),
+        }
+    }
+}
+
+impl std::clone::Clone for GrokPattern {
+    fn clone(&self) -> Self {
+        Self {
+            definition: self.definition.to_owned(),
+            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).expect(""),
         }
     }
 }

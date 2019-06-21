@@ -35,9 +35,9 @@ use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
 use tremor_runtime::functions as tr_fun;
-use tremor_runtime::logstash;
 use tremor_runtime::rest;
 use tremor_runtime::utils;
+use tremor_script::grok;
 
 use clap::ArgMatches;
 use std::io;
@@ -232,12 +232,11 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
                 let m = tremor_script::LocalMap::new();
                 let mut global_map =
                     simd_json::borrowed::Value::Object(tremor_script::LocalMap::new());
-                let stack: tremor_script::ValueStack = tremor_script::ValueStack::default();
                 #[allow(mutable_transmutes)]
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let mut unwind_event: &mut simd_json::borrowed::Value =
                     unsafe { std::mem::transmute(json.suffix()) };
-                match s.run(&context, &mut unwind_event, &mut global_map, &stack) {
+                match s.run(&context, &mut unwind_event, &mut global_map) {
                     Ok(_result) => {
                         println!(
                             "{}",
@@ -285,9 +284,9 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
     };
 
     let grok = if cmd.is_present("patterns") {
-        logstash::grok::GrokPattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
+        grok::GrokPattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
     } else {
-        logstash::grok::GrokPattern::new(test_pattern.to_string())?
+        grok::GrokPattern::new(test_pattern.to_string())?
     };
     for (num, line) in input.lines().enumerate() {
         let l = line?;

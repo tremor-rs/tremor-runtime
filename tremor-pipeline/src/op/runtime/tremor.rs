@@ -58,7 +58,6 @@ impl Operator for Tremor {
         let context = TremorContext {
             ingest_ns: event.ingest_ns,
         };
-        let stack = tremor_script::ValueStack::default();
         #[allow(clippy::transmute_ptr_to_ptr)]
         #[allow(mutable_transmutes)]
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
@@ -70,29 +69,29 @@ impl Operator for Tremor {
             &context,
             &mut unwind_event, // event
             &mut event_meta,   // $
-            &stack,
         );
         match value {
-            Ok(Return::Emit(data)) => {
+            Ok(Return::EmitEvent { port }) => {
                 let event_meta: simd_json::owned::Value = event_meta.into();
                 if let simd_json::owned::Value::Object(map) = event_meta {
                     event.meta = map;
-                    *unwind_event = data;
-                    Ok(vec![("out".to_string(), event)])
+                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
                 } else {
                     unreachable!();
                 }
             }
-            Ok(Return::Drop(data)) => {
+
+            Ok(Return::Emit { value, port }) => {
                 let event_meta: simd_json::owned::Value = event_meta.into();
                 if let simd_json::owned::Value::Object(map) = event_meta {
                     event.meta = map;
-                    *unwind_event = data;
-                    Ok(vec![("drop".to_string(), event)])
+                    *unwind_event = value;
+                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
                 } else {
                     unreachable!();
                 }
             }
+            Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
                 /*
                 *unwind_event = Value::Object(hashmap! {
@@ -111,7 +110,7 @@ impl Operator for Tremor {
                         error.insert("event".into(), o);
                     };
                     //*unwind_event = data;
-                    Ok(vec![("drop".to_string(), event)])
+                    Ok(vec![("error".to_string(), event)])
                 } else {
                     unreachable!();
                 }

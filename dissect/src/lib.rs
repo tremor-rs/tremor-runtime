@@ -181,7 +181,7 @@ pub type Result<T> = std::result::Result<T, DissectError>;
 // an error if either the parsing or the extracting fails, and will return an error if it it doesn't
 // match the token.
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct Pattern {
     tokens: Vec<Token>,
 }

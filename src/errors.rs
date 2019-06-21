@@ -213,5 +213,9 @@ error_chain! {
             description("Bad output pipeline id.")
                 display("Bad output pipeline id {}", i - 1)
         }
+        BadUTF8InString {
+            description("Bad UTF8 in input string")
+                display("Bad UTF8 in input string")
+        }
     }
 }
