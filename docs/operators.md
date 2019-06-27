@@ -39,7 +39,9 @@ The tremor script runtime that allows to modify events or their metadata. To lea
 
 **Outputs**:
 
-* `out`
+* `out` (default output used with `emit`)
+* `error` - special channel for runtime errors
+* `<anything else>` used when `emit event => "<anything else>"`
 
 **Example**:
 
@@ -48,9 +50,7 @@ The tremor script runtime that allows to modify events or their metadata. To lea
     op: runtime::tremor
     config:
       script: |
-        export index_type;
-
-        _ { $index_type := index; }
+        emit
 ```
 
 ## grouper::bucket

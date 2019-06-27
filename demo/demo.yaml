@@ -55,12 +55,9 @@ services:
       - 9898:9898
     environment:
       - SLEEP=20
-      - CONFIG_FILE=/configs/config.yaml
-      - MAPPING_FILE=/configs/mappings.yaml
-      - LOGGER_FILE=/configs/logger.yaml
       - RUST_BACKTRACE=1
       - RUST_LOG=info
     volumes:
-      - ./configs:/configs:ro
+      - ./configs/tremor:/etc/tremor:ro
       - ./logs:/logs:rw
       - ./data:/data:ro

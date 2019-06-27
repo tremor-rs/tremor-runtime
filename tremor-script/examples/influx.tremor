@@ -1,4 +1,4 @@
-let actual = match { "meta" :  "wea\\ ther,location=us-midwest temperature=82 1465839830100400200" } of
+let actual = emit match { "meta" :  "wea\\ ther,location=us-midwest temperature=82.0 1465839830100400200" } of
   case rp = %{ meta ~= influx||} => rp
   default => "no match"
 end;
@@ -10,7 +10,7 @@ end;
              "location": "us-midwest"
            },
            "fields": {
-            "temperature": 82
+            "temperature": 82.0
           },
           "timestamp": 1465839830100400200
         }

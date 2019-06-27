@@ -8,6 +8,6 @@ match (let r = { "event": event, "meta": $snot }) of
   case rp = %{ meta ~= re|bad(?P<snot>.*)|, `event` != null } => rp
   # case rp = %{ meta ~= re|bad(?P<snot>.*)|, test event != null  nested ~= %{ ... } } when => rp ... what about adding fields to local ctx issues with nested is a.a vs a - what does 'a' mean?
   case ap = %[ "cookie", "armadillo" ] => "snot badger"
-  case `$snot$sum` = (1 + 2) == 3 when true => 3
+  case `$snot$sum` = ((1 + 2) == 3) when true => 3
   default => string::format("With target: {}", r)
 end;

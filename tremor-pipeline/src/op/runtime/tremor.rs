@@ -11,15 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::errors::*;
 use crate::FN_REGISTRY;
 use crate::{Event, Operator};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
+use tremor_script::highlighter::DumbHighlighter;
 use tremor_script::{self, Return, Script};
-
 #[derive(Debug, Clone, Default)]
 pub struct TremorContext {
     pub ingest_ns: u64,
@@ -27,17 +26,28 @@ pub struct TremorContext {
 impl tremor_script::Context for TremorContext {}
 
 op!(TremorFactory(node) {
-        if let Some(map) = &node.config {
-            let config: Config = serde_yaml::from_value(map.clone())?;
+    if let Some(map) = &node.config {
+        let config: Config = serde_yaml::from_value(map.clone())?;
 
-            let runtime = Script::parse(&config.script, &*FN_REGISTRY.lock()?)?;
-            Ok(Box::new(Tremor {
-                runtime,
-                config,
-                id: node.id.clone(),
-            }))
-        } else {
-            Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        match tremor_script::Script::parse(&config.script, &*FN_REGISTRY.lock()?) {
+            Ok(runtime) =>
+                Ok(Box::new(Tremor {
+                    runtime,
+                    config,
+                    id: node.id.clone(),
+                })),
+            Err(e) => {
+                let mut h = DumbHighlighter::new();
+                if let Err(e) = tremor_script::interpreter::Script::<()>::format_error_from_script(&config.script, &mut h, &e) {
+                    error!("{}", e.to_string());
+                } else {
+                    error!("{}", h.to_string());
+                };
+                return Err(e.into());
+            }
+        }
+    } else {
+        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
     }
 });
 
@@ -159,5 +169,18 @@ mod test {
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
         assert_eq!(j, json!({"snot": "badger", "a": 1}))
+    }
+
+    #[test]
+    pub fn test_how_it_handles_errors() {
+        let config = Config {
+            script: r#"match this is invalid code so no match case"#.to_string(),
+        };
+        let runtime = Script::parse(
+            &config.script,
+            &*FN_REGISTRY.lock().expect("could not claim lock"),
+        );
+
+        dbg!(&runtime);
     }
 }

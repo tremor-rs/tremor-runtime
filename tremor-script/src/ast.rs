@@ -278,7 +278,15 @@ pub enum Expr1 {
     //Let(Let<Ctx>),
     Assign(Assign1),
     Comprehension(Comprehension1),
-    Drop { start: Location, end: Location },
+    Drop {
+        start: Location,
+        end: Location,
+    },
+    Present {
+        path: Path1,
+        start: Location,
+        end: Location,
+    },
     Emit(EmitExpr1),
     Test(TestExpr),
 }
@@ -316,6 +324,11 @@ impl Expr1 {
             Expr1::MatchExpr(m) => Expr::MatchExpr(Box::new(m.up(helper)?)),
             Expr1::PatchExpr(p) => Expr::PatchExpr(Box::new(p.up(helper)?)),
             Expr1::MergeExpr(m) => Expr::MergeExpr(Box::new(m.up(helper)?)),
+            Expr1::Present { path, start, end } => Expr::Present {
+                path: path.up(helper)?,
+                start,
+                end,
+            },
             Expr1::Path(p) => Expr::Path(p.up(helper)?),
             Expr1::Literal(l) => Expr::Literal(l.up(helper)?),
             Expr1::Binary(b) => match b.up(helper)? {
@@ -403,11 +416,19 @@ pub enum Expr<Ctx: Context + 'static> {
     Literal(Literal<Ctx>),
     Binary(Box<BinExpr<Ctx>>),
     Unary(Box<UnaryExpr<Ctx>>),
+    Present {
+        path: Path<Ctx>,
+        start: Location,
+        end: Location,
+    },
     Invoke(Invoke<Ctx>),
     Let(Let<Ctx>),
     Assign(Assign<Ctx>),
     Comprehension(Comprehension<Ctx>),
-    Drop { start: Location, end: Location },
+    Drop {
+        start: Location,
+        end: Location,
+    },
     Emit(Box<EmitExpr<Ctx>>),
     Test(TestExpr),
 }
@@ -460,6 +481,7 @@ impl<Ctx: Context + 'static> BaseExpr for Expr<Ctx> {
             Expr::Assign(e) => e.s(),
             Expr::Comprehension(e) => e.s(),
             Expr::Drop { start, .. } => *start,
+            Expr::Present { start, .. } => *start,
             Expr::Emit(e) => e.s(),
             Expr::Test(e) => e.s(),
         }
@@ -479,6 +501,7 @@ impl<Ctx: Context + 'static> BaseExpr for Expr<Ctx> {
             Expr::Assign(e) => e.e(),
             Expr::Comprehension(e) => e.e(),
             Expr::Drop { end, .. } => *end,
+            Expr::Present { end, .. } => *end,
             Expr::Emit(e) => e.e(),
             Expr::Test(e) => e.e(),
         }

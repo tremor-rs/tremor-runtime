@@ -1,0 +1,4 @@
+match { "test" : "INFO" } of
+  case foo = %{ test ~= glob|INFO*| } => foo
+  default => "ko"
+end;

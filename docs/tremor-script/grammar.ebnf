@@ -44,7 +44,7 @@ Bool ::=
 
 Let ::= 'let' Path '=' SimpleExpr
 
-Emit ::= 'emit' Expr
+Emit ::= 'emit' Expr ( '=>' STRING_LITERAL )?
 
 Drop ::= 'drop' Expr
 

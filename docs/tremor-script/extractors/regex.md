@@ -2,7 +2,15 @@
 
 The regex extractor extracts fields from data by parsing a regular expression provided by the user. It accepts a "perl-style regular expression"
 
-Example:
+## Predicate:
+
+When used with `~`, the predicate passes if a valid regular expression is passed.
+
+## Extraction:
+
+If the predicate passes, the extractor returns the matched values from the target. Returns an error if the regex fails to match.
+
+## Example:
 
 ```tremor
 drop match { "test": "http://example.com/", "footle": "bar" } of

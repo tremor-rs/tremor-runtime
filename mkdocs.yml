@@ -26,7 +26,7 @@ nav:
     - Monitoring.md
     - Tremor Script:
       - Overview: tremor-script.md
-      - Functions:
+      - Function Reference:
           - Overview: tremor-script/functions.md
           - array: tremor-script/functions/array.md
           - datetime: tremor-script/functions/datetime.md
@@ -35,6 +35,17 @@ nav:
           - string: tremor-script/functions/string.md
           - system: tremor-script/functions/system.md
           - type: tremor-script/functions/type.md
+      - Extractor Reference:
+          -  Overview: tremor-script/extractors.md
+          -  Base64: tremor-script/extractors/base64.md
+          -  CIDR: tremor-script/extractors/cidr.md
+          -  Dissect: tremor-script/extractors/dissect.md
+          -  Glob: tremor-script/extractors/glob.md
+          -  Influx: tremor-script/extractors/influx.md
+          -  JSON: tremor-script/extractors/json.md
+          -  KV: tremor-script/extractors/kv.md
+          -  Regex: tremor-script/extractors/regex.md
+      - Recipes: tremor-script/recipes.md
     - API: Api.md
     - Tremor Tool: CLI.md
     - Configuration Walkthrough: ConfigurationWalkthrough.md
@@ -47,7 +58,9 @@ nav:
     - 'Quick Start Guide': QuickStart.md
     - Profiling: Profiling.md
     - 'Debugging with LLDB': Debugging.md
-    - Benchmarking: Benchmarking.md
+    - Benchmarking:
+      - Overview: Benchmarking.md
+      - Logstash: benchmarks/LogstashBenchmark.md
     - Testing: Testing.md
     - Investigation: IssueInvestigation.md
   - 'Glossary': Glossary.md

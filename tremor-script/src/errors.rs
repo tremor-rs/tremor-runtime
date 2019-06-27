@@ -118,9 +118,9 @@ impl ErrorKind {
         match self {
             ArrayOutOfRange(expr, inner, _) => (Some(*expr), Some(*inner)),
             AssignIntoArray(expr, inner) => (Some(*expr), Some(*inner)),
-            BadAccessInEvent(expr, inner, _) => (Some(*expr), Some(*inner)),
-            BadAccessInGlobal(expr, inner, _) => (Some(*expr), Some(*inner)),
-            BadAccessInLocal(expr, inner, _) => (Some(*expr), Some(*inner)),
+            BadAccessInEvent(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            BadAccessInGlobal(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            BadAccessInLocal(expr, inner, _, _) => (Some(*expr), Some(*inner)),
             BadArity(expr, inner, _, _, _, _) => (Some(*expr), Some(*inner)),
             BadType(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
             BinaryDrop(expr, inner) => (Some(*expr), Some(*inner)),
@@ -181,8 +181,33 @@ impl ErrorKind {
         use ErrorKind::*;
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute == outer.1.absolute => Some("It looks like a `;` is missing at the end of the script".into()),
-            BadAccessInLocal(_, _, key) if distance::damerau_levenshtein(key, "event") <= 2 => {
-                Some("Did you mean to use event?".to_owned())
+            UnrecognizedToken(_, _, t, _) if t == "default" => Some("You might have a trailing `,` in the prior statement".into()),
+            BadAccessInLocal(_, _, key, _) if key == "nil" => {
+                Some("Did you mean null?".to_owned())
+            }
+            BadAccessInLocal(_, _, key, options) => {
+                let mut options = options.clone();
+                options.push("event".to_owned());
+                options.push("true".to_owned());
+                options.push("false".to_owned());
+                options.push("null".to_owned());
+                match best_hint(&key, &options, 2) {
+                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
+                    _ => None
+                }
+            }
+
+            BadAccessInEvent(_, _, key, options) => {
+                match best_hint(&key, &options, 2) {
+                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
+                    _ => None
+                }
+            }
+            BadAccessInGlobal(_, _, key, options) => {
+                match best_hint(&key, &options, 2) {
+                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
+                    _ => None
+                }
             }
             TypeConflict(_, _, ValueType::F64, expected) => match expected.as_slice() {
                 [ValueType::I64] => Some(
@@ -194,10 +219,10 @@ impl ErrorKind {
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
             MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
             MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
-            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as parth of a path, consider quoting it as `event` to make it an ident oruse array like acces such as [\"event\"].".into()),
+            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_) => Some("Please take the error output script and idealy data and open a ticket, this should not happen.".into()),
+            Oops(_) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
             _ => None,
         }
     }
@@ -299,18 +324,18 @@ error_chain! {
          */
         UnterminatedExtractor(expr: Range, inner: Range, extractor: String) {
             description("Unterminated extractor")
-                display("It looks like you forgot to terminate an extractor")
+                display("It looks like you forgot to terminate an extractor with a closing '|'")
         }
 
         UnterminatedStringLiteral(expr: Range, inner: Range, extractor: String) {
             description("Unterminated string")
-                display("It looks like you forgot to terminate a string")
+                display("It looks like you forgot to terminate a string with a closing '\"'")
         }
 
         UnterminatedIdentLiteral(expr: Range, inner: Range, extractor: String)
         {
             description("Unterminated ident")
-                display("It looks like you forgot to terminate an ident")
+                display("It looks like you forgot to terminate an ident with a closing '`'")
 
         }
 
@@ -360,15 +385,15 @@ error_chain! {
          * Resolve / Assign path walking
          */
 
-        BadAccessInLocal(expr: Range, inner: Range, key: String ) {
+        BadAccessInLocal(expr: Range, inner: Range, key: String, options: Vec<String>) {
             description("Trying to access a non existing local key")
                 display("Trying to access a non existing local key `{}`", key)
         }
-        BadAccessInGlobal(expr: Range, inner: Range, key: String) {
+        BadAccessInGlobal(expr: Range, inner: Range, key: String, options: Vec<String>) {
             description("Trying to access a non existing global key")
                 display("Trying to access a non existing global key `{}`", key)
         }
-        BadAccessInEvent(expr: Range, inner: Range, key: String) {
+        BadAccessInEvent(expr: Range, inner: Range, key: String, options: Vec<String>) {
             description("Trying to access a non existing event key")
                 display("Trying to access a non existing event key `{}`", key)
         }
@@ -429,8 +454,8 @@ error_chain! {
                 display("Invalid tilde predicate pattern: {}", error)
         }
         NoClauseHit(expr: Range){
-            description("A match expression executed bu no clause matched")
-                display("A match expression executed bu no clause matched")
+            description("A match expression executed but no clause matched")
+                display("A match expression executed but no clause matched")
         }
         MissingEffectors(expr: Range, inner: Range) {
             description("The clause has no effectors")
@@ -440,12 +465,12 @@ error_chain! {
          * Patch
          */
         InsertKeyExists(expr: Range, inner: Range, key: String) {
-            description("The key that is suposed to be inserted already exists")
-                display("The key that is suposed to be inserted already exists: {}", key)
+            description("The key that is supposed to be inserted already exists")
+                display("The key that is supposed to be inserted already exists: {}", key)
         }
         UpdateKeyMissing(expr: Range, inner: Range, key:String) {
-            description("The key that is suposed to be updated does not exists")
-                display("The key that is suposed to be updated does not exists: {}", key)
+            description("The key that is supposed to be updated does not exists")
+                display("The key that is supposed to be updated does not exists: {}", key)
         }
 
         MergeTypeConflict(expr: Range, inner: Range, key:String, val: ValueType) {
@@ -485,12 +510,19 @@ impl<Ctx: Context> Expr<Ctx> {
         inner: &Expr<Ctx>,
         path: &ast::Path<Ctx>,
         key: String,
+        options: Vec<String>,
     ) -> Result<T> {
         let expr: Range = self.into();
         Err(match path {
-            ast::Path::Local(_p) => ErrorKind::BadAccessInLocal(expr, inner.into(), key).into(),
-            ast::Path::Meta(_p) => ErrorKind::BadAccessInGlobal(expr, inner.into(), key).into(),
-            ast::Path::Event(_p) => ErrorKind::BadAccessInEvent(expr, inner.into(), key).into(),
+            ast::Path::Local(_p) => {
+                ErrorKind::BadAccessInLocal(expr, inner.into(), key, options).into()
+            }
+            ast::Path::Meta(_p) => {
+                ErrorKind::BadAccessInGlobal(expr, inner.into(), key, options).into()
+            }
+            ast::Path::Event(_p) => {
+                ErrorKind::BadAccessInEvent(expr, inner.into(), key, options).into()
+            }
         })
     }
     pub fn error_type_conflict_mult<T>(

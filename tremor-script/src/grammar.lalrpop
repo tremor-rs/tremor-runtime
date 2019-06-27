@@ -102,9 +102,16 @@ UnaryExpr: Expr1 = {
 }
 
 UnarySimpleExpr: Expr1 = {
-    <start:@L> "not" <expr:SimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(expr), start, end }),
+    <start:@L> "not" <expr:PresenceSimplExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(expr), start, end }),
+    PresenceSimplExpr => <>,
+}
+
+PresenceSimplExpr: Expr1 = {
+    <start:@L> "present" <path:Path> <end:@L> => Expr1::Present{path, start, end},
+    <start:@L> "absent" <path:Path> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(Expr1::Present{path, start, end}), start, end }),
     SimpleExpr => <>,
 }
+
 
 SimpleExpr: Expr1 = {
     <literal:Literal> => Expr1::Literal(literal),
@@ -396,8 +403,8 @@ PredicateFieldPattern: PredicatePattern1 = {
     // FIXME: should this be op ~ since the assign is seperate?
     <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePattern1::FieldPresent { lhs: lhs.id },
     <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePattern1::FieldAbsent { lhs: lhs.id },
-    <lhs:Ident> <op:"=="> <expr:SimpleExpr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: false },
-    <lhs:Ident> <op:"!="> <expr:SimpleExpr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: true },
+    <lhs:Ident> <op:"=="> <expr:Expr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: false },
+    <lhs:Ident> <op:"!="> <expr:Expr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: true },
 }
 
 TestExpr: TestExpr1 = {

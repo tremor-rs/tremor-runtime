@@ -2,7 +2,7 @@ onramp:
   - id: blaster
     type: blaster
     config:
-      source: data/data.json.xz
+      source: /data/data.json.xz
       interval: 4000000 # 250 events/s
     codec: json
   - id: kafka-in
@@ -58,14 +58,14 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, rate;
-            short_message=g"*info*" { $class := "info"; $rate := 1000; return; }
-      - id: b
-        op: grouper::bucket
+            emit;
+            match event of
+              case %{ short_message ~= glob|*info*| } => emit
+              default => drop
+            end
     links:
       in: [ r ]
-      r: [ b ]
-      b : [ out ]
+      r: [ out ]
   - id: loadgen-error
     interface:
       inputs:
@@ -77,14 +77,13 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, rate;
-            short_message=g"*ERROR*" { $class := "error"; $rate := 1000; return; }
-      - id: b
-        op: grouper::bucket
+            match event of
+              case %{ short_message ~= glob|*ERROR*| } => emit
+              default => drop
+            end
     links:
       in: [ r ]
-      r: [ b ]
-      b : [ out ]
+      r: [ out ]
   - id: enrich
     interface:
       inputs:
@@ -96,7 +95,8 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            _ { tags.host := system::hostname(); }
+            let event.tags.host = system::hostname();
+            emit
       - id: batch
         op: generic::batch
         config:
@@ -116,21 +116,24 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            export class, rate, index, doc_type;
-            _ { $index := "tremor"; $doc_type := "log"; }
+            let $index = "tremor";
+            let $doc_type = "log";
             # The first class we define is named `info`,
             # it matches if `short_message`  contains the string `"info"`
-            # we configure it to have a rate of 10 events/s 
-            short_message=g"*info*" { $class := "info"; $rate := 10; return; }
+            # we configure it to have a rate of 10 events/s
+            match event of
+              case %{ short_message ~= glob|*info*| } => let $class = "info", let $rate = 10, emit
             # The second class we define is `error`, it matches
             # if  `short_message` contains the string `"ERROR`
             # we configure it to have a rate of 100 events/s 
-            short_message=g"*ERROR*" { $class := "error"; $rate := 100; return; }
-            # The _ denotes that this will match every event. Since we use 'return'
-            # in the previous rules we know that only events that didn't match another
+              case %{ short_message ~= glob|*ERROR*| } => let $class = "error", let $rate = 100, emit
+            end;
+            # Since we use 'emit' in the previous rules we know that only events that didn't match another
             # rule will arrive here. We're setting class and rate here to 'defaut' and
             # 90 rates.
-            _ { $class := "default"; $rate := 90; }
+            let $class = "default";
+            let $rate = 90;
+            emit
       - id: bucket                                    # Now we limit how much each class is allowed to send per second
         op: grouper::bucket
       - id: bp                                        # Apply back pressure, every time a response is over 100ms we bump the backoff
@@ -160,8 +163,8 @@ binding:
   - id: demo
     links:
       '/onramp/kafka-in/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
-      '/pipeline/demo/{instance}/out': [ '/offramp/debug/{instance}/in', '/offramp/elastic/{instance}/in'  ]
+      '/pipeline/demo/{instance}/out': [ '/offramp/elastic/{instance}/in'  ]
   - id: metrics
     links:
       '/pipeline/system::metrics/system/out': [ '/pipeline/enrich/system/in' ]
-      '/pipeline/enrich/system/out': [ '/offramp/influxdb/system/in' ]
+      '/pipeline/enrich/system/out': [ '/offramp/influxdb/system/in', '/offramp/system::stdout/system/in' ]

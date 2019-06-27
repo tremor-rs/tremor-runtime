@@ -1,6 +1,6 @@
 let $arma = "arma";
 let dillo = "dillo";
-drop [
+emit [
     string::format("hello {} {}", $arma, dillo ),
     system::hostname()
 ];

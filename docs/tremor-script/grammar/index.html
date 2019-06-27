@@ -439,11 +439,11 @@
          <ul>
             <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
          </ul>
-         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Emit" shape="rect">Emit:</a></p><img border="0" src="diagram/Emit.png" height="37" width="177" usemap="#Emit.map"><map name="Emit.map"><area shape="rect" coords="99,1,147,33" href="#Expr" title="Expr"></map><p>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Emit" shape="rect">Emit:</a></p><img border="0" src="diagram/Emit.png" height="69" width="421" usemap="#Emit.map"><map name="Emit.map"><area shape="rect" coords="99,1,147,33" href="#Expr" title="Expr"><area shape="rect" coords="247,33,371,65" href="#STRING_LITERAL" title="STRING_LITERAL"></map><p>
          
          <div class="ebnf"><code>
                
-               <div><a href="#Emit" title="Emit" shape="rect">Emit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'emit' <a href="#Expr" title="Expr" shape="rect">Expr</a></div></code></div>
+               <div><a href="#Emit" title="Emit" shape="rect">Emit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'emit' <a href="#Expr" title="Expr" shape="rect">Expr</a> ( '=&gt;' <a href="#STRING_LITERAL" title="STRING_LITERAL" shape="rect">STRING_LITERAL</a> )?</div></code></div>
          </p>
       
       <p>referenced by:
@@ -782,6 +782,7 @@
       <p>referenced by:
          
          <ul>
+            <li><a href="#Emit" title="Emit" shape="rect">Emit</a></li>
             <li><a href="#Field" title="Field" shape="rect">Field</a></li>
          </ul>
          </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="STRING_ESCAPE" shape="rect">STRING_ESCAPE:</a></p><img border="0" src="diagram/STRING_ESCAPE.png" height="345" width="175"><p>

@@ -21,7 +21,7 @@ use std::io::{BufRead, BufReader};
 use std::str;
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
-const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
+pub const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
 #[allow(unused)]
 pub fn resolve(pattern: String) -> GrokPattern {

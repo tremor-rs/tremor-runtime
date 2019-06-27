@@ -1,4 +1,4 @@
-drop match { "test": "http://example.com/", "footle": "bar" } of
+emit match { "test": "http://example.com/", "footle": "bar" } of
   case foo = %{ test ~= re|^http://.*/$|, footle == "bar" } => foo
   default => "ko"
 end

@@ -349,6 +349,12 @@ impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>, Location>> {
     }
 }
 
+fn unformat_str(s: &str) -> String {
+    s.replace(r#"\"#, r#"\\"#)
+        .replace('"', r#"\\""#)
+        .replace('\n', "\\n")
+        .replace('\t', "\\t")
+}
 // Format a token for display
 //
 impl<'input> fmt::Display for Token<'input> {
@@ -363,7 +369,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
-            Token::StringLiteral(value) => write!(f, "\"{}\"", value),
+            Token::StringLiteral(value) => write!(f, "\"{}\"", unformat_str(&value)),
             Token::TestLiteral(value) => write!(f, "|{}|", value),
             Token::BoolLiteral(value) => write!(f, "{}", value),
             Token::BadToken(value) => write!(f, "{}", value),
@@ -400,7 +406,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Dollar => write!(f, "$"),
             //            Token::Question => write!(f, "?"),
             //            Token::Pipe => write!(f, "|"),
-            Token::Not => write!(f, "!"),
+            Token::Not => write!(f, "not"),
             //            Token::Tilde => write!(f, "~"),
             // Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),

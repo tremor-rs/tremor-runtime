@@ -16,6 +16,17 @@
 // FIXME: investigate if re-writing would make code better
 #![allow(clippy::too_many_arguments)]
 
+// FIXME possible optimisations:
+// * P001 [ ] re-write `let x = merge x of ... end` to a mutable merge that does not require cloing `x`
+// * P002 [ ] don't construct data for expressions that return value is never used
+// * P003 [ ] don't clone as part of a match statement (we should never ever mutate in case or when)
+// * P004 [ ] turn local variables into a pre-defined vector to improve access
+// * P005 [ ] turn literals into BorrowedValues so we don't need to re-cast them - constants could be pre-laoded
+
+// FIXME todo
+// * 101 [ ] `%{x > 3}` and other comparisons
+// * 102 [ ] Remove the need for `()` around when clauses that contain binary ops
+
 use crate::ast::{self, Expr, Helper};
 use crate::errors::*;
 use crate::lexer::{self, TokenFuns};
@@ -47,32 +58,58 @@ pub enum Return<'event> {
     },
 }
 
-pub struct CheekyStack<T> {
-    stack: LinkedList<T>,
+pub struct CheekyStack<'v> {
+    fixed: Vec<Value<'v>>,
+    idx: usize,
+    stack: LinkedList<Value<'v>>,
 }
-
-impl<T> std::default::Default for CheekyStack<T> {
+impl<'v> std::default::Default for CheekyStack<'v> {
     fn default() -> Self {
-        Self {
-            stack: LinkedList::new(),
-        }
+        CheekyStack::new()
     }
 }
 
-impl<T> CheekyStack<T> {
-    pub fn push(&self, v: T) -> &T {
+impl<'v> CheekyStack<'v> {
+    pub fn new() -> Self {
+        Self {
+            fixed: Vec::with_capacity(2048),
+            idx: 0,
+            stack: LinkedList::new(),
+        }
+    }
+
+    pub fn push<'stack>(&'stack self, v: Value<'v>) -> &'stack Value<'v>
+    where
+        'v: 'stack,
+    {
         // We can do this since adding a element will never change existing elements
         // within a linked list
         #[allow(mutable_transmutes)]
         #[allow(clippy::transmute_ptr_to_ptr)]
-        let s: &mut LinkedList<T> = unsafe { std::mem::transmute(&self.stack) };
-        s.push_front(v);
-        if let Some(v) = s.front() {
-            v
+        let s: &mut Self = unsafe { std::mem::transmute(self) };
+        if self.idx < s.fixed.capacity() {
+            s.fixed.push(v);
+            s.idx += 1;
+            unsafe { s.fixed.get_unchecked(s.idx - 1) }
         } else {
-            // NOTE This is OK since we just pushed we know there is a element in the stack.
-            unreachable!()
+            s.idx += 1;
+            s.stack.push_front(v);
+            if let Some(v) = s.stack.front() {
+                v
+            } else {
+                // NOTE This is OK since we just pushed we know there is a element in the stack.
+                unreachable!()
+            }
         }
+    }
+
+    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
+    pub fn len(&self) -> usize {
+        self.idx
+    }
+    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
+    pub fn is_empty(&self) -> bool {
+        self.idx == 0
     }
     #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
     pub fn clear(&mut self) {
@@ -80,7 +117,7 @@ impl<T> CheekyStack<T> {
     }
 }
 
-pub type ValueStack<'event> = CheekyStack<Value<'event>>;
+pub type ValueStack<'event> = CheekyStack<'event>;
 pub type LocalMap<'map> = simd_json::value::borrowed::Map<'map>;
 
 pub trait Interpreter<'run, 'event, 'script, Ctx>
@@ -97,6 +134,16 @@ where
     ) -> Result<Cont<'run, 'event>>;
 
     fn resolve(
+        &'script self,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path<Ctx>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<&'run Value<'event>>;
+
+    fn present(
         &'script self,
         context: &'run Ctx,
         event: &'run mut Value<'event>,
@@ -290,11 +337,13 @@ where
             match expr.run(context, event, meta, &mut local, &stack)? {
                 Cont::Drop => return Ok(Return::Drop),
                 Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                Cont::EmitEvent(port) => return Ok(Return::EmitEvent { port }),
+                Cont::EmitEvent(port) => {
+                    //dbg!(stack.len());
+                    return Ok(Return::EmitEvent { port });
+                }
                 Cont::Cont(v) => val = v,
             }
         }
-
         Ok(Return::Emit {
             value: val.clone(),
             port: None,
@@ -367,9 +416,9 @@ where
         local: &'run mut Value<'event>,
         stack: &'run ValueStack<'event>,
         expr: &'script ast::Literal<Ctx>,
-    ) -> Result<&'run Value<'event>> {
+    ) -> Result<Value<'event>> {
         match &expr.value {
-            ast::LiteralValue::Native(owned) => Ok(stack.push(owned.clone().into())),
+            ast::LiteralValue::Native(owned) => Ok(owned.clone().into()),
             ast::LiteralValue::List(ref list) => {
                 let mut r: Vec<Value<'event>> = Vec::with_capacity(list.len());
                 for expr in list {
@@ -379,7 +428,7 @@ where
                             .clone(),
                     );
                 }
-                Ok(stack.push(Value::Array(r)))
+                Ok(Value::Array(r))
             }
         }
     }
@@ -395,7 +444,9 @@ where
     ) -> Result<&'run Value<'event>> {
         let mut argv: Vec<&simd_json::borrowed::Value> = Vec::new();
         for arg in &expr.args {
-            // FIXME: We should find a way to get rid of those clones
+            // FIXME: P007
+            //We should find a way to get rid of those clones
+
             let result = arg
                 .run(context, event, meta, local, stack)?
                 .into_value(&self, &arg)?
@@ -419,8 +470,8 @@ where
     ) -> Result<&'run Value<'event>> {
         let rhs = expr
             .expr
-            .run(context, event, meta, local, stack)?
-            .into_value(&self, &expr.expr)?;
+            .run(context, event, meta, local, stack)
+            .and_then(|v| v.into_value(&self, &expr.expr))?;
         match (&expr.kind, rhs) {
             (ast::UnaryOpKind::Minus, Value::I64(x)) => Ok(stack.push(Value::I64(-*x))),
             (ast::UnaryOpKind::Minus, Value::F64(x)) => Ok(stack.push(Value::F64(-*x))),
@@ -902,7 +953,8 @@ where
         stack: &'run ValueStack<'event>,
         expr: &'script ast::Match<Ctx>,
     ) -> Result<Cont<'run, 'event>> {
-        //FIXME: We really don't want to clone here
+        //FIXME: P006
+        // We really don't want to clone here
         // but for that we need to hard forbid mutation
         // in patterns
         let target: &Value<'event> = stack.push(
@@ -987,6 +1039,9 @@ where
                             if let Some(v) = self
                                 .match_ap_expr(context, event, meta, local, stack, &target, &ap)?
                             {
+                                // we need to assign prior to the guard so we can cehck
+                                // against the pattern expressions
+                                self.assign(context, event, meta, local, &path, v, stack)?;
                                 if !self.test_guard(
                                     context,
                                     event,
@@ -997,7 +1052,6 @@ where
                                 )? {
                                     continue 'predicate;
                                 };
-                                self.assign(context, event, meta, local, &path, v, stack)?;
                                 return self.execute_effectors(
                                     context,
                                     event,
@@ -1015,6 +1069,9 @@ where
                             if let Some(v) = self
                                 .match_rp_expr(context, event, meta, local, stack, &target, &rp)?
                             {
+                                // we need to assign prior to the guard so we can cehck
+                                // against the pattern expressions
+                                self.assign(context, event, meta, local, &path, v, stack)?;
                                 if !self.test_guard(
                                     context,
                                     event,
@@ -1025,7 +1082,6 @@ where
                                 )? {
                                     continue 'predicate;
                                 };
-                                self.assign(context, event, meta, local, &path, v, stack)?;
                                 return self.execute_effectors(
                                     context,
                                     event,
@@ -1048,6 +1104,8 @@ where
                                 // NOTE We clone here since we write (aka mutate)
                                 // this is intended behaviour
                                 let res = res.clone();
+                                // we need to assign prior to the guard so we can cehck
+                                // against the pattern expressions
                                 self.assign(context, event, meta, local, &path, res, stack)?;
                                 if !self.test_guard(
                                     context,
@@ -1233,14 +1291,16 @@ where
 
         if let Some(target_map) = target_value.as_object() {
             // Record comprehension case
-
+            value_vec.reserve(target_map.len());
+            // FIXME P008 - we should not need to clone the value
+            // we are iterating over
             // NOTE: Since we we are going to create new data from this
             // object we are cloning it.
             // This is also required since we might mutate. If we restruct
             // mutation in the future we could get rid of this.
             let target_map = target_map.clone();
 
-            'comprehension_outer: for x in target_map.into_iter() {
+            'comprehension_outer: for x in target_map.iter() {
                 for e in cases {
                     let new_key = std::borrow::Cow::Owned(e.key_name.clone());
                     let new_value = std::borrow::Cow::Owned(e.value_name.clone());
@@ -1263,7 +1323,8 @@ where
                             once = true;
                         }
 
-                        // FIXME: This is ugly, we should not have to clone here
+                        // FIXME:
+                        // This is ugly, we should not have to clone here
                         // probably a halfbrown bug or a general hashmap problem?
                         local_map.insert(new_key.clone(), x.0.to_string().into());
                         local_map.insert(new_value.clone(), x.1.clone());
@@ -1317,6 +1378,8 @@ where
             }
         } else if let Some(target_array) = target_value.as_array() {
             // Array comprehension case
+
+            value_vec.reserve(target_array.len());
 
             // NOTE: Since we we are going to create new data from this
             // object we are cloning it.
@@ -1419,7 +1482,7 @@ where
             ast::Path::Event(path) => &path.segments,
         };
 
-        let mut segments: Vec<NormalizedSegment> = vec![];
+        let mut segments: Vec<NormalizedSegment> = Vec::with_capacity(udp.len());
 
         for segment in udp {
             match segment {
@@ -1498,6 +1561,111 @@ where
     'script: 'event,
     'event: 'run,
 {
+    fn present(
+        &'script self,
+        context: &'run Ctx,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut Value<'event>,
+        path: &'script ast::Path<Ctx>,
+        stack: &'run ValueStack<'event>,
+    ) -> Result<&'run Value<'event>> {
+        let segments = self.resolve_path_segments(context, event, meta, local, path, stack)?;
+
+        let mut current: &Value = match path {
+            ast::Path::Local(_path) => local,
+            ast::Path::Meta(_path) => meta,
+            ast::Path::Event(_path) => event,
+        };
+
+        let segments = &mut segments.iter().peekable();
+        'outer: while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                match segment {
+                    NormalizedSegment::FieldRef { id, .. } => match current {
+                        Value::Object(o) => {
+                            let id = id.as_str();
+                            return Ok(if o.contains_key(id) {
+                                &Value::Bool(true)
+                            } else {
+                                &Value::Bool(false)
+                            });
+                        }
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                    NormalizedSegment::Index { idx, .. } => match current {
+                        Value::Array(a) => {
+                            return Ok(if *idx < a.len() {
+                                &Value::Bool(true)
+                            } else {
+                                &Value::Bool(false)
+                            });
+                        }
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                    NormalizedSegment::Range {
+                        range_start,
+                        range_end,
+                        ..
+                    } => match current {
+                        Value::Array(a) => {
+                            return Ok(if *range_start <= *range_end && *range_end < a.len() {
+                                &Value::Bool(true)
+                            } else {
+                                &Value::Bool(false)
+                            });
+                        }
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                }
+            } else {
+                match segment {
+                    NormalizedSegment::FieldRef { id, .. } => match current {
+                        Value::Object(o) => match o.get(id.as_str()) {
+                            Some(c @ Value::Object(_)) => {
+                                current = c;
+                                continue 'outer;
+                            }
+                            Some(c @ Value::Array(_)) => {
+                                current = c;
+                                continue 'outer;
+                            }
+                            _ => return Ok(&Value::Bool(false)),
+                        },
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                    NormalizedSegment::Index { idx, .. } => match current {
+                        Value::Array(a) => {
+                            if let Some(v) = a.get(*idx) {
+                                current = v;
+                            } else {
+                                return Ok(&Value::Bool(false));
+                            }
+                            continue;
+                        }
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                    NormalizedSegment::Range {
+                        range_start,
+                        range_end,
+                        ..
+                    } => match current {
+                        Value::Array(b) => {
+                            if let Some(v) = b.get(*range_start..*range_end) {
+                                current = stack.push(Value::Array(v.to_vec()));
+                            } else {
+                                return Ok(&Value::Bool(false));
+                            }
+                            continue 'outer;
+                        }
+                        _ => return Ok(&Value::Bool(false)),
+                    },
+                }
+            }
+        }
+        Ok(&Value::Bool(true))
+    }
+
     fn resolve(
         &'script self,
         context: &'run Ctx,
@@ -1529,6 +1697,7 @@ where
                                     &Expr::dummy(*start, *end),
                                     &path,
                                     id.into(),
+                                    o.keys().map(|v| v.to_string()).collect(),
                                 );
                             }
                         }
@@ -1536,7 +1705,7 @@ where
                             return self.error_type_conflict(
                                 &Expr::dummy(*start, *end),
                                 other.kind(),
-                                ValueType::Array,
+                                ValueType::Object,
                             )
                         }
                     },
@@ -1610,6 +1779,7 @@ where
                                     &Expr::dummy(*start, *end),
                                     &path,
                                     id.clone(),
+                                    o.keys().map(|v| v.to_string()).collect(),
                                 )
                             }
                         },
@@ -1809,6 +1979,7 @@ where
             Expr::Drop { .. } => Ok(Cont::Drop),
             Expr::Literal(literal) => self
                 .literal(context, event, meta, local, stack, literal)
+                .map(|v| stack.push(v))
                 .map(Cont::Cont),
             Expr::Assign(expr) => {
                 // NOTE Since we are assigning a new value we do cline here.
@@ -1819,6 +1990,9 @@ where
             }
             Expr::Path(path) => self
                 .resolve(context, event, meta, local, path, stack)
+                .map(Cont::Cont),
+            Expr::Present { path, .. } => self
+                .present(context, event, meta, local, path, stack)
                 .map(Cont::Cont),
             Expr::RecordExpr(ref record) => {
                 let mut object: Map = hashmap! {};

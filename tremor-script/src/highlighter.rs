@@ -311,6 +311,7 @@ pub struct TermHighlighter {
     bufwtr: BufferWriter,
     buff: Buffer,
 }
+#[allow(clippy::new_without_default)]
 impl TermHighlighter {
     pub fn new() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);

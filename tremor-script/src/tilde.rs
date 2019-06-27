@@ -26,8 +26,9 @@
 use base64;
 use halfbrown::{hashmap, HashMap};
 
-use crate::grok::GrokPattern;
+use crate::grok::*;
 use crate::influx;
+use crate::std_lib::datetime::_parse;
 use cidr_utils::{cidr::IpCidr, utils::IpCidrCombiner};
 use dissect::Pattern;
 use glob;
@@ -40,6 +41,7 @@ use std::fmt;
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::str::FromStr;
+
 // {"Re":{"rule":"(snot)?foo(?P<snot>.*)"}}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Extractor {
@@ -72,6 +74,9 @@ pub enum Extractor {
         range: Option<Vec<String>>,
     },
     Influx,
+    Datetime {
+        format: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -127,22 +132,31 @@ impl Extractor {
                 compiled: Pattern::try_from(rule_text)
                     .map_err(|e| ExtractorError { msg: e.to_string() }),
             },
-            "grok" => {
-                let mut grok = grok::Grok::default();
-                match grok.compile(&rule_text, true) {
-                    Ok(pat) => Extractor::Grok {
-                        rule: rule_text.to_string(),
-                        compiled: Some(GrokPattern {
-                            definition: rule_text.to_string(),
-                            pattern: pat,
-                        }),
-                    },
-                    Err(_) => Extractor::Grok {
-                        rule: rule_text.to_string(),
-                        compiled: None,
-                    },
+            "grok" => match GrokPattern::from_file(
+                crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
+                rule_text.to_string(),
+            ) {
+                Ok(pat) => Extractor::Grok {
+                    rule: rule_text.to_string(),
+                    compiled: Some(pat),
+                },
+                Err(_) => {
+                    let mut grok = grok::Grok::default();
+                    match grok.compile(&rule_text, true) {
+                        Ok(pat) => Extractor::Grok {
+                            rule: rule_text.to_string(),
+                            compiled: Some(GrokPattern {
+                                definition: rule_text.to_string(),
+                                pattern: pat,
+                            }),
+                        },
+                        Err(_) => Extractor::Grok {
+                            rule: rule_text.to_string(),
+                            compiled: None,
+                        },
+                    }
                 }
-            }
+            },
             "cidr" => {
                 if rule_text.is_empty() {
                     Extractor::Cidr { range: None }
@@ -158,6 +172,9 @@ impl Extractor {
             }
 
             "influx" => Extractor::Influx,
+            "datetime" => Extractor::Datetime {
+                format: rule_text.to_string(),
+            },
             other => return Err(format!("Unsupported extractor '{}'.", other).into()),
         };
         Ok(e)
@@ -200,7 +217,7 @@ impl Extractor {
                     if glob.matches(s) {
                         Ok(true.into())
                     } else {
-                        Err("glob expression dind't match'".into())
+                        Err("glob expression didn't match".into())
                     }
                 }
                 Extractor::Glob { .. } => Err("invalid glob pattern".into()),
@@ -218,7 +235,11 @@ impl Extractor {
                     let encoded = s.to_string().clone();
                     let decoded = base64::decode(&encoded)?;
                     Ok(Value::String(
-                        String::from_utf8(decoded).expect("not valid utf-8").into(),
+                        String::from_utf8(decoded)
+                            .map_err(|_| ExtractorError {
+                                msg: "failed to decode".into(),
+                            })?
+                            .into(),
                     ))
                 }
                 Extractor::Json => {
@@ -272,6 +293,13 @@ impl Extractor {
                     Ok(x) => Ok(Value::Object(x.into())),
                     Err(_) => Err("The input is invalid".into()),
                 },
+                Extractor::Datetime { format } => {
+                    Ok(Value::from(_parse(s, format).map_err(|e| {
+                        ExtractorError {
+                            msg: format!("Invalid datetime specified: {}", e.to_string()),
+                        }
+                    })?))
+                }
             },
             _ => Err("Extractors are currently only supported against Strings".into()),
         }
@@ -292,8 +320,6 @@ impl PartialEq<Extractor> for Extractor {
             (Extractor::Dissect { rule: rule_l, .. }, Extractor::Dissect { rule: rule_r, .. }) => {
                 rule_l == rule_r
             }
-
-            //FIXME: (Extractor::Cidr, Extractor::Cidr) => true,
             (Extractor::Grok { rule: rule_l, .. }, Extractor::Grok { rule: rule_r, .. }) => {
                 rule_l == rule_r
             }
@@ -301,6 +327,10 @@ impl PartialEq<Extractor> for Extractor {
                 range_l == range_r
             }
             (Extractor::Influx, Extractor::Influx) => true,
+            (
+                Extractor::Datetime { format: format_l },
+                Extractor::Datetime { format: format_r },
+            ) => format_l == format_r,
             _ => false,
         }
     }
@@ -538,6 +568,18 @@ mod tests {
                        "fields".into() => Value::Object(hashmap!("temperature".into() => 82.0f64.into())),
                        "timestamp".into() => Value::I64(1465839830100400200)
                 )))
+            ),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_datetime_extractor() {
+        let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
+        match ex {
+            Extractor::Datetime { .. } => assert_eq!(
+                ex.extract(&Value::from("2019-06-20 00:00:00")),
+                Ok(Value::I64(1560988800000_000_000))
             ),
             _ => unreachable!(),
         }

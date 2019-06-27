@@ -4,4 +4,4 @@ let bb = merge aa of
     { "cc": 2, "bb": 3, "aa": null }
 end;
 
-drop { "aa": aa, "bb": bb };
+emit { "aa": aa, "bb": bb };

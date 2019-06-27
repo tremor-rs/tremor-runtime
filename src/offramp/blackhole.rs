@@ -56,6 +56,8 @@ pub struct Blackhole {
     warmup: u64,
     has_stop_limit: bool,
     delivered: Histogram<u64>,
+    run_secs: f64,
+    bytes: usize,
     pipelines: HashMap<TremorURL, PipelineAddr>,
 }
 
@@ -66,6 +68,7 @@ impl OfframpImpl for Blackhole {
             let now_ns = utils::nanotime();
             Ok(Box::new(Blackhole {
                 config: config.clone(),
+                run_secs: config.stop_after_secs as f64,
                 stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
                 warmup: now_ns + config.warmup_secs * 1_000_000_000,
                 has_stop_limit: config.stop_after_secs != 0,
@@ -75,6 +78,7 @@ impl OfframpImpl for Blackhole {
                     config.significant_figures as u8,
                 )?,
                 pipelines: HashMap::new(),
+                bytes: 0,
             }))
         } else {
             Err("Blackhole offramp requires a config".into())
@@ -92,9 +96,7 @@ impl Offramp for Blackhole {
     }
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            let _v = codec.encode(event.value);
             let now_ns = utils::nanotime();
-            let delta_ns = now_ns - event.ingest_ns;
 
             if self.has_stop_limit && now_ns > self.stop_after {
                 let mut buf = Vec::new();
@@ -104,10 +106,18 @@ impl Offramp for Blackhole {
                     error!("Failed to serialize histogram: {:?}", e);
                 };
                 quantiles(buf.as_slice(), stdout(), 5, 2).expect("Failed to serialize histogram");
+                println!(
+                    "\n\nThroughput: {:.1} MB/s",
+                    (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
+                );
                 process::exit(0);
-            }
+            };
 
             if now_ns > self.warmup {
+                let delta_ns = now_ns - event.ingest_ns;
+                if let Ok(v) = codec.encode(event.value) {
+                    self.bytes += v.len();
+                };
                 self.delivered
                     .record(delta_ns)
                     .expect("HDR Histogram error");

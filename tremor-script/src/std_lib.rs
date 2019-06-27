@@ -13,7 +13,8 @@
 // limitations under the License.
 
 mod array;
-mod datetime;
+pub mod datetime;
+mod dummy;
 mod integer;
 mod json;
 mod math;
@@ -33,4 +34,5 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     math::load(registry);
     r#type::load(registry);
     datetime::load(registry);
+    dummy::load(registry);
 }

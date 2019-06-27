@@ -213,12 +213,27 @@ Indicatively, we stand to see a range of 20x-40x improvement. In production we h
 in density with the L3 replacement, and with the v0.4 upgrade to L1 in GCP pre-live. We expect a further modest incremental
 improvement in L1 with v0.5, and a good ~10x over logstash for L2 this ( v0.5 ) release.
 
-# Real-World Scenario
+# Apache Logs Scenario
 
-TBD - In this section we revisit the 'real-world-throughput' scenario in tremor that reflects the L1 use case in
-full-scale production. This needs to be migrated ( as far as is possible, minus rate limiting features ) to a
-comparable hypothetically equivalent logstash configuration for benchmark purposes.
+Logstash ships with a benchmark where logstash is configured for Apache log processing
+and elementization. We have ported this benchmark to tremor for coparative purposes.
 
-# Loggging Level 2 Replacement Scenario
+Tremor processes [44109658](tremor-apache-log.txt)  messages in 100 seconds fixed interval ( continuously replaying ), whereas logstash takes 751 seconds to process the same [6900000](logstash-apache-log.txt) log records.
 
-TBD - In this section we compare L2 logstash configuration ( or a subset ) against the equivalent tremor configuration.
+This is 48x speedup in favour of tremor.
+
+# Logging Level 2 Replacement Scenario
+
+Tremor ships with a benchmark where the enrichment component of logstash replacement running in production has been used to drive the implementation of tremor-script features in the v0.5 release.
+
+We have minimally modified the logstash benchmark client to support running logstash equivalent configuration of tremor ( or vice-versa ) to get as close to possible to a fair apples-to-apples comparison. We have stopped short of fixing fundemental issues with the logstash benchmark framework itself.
+
+Tremor process [2262222](tremor-l2-log.txt) records in 100 seconds fixed interval ( continuously replaying ), whereas logstash takes 66 seconds to process [200000](logstash-l2-log.txt) records. This equates to a ballpark 7.5x speedup in favour of tremor.
+
+# Logging Level 2 Replacement bad case
+
+Benchmarking the validation/transformation scenario  involves a more complex script with loops and deeper nested expressions. Here some of the shortcuts we took to implement the new tremor script in a reasonable timeframe surface as performance bottlenecks.
+
+Again ran the transformation script with both Logstash as well tremor with configurations as close to equivalent as possible.
+
+Tremor processes [73132](tremor-transform-log.txt) records in 100 seconds fixed interval ( continuously replaying ), whereas logstash takes 87 seconds to process [150000](logstash-transform-log.txt) records. In this case tremor is about 2.3x slower then a comparable logstasv configuration.

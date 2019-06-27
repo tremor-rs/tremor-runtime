@@ -21,6 +21,8 @@
 
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
 
 use crate::errors::*;
 use halfbrown::HashMap;

@@ -67,7 +67,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                                 if let BorrowedValue::String(s) = arg {
                                     out.push_str(&s)
                                 } else {
-                                    out.push_str(format!("{}", arg).as_str());
+                                    out.push_str(arg.to_string().as_str());
                                 }
                             }
                             Some((_, '{')) => {
@@ -126,6 +126,14 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             })
 
         }))
+        .insert(
+            tremor_fn!(string::substr(_context, _input: String, _start: I64, _end: I64) {
+                use std::cmp::{max,min};
+                let start = max(0, *_start as usize) as usize;
+                let end = min(_input.len(), *_end as usize) as usize;
+                Ok(Value::from(&_input[start..end]))
+            }),
+        )
         .insert(
             tremor_fn! (string::split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
@@ -216,6 +224,15 @@ mod test {
         let f = fun("string", "capitalize");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), "This is a test")
+    }
+
+    #[test]
+    fn substr() {
+        let f = fun("string", "substr");
+        let v = Value::from("this is a test");
+        let s = Value::from(5);
+        let e = Value::from(7);
+        assert_val!(f(&[&v, &s, &e]), "is")
     }
 
     #[test]

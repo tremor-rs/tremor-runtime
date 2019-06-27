@@ -1,4 +1,4 @@
 match "dont-care" of
-  case "dont-care" when drop "error" => "ouch"
+  case "dont-care" when emit "error" => "ouch"
   default => "ouch"
 end

@@ -1,0 +1,20 @@
+Logstash Benchmark
+------------------------------------------
+Benchmarking Version: /Code/tremor/experiments/logstash
+Logstash Parameters: -w 2 -b 128
+Running Test Case: tremor (x1000)
+------------------------------------------
+Using user supplied tremor test-case data file.
+Using user supplied tremor test-case config file.
+Start Time: Thu 6 27 13:12:47 2019 CEST
+Statistical Summary:
+
+Elapsed Time: 66s
+Num Events: 200000
+Throughput Min: 914.29
+Throughput Max: 69888.00
+Throughput Mean: 19451.43
+Throughput StdDev: 18334.75
+Throughput Variance: 336162959.96
+Mean CPU Usage: 34.90%
+Mean Heap Usage: 29.80%

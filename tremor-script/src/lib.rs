@@ -19,9 +19,9 @@ mod compat;
 pub mod errors;
 pub mod grok;
 #[allow(unused, dead_code)]
-mod highlighter;
+pub mod highlighter;
 pub mod influx;
-mod interpreter;
+pub mod interpreter;
 mod lexer;
 #[allow(unused, dead_code)]
 mod parser;

@@ -11,4 +11,4 @@ let evont.foo.bar.baz = $foo.bar.baz;
 let ewont.foo.bar.baz = $foo.bar.baz;
 let foo.bar.baz = event.`foo`.bar.`baz`;
 
-drop { "foo": $foo.bar.baz, "bar": event.foo.bar.baz, "baz": foo.bar.baz };
+emit { "foo": $foo.bar.baz, "bar": event.foo.bar.baz, "baz": foo.bar.baz };

@@ -12,7 +12,7 @@ let aa = patch aa of
   insert aa => "bar"
 end;
 
-drop patch merge aa of { "foo": "bar" } end of update foo => "badger" end;
-drop merge patch {} of erase `does-not-exist` end of {} end;
+emit patch merge aa of { "foo": "bar" } end of update foo => "badger" end;
+emit merge patch {} of erase `does-not-exist` end of {} end;
 
 # drop { "aa": aa, "bb": bb };

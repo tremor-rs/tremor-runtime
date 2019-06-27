@@ -1,0 +1,4 @@
+match { "test" : "2019-01-01 09:42" } of
+  case foo = %{ test ~= datetime|%Y-%m-%d %H:%M| } => foo
+  default => "ko"
+end;

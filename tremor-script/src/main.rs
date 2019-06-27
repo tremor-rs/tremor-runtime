@@ -15,11 +15,11 @@
 
 mod ast;
 mod errors;
-mod grok;
+pub mod grok;
 #[allow(unused, dead_code)]
 mod highlighter;
 mod influx;
-mod interpreter;
+pub mod interpreter;
 mod lexer;
 #[allow(unused, dead_code)]
 mod parser;

@@ -310,7 +310,7 @@ drop "never happens"; # As the first emit always wins, this expression never exe
 Emit grammar:
 > ![](grammar/diagram/Emit.png)
 
-Emit expressions enable short-circuiting the execution of a `tremor-script when processing
+Emit expressions enable short-circuiting the execution of a `tremor-script` when processing
 is known to be complete and further processing can be avoided. If no argument is supplied,
 `emit` will return the event record. If an argument is supplied, the result of evaluating the expression
 will be returned. Tremor or other processing tools can process emitted events or data using their
@@ -339,6 +339,20 @@ emit "snot"
 ```tremor
 emit "oh noes!"
 emit "never happens"; # As the first emit always wins, this expression never executes
+```
+
+There are times when it is necessary to emit synthetic events from `tremor-script` within a
+`tremor` `pipeline` to an alternate `operator` port than the default success route. For example,
+when data is well-formed but not valid and the data needs to be __diverted__ into an alternate
+flow. The emit clause can be deployed for this purpose by specifying an optional named port.
+
+```tremor
+emit { 
+  "event": event, 
+  "status": "malformed", 
+  "description": 
+  "required field `loglevel` is absent" 
+} => "invalid";
 ```
 
 ### Match
@@ -436,10 +450,14 @@ These are often referred to informally as `tilde expressions` and tremor support
 variety of micro-formats that can be used for predicate or test-based matching such
 as logstash dissect, json, influx, perl-compatible regular expressions.
 
+Tilde expressions can under certain conditions elementize ( extract ) micro-format
+data. The elementization or extraction is covered in the [Extractors](#extractors)
+section of this document and in the Extractor reference.
+
 #### Match and extract expressions
 
 It is also possible to elementize or ingest supported micro-formats into
-tremor-script for further processing. For example, we can use the `~=` operator
+tremor-script for further processing. For example, we can use the `~=` and `~` operator
 to perform a predicate test, such as the base64 test in the previous example,
 which upon success, extracts ( in the base64 case, decoding ) a value for further
 processing.
@@ -556,6 +574,21 @@ match { "superhero": [ { "name": "batman" }, { "name": "robin" } ] } of
 end;
 ```
 
+#### Guard clauses
+
+> ![](grammar/diagram/Guard.png)
+
+Guard expressions in Match case clauses enable matching data structures to be further
+filtered based on predicate expressions. For example they can be used to restrict the
+match to a subset of matching cases where appropriate.
+
+```tremor
+match event of
+  case record = %{} when record.log_level == "ERROR" => "error"
+  default => "non-error"
+end
+```
+
 ### Merge
 
 > ![](grammar/diagram/Merge.png)
@@ -657,11 +690,3 @@ The set of supported micro-formats at the time of writing are as follows:
 
 There is no concept of _injector_ in the `tremor-script` language that is analogous to extractors. Where relevant the langauge supports functions that
 support the underlying operation ( such as base64 encoding ) and let expressions can be used for assignments.
-
-## Advanced
-
-To be done
-
-### Patch vs Merge
-
-### Performance tuning

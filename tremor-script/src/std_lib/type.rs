@@ -38,7 +38,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         .insert(map_function!(is_float, is_f64))
         .insert(map_function!(is_string))
         .insert(map_function!(is_array))
-        .insert(map_function!(is_object))
+        .insert(map_function!(is_record, is_object))
         .insert(tremor_fn! (type::as_string(_context, _input) {
             Ok(match _input.kind() {
                 ValueType::Null => OwnedValue::from("null"),
@@ -47,7 +47,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 ValueType::F64 => OwnedValue::from("number"),
                 ValueType::String => OwnedValue::from("string"),
                 ValueType::Array => OwnedValue::from("array"),
-                ValueType::Object => OwnedValue::from("object"),
+                ValueType::Object => OwnedValue::from("record"),
             })
         }))
         .insert(tremor_fn! (type::is_number(_context, _input) {
@@ -136,8 +136,8 @@ mod test {
     }
 
     #[test]
-    fn is_object() {
-        let f = fun("type", "is_object");
+    fn is_record() {
+        let f = fun("type", "is_record");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
         let v = Value::Object(Map::new());
@@ -160,7 +160,7 @@ mod test {
         let v = Value::Array(vec![]);
         assert_val!(f(&[&v]), "array");
         let v = Value::Object(Map::new());
-        assert_val!(f(&[&v]), "object");
+        assert_val!(f(&[&v]), "record");
     }
 
 }

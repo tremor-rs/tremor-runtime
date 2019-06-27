@@ -1,3 +1,4 @@
+let data = { "exists": 1 };
 let actual = {
   "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" default => "ko" end,
   "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" default => "ko" end,
@@ -5,7 +6,12 @@ let actual = {
   "both-present-nomatch": match {} of case %{ present superhero, present human } => "ko" default => "ok" end,
   "both-absent": match {} of case %{ absent superhero, absent human } => "ok" default => "ko" end,
   "both-absent-nomatch": match { "superhero": "superman", "human": "clark kent" } of case %{ absent superhero, absent human } => "ko" default => "ok" end,
+  "absent-kw-true": match absent data.not_here of case true => "ok" default => "ko" end,
+  "absent-kw-false": match absent data.exists of case true => "ko" default => "ok" end,
+  "present-kw-true": match present data.not_here of case true => "ko" default => "ok" end,
+  "present-kw-false": match present data.exists of case true => "ok" default => "ko" end,
 };
+
 
 let expected = {
     "present": "ok",
@@ -13,7 +19,11 @@ let expected = {
     "both-present": "ok",
     "both-present-nomatch": "ok",
     "both-absent": "ok",
-    "both-absent-nomatch": "ok"
+    "both-absent-nomatch": "ok",
+  "absent-kw-true": "ok",
+  "absent-kw-false": "ok",
+  "present-kw-true": "ok",
+  "present-kw-false": "ok"
 };
 
 match expected == actual of

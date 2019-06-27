@@ -2,5 +2,5 @@ let key = "key";
 
 let m = {};
 let m[key] = "value";
-drop m;
+emit m;
 

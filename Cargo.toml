@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.0-beta1"
+version = "0.5.0"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -43,7 +43,7 @@ rmp-serde = "0.13"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-simd-json = "0.1"
+simd-json = "0.1.15"
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "1"

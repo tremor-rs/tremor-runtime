@@ -1,4 +1,4 @@
-drop {
+emit {
   "or": {
     "00": false or false,
     "01": false or true,
