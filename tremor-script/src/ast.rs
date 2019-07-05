@@ -1051,6 +1051,7 @@ impl PredicatePattern1 {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PredicatePattern<Ctx: Context + 'static> {
     TildeEq {

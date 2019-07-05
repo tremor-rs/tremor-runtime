@@ -128,7 +128,7 @@ mod tests {
                 .into_iter()
                 .cloned()
                 .collect(),
-            [("temperature".to_owned(), 82u64.into())]
+            [("temperature".to_owned(), 82.0.into())]
                 .into_iter()
                 .cloned()
                 .collect(),
@@ -152,7 +152,7 @@ mod tests {
 
         let encoded = codec.encode(s.into()).expect("failed to encode");
 
-        let raw = r#"wea\,\\\ ther temp\=erature=82 too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
+        let raw = r#"wea\,\\\ ther temp\=erature=82,too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
 
         assert_eq!(
             str::from_utf8(&encoded).expect("failed to convert utf8"),
@@ -160,7 +160,7 @@ mod tests {
         );
     }
 
-    pub fn get_data_for_tests() -> [(Vec<u8>, OwnedValue, &'static str); 11] {
+    pub fn get_data_for_tests() -> [(Vec<u8>, OwnedValue, &'static str); 13] {
         [
             (
                 b"weather,location=us\\,midwest temperature=82 1465839830100400200".to_vec(),
@@ -296,9 +296,30 @@ mod tests {
                     "timestamp": 1465839830100400206i64
                 }),
                 "case 10"
-            )
+            ),
 
+            (
+                b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200".to_vec(),
+ json!({
+            "measurement": "weather",
+            "tags" :  hashmap! { "location" => "us-midwest" },
+            "fields": hashmap!{"temperature" => 82.0, "bug_concentration" => 98.0},
+            "timestamp": 1465839830100400200i64
+        }),
+        "case 11"
+        ),
 
+        (
+
+           b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec(),
+json!({
+            "measurement": "weather",
+            "tags" :  hashmap! { "location" => "us-midwest" },
+            "fields": hashmap!{"temperature" => 82},
+            "timestamp": 1465839830100400200i64
+        }),
+        "case 12"
+)
         ]
     }
 
@@ -320,6 +341,77 @@ mod tests {
                 assert_eq!(decoded, case.1);
             }
         })
+    }
+
+    #[test]
+    pub fn parse_simple3() {
+        let s =
+            b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200"
+                .to_vec();
+        let codec = Influx {};
+
+        let decoded = codec.decode(s).expect("failed to decode");
+
+        let e: OwnedValue = json!({
+            "measurement": "weather",
+            "tags" :  hashmap! { "location" => "us-midwest" },
+            "fields": hashmap!{"temperature" => 82.0, "bug_concentration" => 98.0},
+
+            "timestamp": 1465839830100400200i64
+        });
+        assert_eq!(decoded, e)
+    }
+
+    #[test]
+    pub fn parse_int_value() {
+        let s = b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec();
+        let codec = Influx {};
+
+        let decoded = codec.decode(s).expect("failed to decode");
+
+        let e: OwnedValue = json!({
+            "measurement": "weather",
+            "tags" :  hashmap! { "location" => "us-midwest" },
+            "fields": hashmap!{"temperature" => 82},
+
+            "timestamp": 1465839830100400200i64
+        });
+        assert_eq!(decoded, e)
+    }
+
+    #[test]
+    pub fn live_usecase() {
+        let s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage TotalFetchRequestsPerSec=1993153i,BytesOutPerSec=0i,BytesInPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i 1562179275506000000".to_vec();
+
+        let codec = Influx {};
+
+        let e: OwnedValue = json!({
+                    "measurement" : "kafka_BrokerTopicMetrics",
+                    "tags" : hashmap! {
+                        "agent" => "jmxtrans",
+                        "dc" => "iad1",
+                        "host_name" => "kafka-iad1-g4-1",
+                        "junk" => "kafka_topic",
+                        "kafka_type" => "server",
+                        "metric_type" => "counter",
+                        "topic_name" => "customerEmailServiceMessage",
+                        },
+                    "fields" : hashmap! {
+                        "TotalFetchRequestsPerSec" => 1993153,
+                        "BytesOutPerSec" => 0,
+                        "BytesInPerSec" => 0,
+                        "FailedFetchRequestsPerSec" => 0,
+                        "FetchMessageConversionsPerSec" => 0
+                       },
+                    "timestamp" : 1562179275506000000i64
+        });
+        let decoded = codec.decode(s.clone()).expect("failed to decode");
+        let encoded = codec
+            .encode(decoded.clone().into())
+            .expect("failed to encode");
+
+        assert_eq!(decoded, e);
+        assert_eq!(encoded, s);
     }
 
     /*

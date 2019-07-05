@@ -57,7 +57,7 @@ impl InfluxDatapoint {
                 OwnedValue::String(s) => Ok(process_string(s)),
 
                 OwnedValue::F64(num) => Ok(num.to_string()),
-                OwnedValue::I64(num) => Ok(num.to_string()),
+                OwnedValue::I64(num) => Ok(num.to_string() + "i"),
 
                 OwnedValue::Bool(b) => Ok(b.to_string()),
                 _ => Err(ErrorKind::InvalidInfluxData(
@@ -71,7 +71,7 @@ impl InfluxDatapoint {
             field_collection.push(op);
         }
 
-        let fields = field_collection.join(" ");
+        let fields = field_collection.join(",");
         output.push_str(&fields);
         output.push(' ');
 
