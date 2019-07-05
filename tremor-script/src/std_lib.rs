@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod array;
+mod chash;
 pub mod datetime;
 mod dummy;
 mod integer;
@@ -34,5 +35,6 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     math::load(registry);
     r#type::load(registry);
     datetime::load(registry);
+    chash::load(registry);
     dummy::load(registry);
 }

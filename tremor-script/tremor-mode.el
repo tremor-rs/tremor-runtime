@@ -1,11 +1,11 @@
 ;; a tremor major mode, tremor-mode
 
 ;;;###autoload
-(require 'smie)
+;;(require 'smie)
 
 ;; Font-locking definitions and helpers
 (defconst tremor-mode-keywords
-  '("match" "end" "let" "when" "case" "of" "patch" "emit" "drop" "once" "default"  "or" "and" "not" "merge" "for" "null"))
+  '("match" "end" "let" "when" "case" "of" "merge" "patch" "erase" "emit" "drop" "once" "default"  "or" "and" "not" "for" "null" "present" "absent" "event"))
 
 (defconst tremor-special-types
   '("false" "null" "true"))
@@ -168,9 +168,7 @@ should be considered a paired angle bracket."
 ;;       (inst
 ;;        ("let" id ":=" exp)
 ;;        ("erase" id)
-;;        ("match" exp "->" cases "end")
-;;        ("{" exp ":" exp "||" id ":" id "<-" exp "}")
-;;        ("{" exp ":" exp "||" id ":" id "<-" exp "when" exp "}")
+;;        ("match" exp "of" cases "end")
 ;;        ("{" kvs "}")
 ;;        )
 ;;       (insts (inst ";" inst))
@@ -227,56 +225,57 @@ should be considered a paired angle bracket."
 
 
 
-(defvar tremor-smie-grammar
-  (smie-prec2->grammar
-   (smie-bnf->prec2
-    '((id)
-      (stmt
-       ("let" id "=" expr)
-       (expr))
-      (stmts (stmt ";" stmt))
-      (case-stmts (stmt "," stmt))
-      (expr
-       ("match" expr "of" cases "default" "=>" case-stmts "end")
-       ("patch" expr "of" patches "end")
-       ("for" expr "of" cases "end")
-       ("merge" expr "of" expr "end")
-       ("[" items "]")
-       ("{" oitems "}")
-       (id))
-      (aitems (aitems "," aitems), expr)
-      (oitems (oitems "," oitems), (expr ":" expr))
-      (cases (cases " " cases)
-             ("case" caselabel "=>" case-stmts)))
-    '((assoc "=>"))
-    '((assoc ";"))
-    '((assoc ","))
-    '((assoc ":"))
-    '((assoc "+") (assoc "-") (assoc "*") (assoc "/")))))
-(defun tremor-smie-rules (kind token)
-  (pcase (cons kind token)
-    (`(:elem . basic) tremor-indent-basic)
-    (`(,_ . ",") (smie-rule-separator kind))
-    ;;(`(,_ . ";") (smie-rule-separator kind))
-    (`(,_ . ":") (smie-rule-separator kind))
-    ;;(`(,_ . "when") (smie-rule-separator kind))
-    ;;(`(:after . ":") tremor-indent-basic)
-    (`(:before . ":=") tremor-indent-basic)
-    (`(:after . "case") tremor-indent-basic)
-    (`(:before . "=>") tremor-indent-basic)
-    ;;(`(:before . "when") tremor-indent-basic)
-    ;;(`(:list-intro . "") tremor-indent-basic)
-    (`(:before . ,(or `"[" `"(" `"{"))
-     (if (smie-rule-hanging-p) (smie-rule-parent)))
-    (`(:before . "extend") (smie-rule-parent))
-    ;;(`(:before . "match") (smie-rule-parent))
-    (`(:before . "->") tremor-indent-basic)
-    ;; (`(:before . "with") tremor-indent-basic)
-    ;;(`(:before . "end") (smie-rule-parent))
+;; (defvar tremor-smie-grammar
+;;   (smie-prec2->grammar
+;;    (smie-bnf->prec2
+;;     '((id)
+;;       (stmt
+;;        ("let" id "=" expr)
+;;        (expr))
+;;       (stmts (stmt ";" stmt))
+;;       (case-stmts (stmt "," stmt))
+;;       (expr
+;;        ("match" expr "of" cases "default" effectors "end")
+;;        ("patch" expr "of" patches "end")
+;;        ("for" expr "of" cases "end")
+;;        ("merge" expr "of" expr "end")
+;;        ("[" items "]")
+;;        ("{" oitems "}")
+;;        (id))
+;;       (aitems (aitems "," aitems), expr)
+;;       (oitems (oitems "," oitems), (expr ":" expr))
+;;       (cases (cases " " cases)
+;;              ("case" caselabel effectors))
+;;       (effectors ("=>" case-stmts)))
+;;     '((assoc "=>"))
+;;     '((assoc ";"))
+;;     '((assoc ","))
+;;     '((assoc ":"))
+;;     '((assoc "+") (assoc "-") (assoc "*") (assoc "/")))))
 
-    ))
-
-
+;; (defun tremor-smie-rules (kind token)
+;;   (pcase (cons kind token)
+;;     (`(:elem . basic) tremor-indent-basic)
+;;     (`(,_ . ",") (smie-rule-separator kind))
+;;     ;; (`(,_ . ";") (smie-rule-separator kind))
+;;     (`(,_ . ":") (smie-rule-separator kind))
+;;     ;; (`(,_ . "when") (smie-rule-separator kind))
+;;     ;; (`(:after . ":") tremor-indent-basic)
+;;     (`(:before . "=") tremor-indent-basic)
+;;     ;;(`(:before . "case") tremor-indent-basic)
+;;     ;;(`(:before . "default") tremor-indent-basic)
+;;     ;; (`(:before . "=>") tremor-indent-basic)
+;;     ;; (`(:before . "when") tremor-indent-basic)
+;;     ;; (`(:list-intro . "") tremor-indent-basic)
+;;     (`(:before . ,(or `"[" `"(" `"{"))
+;;      (if (smie-rule-hanging-p) (smie-rule-parent)))
+;;     ;; (`(:before . "extend") (smie-rule-parent))
+;;     ;; (`(:before . "match") (smie-rule-parent))
+;;     ;; (`(:before . "->") tremor-indent-basic)
+;;     (`(:after . "of") tremor-indent-basic)
+;;     ;; (`(:before . "with") tremor-indent-basic)
+;;     ;; (`(:before . "end") (smie-rule-parent))
+;;     ))
 
 ;;;###autoload
 (define-derived-mode tremor-mode prog-mode "Tremor"
@@ -290,23 +289,21 @@ should be considered a paired angle bracket."
 
   ;; Indentation
   ;;(setq-local indent-line-function 'tremor-mode-indent-line)
-  (smie-setup nil #'tremor-smie-rules)
-  (setq-local smie-indent-basic tremor-indent-basic)
-  (setq-local smie-grammar tremor-smie-grammar)
-  
+  ;;(smie-setup nil #'tremor-smie-rules)
+  ;;(setq-local smie-indent-basic tremor-indent-basic)
+  ;;(setq-local smie-grammar tremor-smie-grammar)
 
   ;; Fonts
   (setq-local font-lock-defaults '(tremor-mode-font-lock-keywords
                                    nil nil nil nil
-                                   (font-lock-syntactic-face-function . tremor-mode-syntactic-face-function)
-                                   ))
+                                   (font-lock-syntactic-face-function . tremor-mode-syntactic-face-function)))
 
   (setq-local comment-use-syntax t)
   (setq-local comment-start "#")
   (setq-local comment-end "")
   (setq-local indent-tabs-mode nil)
 
-;; ;; Misc
+  ;; ;; Misc
   ;; (setq-local comment-start "// ")
   ;; (setq-local comment-end   "")
   ;; (setq-local indent-tabs-mode nil)
@@ -329,8 +326,7 @@ should be considered a paired angle bracket."
   ;; (setq-local adaptive-fill-first-line-regexp "")
   ;; (setq-local comment-multi-line t)
   ;; (setq-local comment-line-break-function 'tremor-comment-indent-new-line)
-  ;; (setq-local imenu-generic-expr
-  ession tremor-imenu-generic-expression)
+  ;; (setq-local imenu-generic-expr ession tremor-imenu-generic-expression)
   ;; (setq-local imenu-syntax-alist '((?! . "w"))) ; For macro_rules!
   ;; (setq-local beginning-of-defun-function 'tremor-beginning-of-defun)
   ;; (setq-local end-of-defun-function 'tremor-end-of-defun)
@@ -344,7 +340,8 @@ should be considered a paired angle bracket."
 
   ;; (when tremor-always-locate-project-on-open
   ;;   (tremor-update-buffer-project)))
-
+)
 
 (add-to-list 'auto-mode-alist '("\\.tremor\\'" . tremor-mode))
 
+(provide 'tremor-mode)

@@ -206,7 +206,7 @@ pub trait Highlighter {
                     Token::DocComment(_) => {
                         c.set_intense(true).set_fg(Some(Color::Cyan));
                     }
-                    Token::TestLiteral(_) => {
+                    Token::TestLiteral(_, _) => {
                         c.set_intense(true).set_fg(Some(Color::Magenta));
                     }
 
@@ -225,8 +225,49 @@ pub trait Highlighter {
                     _other => (), // Just an empty spec
                 }
                 self.set_color(&mut c)?;
+                match &x.value {
+                    Token::HereDoc(indent, lines) => {
+                        let space = String::from(" ");
+                        writeln!(self.get_writer(), r#"""""#)?;
+                        for l in lines {
+                            line += 1;
+                            self.reset()?;
+                            self.set_color(ColorSpec::new().set_bold(true))?;
+                            write!(self.get_writer(), "{:5} | ", line)?;
+                            self.reset()?;
+                            c.set_intense(true).set_fg(Some(Color::Magenta));
+                            writeln!(self.get_writer(), "{}{}", space.repeat(*indent), l)?
+                        }
+                        line += 1;
+                        self.reset()?;
+                        self.set_color(ColorSpec::new().set_bold(true))?;
+                        write!(self.get_writer(), "{:5} | ", line)?;
+                        self.reset()?;
+                        write!(self.get_writer(), r#"""""#)?;
+                    }
+                    Token::TestLiteral(indent, lines) => {
+                        let space = String::from(" ");
+                        write!(self.get_writer(), "|")?;
+                        let mut first = true;
+                        for l in lines {
+                            if first {
+                                first = false;
+                            } else {
+                                line += 1;
+                                self.reset()?;
+                                self.set_color(ColorSpec::new().set_bold(true))?;
+                                write!(self.get_writer(), "\\\n{:5} | ", line)?;
+                                self.reset()?;
+                                c.set_intense(true).set_fg(Some(Color::Magenta));
+                            }
+                            write!(self.get_writer(), "{}{}", space.repeat(*indent), l)?
+                        }
+                        self.reset()?;
+                        write!(self.get_writer(), "|")?;
+                    }
+                    _ => write!(self.get_writer(), "{}", x.value)?,
+                }
 
-                write!(self.get_writer(), "{}", x.value)?;
                 self.reset()?;
             };
         }
@@ -284,6 +325,8 @@ pub trait Highlighter {
     }
 }
 
+/// Highlights data to allow extracting it as a plain,
+/// unhighlighted string.
 #[derive(Default)]
 pub struct DumbHighlighter {
     buff: Vec<u8>,
@@ -307,10 +350,12 @@ impl ToString for DumbHighlighter {
     }
 }
 
+/// Highlights data colorized and directly to the terminal
 pub struct TermHighlighter {
     bufwtr: BufferWriter,
     buff: Buffer,
 }
+
 #[allow(clippy::new_without_default)]
 impl TermHighlighter {
     pub fn new() -> Self {

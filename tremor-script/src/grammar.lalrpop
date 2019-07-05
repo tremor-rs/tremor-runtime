@@ -480,11 +480,12 @@ Ident: Ident = {
 #[inline]
 StringLiteral: String = {
     "string" => <>.to_string(),
+    "heredoc" => <>.join("\n"),
 }
 
 #[inline]
 TestLiteral: String = {
-    "test" => <>.to_string(),
+    "test" => {let t = <>.join(""); dbg!(&t); t},
 }
 
 Sep<L, T, D>: L = {
@@ -572,7 +573,8 @@ extern {
         "int" => lexer::Token::IntLiteral(<i64>),
         "float" => lexer::Token::FloatLiteral(<f64>, <String>),
         "string" => lexer::Token::StringLiteral(<String>),
-        "test" => lexer::Token::TestLiteral(<String>),
+        "heredoc" => lexer::Token::HereDoc(_, <Vec<String>>),
+        "test" => lexer::Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => lexer::Token::Ident(<String>, <bool>),
         "<error>" => lexer::Token::BadToken(<String>),
         "<end-of-stream>" => lexer::Token::EndOfStream,

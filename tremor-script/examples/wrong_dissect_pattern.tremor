@@ -1,0 +1,4 @@
+match { "test": "http://example.com/"} of
+  case foo = %{test ~= dissect|%{?}| } => foo
+       default => "ko"
+end;

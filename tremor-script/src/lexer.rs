@@ -26,10 +26,11 @@ use codespan::Span;
 use lalrpop_util;
 use std::fmt;
 use std::iter::Peekable;
+use std::str::Chars;
 use unicode_xid::UnicodeXID;
 
 pub use crate::pos::*;
-use crate::str_suffix;
+//use crate::str_suffix;
 
 pub trait ParserSource {
     fn src(&self) -> &str;
@@ -37,7 +38,10 @@ pub trait ParserSource {
 
     fn span(&self) -> Span<BytePos> {
         let start = self.start_index();
-        Span::new(start, start + ByteOffset::from(self.src().len() as i64))
+        Span::new(
+            start,
+            start + ByteOffset::from(self.src().chars().count() as i64),
+        )
     }
 }
 
@@ -58,7 +62,7 @@ impl ParserSource for str {
         self
     }
     fn start_index(&self) -> BytePos {
-        BytePos::from(1)
+        BytePos::from(0)
     }
 }
 
@@ -73,36 +77,28 @@ impl ParserSource for codespan::FileMap {
 
 pub type TokenSpan<'input> = Spanned<Token<'input>, Location>;
 
-fn is_ws(ch: u8) -> bool {
-    let ch = ch as char;
+fn is_ws(ch: char) -> bool {
     ch.is_whitespace() && ch != '\n'
 }
 
-fn is_ident_start(ch: u8) -> bool {
-    let ch = ch as char;
+fn is_ident_start(ch: char) -> bool {
     UnicodeXID::is_xid_start(ch) || ch == '_' || ch == '-'
 }
 
-fn is_ident_continue(ch: u8) -> bool {
+fn is_ident_continue(ch: char) -> bool {
     let ch = ch as char;
     UnicodeXID::is_xid_continue(ch) || ch == '_' || ch == '-'
-}
-
-fn is_string_start(ch: char) -> bool {
-    ch == '\"'
 }
 
 fn is_test_start(ch: char) -> bool {
     ch == '|'
 }
 
-fn is_dec_digit(ch: u8) -> bool {
-    let ch = ch as char;
+fn is_dec_digit(ch: char) -> bool {
     ch.is_digit(10)
 }
 
-fn is_hex(ch: u8) -> bool {
-    let ch = ch as char;
+fn is_hex(ch: char) -> bool {
     ch.is_digit(16)
 }
 
@@ -135,7 +131,8 @@ pub enum Token<'input> {
     IntLiteral(i64),
     FloatLiteral(f64, String),
     StringLiteral(String),
-    TestLiteral(String),
+    TestLiteral(usize, Vec<String>),
+    HereDoc(usize, Vec<String>),
 
     // Keywords
     Let,
@@ -276,7 +273,8 @@ impl<'input> TokenFuns for Token<'input> {
     fn is_string_like(&self) -> bool {
         match *self {
             Token::StringLiteral(_) => true,
-            Token::TestLiteral(_) => true,
+            Token::TestLiteral(_, _) => true,
+            Token::HereDoc(_, _) => true,
             _ => false,
         }
     }
@@ -349,12 +347,12 @@ impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>, Location>> {
     }
 }
 
-fn unformat_str(s: &str) -> String {
-    s.replace(r#"\"#, r#"\\"#)
-        .replace('"', r#"\\""#)
-        .replace('\n', "\\n")
-        .replace('\t', "\\t")
-}
+// fn unformat_str(s: &str) -> String {
+//     s.replace(r#"\"#, r#"\\"#)
+//         .replace('"', r#"\\""#)
+//         .replace('\n', "\\n")
+//         .replace('\t', "\\t")
+// }
 // Format a token for display
 //
 impl<'input> fmt::Display for Token<'input> {
@@ -369,8 +367,33 @@ impl<'input> fmt::Display for Token<'input> {
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
-            Token::StringLiteral(value) => write!(f, "\"{}\"", unformat_str(&value)),
-            Token::TestLiteral(value) => write!(f, "|{}|", value),
+            Token::StringLiteral(value) => {
+                write!(f, "{}", simd_json::OwnedValue::from(value).to_string())
+            }
+            Token::HereDoc(indent, lines) => {
+                writeln!(f, r#"""""#)?;
+                let space = String::from(" ");
+                for l in lines {
+                    writeln!(f, "{}{}", space.repeat(*indent), l)?
+                }
+                write!(f, r#"""""#)
+            }
+            Token::TestLiteral(indent, values) => {
+                let mut first = true;
+                let space = String::from(" ");
+                write!(f, "|")?;
+                for l in values {
+                    if first {
+                        write!(f, "|")?;
+                        first = false;
+                    } else {
+                        writeln!(f)?;
+                    };
+                    writeln!(f, "{}{}", space.repeat(*indent), l)?;
+                }
+                write!(f, "|")
+            }
+
             Token::BoolLiteral(value) => write!(f, "{}", value),
             Token::BadToken(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
@@ -442,7 +465,7 @@ impl<'input> fmt::Display for Token<'input> {
 
 struct CharLocations<'input> {
     location: Location,
-    chars: str_suffix::Iter<'input>,
+    chars: Peekable<Chars<'input>>,
 }
 
 impl<'input> CharLocations<'input> {
@@ -456,15 +479,15 @@ impl<'input> CharLocations<'input> {
                 column: Column::from(1),
                 absolute: input.start_index(),
             },
-            chars: str_suffix::StrSuffix::new(input.src()).iter(),
+            chars: input.src().chars().peekable(),
         }
     }
 }
 
 impl<'input> Iterator for CharLocations<'input> {
-    type Item = (Location, u8);
+    type Item = (Location, char);
 
-    fn next(&mut self) -> Option<(Location, u8)> {
+    fn next(&mut self) -> Option<(Location, char)> {
         self.chars.next().map(|ch| {
             let location = self.location;
             self.location.shift(ch);
@@ -497,7 +520,6 @@ impl<'input> Tokenizer<'input> {
             eos: false,
             iter: lexer.peekable(),
             pos: span(start, end),
-            //line: 0,
         }
     }
 }
@@ -537,7 +559,7 @@ pub struct Lexer<'input> {
     start_index: BytePos,
 }
 
-type Lexeme = Option<(Location, u8)>;
+type Lexeme = Option<(Location, char)>;
 
 impl<'input> Lexer<'input> {
     /// Create a new lexer from the source string
@@ -546,7 +568,6 @@ impl<'input> Lexer<'input> {
         S: ?Sized + ParserSource,
     {
         let chars = CharLocations::new(input);
-
         Lexer {
             input: input.src(),
             chars,
@@ -555,12 +576,9 @@ impl<'input> Lexer<'input> {
     }
 
     /// Return the next character in the source string
-    fn lookahead(&self) -> Lexeme {
-        self.chars
-            .chars
-            .as_str_suffix()
-            .first()
-            .map(|b| (self.chars.location, b))
+    fn lookahead(&mut self) -> Lexeme {
+        let loc = self.chars.location;
+        self.chars.chars.peek().map(|b| (loc, *b))
     }
 
     fn bump(&mut self) -> Lexeme {
@@ -568,27 +586,40 @@ impl<'input> Lexer<'input> {
     }
 
     /// Return a slice of the source string
-    fn slice(&self, start: Location, end: Location) -> &'input str {
-        let start = start.absolute - ByteOffset::from(self.start_index.to_usize() as i64);
-        let end = end.absolute - ByteOffset::from(self.start_index.to_usize() as i64);
+    fn slice(&self, start: Location, end: Location) -> Option<&'input str> {
+        let start =
+            (start.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
+        let end = (end.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
 
-        &self.input[start.to_usize()..end.to_usize()]
+        // Our indexes are in characters as we are iterating over codepoints
+        // string indexes however are in bytes and might lead to either
+        // invalid regions or even invalid strings
+        // That is terrible, what are you thinking rust!
+        // But at lease we can work around it using `indices`
+        let start = self.input.char_indices().nth(start)?.0;
+        let end = self.input.char_indices().nth(end)?.0;
+        self.input.get(start..end)
     }
 
     fn take_while<F>(&mut self, start: Location, mut keep_going: F) -> (Location, &'input str)
     where
-        F: FnMut(u8) -> bool,
+        F: FnMut(char) -> bool,
     {
         self.take_until(start, |c| !keep_going(c))
     }
 
     fn take_until<F>(&mut self, start: Location, mut terminate: F) -> (Location, &'input str)
     where
-        F: FnMut(u8) -> bool,
+        F: FnMut(char) -> bool,
     {
         while let Some((end, ch)) = self.lookahead() {
             if terminate(ch) {
-                return (end, self.slice(start, end));
+                if let Some(slice) = self.slice(start, end) {
+                    return (end, slice);
+                } else {
+                    // Invalid start end case :(
+                    return (start, "");
+                }
             } else {
                 self.bump();
             }
@@ -598,7 +629,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_until(start, |ch| ch == b'\n');
+        let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
         if lexeme.starts_with("##") {
             let doc = Token::DocComment(&lexeme[2..]);
@@ -610,11 +641,11 @@ impl<'input> Lexer<'input> {
 
     fn eq(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
-            Some((end, b'>')) => {
+            Some((end, '>')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::EqArrow))
             }
-            Some((end, b'=')) => {
+            Some((end, '=')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::EqEq))
             }
@@ -623,7 +654,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn cn(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_while(start, |ch| ch == b':' || ch == b'=');
+        let (end, lexeme) = self.take_while(start, |ch| ch == ':');
 
         match lexeme {
             "::" => Ok(spanned2(start, end, Token::ColonColon)),
@@ -633,7 +664,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn sb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_while(start, |ch| ch == b'-' || ch == b'>');
+        let (end, lexeme) = self.take_while(start, |ch| ch == '-');
 
         match lexeme {
             "-" => Ok(spanned2(start, end, Token::Sub)),
@@ -643,7 +674,7 @@ impl<'input> Lexer<'input> {
 
     fn an(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_while(start, |ch| {
-            ch == b'>' || ch == b'<' || ch == b'=' || is_ident_continue(ch)
+            ch == '>' || ch == '<' || ch == '=' || is_ident_continue(ch)
         });
 
         match lexeme {
@@ -657,11 +688,11 @@ impl<'input> Lexer<'input> {
 
     fn pb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
-            Some((end, b'[')) => {
+            Some((end, '[')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::LPatBracket))
             }
-            Some((end, b'{')) => {
+            Some((end, '{')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::LPatBrace))
             }
@@ -672,7 +703,7 @@ impl<'input> Lexer<'input> {
 
     fn pe(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
-            Some((end, b'=')) => {
+            Some((end, '=')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::NotEq))
             }
@@ -683,7 +714,7 @@ impl<'input> Lexer<'input> {
 
     fn tl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
-            Some((end, b'=')) => {
+            Some((end, '=')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::TildeEq))
             }
@@ -735,44 +766,73 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn escape_code(&mut self, s: &str) -> Result<u8> {
+    fn escape_code(&mut self, s: &str, start: Location) -> Result<Option<char>> {
         match self.bump() {
-            Some((_, b'\'')) => Ok(b'\''),
-            Some((_, b'"')) => Ok(b'"'),
-            Some((_, b'\\')) => Ok(b'\\'),
-            Some((_, b'/')) => Ok(b'/'),
-            Some((_, b'n')) => Ok(b'\n'),
-            Some((_, b'r')) => Ok(b'\r'),
-            Some((_, b't')) => Ok(b'\t'),
+            Some((_, '\'')) => Ok(Some('\'')),
+            Some((_, '"')) => Ok(Some('"')),
+            Some((_, '\\')) => Ok(Some('\\')),
+            Some((_, '/')) => Ok(Some('/')),
+            Some((_, 'b')) => Ok(Some('\u{8}')), // Backspace
+            Some((_, 'f')) => Ok(Some('\u{c}')), // Form Feed
+            Some((_, 'n')) => Ok(Some('\n')),
+            Some((_, 'r')) => Ok(Some('\r')),
+            Some((_, 't')) => Ok(Some('\t')),
             // TODO: Unicode escape codes
-            Some((end, ch)) => {
-                let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
-                Err(ErrorKind::UnexpectedEscapeCode(
-                    Range::from((end, end)).expand_lines(2),
-                    Range::from((end, end)),
-                    format!("\"{}\\{}\n", s, ch as char),
-                    ch,
-                )
-                .into())
+            Some((end, 'u')) => {
+                let mut end = end;
+                let mut digits = String::new();
+                for _i in 0..4 {
+                    if let Some((e, c)) = self.bump() {
+                        end = e;
+                        digits.push(c);
+                    } else {
+                        return Err(ErrorKind::UnterminatedIdentLiteral(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            format!("\"{}\\u{}\n", s, digits),
+                        )
+                        .into());
+                    }
+                }
+
+                if let Ok(Some(c)) = u32::from_str_radix(&digits, 16).map(std::char::from_u32) {
+                    Ok(Some(c))
+                } else {
+                    Err(ErrorKind::UnexpectedEscapeCode(
+                        Range::from((start, end)).expand_lines(2),
+                        Range::from((start, end)),
+                        format!("\"{}\\u{}\n", s, digits),
+                        'u',
+                    )
+                    .into())
+                }
             }
+            Some((end, ch)) => Err(ErrorKind::UnexpectedEscapeCode(
+                Range::from((start, end)).expand_lines(2),
+                Range::from((start, end)),
+                format!("\"{}\\{}\n", s, ch),
+                ch,
+            )
+            .into()),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
 
+    /// handle quoted idents `\`` ...
     fn id2(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut end = start;
 
         loop {
             match self.bump() {
-                Some((mut end, b'`')) => {
+                Some((mut end, '`')) => {
                     let token = Token::Ident(string, true);
                     // we got to bump end by one so we claim the tailing `"`
                     end.column.0 += 1;
                     end.absolute.0 += 1;
                     return Ok(spanned2(start, end, token));
                 }
-                Some((end, b'\n')) => {
+                Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedIdentLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
@@ -798,23 +858,126 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn qs(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn qs_or_hd(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
+        match self.bump() {
+            // This would be the second quote
+            Some((mut end, '"')) => match self.lookahead() {
+                Some((end, '"')) => {
+                    self.bump();
+                    // We don't allow anything tailing the initial `"""`
+                    match self.bump() {
+                        Some((_end, '\n')) => self.hd(start),
+                        Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            format!(r#""""{}\n"#, ch),
+                            ch,
+                        )
+                        .into()),
+                        None => Err(ErrorKind::UnterminatedHereDoc(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            r#""""\n"#.to_string(),
+                        )
+                        .into()),
+                    }
+                }
+                // We had two quotes followed by something not a quote so
+                // it is an empty string.
+                _ => {
+                    let token = Token::StringLiteral(string);
+                    end.column.0 += 1;
+                    end.absolute.0 += 1;
+                    Ok(spanned2(start, end, token))
+                }
+            },
+            Some((end, '\\')) => {
+                if let Some(c) = self.escape_code(&string, start)? {
+                    string.push(c);
+                };
+                self.qs(start, end, string)
+            }
+            Some((end, '\n')) => Err(ErrorKind::UnterminatedStringLiteral(
+                Range::from((start, end)).expand_lines(2),
+                Range::from((start, end)),
+                format!("\"{}\n", string),
+            )
+            .into()),
+            Some((end, ch)) => {
+                string.push(ch);
+                self.qs(start, end, string)
+            }
+            None => Err(ErrorKind::UnterminatedStringLiteral(
+                Range::from((start, start)).expand_lines(2),
+                Range::from((start, start)),
+                format!("\"{}", string),
+            )
+            .into()),
+        }
+    }
+
+    fn hd(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+        let mut string = String::new();
+        let mut strings = Vec::new();
         let mut end = start;
         loop {
             match self.bump() {
-                Some((e, b'\\')) => {
-                    string.push(self.escape_code(&string)? as char);
+                Some((e, '\n')) => {
+                    end = e;
+                    strings.push(string);
+                    string = String::new();
+                }
+                Some((mut end, ch)) => {
+                    string.push(ch);
+                    // If the current line is just a `"""` then we are at the end of the heardoc
+                    if string.trim_start() == r#"""""# {
+                        let indent = indentation(&strings);
+                        let strings = strings
+                            .iter()
+                            .map(|s| s.split_at(indent).1.to_string())
+                            .collect();
+                        let token = Token::HereDoc(indent, strings);
+                        end.column.0 += 1;
+                        end.absolute.0 += 1;
+                        return Ok(spanned2(start, end, token));
+                    }
+                }
+                None => {
+                    return Err(ErrorKind::UnterminatedHereDoc(
+                        Range::from((start, end)).expand_lines(2),
+                        Range::from((start, end)),
+                        format!(r#""""{}\n"#, strings.join("\n")).to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+        //let mut strings = Vec::new();
+    }
+    /// Handle quote strings `"`  ...
+    fn qs(
+        &mut self,
+        start: Location,
+        mut end: Location,
+        mut string: String,
+    ) -> Result<TokenSpan<'input>> {
+        loop {
+            match self.bump() {
+                Some((e, '\\')) => {
+                    if let Some(c) = self.escape_code(&string, start)? {
+                        string.push(c);
+                    };
                     end = e;
                 }
-                Some((mut end, b'"')) => {
+                Some((mut end, '"')) => {
                     let token = Token::StringLiteral(string);
                     // we got to bump end by one so we claim the tailing `"`
                     end.column.0 += 1;
                     end.absolute.0 += 1;
                     return Ok(spanned2(start, end, token));
                 }
-                Some((end, b'\n')) => {
+                Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
@@ -839,33 +1002,59 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn test_escape_code(&mut self) -> Result<u8> {
+    fn test_escape_code(&mut self, s: &str) -> Result<Option<char>> {
         match self.bump() {
-            Some((_, b'\\')) => Ok(b'\\'),
-            Some((_, b'|')) => Ok(b'|'),
-            Some((_end, ch)) => Ok(ch),
+            Some((_, '\\')) => Ok(Some('\\')),
+            Some((_, '|')) => Ok(Some('|')),
+            Some((_end, '\n')) => Ok(None),
+            Some((end, ch)) => Err(ErrorKind::UnexpectedEscapeCode(
+                Range::from((end, end)).expand_lines(2),
+                Range::from((end, end)),
+                format!("|{}\\{}\n", s, ch as char),
+                ch,
+            )
+            .into()),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
 
+    /// handle escaped
     fn pl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
+        let mut strings = Vec::new();
 
         let mut end = start;
         loop {
             match self.bump() {
-                Some((e, b'\\')) => {
-                    string.push('\\');
-                    string.push(self.test_escape_code()? as char);
+                Some((e, '\\')) => {
+                    if let Some(ch) = self.test_escape_code(&string)? {
+                        string.push(ch);
+                    } else {
+                        strings.push(string);
+                        string = String::new();
+                    }
                     end = e;
                 }
-                Some((mut end, b'|')) => {
+                Some((mut end, '|')) => {
+                    strings.push(string);
                     end.absolute.0 += 1;
                     end.column.0 += 1;
-                    let token = Token::TestLiteral(string);
+                    let indent = indentation(&strings);
+                    dbg!(indent);
+                    let strings = strings
+                        .iter()
+                        .map(|s| {
+                            if s == "" {
+                                s.to_owned()
+                            } else {
+                                s.split_at(indent).1.to_string()
+                            }
+                        })
+                        .collect();
+                    let token = Token::TestLiteral(indent, strings);
                     return Ok(spanned2(start, end, token));
                 }
-                Some((end, b'\n')) => {
+                Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedExtractor(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
@@ -897,8 +1086,8 @@ impl<'input> Lexer<'input> {
         let mut delimiters = 0;
         while let Some((end, ch)) = self.bump() {
             match ch {
-                b'#' => delimiters += 1,
-                b'"' => break,
+                '#' => delimiters += 1,
+                '"' => break,
                 _ => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
                         Range::from((start, end)).expand_lines(2),
@@ -911,14 +1100,14 @@ impl<'input> Lexer<'input> {
 
         let content_start = self.next_index()?;
         loop {
-            self.take_until(content_start, |b| b == b'"');
+            self.take_until(content_start, |b| b == '"');
             match self.bump() {
-                Some((_, b'"')) => {
+                Some((_, '"')) => {
                     let mut found_delimiters = 0;
                     while let Some((_, ch)) = self.bump() {
                         match ch {
-                            b'#' => found_delimiters += 1,
-                            b'"' => found_delimiters = 0,
+                            '#' => found_delimiters += 1,
+                            '"' => found_delimiters = 0,
                             _ => break,
                         }
                         if found_delimiters == delimiters {
@@ -942,11 +1131,11 @@ impl<'input> Lexer<'input> {
         let (end, int) = self.take_while(start, is_dec_digit);
 
         let (start, end, token) = match self.lookahead() {
-            Some((_, b'.')) => {
-                self.bump(); // Skip b'.'
+            Some((_, '.')) => {
+                self.bump(); // Skip '.'
                 let (end, float) = self.take_while(start, is_dec_digit);
                 match self.lookahead() {
-                    Some((_, b'e')) => {
+                    Some((_, 'e')) => {
                         self.bump();
                         self.bump();
                         let (end, exp) = self.take_while(end, is_dec_digit);
@@ -966,7 +1155,6 @@ impl<'input> Lexer<'input> {
                         )
                     }
                     Some((end, ch)) if is_ident_start(ch) => {
-                        let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
                         return Err(ErrorKind::UnexpectedCharacter(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -989,14 +1177,13 @@ impl<'input> Lexer<'input> {
                     ),
                 }
             }
-            Some((_, b'x')) => {
-                self.bump(); // Skip b'x'
+            Some((_, 'x')) => {
+                self.bump(); // Skip 'x'
                 let int_start = self.next_index()?;
                 let (end, hex) = self.take_while(int_start, is_hex);
                 match int {
                     "0" | "-0" => match self.lookahead() {
                         Some((_, ch)) if is_ident_start(ch) => {
-                            let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
                             return Err(ErrorKind::UnexpectedCharacter(
                                 Range::from((start, end)).expand_lines(2),
                                 Range::from((start, end)),
@@ -1034,8 +1221,8 @@ impl<'input> Lexer<'input> {
                     }
                 }
             }
-            // Some((_, b'b')) => {
-            //     self.bump(); // Skip b'b'
+            // Some((_, '')) => {
+            //     self.bump(); // Skip ''
             //     let end = self.next_index()?;
             //     match self.lookahead() {
             //         Some((pos, ch)) if is_ident_start(ch) => {
@@ -1062,7 +1249,6 @@ impl<'input> Lexer<'input> {
             //     }
             // }
             Some((_, ch)) if is_ident_start(ch) => {
-                let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
                 return Err(ErrorKind::UnexpectedCharacter(
                     Range::from((start, end)).expand_lines(2),
                     Range::from((start, end)),
@@ -1108,6 +1294,7 @@ fn inc_loc(mut l: Location) -> Location {
     l.absolute.0 += 1;
     l
 }
+
 impl<'input> Iterator for Lexer<'input> {
     type Item = Result<TokenSpan<'input>>;
 
@@ -1146,19 +1333,36 @@ impl<'input> Iterator for Lexer<'input> {
                     '`' => Some(self.id2(start)),
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
-                    ch if is_ident_start(ch as u8) => Some(self.id(start)),
-                    ch if is_string_start(ch) => Some(self.qs(start)),
+                    ch if is_ident_start(ch) => Some(self.id(start)),
+                    '"' => Some(self.qs_or_hd(start)),
                     ch if is_test_start(ch) => Some(self.pl(start)),
-                    ch if is_dec_digit(ch as u8) => Some(self.nm(start)),
+                    ch if is_dec_digit(ch) => Some(self.nm(start)),
                     ch if ch.is_whitespace() => Some(self.ws(start)),
                     _ => {
-                        let str = format!("{}", ch as char);
+                        let str = format!("{}", ch);
                         Some(Ok(spanned2(start, start, Token::BadToken(str))))
                     }
                 }
             }
         }
     }
+}
+
+fn indentation(strings: &[String]) -> usize {
+    let mut indent = None;
+    for s in strings {
+        if s != "" {
+            let l = s.len() - s.trim_start().len();
+            if let Some(i) = indent {
+                if i > l {
+                    indent = Some(l);
+                }
+            } else {
+                indent = Some(l);
+            }
+        }
+    }
+    indent.unwrap_or(0)
 }
 
 #[cfg(test)]

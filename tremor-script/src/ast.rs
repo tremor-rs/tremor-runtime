@@ -288,7 +288,7 @@ pub enum Expr1 {
         end: Location,
     },
     Emit(EmitExpr1),
-    Test(TestExpr),
+    Test(TestExpr1),
 }
 
 impl Expr1 {
@@ -401,7 +401,7 @@ impl Expr1 {
             Expr1::Comprehension(c) => Expr::Comprehension(c.up(helper)?),
             Expr1::Drop { start, end } => Expr::Drop { start, end },
             Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
-            Expr1::Test(t) => Expr::Test(t),
+            Expr1::Test(t) => Expr::Test(t.up(helper)?),
         })
     }
 }
@@ -635,7 +635,7 @@ impl<Ctx: Context + 'static> fmt::Debug for Invoke<Ctx> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TestExpr {
     pub start: Location,
     pub end: Location,

@@ -207,8 +207,8 @@ impl Location {
         new
     }
 
-    pub fn shift(&mut self, ch: u8) {
-        if ch == b'\n' {
+    pub fn shift(&mut self, ch: char) {
+        if ch == '\n' {
             self.line += LineOffset(1);
             self.column = Column(1);
         } else {

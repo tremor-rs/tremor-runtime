@@ -43,32 +43,31 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 // {"Re":{"rule":"(snot)?foo(?P<snot>.*)"}}
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Extractor {
     Glob {
         rule: String,
         #[serde(skip)]
-        compiled: Option<glob::Pattern>,
+        compiled: glob::Pattern,
     },
     Re {
         rule: String,
         #[serde(skip)]
-        compiled: Option<Regex>,
+        compiled: Regex,
     },
     Base64,
     Kv,
     Json,
     Dissect {
         rule: String,
-        #[serde(default = "default_dissect_pattern")]
         #[serde(skip)]
-        compiled: Result<dissect::Pattern, ExtractorError>,
+        compiled: dissect::Pattern,
     },
 
     Grok {
         rule: String,
         #[serde(skip)]
-        compiled: Option<GrokPattern>,
+        compiled: GrokPattern,
     },
     Cidr {
         range: Option<Vec<String>>,
@@ -90,38 +89,16 @@ impl fmt::Display for ExtractorError {
     }
 }
 
-fn default_dissect_pattern() -> Result<dissect::Pattern, ExtractorError> {
-    Ok(dissect::Pattern::default())
-}
-
-/// This is a stupid hack because we can't depend on display for E
-/// since rust is being an idiot
-pub trait Snot: fmt::Display {}
-impl Snot for glob::PatternError {}
-impl Snot for regex::Error {}
-impl Snot for String {}
-impl Snot for &str {}
-impl Snot for base64::DecodeError {}
-impl Snot for simd_json::Error {}
-impl Snot for dissect::DissectError {}
-impl<E: Snot> From<E> for ExtractorError {
-    fn from(e: E) -> Self {
-        ExtractorError {
-            msg: format!("{}", e),
-        }
-    }
-}
-
 impl Extractor {
     pub fn new(id: &str, rule_text: &str) -> Result<Extractor, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
             "glob" => Extractor::Glob {
-                compiled: Some(glob::Pattern::new(&rule_text)?),
+                compiled: glob::Pattern::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
             "re" => Extractor::Re {
-                compiled: Some(Regex::new(&rule_text)?),
+                compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
             "base64" => Extractor::Base64,
@@ -130,7 +107,7 @@ impl Extractor {
             "dissect" => Extractor::Dissect {
                 rule: rule_text.to_string(),
                 compiled: Pattern::try_from(rule_text)
-                    .map_err(|e| ExtractorError { msg: e.to_string() }),
+                    .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
             "grok" => match GrokPattern::from_file(
                 crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
@@ -138,21 +115,16 @@ impl Extractor {
             ) {
                 Ok(pat) => Extractor::Grok {
                     rule: rule_text.to_string(),
-                    compiled: Some(pat),
+                    compiled: pat,
                 },
                 Err(_) => {
                     let mut grok = grok::Grok::default();
-                    match grok.compile(&rule_text, true) {
-                        Ok(pat) => Extractor::Grok {
-                            rule: rule_text.to_string(),
-                            compiled: Some(GrokPattern {
-                                definition: rule_text.to_string(),
-                                pattern: pat,
-                            }),
-                        },
-                        Err(_) => Extractor::Grok {
-                            rule: rule_text.to_string(),
-                            compiled: None,
+                    let pat = grok.compile(&rule_text, true)?;
+                    Extractor::Grok {
+                        rule: rule_text.to_string(),
+                        compiled: GrokPattern {
+                            definition: rule_text.to_string(),
+                            pattern: pat,
                         },
                     }
                 }
@@ -175,7 +147,11 @@ impl Extractor {
             "datetime" => Extractor::Datetime {
                 format: rule_text.to_string(),
             },
-            other => return Err(format!("Unsupported extractor '{}'.", other).into()),
+            other => {
+                return Err(ExtractorError {
+                    msg: format!("Unsuupotred extractor {}", other),
+                })
+            }
         };
         Ok(e)
     }
@@ -190,9 +166,7 @@ impl Extractor {
     {
         match v {
             Value::String(ref s) => match self {
-                Extractor::Re {
-                    compiled: Some(re), ..
-                } => {
+                Extractor::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
                         let matches: HashMap<std::borrow::Cow<str>, Value> = re
                             .capture_names()
@@ -206,29 +180,29 @@ impl Extractor {
                             .collect();
                         Ok(Value::Object(matches.clone()))
                     } else {
-                        Err("regular expression dind't match'".into())
+                        Err(ExtractorError {
+                            msg: "regular expression didn't match'".into(),
+                        })
                     }
                 }
-                Extractor::Re { .. } => Err("invalid regular expression".into()),
-                Extractor::Glob {
-                    compiled: Some(glob),
-                    ..
-                } => {
+                Extractor::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
                         Ok(true.into())
                     } else {
-                        Err("glob expression didn't match".into())
+                        Err(ExtractorError {
+                            msg: "glob expression didn't match".into(),
+                        })
                     }
                 }
-                Extractor::Glob { .. } => Err("invalid glob pattern".into()),
-
                 Extractor::Kv => {
                     if let Some(r) = kv::split(s, &[' '], &[':']) {
                         //FIXME: This is needed for removing the lifetimne from the result
                         let r: OwnedValue = Value::Object(r.clone()).into();
                         Ok(r.into())
                     } else {
-                        Err("Failed to split kv list".into())
+                        Err(ExtractorError {
+                            msg: "Failed to split kv list".into(),
+                        })
                     }
                 }
                 Extractor::Base64 => {
@@ -246,7 +220,10 @@ impl Extractor {
                     let mut s = s.to_string();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded: &mut [u8] = unsafe { s.as_bytes_mut() };
-                    let decoded = simd_json::to_owned_value(encoded)?;
+                    let decoded =
+                        simd_json::to_owned_value(encoded).map_err(|_| ExtractorError {
+                            msg: "Error in decoding to a json object".to_string(),
+                        })?;
                     Ok(decoded.into())
                 }
                 Extractor::Cidr { range: Some(range) } => {
@@ -269,31 +246,30 @@ impl Extractor {
                                 .into(),
                         ))
                     } else {
-                        Err("IP does not belong to any CIDR specified".into())
+                        Err(ExtractorError {
+                            msg: "IP does not belong to any CIDR specified".into(),
+                        })
                     }
                 }
-                Extractor::Cidr { range: None } => Ok(Value::Object(Cidr::from_str(s)?.into())),
+                Extractor::Cidr { range: None } => Ok(Value::Object(
+                    Cidr::from_str(s)
+                        .map_err(|e| ExtractorError { msg: e.to_string() })?
+                        .into(),
+                )),
                 Extractor::Dissect {
-                    compiled: Ok(ref pattern),
-                    ..
+                    compiled: pattern, ..
                 } => Ok(Value::Object(pattern.extract(s)?.0)),
-                Extractor::Dissect {
-                    compiled: Err(error),
-                    ..
-                } => Err(error.to_owned()),
                 Extractor::Grok {
-                    compiled: Some(ref pattern),
+                    compiled: ref pattern,
                     ..
-                } => match pattern.matches(s.as_bytes().to_vec()) {
-                    Ok(x) => Ok(x.into()),
-                    Err(_) => Err("cannot find match for grok pattern".into()),
-                },
-                Extractor::Grok { .. } => Err("invalid grok operation".into()),
+                } => Ok(pattern.matches(s.as_bytes().to_vec())?.into()),
                 Extractor::Influx => match influx::parse(s) {
                     Ok(x) => Ok(Value::Object(x.into())),
-                    Err(_) => Err("The input is invalid".into()),
+                    Err(_) => Err(ExtractorError {
+                        msg: "The input is invalid".into(),
+                    }),
                 },
-                Extractor::Datetime { format } => {
+                Extractor::Datetime { ref format } => {
                     Ok(Value::from(_parse(s, format).map_err(|e| {
                         ExtractorError {
                             msg: format!("Invalid datetime specified: {}", e.to_string()),
@@ -301,10 +277,19 @@ impl Extractor {
                     })?))
                 }
             },
-            _ => Err("Extractors are currently only supported against Strings".into()),
+            _ => Err(ExtractorError {
+                msg: "Extractors are currently only supported against Strings".into(),
+            }),
         }
     }
 }
+
+impl<T: std::error::Error> From<T> for ExtractorError {
+    fn from(x: T) -> ExtractorError {
+        ExtractorError { msg: x.to_string() }
+    }
+}
+
 impl PartialEq<Extractor> for Extractor {
     fn eq(&self, other: &Extractor) -> bool {
         match (&self, other) {
@@ -354,6 +339,7 @@ impl std::ops::Deref for Cidr {
         &self.0
     }
 }
+
 #[allow(clippy::implicit_hasher)]
 // ^ we will not be using this with custom hashers, so we do not need to generalise the function over all hashers
 impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
@@ -547,7 +533,9 @@ mod tests {
 
                 assert_eq!(
                     rex.extract(&Value::from("99.98.97.96")),
-                    Err("IP does not belong to any CIDR specified".into())
+                    Err(ExtractorError {
+                        msg: "IP does not belong to any CIDR specified".into()
+                    })
                 );
             }
             _ => unreachable!(),

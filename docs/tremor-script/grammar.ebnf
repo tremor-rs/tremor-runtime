@@ -22,7 +22,9 @@ MulExpr ::= UnaryExpr ( '*' | '/' | '%' ) UnaryExpr | UnaryExpr
 
 UnaryExpr ::= ( '+' | '-' ) NotExpr
 
-NotExpr ::= 'not' SimpleExpr
+NotExpr ::= 'not' PresenceExpr
+
+PresenceExpr ::= ( 'present' | 'absent' ) SimpleExpr
 
 SimpleExpr ::= Literal | '(' Expr ')' | Path | Record | Match | Patch | Merge | FnCall | For | Let | Drop | Emit
 
@@ -104,7 +106,7 @@ STRING_ESCAPE    ::= '\' [tbnrf\"']
 
 TEST_LITERAL
          ::= '|' ( ([^#x22#x5C#xA#xD]) | TEST_ESCAPE )* '|'
-TEST_ESCAPE    ::= '\' [|\]
+TEST_ESCAPE    ::= '\' [\n|\]
 
 Id ::= '`' ([^`])* '`' | [a-z][A-Z] ([a-z][A-Z][0-9]_)*
 

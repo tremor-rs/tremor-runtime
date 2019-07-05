@@ -134,3 +134,37 @@ match event of
   # ...
 end
 ```
+
+## Routing messages
+
+Tremor script can be used to route messages by combining the `emit` feature and the fact that the tremor runtime operator allows different outputs.
+
+To route to doing a  `blue` / `green` split based on a field in a record we could use the following code:
+
+
+
+```
+match event of
+  case %{key == "blue"} => emit event => "blue"
+  case %{key == "green"} => emit event => "green"
+  default => drop
+end
+```
+
+
+
+And then in the pipeline configuration instead use parts such as:
+
+```yaml
+
+pipeline:
+  - id: one
+    outputs:
+      - blue
+      - green
+    # ...
+    links:
+     script/blue: ["blue"]
+     script/green: ["green"]     
+```
+

@@ -153,7 +153,8 @@ impl ErrorKind {
             UnterminatedIdentLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
             UnterminatedStringLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
             UpdateKeyMissing(expr, inner, _) => (Some(*expr), Some(*inner)),
-
+            UnterminatedHereDoc(expr, inner, _) => (Some(*expr), Some(*inner)),
+            TailingHereDoc(expr, inner, _, _) => (Some(*expr), Some(*inner)),
             // Special cases
             EmptyScript
             | Grok(_)
@@ -327,9 +328,18 @@ error_chain! {
                 display("It looks like you forgot to terminate an extractor with a closing '|'")
         }
 
-        UnterminatedStringLiteral(expr: Range, inner: Range, extractor: String) {
+        UnterminatedStringLiteral(expr: Range, inner: Range, string: String) {
             description("Unterminated string")
                 display("It looks like you forgot to terminate a string with a closing '\"'")
+        }
+
+        UnterminatedHereDoc(expr: Range, inner: Range, string: String) {
+            description("Unterminated heredoc")
+                display("It looks like you forgot to terminate a here doc with with a closing '\"\"\"'")
+        }
+        TailingHereDoc(expr: Range, inner: Range, hd: String, ch: char) {
+            description("Tailing Characters after opening a here doc")
+                display("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")
         }
 
         UnterminatedIdentLiteral(expr: Range, inner: Range, extractor: String)

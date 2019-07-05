@@ -174,6 +174,9 @@ fn main() {
             let _expr = Value::Null;
             let expr = runnable.run(&ctx, &mut event, &mut global_map);
             match expr {
+                // Seperate out the speical case of emiting the inbound evet,
+                // this way we don't have to clone it on the way out and can
+                // uswe the refference that was apssed in instead.
                 Ok(Return::EmitEvent { port }) => {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {
@@ -194,6 +197,7 @@ fn main() {
                         h.highlight(lexed_tokens).expect("Failed to highliht error");
                     }
                 }
+                // Handle the other success returns
                 Ok(result) => {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {
@@ -207,6 +211,7 @@ fn main() {
                         h.highlight(lexed_tokens).expect("Failed to highliht error");
                     }
                 }
+                // Hande and print runtime errors.
                 Err(e) => {
                     let mut h = TermHighlighter::new();
                     runnable
@@ -216,6 +221,7 @@ fn main() {
                 }
             }
         }
+        // Handle and print compile time errors.
         Err(e) => {
             let mut h = TermHighlighter::new();
             if let Err(e) = interpreter::Script::<()>::format_error_from_script(&raw, &mut h, &e) {

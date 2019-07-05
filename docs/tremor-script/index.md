@@ -130,17 +130,23 @@ The language does not support literal character or Unicode code-points at this t
 "I am a string"
 ```
 
-String literals in `tremor-script` can span multiple lines
+### HereDocs
+
+To deal with pre formatted strings in tremor script we allow for **here docs** they are started by using triple quotes `"""`  that terminate the line (aka `"""bla`  isn't legal) .
+
+Here docs can in indented, the indentation will be truncated to the lowest number of spaces found in any of the lines.
 
 ```tremor
-" I
-am 
-a 
-long
-multi-line
-string
-"
+"""
+    I am 
+   a
+    long
+    multi-line
+    string
+"""
 ```
+
+The above **heredoc** would truncate 3 spaces characters since `...a` has 3 spaces infant of it even so other lines have 4.
 
 #### Arrays
 
@@ -673,6 +679,8 @@ The general form of a supported micro-format is as follows:
 Where:
 * name - The key for the micro-format being used for testing or extraction
 * format - An optional multi-line micro-format specific format encoding used for testing and extraction
+
+Formats can be spread out over multiple lines by adding a `\` as a last character of the line. Spaces at the start of the line will be truncated by the lowest number of leading spaces. So if 3 lines respectively have 2, 4, and 7 spaces then 2 spaces are going to be removed from each line leaving 0, 2, and 5 spaces at the start.
 
 The set of supported micro-formats at the time of writing are as follows:
 

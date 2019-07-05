@@ -4,6 +4,24 @@ Tremor started with a straight forward problem statement:
 
 **During peak events logs and metrics going to Elastic Search and InfluxDB back up in Kafka queues  removing visibility from the system.**
 
+## tremor-0.5.1 (stable)
+
+With this release we are experimenting with a shorter release cycle. While both 0.4 and 0.5 introduced major changes they lay a stable foundation that makes it easier to ship small features and wins to our users much more frequently.
+
+In this release in particular we introduce some quality of life improvements on extractors by improving error reporting on bad patterns and moving it to compile time with the same good errors we provide for language level errors.
+
+Along with that we fixed a bug on the influx line protocol renderer that caused integers to be re-rendered as floats and multi field items to be rendered in-correctly.
+
+Last but not least we introduced the [`chash` module](../tremor-script/functions/chash/) that currently houses an implementation of googles [jump consistent hashing](https://arxiv.org/abs/1406.2294) this allows partitioning a data flow near evenly over more then out output with minimal cost and no need or synchronisation.
+
+## tremor-0.5 (stable)
+
+Version 0.5 we introduced a completely overhauled scripting language. We moved from a simple rule to action based system to something that can best be described as a ETL focused language now with powerful constructs such as [ `match` statements](../tremor-script/#match) with `record-` and `array patterns` and an extensive [function library](../tremor-script/functions/).
+
+It introduces the concept of [extractors](../tremor-script/extractors/), part of tremor script they allow matching against complex patterns and extracting information from them. This work covers common things like regular expressions or globs, as well as grok and dissect patterns. But also allows decoding embedded influx, json, or even base64 data without much extra work.
+
+As always this release introduces some optimisations, since JSON is the main encoding used for data we introduced [SIMD optimized](tremor-script/#performant) decoding of this data base on [Geoff Langdales, and Daniel Lemires work](https://arxiv.org/abs/1902.08318) into this area.
+
 ## tremor-0.4 (stable)
 
 This release combined the lessons from the 0.3 and 0.2 looking at what worked in one and the other. The 0.4 release kept the dynamic pipelines but implemented them in a way closer to how they were implemented in 0.2 retaining the performance this way.

@@ -29,6 +29,7 @@ nav:
       - Function Reference:
           - Overview: tremor-script/functions.md
           - array: tremor-script/functions/array.md
+          - chash: tremor-script/functions/chash.md
           - datetime: tremor-script/functions/datetime.md
           - record: tremor-script/functions/record.md
           - re: tremor-script/functions/re.md
