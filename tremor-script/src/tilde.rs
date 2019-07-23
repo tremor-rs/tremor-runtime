@@ -26,10 +26,13 @@
 use base64;
 use halfbrown::{hashmap, HashMap};
 
+use crate::datetime::_parse;
 use crate::grok::*;
 use crate::influx;
-use crate::std_lib::datetime::_parse;
-use cidr_utils::{cidr::IpCidr, utils::IpCidrCombiner};
+use cidr_utils::{
+    cidr::{IpCidr, Ipv4Cidr},
+    utils::IpCidrCombiner,
+};
 use dissect::Pattern;
 use glob;
 use kv;
@@ -38,9 +41,142 @@ use simd_json::borrowed::Value;
 use simd_json::OwnedValue;
 use std::borrow::Cow;
 use std::fmt;
-use std::iter::Iterator;
-use std::net::IpAddr;
+use std::iter::{Iterator, Peekable};
+use std::net::{IpAddr, Ipv4Addr};
+use std::slice::Iter;
 use std::str::FromStr;
+
+fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
+
+    let mut network_length = match itr.next()? {
+        c if *c >= b'0' && *c <= b'9' => *c - b'0',
+        _ => return None,
+    };
+    network_length = match itr.next() {
+        Some(c) if *c >= b'0' && *c <= b'9' => network_length * 10 + *c - b'0',
+        None => network_length,
+        _ => return None,
+    };
+    if network_length > 32 {
+        None
+    } else {
+        Some(IpCidr::V4(
+            Ipv4Cidr::from_prefix_and_bits(address, network_length).ok()?,
+        ))
+    }
+}
+
+fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
+    let mut itr = ipstr.as_bytes().iter().peekable();
+    //// A
+    let mut a: u8 = 0;
+    while let Some(c) = itr.next() {
+        match *c {
+            b'0'..=b'9' => {
+                a = if let Some(a) = a.checked_mul(10).and_then(|a| a.checked_add(c - b'0')) {
+                    a
+                } else {
+                    return parse_ipv6_fast(ipstr);
+                };
+            }
+            b'a'..=b'f' | b'A'..=b'F' => return parse_ipv6_fast(ipstr),
+            b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, 0), itr),
+            b'.' => {
+                if itr.peek().is_none() {
+                    return None;
+                } else {
+                    break;
+                }
+            }
+            _ => return None,
+        }
+    }
+    if itr.peek().is_none() {
+        return Some(IpCidr::V4(
+            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, 0, 0, 0), 32).ok()?,
+        ));
+    };
+
+    //// B
+    let mut b: u8 = 0;
+    while let Some(e) = itr.next() {
+        match *e {
+            b'0'..=b'9' => {
+                b = if let Some(b) = b.checked_mul(10).and_then(|b| b.checked_add(e - b'0')) {
+                    b
+                } else {
+                    return None;
+                };
+            }
+            b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, b), itr),
+            b'.' => {
+                if itr.peek().is_none() {
+                    return None;
+                } else {
+                    break;
+                }
+            }
+            _ => return None,
+        }
+    }
+    if itr.peek().is_none() {
+        return Some(IpCidr::V4(
+            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, 0, 0, b), 32).ok()?,
+        ));
+    };
+
+    //// C
+    let mut c: u8 = 0;
+    while let Some(e) = itr.next() {
+        match *e {
+            b'0'..=b'9' => {
+                c = if let Some(c) = c.checked_mul(10).and_then(|c| c.checked_add(e - b'0')) {
+                    c
+                } else {
+                    return None;
+                };
+            }
+            b'/' => return parse_network(Ipv4Addr::new(a, b, 0, c), itr),
+            b'.' => {
+                if itr.peek().is_none() {
+                    return None;
+                } else {
+                    break;
+                }
+            }
+            _ => return None,
+        }
+    }
+    if itr.peek().is_none() {
+        return Some(IpCidr::V4(
+            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, b, 0, c), 32).ok()?,
+        ));
+    };
+
+    //// D
+    let mut d: u8 = 0;
+    while let Some(e) = itr.next() {
+        match *e {
+            b'0'..=b'9' => {
+                d = if let Some(d) = d.checked_mul(10).and_then(|d| d.checked_add(e - b'0')) {
+                    d
+                } else {
+                    return None;
+                };
+            }
+            b'/' => return parse_network(Ipv4Addr::new(a, b, c, d), itr),
+            _ => return None,
+        }
+    }
+    let address = Ipv4Addr::new(a, b, c, d);
+    Some(IpCidr::V4(
+        Ipv4Cidr::from_prefix_and_bits(address, 32).ok()?,
+    ))
+}
+
+fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
+    IpCidr::from_str(s).ok()
+}
 
 // {"Re":{"rule":"(snot)?foo(?P<snot>.*)"}}
 #[derive(Debug, Clone, Serialize)]
@@ -70,12 +206,57 @@ pub enum Extractor {
         compiled: GrokPattern,
     },
     Cidr {
-        range: Option<Vec<String>>,
+        rules: Vec<String>,
+        #[serde(skip)]
+        range: Option<SnotCombiner>,
     },
     Influx,
     Datetime {
         format: String,
     },
+}
+
+#[derive(Debug, Serialize)]
+pub struct SnotCombiner {
+    #[serde(skip)]
+    combiner: IpCidrCombiner,
+    rules: Vec<String>,
+}
+
+impl SnotCombiner {
+    fn from_rules(rules: Vec<String>) -> Result<Self, ExtractorError> {
+        let mut combiner = IpCidrCombiner::new();
+        for x in &rules {
+            //Cidr::from_str(x).map_err(|e| ExtractorError { msg: e.to_string() })?;
+            if let Some(y) = parse_ipv4_fast(x) {
+                combiner.push(y)
+            } else {
+                return Err(ExtractorError {
+                    msg: format!("could not parse CIDR: '{}'", x),
+                });
+            }
+        }
+        Ok(Self { combiner, rules })
+    }
+}
+
+impl PartialEq for SnotCombiner {
+    fn eq(&self, other: &Self) -> bool {
+        self.rules == other.rules
+    }
+}
+
+impl Clone for SnotCombiner {
+    fn clone(&self) -> Self {
+        if let Ok(clone) = SnotCombiner::from_rules(self.rules.clone()) {
+            clone
+        } else {
+            SnotCombiner {
+                combiner: IpCidrCombiner::new(),
+                rules: vec![],
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,14 +312,18 @@ impl Extractor {
             },
             "cidr" => {
                 if rule_text.is_empty() {
-                    Extractor::Cidr { range: None }
+                    Extractor::Cidr {
+                        range: None,
+                        rules: vec![],
+                    }
                 } else {
-                    let values = rule_text
+                    let rules = rule_text
                         .split(',')
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
                     Extractor::Cidr {
-                        range: Some(values),
+                        range: Some(SnotCombiner::from_rules(rules.clone())?),
+                        rules,
                     }
                 }
             }
@@ -158,6 +343,7 @@ impl Extractor {
 
     pub fn extract<'event, 'run, 'script>(
         &'script self,
+        result_needed: bool,
         v: &'run Value<'event>,
     ) -> Result<Value<'event>, ExtractorError>
     where
@@ -168,6 +354,9 @@ impl Extractor {
             Value::String(ref s) => match self {
                 Extractor::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
+                        if !result_needed {
+                            return Ok(Value::Null);
+                        }
                         let matches: HashMap<std::borrow::Cow<str>, Value> = re
                             .capture_names()
                             .flatten()
@@ -187,7 +376,7 @@ impl Extractor {
                 }
                 Extractor::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
-                        Ok(true.into())
+                        Ok(Value::Bool(true))
                     } else {
                         Err(ExtractorError {
                             msg: "glob expression didn't match".into(),
@@ -196,6 +385,9 @@ impl Extractor {
                 }
                 Extractor::Kv => {
                     if let Some(r) = kv::split(s, &[' '], &[':']) {
+                        if !result_needed {
+                            return Ok(Value::Null);
+                        }
                         //FIXME: This is needed for removing the lifetimne from the result
                         let r: OwnedValue = Value::Object(r.clone()).into();
                         Ok(r.into())
@@ -208,6 +400,10 @@ impl Extractor {
                 Extractor::Base64 => {
                     let encoded = s.to_string().clone();
                     let decoded = base64::decode(&encoded)?;
+                    if !result_needed {
+                        return Ok(Value::Null);
+                    }
+
                     Ok(Value::String(
                         String::from_utf8(decoded)
                             .map_err(|_| ExtractorError {
@@ -224,57 +420,65 @@ impl Extractor {
                         simd_json::to_owned_value(encoded).map_err(|_| ExtractorError {
                             msg: "Error in decoding to a json object".to_string(),
                         })?;
+                    if !result_needed {
+                        return Ok(Value::Null);
+                    }
                     Ok(decoded.into())
                 }
-                Extractor::Cidr { range: Some(range) } => {
-                    let mut combiner = IpCidrCombiner::new();
-                    range.iter().for_each(|x| {
-                        if let Ok(y) = Cidr::from_str(x) {
-                            combiner.push(y.0);
-                        }
-                    });
-
+                Extractor::Cidr {
+                    range: Some(combiner),
+                    ..
+                } => {
                     let input = IpAddr::from_str(s).map_err(|_| ExtractorError {
                         msg: "input is invalid".into(),
                     })?;
-                    if combiner.contains(input) {
-                        Ok(Value::Object(
-                            Cidr::from_str(s)
-                                .map_err(|_| ExtractorError {
-                                    msg: "The CIDR is invalid".into(),
-                                })?
-                                .into(),
-                        ))
+                    if combiner.combiner.contains(input) {
+                        if !result_needed {
+                            return Ok(Value::Null);
+                        }
+
+                        Ok(Value::Object(Cidr::from_str(s)?.into()))
                     } else {
                         Err(ExtractorError {
                             msg: "IP does not belong to any CIDR specified".into(),
                         })
                     }
                 }
-                Extractor::Cidr { range: None } => Ok(Value::Object(
-                    Cidr::from_str(s)
-                        .map_err(|e| ExtractorError { msg: e.to_string() })?
-                        .into(),
-                )),
+                Extractor::Cidr { range: None, .. } => {
+                    let c = Cidr::from_str(s)?;
+                    if !result_needed {
+                        return Ok(Value::Null);
+                    };
+                    Ok(Value::Object(c.into()))
+                }
                 Extractor::Dissect {
                     compiled: pattern, ..
                 } => Ok(Value::Object(pattern.extract(s)?.0)),
                 Extractor::Grok {
                     compiled: ref pattern,
                     ..
-                } => Ok(pattern.matches(s.as_bytes().to_vec())?.into()),
+                } => {
+                    let o = pattern.matches(s.as_bytes().to_vec())?;
+                    if !result_needed {
+                        return Ok(Value::Null);
+                    };
+                    Ok(o.into())
+                }
                 Extractor::Influx => match influx::parse(s) {
+                    Ok(ref _x) if !result_needed => Ok(Value::Null),
                     Ok(x) => Ok(Value::Object(x.into())),
                     Err(_) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
                     }),
                 },
                 Extractor::Datetime { ref format } => {
-                    Ok(Value::from(_parse(s, format).map_err(|e| {
-                        ExtractorError {
-                            msg: format!("Invalid datetime specified: {}", e.to_string()),
-                        }
-                    })?))
+                    let d = _parse(s, format).map_err(|e| ExtractorError {
+                        msg: format!("Invalid datetime specified: {}", e.to_string()),
+                    })?;
+                    if !result_needed {
+                        return Ok(Value::Null);
+                    };
+                    Ok(Value::from(d))
                 }
             },
             _ => Err(ExtractorError {
@@ -308,7 +512,7 @@ impl PartialEq<Extractor> for Extractor {
             (Extractor::Grok { rule: rule_l, .. }, Extractor::Grok { rule: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Cidr { range: range_l }, Extractor::Cidr { range: range_r }) => {
+            (Extractor::Cidr { range: range_l, .. }, Extractor::Cidr { range: range_r, .. }) => {
                 range_l == range_r
             }
             (Extractor::Influx, Extractor::Influx) => true,
@@ -325,10 +529,14 @@ impl PartialEq<Extractor> for Extractor {
 pub struct Cidr(pub IpCidr);
 
 impl Cidr {
-    pub fn from_str(s: &str) -> Result<Cidr, String> {
-        Ok(Cidr(
-            IpCidr::from_str(s).map_err(|_| "invalid cidr operation")?,
-        ))
+    pub fn from_str(s: &str) -> Result<Cidr, ExtractorError> {
+        if let Some(cidr) = parse_ipv4_fast(s) {
+            Ok(Cidr(cidr))
+        } else {
+            Err(ExtractorError {
+                msg: format!("Invalid CIDR: '{}'", s),
+            })
+        }
     }
 }
 
@@ -368,7 +576,7 @@ mod tests {
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
-                    ex.extract(&Value::String("foobar".to_string().into())),
+                    ex.extract(true, &Value::String("foobar".to_string().into())),
                     Ok(Value::Object(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
                     ))
@@ -383,7 +591,7 @@ mod tests {
         match ex {
             Extractor::Kv { .. } => {
                 assert_eq!(
-                    ex.extract(&Value::String("a:b c:d".to_string().into())),
+                    ex.extract(true, &Value::String("a:b c:d".to_string().into())),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
@@ -400,7 +608,10 @@ mod tests {
         match ex {
             Extractor::Json => {
                 assert_eq!(
-                    ex.extract(&Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into())),
+                    ex.extract(
+                        true,
+                        &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into())
+                    ),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
                         "c".into() => "d".into()
@@ -417,7 +628,7 @@ mod tests {
         match ex {
             Extractor::Glob { .. } => {
                 assert_eq!(
-                    ex.extract(&Value::String("INFO".to_string().into())),
+                    ex.extract(true, &Value::String("INFO".to_string().into())),
                     Ok(Value::Bool(true))
                 );
             }
@@ -431,7 +642,7 @@ mod tests {
         match ex {
             Extractor::Base64 => {
                 assert_eq!(
-                    ex.extract(&Value::String("8J+agHNuZWFreSByb2NrZXQh".into())),
+                    ex.extract(true, &Value::String("8J+agHNuZWFreSByb2NrZXQh".into())),
                     Ok("🚀sneaky rocket!".into())
                 );
             }
@@ -445,7 +656,7 @@ mod tests {
         match ex {
             Extractor::Dissect { .. } => {
                 assert_eq!(
-                    ex.extract(&Value::String("John".to_string().into())),
+                    ex.extract(true, &Value::String("John".to_string().into())),
                     Ok(Value::Object(hashmap! {
                         "name".into() => Value::from("John")
                     }))
@@ -462,7 +673,7 @@ mod tests {
         let ex = Extractor::new("grok", pattern).expect("bad extractor");
         match ex {
             Extractor::Grok { .. } => {
-                let output = ex.extract(&Value::from(
+                let output = ex.extract(true, &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
                 ));
 
@@ -492,7 +703,16 @@ mod tests {
         match ex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    ex.extract(&Value::from("192.168.1.0/24")),
+                    ex.extract(true, &Value::from("192.168.1.0")),
+                    Ok(Value::Object(hashmap! (
+                        "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
+                        "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
+
+
+                    )))
+                );
+                assert_eq!(
+                    ex.extract(true, &Value::from("192.168.1.0/24")),
                     Ok(Value::Object(hashmap! (
                                         "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                                         "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 0.into()])
@@ -502,7 +722,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    ex.extract(&Value::from("192.168.1.0")),
+                    ex.extract(true, &Value::from("192.168.1.0")),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                                 "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
@@ -510,7 +730,10 @@ mod tests {
                 );
 
                 assert_eq!(
-                    ex.extract(&Value::from("2001:4860:4860:0000:0000:0000:0000:8888")),
+                    ex.extract(
+                        true,
+                        &Value::from("2001:4860:4860:0000:0000:0000:0000:8888")
+                    ),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
                                 "mask".into() => Value::from(vec![Value::I64(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
@@ -524,7 +747,7 @@ mod tests {
         match rex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    rex.extract(&Value::from("10.22.0.254")),
+                    rex.extract(true, &Value::from("10.22.0.254")),
                     Ok(Value::Object(hashmap! (
                             "prefix".into() => Value::from(vec![Value::I64(10), 22.into(), 0.into(), 254.into()]),
                             "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()]),
@@ -532,7 +755,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    rex.extract(&Value::from("99.98.97.96")),
+                    rex.extract(true, &Value::from("99.98.97.96")),
                     Err(ExtractorError {
                         msg: "IP does not belong to any CIDR specified".into()
                     })
@@ -547,9 +770,12 @@ mod tests {
         let ex = Extractor::new("influx", "").expect("bad extractor");
         match ex {
             Extractor::Influx => assert_eq!(
-                ex.extract(&Value::from(
-                    "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
-                )),
+                ex.extract(
+                    true,
+                    &Value::from(
+                        "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
+                    )
+                ),
                 Ok(Value::Object(hashmap! (
                        "measurement".into() => "wea ther".into(),
                        "tags".into() => Value::Object(hashmap!( "location".into() => "us-midwest".into())),
@@ -566,7 +792,7 @@ mod tests {
         let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
         match ex {
             Extractor::Datetime { .. } => assert_eq!(
-                ex.extract(&Value::from("2019-06-20 00:00:00")),
+                ex.extract(true, &Value::from("2019-06-20 00:00:00")),
                 Ok(Value::I64(1560988800000_000_000))
             ),
             _ => unreachable!(),

@@ -37,6 +37,16 @@ use simd_json::{BorrowedValue as Value, ValueTrait};
 use std::num;
 use std::ops::Range as IRange;
 
+#[macro_export]
+macro_rules! stry {
+    ($e:expr) => {
+        match $e {
+            ::std::result::Result::Ok(val) => val,
+            ::std::result::Result::Err(err) => return ::std::result::Result::Err(err),
+        }
+    };
+}
+
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {
@@ -52,7 +62,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {
             LalrpopError::UnrecognizedToken {
-                token: Some((start, token, end)),
+                token: (start, token, end),
                 expected,
             } => ErrorKind::UnrecognizedToken(
                 (start.move_up_lines(2), end.move_down_lines(2)).into(),
@@ -116,45 +126,47 @@ impl ErrorKind {
     pub fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
-            ArrayOutOfRange(expr, inner, _) => (Some(*expr), Some(*inner)),
-            AssignIntoArray(expr, inner) => (Some(*expr), Some(*inner)),
-            BadAccessInEvent(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            BadAccessInGlobal(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            BadAccessInLocal(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            BadArity(expr, inner, _, _, _, _) => (Some(*expr), Some(*inner)),
-            BadType(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
-            BinaryDrop(expr, inner) => (Some(*expr), Some(*inner)),
-            BinaryEmit(expr, inner) => (Some(*expr), Some(*inner)),
+            ArrayOutOfRange(outer, inner, _) => (Some(*outer), Some(*inner)),
+            AssignIntoArray(outer, inner) => (Some(*outer), Some(*inner)),
+            BadAccessInEvent(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            BadAccessInGlobal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            BadAccessInLocal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            BadArity(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
+            BadType(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
+            BinaryDrop(outer, inner) => (Some(*outer), Some(*inner)),
+            BinaryEmit(outer, inner) => (Some(*outer), Some(*inner)),
             ExtraToken(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InsertKeyExists(expr, inner, _) => (Some(*expr), Some(*inner)),
-            InvalidAssign(expr, inner) => (Some(*expr), Some(*inner)),
-            InvalidBinary(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
-            InvalidDrop(expr, inner) => (Some(*expr), Some(*inner)),
-            InvalidEmit(expr, inner) => (Some(*expr), Some(*inner)),
-            InvalidExtractor(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
-            InvalidFloatLiteral(expr, inner) => (Some(*expr), Some(*inner)),
-            InvalidHexLiteral(expr, inner) => (Some(*expr), Some(*inner)),
-            InvalidIntLiteral(expr, inner) => (Some(*expr), Some(*inner)),
+            InsertKeyExists(outer, inner, _) => (Some(*outer), Some(*inner)),
+            InvalidAssign(outer, inner) => (Some(*outer), Some(*inner)),
+            InvalidBinary(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
+            InvalidDrop(outer, inner) => (Some(*outer), Some(*inner)),
+            InvalidEmit(outer, inner) => (Some(*outer), Some(*inner)),
+            InvalidConst(outer, inner) => (Some(*outer), Some(*inner)),
+            AssignToConst(outer, inner, _) => (Some(*outer), Some(*inner)),
+            DoubleConst(outer, inner, _) => (Some(*outer), Some(*inner)),
+            InvalidExtractor(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
+            InvalidFloatLiteral(outer, inner) => (Some(*outer), Some(*inner)),
+            InvalidHexLiteral(outer, inner) => (Some(*outer), Some(*inner)),
+            InvalidIntLiteral(outer, inner) => (Some(*outer), Some(*inner)),
             InvalidToken(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidUnary(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            MergeTypeConflict(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            MissingEffectors(expr, inner) => (Some(*expr), Some(*inner)),
-            MissingFunction(expr, inner, _, _, _) => (Some(*expr), Some(*inner)),
-            MissingModule(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            NoClauseHit(expr) => (Some(expr.expand_lines(2)), Some(*expr)),
-            Oops(expr) => (Some(expr.expand_lines(2)), Some(*expr)),
-            OverwritingLocal(expr, inner, _) => (Some(*expr), Some(*inner)),
-            RuntimeError(expr, inner, _, _, _, _) => (Some(*expr), Some(*inner)),
-            TypeConflict(expr, inner, _, _) => (Some(*expr), Some(*inner)),
-            UnexpectedCharacter(expr, inner, _) => (Some(*expr), Some(*inner)),
-            UnexpectedEscapeCode(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            InvalidUnary(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            MergeTypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            MissingEffectors(outer, inner) => (Some(*outer), Some(*inner)),
+            MissingFunction(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
+            MissingModule(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            NoClauseHit(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
+            Oops(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
+            RuntimeError(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
+            TypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            UnexpectedCharacter(outer, inner, _) => (Some(*outer), Some(*inner)),
+            UnexpectedEscapeCode(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             UnrecognizedToken(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnterminatedExtractor(expr, inner, _) => (Some(*expr), Some(*inner)),
-            UnterminatedIdentLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
-            UnterminatedStringLiteral(expr, inner, _) => (Some(*expr), Some(*inner)),
-            UpdateKeyMissing(expr, inner, _) => (Some(*expr), Some(*inner)),
-            UnterminatedHereDoc(expr, inner, _) => (Some(*expr), Some(*inner)),
-            TailingHereDoc(expr, inner, _, _) => (Some(*expr), Some(*inner)),
+            UnterminatedExtractor(outer, inner, _) => (Some(*outer), Some(*inner)),
+            UnterminatedIdentLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
+            UnterminatedStringLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
+            UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
+            UnterminatedHereDoc(outer, inner, _) => (Some(*outer), Some(*inner)),
+            TailingHereDoc(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | Grok(_)
@@ -423,6 +435,18 @@ error_chain! {
             description("You can not assign that")
                 display("You are trying to assing to a value that isn't valid")
         }
+        InvalidConst(expr: Range, inner: Range) {
+            description("Can't declare a const here location")
+                display("Can't declare a const here location")
+        }
+        DoubleConst(expr: Range, inner: Range, name: String) {
+            description("Can't declare a constant twice")
+                display("Can't declare the constant `{}` twice", name)
+        }
+        AssignToConst(expr: Range, inner: Range, name: String) {
+            description("Can't assign to a constant")
+                display("Can't assign to the `{}` constant", name)
+        }
         /*
          * Emit & Drop
          */
@@ -488,10 +512,6 @@ error_chain! {
                 display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(*val))
         }
 
-        OverwritingLocal(expr: Range, inner: Range, val: String) {
-            description("Trying to overwrite a local variable in a comprehension case")
-                display("Trying to overwrite the local variable `{}` in a comprehension case", val)
-        }
         InvalidInfluxData(s: String) {
             description("Invalid Influx Line Protocol data")
                 display("Invalid Influx Line Protocol data: {}", s)
@@ -500,124 +520,139 @@ error_chain! {
     }
 }
 
-impl<Ctx: Context> Expr<Ctx> {
-    pub fn error_array_out_of_bound<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        path: &ast::Path<Ctx>,
-        r: IRange<usize>,
-    ) -> Result<T> {
-        let expr: Range = self.into();
-        Err(match path {
-            ast::Path::Local(_path) => ErrorKind::ArrayOutOfRange(expr, inner.into(), r).into(),
-            ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.into(), r).into(),
-            ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.into(), r).into(),
-        })
-    }
+pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: Vec<ValueType>,
+) -> Result<T> {
+    Err(ErrorKind::TypeConflict(outer.extent(), inner.extent(), got, expected).into())
+}
 
-    pub fn error_bad_key<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        path: &ast::Path<Ctx>,
-        key: String,
-        options: Vec<String>,
-    ) -> Result<T> {
-        let expr: Range = self.into();
-        Err(match path {
-            ast::Path::Local(_p) => {
-                ErrorKind::BadAccessInLocal(expr, inner.into(), key, options).into()
-            }
-            ast::Path::Meta(_p) => {
-                ErrorKind::BadAccessInGlobal(expr, inner.into(), key, options).into()
-            }
-            ast::Path::Event(_p) => {
-                ErrorKind::BadAccessInEvent(expr, inner.into(), key, options).into()
-            }
-        })
-    }
-    pub fn error_type_conflict_mult<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        got: ValueType,
-        expected: Vec<ValueType>,
-    ) -> Result<T> {
-        Err(ErrorKind::TypeConflict(self.into(), inner.into(), got, expected).into())
-    }
+pub fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: ValueType,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![expected])
+}
 
-    pub fn error_type_conflict<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        got: ValueType,
-        expected: ValueType,
-    ) -> Result<T> {
-        self.error_type_conflict_mult(inner, got, vec![expected])
-    }
+pub fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: &Value,
+) -> Result<T> {
+    error_type_conflict(outer, inner, got.kind(), ValueType::Bool)
+}
 
-    pub fn error_guard_not_bool<T>(&self, inner: &Expr<Ctx>, got: &Value) -> Result<T> {
-        self.error_type_conflict(inner, got.kind(), ValueType::Bool)
-    }
+pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    op: ast::UnaryOpKind,
+    val: &Value,
+) -> Result<T> {
+    Err(ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.kind()).into())
+}
 
-    pub fn error_invalid_unary<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        op: ast::UnaryOpKind,
-        val: &Value,
-    ) -> Result<T> {
-        Err(ErrorKind::InvalidUnary(self.into(), inner.into(), op, val.kind()).into())
-    }
-    pub fn error_invalid_binary<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        op: ast::BinOpKind,
-        left: &Value,
-        right: &Value,
-    ) -> Result<T> {
-        Err(
-            ErrorKind::InvalidBinary(self.into(), inner.into(), op, left.kind(), right.kind())
-                .into(),
-        )
-    }
-    pub fn error_no_clause_hit<T>(&self) -> Result<T> {
-        Err(ErrorKind::NoClauseHit(self.into()).into())
-    }
+pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    op: ast::BinOpKind,
+    left: &Value,
+    right: &Value,
+) -> Result<T> {
+    Err(ErrorKind::InvalidBinary(
+        outer.extent(),
+        inner.extent(),
+        op,
+        left.kind(),
+        right.kind(),
+    )
+    .into())
+}
+pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
+    Err(ErrorKind::NoClauseHit(outer.extent()).into())
+}
 
-    pub fn error_oops<T>(&self) -> Result<T> {
-        Err(ErrorKind::Oops(self.into()).into())
-    }
+pub fn error_oops<T, O: BaseExpr>(outer: &O) -> Result<T> {
+    Err(ErrorKind::Oops(outer.extent()).into())
+}
 
-    pub fn error_patch_insert_key_exists<T>(&self, inner: &Expr<Ctx>, key: String) -> Result<T> {
-        Err(ErrorKind::InsertKeyExists(self.into(), inner.into(), key).into())
-    }
+pub fn error_patch_insert_key_exists<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    key: String,
+) -> Result<T> {
+    Err(ErrorKind::InsertKeyExists(outer.extent(), inner.extent(), key).into())
+}
 
-    pub fn error_patch_update_key_missing<T>(&self, inner: &Expr<Ctx>, key: String) -> Result<T> {
-        Err(ErrorKind::UpdateKeyMissing(self.into(), inner.into(), key).into())
-    }
-    pub fn error_missing_effector<T>(&self, inner: &Expr<Ctx>) -> Result<T> {
-        Err(ErrorKind::MissingEffectors(self.into(), inner.into()).into())
-    }
-    pub fn error_overwriting_local_in_comprehension<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        key: String,
-    ) -> Result<T> {
-        Err(ErrorKind::OverwritingLocal(self.into(), inner.into(), key).into())
-    }
+pub fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    key: String,
+) -> Result<T> {
+    Err(ErrorKind::UpdateKeyMissing(outer.extent(), inner.extent(), key).into())
+}
+pub fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::MissingEffectors(outer.extent(), inner.extent()).into())
+}
 
-    pub fn error_patch_merge_type_conflict<T>(
-        &self,
-        inner: &Expr<Ctx>,
-        key: String,
-        val: &Value,
-    ) -> Result<T> {
-        Err(ErrorKind::MergeTypeConflict(self.into(), inner.into(), key, val.kind()).into())
-    }
+pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    key: String,
+    val: &Value,
+) -> Result<T> {
+    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.kind()).into())
+}
 
-    pub fn error_assign_array<T>(&self, inner: &Expr<Ctx>) -> Result<T> {
-        Err(ErrorKind::AssignIntoArray(self.into(), inner.into()).into())
-    }
-    pub fn error_invalid_assign_target<T>(&self) -> Result<T> {
-        let inner: Range = self.into();
+pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::AssignIntoArray(outer.extent(), inner.extent()).into())
+}
+pub fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O) -> Result<T> {
+    let inner: Range = outer.extent();
 
-        Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
-    }
+    Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
+}
+pub fn error_assign_to_const<T, O: BaseExpr>(outer: &O, name: String) -> Result<T> {
+    let inner: Range = outer.extent();
+
+    Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
+}
+pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+    outer: &O,
+    inner: &I,
+    path: &ast::Path<'script, Ctx>,
+    r: IRange<usize>,
+) -> Result<T> {
+    let expr: Range = outer.extent();
+    Err(match path {
+        ast::Path::Local(_path) | ast::Path::Const(_path) => {
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into()
+        }
+        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
+        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
+    })
+}
+
+pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+    outer: &O,
+    inner: &I,
+    path: &ast::Path<'script, Ctx>,
+    key: String,
+    options: Vec<String>,
+) -> Result<T> {
+    let expr: Range = outer.extent();
+    Err(match path {
+        ast::Path::Local(_p) | ast::Path::Const(_p) => {
+            ErrorKind::BadAccessInLocal(expr, inner.extent(), key, options).into()
+        }
+        ast::Path::Meta(_p) => {
+            ErrorKind::BadAccessInGlobal(expr, inner.extent(), key, options).into()
+        }
+        ast::Path::Event(_p) => {
+            ErrorKind::BadAccessInEvent(expr, inner.extent(), key, options).into()
+        }
+    })
 }

@@ -14,43 +14,42 @@
 
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use simd_json::value::owned::Map;
-use simd_json::OwnedValue;
+use simd_json::value::borrowed::Map;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
         .insert(tremor_fn! (record::len(_context, _input: Object) {
-            Ok(OwnedValue::from(_input.len() as i64))
+            Ok(Value::from(_input.len() as i64))
         }))
         .insert(tremor_fn! (record::is_empty(_context, _input: Object) {
-            Ok(OwnedValue::from(_input.is_empty()))
+            Ok(Value::from(_input.is_empty()))
         }))
         .insert(
             tremor_fn! (record::contains(_context, _input: Object, _contains: String) {
-                Ok(OwnedValue::from(_input.get(_contains).is_some()))
+                Ok(Value::from(_input.get(_contains).is_some()))
             }),
         )
         .insert(tremor_fn! (record::keys(_context, _input: Object) {
-            Ok(OwnedValue::Array(_input.keys().map(|k| OwnedValue::from(k.to_string())).collect()))
+            Ok(Value::Array(_input.keys().map(|k| Value::from(k.to_string())).collect()))
         }))
         .insert(tremor_fn! (record::values(_context, _input: Object) {
-            Ok(OwnedValue::Array(_input.values().cloned().map(OwnedValue::from).collect()))
+            Ok(Value::Array(_input.values().cloned().map(Value::from).collect()))
 
         }))
         .insert(tremor_fn! (record::to_array(_context, _input: Object) {
-            Ok(OwnedValue::Array(
-                _input.into_iter()
-                    .map(|(k, v)| OwnedValue::Array(vec![OwnedValue::from(k.to_string()), v.clone().into()]))
+            Ok(Value::Array(
+                _input.iter()
+                    .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()]))
                     .collect(),
             ))
         }))
     .insert(tremor_fn! (record::from_array(_context, _input: Array) {
         let r: FResult<Map> = _input.iter().map(|a| match a {
-            BorrowedValue::Array(a) => if a.len() == 2 {
+            Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.
                 let second = a.pop().expect("We know this has an element");
-                if let BorrowedValue::String(first) = a.pop().expect("We know this has an ellement") {
-                    Ok((first.to_string(), OwnedValue::from(second)))
+                if let Value::String(first) = a.pop().expect("We know this has an ellement") {
+                    Ok((first, second))
                 } else {
                     Err(to_runtime_error(format!("The first element of the tuple needs to be a string: {:?}", a)))
                 }
@@ -59,34 +58,40 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             }
             other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {:?}", other)))
         }).collect();
-        Ok(OwnedValue::Object(r?))
+        Ok(Value::Object(r?))
     })).insert(tremor_fn!(record::select(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(|k| match k {
-            BorrowedValue::String(s) => Some(s.clone()),
+            Value::String(s) => Some(s.clone()),
             _ => None
         }).collect();
         let r: Map =_input.iter().filter_map(|(k, v)| {
-            let k = k.to_owned();
             if keys.contains(&k) {
-                Some((k.to_string(), OwnedValue::from(v.clone())))
+                Some((k.clone(), v.clone()))
             } else {
                 None
             }
         }).collect();
-        Ok(OwnedValue::Object(r))
-    })).insert(tremor_fn!(record::merge(_context, _left: Object, _right: Object) {
-        Ok(OwnedValue::Object(_left.iter().chain(_right.iter()).map(|(k, v)| (k.to_string(), OwnedValue::from(v.clone()))).collect()))
-    }));
+        Ok(Value::Object(r))
+    }))
+        .insert(tremor_fn!(record::merge(_context, _left: Object, _right: Object) {
+        Ok(Value::Object(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect()))
+        })).insert(tremor_fn!(record::rename(_context, _target: Object, _renameings: Object) {
+            Ok(Value::Object(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
+                (k1.clone(), v.clone())
+            } else {
+                (k.clone(), v.clone())
+            }).collect()))
+        }));
 }
 
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
     use halfbrown::hashmap;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 
@@ -140,7 +145,7 @@ mod test {
         });
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![OwnedValue::from("this"), OwnedValue::from("a"),])
+            Value::Array(vec![Value::from("this"), Value::from("a"),])
         );
     }
     #[test]
@@ -152,7 +157,7 @@ mod test {
         });
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![OwnedValue::from("is"), OwnedValue::from("test")])
+            Value::Array(vec![Value::from("is"), Value::from("test")])
         );
     }
 
@@ -165,9 +170,9 @@ mod test {
         });
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![
-                OwnedValue::Array(vec![OwnedValue::from("this"), OwnedValue::from("is")]),
-                OwnedValue::Array(vec![OwnedValue::from("a"), OwnedValue::from("test")])
+            Value::Array(vec![
+                Value::Array(vec![Value::from("this"), Value::from("is")]),
+                Value::Array(vec![Value::from("a"), Value::from("test")])
             ])
         );
     }
@@ -181,9 +186,9 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            OwnedValue::Object(hashmap! {
-                "this".to_string() => OwnedValue::from("is"),
-                "a".to_string() => OwnedValue::from("test")
+            Value::Object(hashmap! {
+                "this".into() => Value::from("is"),
+                "a".into() => Value::from("test")
             })
         );
     }
@@ -198,8 +203,8 @@ mod test {
         let v2 = Value::Array(vec![Value::from("this"), Value::from("is")]);
         assert_val!(
             f(&[&v1, &v2]),
-            OwnedValue::Object(hashmap! {
-                "this".to_string() => OwnedValue::from("is"),
+            Value::Object(hashmap! {
+                "this".into() => Value::from("is"),
             })
         );
     }
@@ -216,10 +221,10 @@ mod test {
         });
         assert_val!(
             f(&[&v1, &v2]),
-            OwnedValue::Object(hashmap! {
-                "this".to_string() => OwnedValue::from("is"),
-                "a".to_string() => OwnedValue::from("cake"),
-                "with".to_string() => OwnedValue::from("cake"),
+            Value::Object(hashmap! {
+                "this".into() => Value::from("is"),
+                "a".into() => Value::from("cake"),
+                "with".into() => Value::from("cake"),
             })
         );
     }

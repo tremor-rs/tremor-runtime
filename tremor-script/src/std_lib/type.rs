@@ -13,19 +13,20 @@
 // limitations under the License.
 
 //cuse crate::errors::*;
+
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use simd_json::{OwnedValue, ValueTrait, ValueType};
+use simd_json::{ValueTrait, ValueType};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
         tremor_fn! (type::$name(_context, _input) {
-            Ok(OwnedValue::from(_input.$fun()))
+            Ok(Value::from(_input.$fun()))
         })
     };
         ($fun:ident) => {
             tremor_fn!(type::$fun(_context, _input) {
-                Ok(OwnedValue::from(_input.$fun()))
+                Ok(Value::from(_input.$fun()))
             })
         }
     }
@@ -41,20 +42,20 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         .insert(map_function!(is_record, is_object))
         .insert(tremor_fn! (type::as_string(_context, _input) {
             Ok(match _input.kind() {
-                ValueType::Null => OwnedValue::from("null"),
-                ValueType::Bool => OwnedValue::from("bool"),
-                ValueType::I64 => OwnedValue::from("number"),
-                ValueType::F64 => OwnedValue::from("number"),
-                ValueType::String => OwnedValue::from("string"),
-                ValueType::Array => OwnedValue::from("array"),
-                ValueType::Object => OwnedValue::from("record"),
+                ValueType::Null => Value::from("null"),
+                ValueType::Bool => Value::from("bool"),
+                ValueType::I64 => Value::from("integer"),
+                ValueType::F64 => Value::from("float"),
+                ValueType::String => Value::from("string"),
+                ValueType::Array => Value::from("array"),
+                ValueType::Object => Value::from("record"),
             })
         }))
         .insert(tremor_fn! (type::is_number(_context, _input) {
             Ok(match _input.kind() {
-                ValueType::I64 => OwnedValue::from(true),
-                ValueType::F64 => OwnedValue::from(true),
-                _ => OwnedValue::from(false),
+                ValueType::I64 => Value::from(true),
+                ValueType::F64 => Value::from(true),
+                _ => Value::from(false),
             })
         }));
 }
@@ -63,11 +64,11 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
 mod test {
     use crate::registry::fun;
     use simd_json::value::borrowed::Map;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 
@@ -152,9 +153,9 @@ mod test {
         let v = Value::Bool(true);
         assert_val!(f(&[&v]), "bool");
         let v = Value::from(42);
-        assert_val!(f(&[&v]), "number");
+        assert_val!(f(&[&v]), "integer");
         let v = Value::from(42.0);
-        assert_val!(f(&[&v]), "number");
+        assert_val!(f(&[&v]), "float");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), "string");
         let v = Value::Array(vec![]);

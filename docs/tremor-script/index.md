@@ -237,10 +237,13 @@ Grab the entire event document:
 let capture = event;
 ```
 
-Grab the books from the store:
+Grab the books from the store (the same using key, index and escaped key notation for field lookup):
 
 ```tremor
 let capture = event.store.book;
+# index and escaped notation can acomodate keys that include 'odd' characters such as whitespaces or dots.
+let capture = event.store["book"];
+let capture = event.store.`book`; 
 ```
 
 Grab the first book:
@@ -266,6 +269,14 @@ the above examples, a reference to a book title would return the value at that p
 the reference event document is a `string`.
 
 Path's in `tremor-script` are themselves expressions in their own right.
+
+### Const
+
+Const grammer:
+
+![](grammar/diagram/Const.png)
+
+Const can be used to define immutable, constant values that get evaluated at compile time. This is more performant then `let` as all logic can happen at compile time and is helpful for setting up lookup tables or other never changing data structures.
 
 ### Let
 

@@ -14,7 +14,6 @@
 
 use super::Codec;
 use crate::errors::*;
-use serde_json;
 use simd_json;
 use tremor_script::LineValue;
 
@@ -27,6 +26,8 @@ impl Codec for JSON {
             .map_err(|e| e.0.into())
     }
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
-        Ok(serde_json::to_vec(&data)?)
+        let mut v = Vec::new();
+        data.suffix().write(&mut v)?;
+        Ok(v)
     }
 }

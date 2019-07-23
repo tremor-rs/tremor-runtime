@@ -19,7 +19,7 @@ use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use tremor_script::highlighter::DumbHighlighter;
 use tremor_script::{self, Return, Script};
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TremorContext {
     pub ingest_ns: u64,
 }
@@ -38,7 +38,7 @@ op!(TremorFactory(node) {
                 })),
             Err(e) => {
                 let mut h = DumbHighlighter::new();
-                if let Err(e) = tremor_script::interpreter::Script::<()>::format_error_from_script(&config.script, &mut h, &e) {
+                if let Err(e) = tremor_script::Script::<()>::format_error_from_script(&config.script, &mut h, &e) {
                     error!("{}", e.to_string());
                 } else {
                     error!("{}", h.to_string());

@@ -14,29 +14,28 @@
 
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use simd_json::OwnedValue;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry.insert(tremor_fn! (integer::parse(_context, _input: String) {
-        _input.parse::<i64>().map_err(to_runtime_error).map(OwnedValue::from)
+        _input.parse::<i64>().map_err(to_runtime_error).map(Value::from)
     }));
 }
 
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue, OwnedValue};
+    use simd_json::BorrowedValue as Value;
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 
     #[test]
     fn parse() {
         let f = fun("integer", "parse");
-        let v = BorrowedValue::from("42");
-        assert_val!(f(&[&v]), OwnedValue::from(42));
+        let v = Value::from("42");
+        assert_val!(f(&[&v]), Value::from(42));
     }
 }

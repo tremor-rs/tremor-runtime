@@ -1,0 +1,6 @@
+emit [
+    math::random(0, 2),
+    math::random(0, 1),
+    math::random(100, 200),
+    math::random(-100, 100)
+];

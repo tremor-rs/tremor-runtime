@@ -1,1 +1,1 @@
-A template, if you see this readme anywhere else someone was a lazy
+Set up an informational map for the tremor node.

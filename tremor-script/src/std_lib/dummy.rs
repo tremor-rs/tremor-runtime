@@ -17,9 +17,9 @@
 // limitations under the License.
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use simd_json::OwnedValue;
+
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry.insert(tremor_fn! (system::ingest_ns(_context) {
-        Ok(OwnedValue::from(0))
+        Ok(Value::from(0))
     }));
 }

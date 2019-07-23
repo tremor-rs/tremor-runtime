@@ -39,6 +39,13 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .required(false),
         )
         .arg(
+            Arg::with_name("no-api")
+                .long("no-api")
+                .short("o")
+                .help("Disables API and other TCP endpoints.")
+                .required(false),
+        )
+        .arg(
             Arg::with_name("host")
                 .long("host")
                 .short("h")

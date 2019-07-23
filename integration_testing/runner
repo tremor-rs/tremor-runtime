@@ -92,7 +92,7 @@ case $build_target in
         run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-server"}
         ;;
     release)
-        run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor-runtime"}
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor-server"}
         ;;
     none)
         if [ -z ${run_cmd+x} ]
@@ -102,6 +102,8 @@ case $build_target in
         fi
 esac
 set +u
+
+run_cmd="$run_cmd --no-api"
 
 echo $run_cmd
 

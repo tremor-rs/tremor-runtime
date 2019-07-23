@@ -48,7 +48,7 @@ pipeline:
               default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
             end;
 
-            let event.tremor = system::hostname();
+            let event.tremor = "tremor"; # system::hostname(); # in production this is hard coded by the deployment
 
             ##############################################
             
@@ -83,22 +83,22 @@ pipeline:
             
             # TODO: look into ',' in patch vs no ',' in for and case
             let event = patch event of
-              erase `@version`,
-              erase request_timestamp,
+              erase "@version",
+              erase "request_timestamp",
             
               # unix time for event creation
               # useful for calculating end to end lag (from the elasticsearch ingest nodes)
             
               # TODO: erase <path>; we return the erased value
-              erase start_timestamp
+              erase "start_timestamp"
             end;
             
             # with guard
             match event of
-              case %{request_unix_time ~= re|^[0-9]{10}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "%s"))
-              case %{request_unix_time ~= re|^[0-9]{10}[.][0-9]{3}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "%s%.3f"))
-            #  case %{request_unix_time ~= re|^[0-9]{13}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "UNIX"))
-              default => null # Does nil and null differ? (nil as in no value null as in null value?, is that our option?)
+              case r = %{request_unix_time ~= datetime|%s|} => let event.start_timestamp = datetime::to_nearest_millisecond(r.request_unix_time)
+              case r = %{request_unix_time ~= datetime|%s%.f|} => let event.start_timestamp = datetime::to_nearest_millisecond(r.request_unix_time)
+              case r = %{request_unix_time ~= datetime|%s%f|} => let event.start_timestamp = datetime::to_nearest_millisecond(r.request_unix_time)
+              default => null
             end;
             
             event            

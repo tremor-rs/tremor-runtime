@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Expr;
+use crate::ast::BaseExpr;
 use crate::tremor_fn;
 use halfbrown::HashMap;
 use hostname::get_hostname;
-use simd_json::BorrowedValue;
-use simd_json::OwnedValue;
+use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
 
-pub type TremorFn<Ctx> = fn(&Ctx, &[&BorrowedValue]) -> FResult<OwnedValue>;
+pub type TremorFn<Ctx> = for<'event> fn(&Ctx, &[&Value<'event>]) -> FResult<Value<'event>>;
 pub type FResult<T> = std::result::Result<T, FunctionError>;
 
 #[allow(unused_variables)]
@@ -73,16 +72,16 @@ pub enum FunctionError {
 }
 
 impl FunctionError {
-    pub fn into_err<Ctx: Context>(
+    pub fn into_err<Ctx: Context, O: BaseExpr, I: BaseExpr>(
         self,
-        outer: &Expr<Ctx>,
-        inner: &Expr<Ctx>,
+        outer: &O,
+        inner: &I,
         registry: Option<&Registry<Ctx>>,
     ) -> crate::errors::Error {
         use crate::errors::{best_hint, ErrorKind};
         use FunctionError::*;
-        let outer = outer.into();
-        let inner = inner.into();
+        let outer = outer.extent();
+        let inner = inner.extent();
         match self {
             BadArity { mfa, calling_a } => {
                 ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a, calling_a).into()
@@ -118,7 +117,7 @@ impl FunctionError {
     }
 }
 
-pub trait Context: Default {}
+pub trait Context: Default + Clone + PartialEq + std::fmt::Debug {}
 
 impl Context for () {}
 
@@ -136,7 +135,7 @@ pub struct Registry<Ctx: Context + 'static> {
 }
 
 impl<Ctx: Context + 'static> TremorFnWrapper<Ctx> {
-    pub fn invoke(&self, context: &Ctx, args: &[&BorrowedValue]) -> FResult<OwnedValue> {
+    pub fn invoke<'event>(&self, context: &Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>> {
         (self.fun)(context, args)
     }
 }
@@ -162,13 +161,12 @@ macro_rules! tremor_fn {
                     $sub
                 };
             }
-            use simd_json::OwnedValue as Value;
-            use simd_json::BorrowedValue;
+            use simd_json::BorrowedValue as Value;
             use $crate::TremorFnWrapper;
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
 
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
@@ -205,13 +203,12 @@ macro_rules! tremor_fn {
                     $sub
                 };
             }
-            use simd_json::OwnedValue as Value;
-            use simd_json::BorrowedValue;
+            use simd_json::BorrowedValue as Value;
             use $crate::TremorFnWrapper;
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
                 }
@@ -223,7 +220,7 @@ macro_rules! tremor_fn {
                 // though it isn't, so linting it
                 match args {
                     [$(
-                        BorrowedValue::$type($arg),
+                        Value::$type($arg),
                     )*] => {$code}
                     [$(
                         $arg,
@@ -247,13 +244,12 @@ macro_rules! tremor_fn {
 
     ($module:ident :: $name:ident($context:ident) $code:block) => {
         {
-            use simd_json::OwnedValue as Value;
-            use simd_json::BorrowedValue;
+            use simd_json::BorrowedValue as Value;
             use $crate::TremorFnWrapper;
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
-            fn $name<'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&BorrowedValue]) -> FResult<Value>{
+            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
                 }
@@ -329,9 +325,9 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
 
 // Test utility to grab a function from the registry
 #[cfg(test)]
-pub fn fun(m: &str, f: &str) -> impl Fn(&[&BorrowedValue]) -> FResult<OwnedValue> {
+pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
     let f = registry().find(m, f).expect("could not find function");
-    move |args: &[&BorrowedValue]| -> FResult<OwnedValue> { f(&(), &args) }
+    move |args: &[&Value]| -> FResult<Value> { f(&(), &args) }
 }
 
 #[cfg(test)]
@@ -342,9 +338,9 @@ mod tests {
     #[test]
     pub fn call_a_function_from_a_registry_works() {
         let max = fun("math", "max");
-        let one = BorrowedValue::from(1);
-        let two = BorrowedValue::from(2);
-        assert_eq!(Ok(OwnedValue::from(2)), max(&[&one, &two]));
+        let one = Value::from(1);
+        let two = Value::from(2);
+        assert_eq!(Ok(Value::from(2)), max(&[&one, &two]));
     }
 
     #[test]
@@ -352,8 +348,8 @@ mod tests {
         let f = tremor_fn! (module::name(_context, _a: I64){
             Ok(format!("{}", _a).into())
         });
-        let one = BorrowedValue::from(1);
-        let two = BorrowedValue::from(2);
+        let one = Value::from(1);
+        let two = Value::from(2);
 
         assert!(f.invoke(&(), &[&one, &two]).is_err());
     }
@@ -364,7 +360,7 @@ mod tests {
             Ok(format!("{}", _a).into())
         });
 
-        let one = BorrowedValue::from("1");
+        let one = Value::from("1");
         assert!(f.invoke(&(), &[&one]).is_err());
     }
 
@@ -372,39 +368,36 @@ mod tests {
     pub fn add() {
         let f = tremor_fn!(math::add(_context, _a, _b){
             match (_a, _b) {
-                (BorrowedValue::F64(a), BorrowedValue::F64(b)) => Ok(OwnedValue::from(a + b)),
-                (BorrowedValue::I64(a), BorrowedValue::I64(b)) => Ok(OwnedValue::from(a + b)),
+                (Value::F64(a), Value::F64(b)) => Ok(Value::from(a + b)),
+                (Value::I64(a), Value::I64(b)) => Ok(Value::from(a + b)),
                 _ =>Err(to_runtime_error("could not add numbers"))
             }
         });
 
-        let two = BorrowedValue::from(2);
-        let three = BorrowedValue::from(3);
-        assert_eq!(Ok(OwnedValue::from(5)), f.invoke(&(), &[&two, &three]));
+        let two = Value::from(2);
+        let three = Value::from(3);
+        assert_eq!(Ok(Value::from(5)), f.invoke(&(), &[&two, &three]));
     }
 
     #[test]
     pub fn t3() {
         let f = tremor_fn!(math::add(_context, _a: I64, _b: I64, _c: I64){
-            Ok(OwnedValue::from(_a + _b + _c))
+            Ok(Value::from(_a + _b + _c))
         });
-        let one = BorrowedValue::from(1);
-        let two = BorrowedValue::from(2);
-        let three = BorrowedValue::from(3);
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
 
-        assert_eq!(
-            Ok(OwnedValue::from(6)),
-            f.invoke(&(), &[&one, &two, &three])
-        );
+        assert_eq!(Ok(Value::from(6)), f.invoke(&(), &[&one, &two, &three]));
     }
 
     #[test]
     pub fn registry_format_with_3_args() {
         let f = fun("math", "max");
 
-        let one = BorrowedValue::from(1);
-        let two = BorrowedValue::from(2);
-        let three = BorrowedValue::from(3);
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
         assert!(f(&[&one, &two, &three]).is_err());
     }
 
@@ -412,22 +405,22 @@ mod tests {
     pub fn format() {
         let format = fun("string", "format");
         let empty = Value::from("empty");
-        assert_eq!(Ok(OwnedValue::from("empty")), format(&[&empty]));
+        assert_eq!(Ok(Value::from("empty")), format(&[&empty]));
         let format = fun("string", "format");
-        let one = BorrowedValue::from(1);
-        let two = BorrowedValue::from(2);
-        let fmt = BorrowedValue::from("{}{}");
-        assert_eq!(Ok(OwnedValue::from("12")), format(&[&fmt, &one, &two]));
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let fmt = Value::from("{}{}");
+        assert_eq!(Ok(Value::from("12")), format(&[&fmt, &one, &two]));
         let format = fun("string", "format");
-        let fmt = BorrowedValue::from("{} + {}");
-        assert_eq!(Ok(OwnedValue::from("1 + 2")), format(&[&fmt, &one, &two]));
+        let fmt = Value::from("{} + {}");
+        assert_eq!(Ok(Value::from("1 + 2")), format(&[&fmt, &one, &two]));
     }
 
     #[test]
     pub fn format_literal_curlies() {
         let format = fun("string", "format");
         let s = Value::from("{{}}");
-        assert_eq!(Ok(OwnedValue::from("{}")), (format(&[&s])));
+        assert_eq!(Ok(Value::from("{}")), (format(&[&s])));
     }
 
     #[test]
@@ -437,7 +430,7 @@ mod tests {
         let v2 = Value::from("{}");
         let v3 = Value::from(1);
         assert_eq!(
-            Ok(OwnedValue::from("a string with {} in it has 1 {}")),
+            Ok(Value::from("a string with {} in it has 1 {}")),
             format(&[&v1, &v2, &v3])
         );
     }
@@ -446,14 +439,14 @@ mod tests {
     pub fn format_evil_test() {
         let format = fun("string", "format");
         let v = Value::from("}}");
-        assert_eq!(Ok(OwnedValue::from("}")), format(&[&v]));
+        assert_eq!(Ok(Value::from("}")), format(&[&v]));
     }
 
     #[test]
     pub fn format_escaped_foo() {
         let format = fun("string", "format");
         let v = Value::from("{{foo}}");
-        assert_eq!(Ok(OwnedValue::from("{foo}")), format(&[&v]));
+        assert_eq!(Ok(Value::from("{foo}")), format(&[&v]));
     }
 
     #[test]
@@ -461,7 +454,7 @@ mod tests {
         let format = fun("string", "format");
         let v1 = Value::from("{{{}}}");
         let v2 = Value::from("foo");
-        assert_eq!(Ok(OwnedValue::from("{foo}")), format(&[&v1, &v2]));
+        assert_eq!(Ok(Value::from("{foo}")), format(&[&v1, &v2]));
     }
 
     #[test]

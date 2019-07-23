@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.1"
+version = "0.5.2"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -23,7 +23,7 @@ members = [
 
 [profile.release]
 debug = true
-lto = false
+lto = true
 opt-level = 3
 
 [dependencies]
@@ -105,6 +105,7 @@ grok = "1"
 [dev-dependencies]
 matches = "0.1"
 criterion = "0.2"
+pretty_assertions = "0.6.1"
 
 [features]
 default = ["mssql", "kafka", "bench"]

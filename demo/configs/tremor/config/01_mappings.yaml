@@ -1,8 +1,0 @@
-mapping:
-  /binding/loadgen-info/loadgen:
-    instance: "loadgen"
-  /binding/loadgen-error/loadgen:
-    instance: "loadgen"
-  /binding/demo/demo:
-    instance: "demo"
-  /binding/metrics/system: {}

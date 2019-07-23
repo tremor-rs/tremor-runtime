@@ -14,7 +14,7 @@
 
 mod array;
 mod chash;
-pub mod datetime;
+mod datetime;
 mod dummy;
 mod integer;
 mod json;
@@ -23,18 +23,19 @@ mod re;
 mod record;
 mod string;
 mod r#type;
+
 use crate::registry::{Context, Registry};
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     array::load(registry);
+    chash::load(registry);
+    datetime::load(registry);
+    dummy::load(registry);
     integer::load(registry);
     json::load(registry);
-    record::load(registry);
-    re::load(registry);
-    string::load(registry);
     math::load(registry);
     r#type::load(registry);
-    datetime::load(registry);
-    chash::load(registry);
-    dummy::load(registry);
+    re::load(registry);
+    record::load(registry);
+    string::load(registry);
 }

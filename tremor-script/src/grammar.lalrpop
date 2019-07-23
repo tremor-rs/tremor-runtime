@@ -17,143 +17,334 @@ use crate::lexer;
 use crate::lexer::{Token};
 use crate::pos::Location;
 use crate::tilde::Extractor;
-use simd_json::OwnedValue;
+use simd_json::BorrowedValue as Value;
+use std::borrow::Cow;
 
 grammar<'input>;
 
-pub Script : Script1 = {
+
+////////////////////////////// Root statements //////////////////////////////
+// These statments for the root of the language.
+
+/// Root
+pub Script : Script1<'input> = {
     <exprs:Exprs> "<end-of-stream>"? => Script1{exprs},
 }
 
-Exprs: Exprs1 = {
-    <expr:Expr> ";" <list:Exprs> => {
+/// List of expressions at the root of the script
+Exprs: Exprs1<'input> = {
+    <expr:MayBeConstExpr> ";" <list:Exprs> => {
        let mut list = list;
         list.insert(0,expr);
         list
     },
-    <item:Expr> ";"? => vec![item],
+    <item:MayBeConstExpr> ";"? => vec![item],
 }
 
-Expr: Expr1 = {
-    <o:BinOp<BinOr, Expr, AndExpr>> => <>,
-    AndExpr => <>,
+MayBeConstExpr: Expr1<'input> = {
+     Const => <>,
+     Expr => <>
 }
 
-BinOr: BinOpKind = {
-    "or" => BinOpKind::Or,
+/// A const expressions (this gets compiled out during the 2nd phjase)
+Const: Expr1<'input> = {
+    <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => Expr1::Const{name: name.id, expr: expr, start, end},
 }
 
-BinAnd: BinOpKind = {
-    "and" => BinOpKind::And,
-}
+////////////////////////////// Expr (mutable) //////////////////////////////
+// Expressions are the fundamental building block of the language
+// starting form binary operators to more complex things like match
+// statements
 
-AndExpr: Expr1 = {
-    BinOp<BinAnd, AndExpr, EqExpr> => <>,
-    EqExpr => <>,
-}
-
-BinEq: BinOpKind = {
-    "==" => BinOpKind::Eq,
-    "!=" => BinOpKind::NotEq,
-}
-
-EqExpr: Expr1 = {
-    BinOp<BinEq, EqExpr, CmpExpr> => <>,
-    CmpExpr => <>,
-}
-
-BinCmp: BinOpKind = {
-    ">=" => BinOpKind::Gte,
-    ">" => BinOpKind::Gt,
-    "<=" => BinOpKind::Lte,
-    "<" => BinOpKind::Lt,
-}
-
-CmpExpr: Expr1 = {
-    BinOp<BinCmp, CmpExpr, AddExpr> => <>,
-    AddExpr => <>,
-}
-
-BinAdd: BinOpKind = {
-    "+" => BinOpKind::Add,
-    "-" => BinOpKind::Sub,
-}
-
-AddExpr: Expr1 = {
-    BinOp<BinAdd, AddExpr, MulExpr> => <>,
-    MulExpr => <>,
-}
-
-BinMul: BinOpKind = {
-    "*" => BinOpKind::Mul,
-    "/" => BinOpKind::Div,
-    "%" => BinOpKind::Mod,
-}
-
-MulExpr: Expr1 = {
-    BinOp<BinMul, MulExpr, UnaryExpr> => <>,
-    UnaryExpr => <>,
-}
-
-UnaryExpr: Expr1 = {
-    <start:@L> "+" <expr:UnarySimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: Box::new(expr), start, end }),
-    <start:@L> "-" <expr:UnarySimpleExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: Box::new(expr), start, end }),
-    UnarySimpleExpr => <>,
-}
-
-UnarySimpleExpr: Expr1 = {
-    <start:@L> "not" <expr:PresenceSimplExpr> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(expr), start, end }),
-    PresenceSimplExpr => <>,
-}
-
-PresenceSimplExpr: Expr1 = {
-    <start:@L> "present" <path:Path> <end:@L> => Expr1::Present{path, start, end},
-    <start:@L> "absent" <path:Path> <end:@L> => Expr1::Unary(UnaryExpr1 { kind: UnaryOpKind::Not, expr: Box::new(Expr1::Present{path, start, end}), start, end }),
+/// Expression root
+Expr: Expr1<'input> = {
     SimpleExpr => <>,
 }
 
-
-SimpleExpr: Expr1 = {
-    <literal:Literal> => Expr1::Literal(literal),
-    "(" <expr:Expr> ")" => expr,
-    <path:Path> => Expr1::Path(path),
-    <record:Record> => Expr1::RecordExpr(record),
+/// Non precedence based expressions and language constructs
+SimpleExpr: Expr1<'input> = {
     <pp:Match> => Expr1::MatchExpr(Box::new(pp)),
-    <pp:Patch> => Expr1::PatchExpr(Box::new(pp)),
-    <pp:Merge> => Expr1::MergeExpr(Box::new(pp)),
-    <call:Invoke> => Expr1::Invoke(call),
-    <comprehension:Foreach> => Expr1::Comprehension(comprehension),
+    <comprehension:For> => Expr1::Comprehension(Box::new(comprehension)),
     Let => <>,
     Drop => <>,
     Emit => <>,
+    ExprImut => <>.into(),
 }
 
-SimpleExprNoSideffect: Expr1 = {
-    <literal:Literal> => Expr1::Literal(literal),
-    "(" <expr:Expr> ")" => expr,
-    <path:Path> => Expr1::Path(path),
-    <record:Record> => Expr1::RecordExpr(record),
-    <pp:Match> => Expr1::MatchExpr(Box::new(pp)),
-    <pp:Patch> => Expr1::PatchExpr(Box::new(pp)),
-    <pp:Merge> => Expr1::MergeExpr(Box::new(pp)),
-    <call:Invoke> => Expr1::Invoke(call),
-    <comprehension:Foreach> => Expr1::Comprehension(comprehension),
+/// Part of the expressions that are always imutable
+AlwaysImutExpr: ImutExpr1<'input> = {
+    <pp:Patch> => ImutExpr1::Patch(Box::new(pp)),
+    <pp:Merge> => ImutExpr1::Merge(Box::new(pp)),
+    <call:Invoke> => ImutExpr1::Invoke(call),
+    <literal:Literal> => ImutExpr1::Literal(literal),
+    <path:Path> => ImutExpr1::Path(path),
+    <record:Record> => ImutExpr1::Record(Box::new(record)),
+    <list:List> => ImutExpr1::List(Box::new(list)),
 }
 
-Literal: Literal1 = {
-    <start:@L> <v:Nil> <end:@L> => Literal1{value: v, start, end},
-    <start:@L> <v:Bool> <end:@L> => Literal1{value: v, start, end},
-    <start:@L> <v:Int> <end:@L> => Literal1{value: v, start, end},
-    <start:@L> <v:Float> <end:@L> => Literal1{value: v, start, end},
-    <start:@L> <v:String> <end:@L> => Literal1{value: v, start, end},
-    <start:@L> <v:List> <end:@L> => Literal1{value: v, start, end},
+////////////////////////////// Expr (immutable) ////////////////////////////////////////
+// Imutable exprssions are used in parts of the lgnauge that are not suposed to
+// modify the event, locals, or metadata.
+
+/// Expression root
+ExprImut: ImutExpr1<'input> = {
+    OrExprImut => <>,
 }
 
-AssignOp: Token<'input> = {
-    "=" => Token::Eq,
+/// Logical or
+OrExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinOr, ExprImut, AndExprImut>> => <>,
+    AndExprImut => <>,
 }
 
-Let: Expr1 = {
+/// Logical and
+AndExprImut: ImutExpr1<'input> = {
+    BinOp<BinAnd, AndExprImut, EqExprImut> => <>,
+    EqExprImut => <>,
+}
+
+/// Equality compairison operators
+EqExprImut: ImutExpr1<'input> = {
+    BinOp<BinEq, EqExprImut, CmpExprImut> => <>,
+    CmpExprImut => <>,
+}
+
+/// Relational compairison operators
+CmpExprImut: ImutExpr1<'input> = {
+    BinOp<BinCmp, CmpExprImut, AddExprImut> => <>,
+    AddExprImut => <>,
+}
+
+/// Additioan based math (+, -)
+AddExprImut: ImutExpr1<'input> = {
+    BinOp<BinAdd, AddExprImut, MulExprImut> => <>,
+    MulExprImut => <>,
+}
+
+/// Multiplication based math (*, /, %)
+MulExprImut: ImutExpr1<'input> = {
+    BinOp<BinMul, MulExprImut, UnaryExprImut> => <>,
+    UnaryExprImut => <>,
+}
+
+/// Mathematical unary expressions (unary +, unary - )
+UnaryExprImut: ImutExpr1<'input> = {
+    <start:@L> "+" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: expr, start, end })),
+    <start:@L> "-" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: expr, start, end })),
+    UnarySimpleExprImut => <>,
+}
+
+
+/// Logical unary expressions (not)
+UnarySimpleExprImut: ImutExpr1<'input> = {
+    <start:@L> "not" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: expr, start, end })),
+    PresenceSimplExprImut => <>,
+}
+
+/// Presence operations (present, absent)
+PresenceSimplExprImut: ImutExpr1<'input> = {
+    <start:@L> "present" <path:Path> <end:@L> => ImutExpr1::Present{path, start, end},
+    <start:@L> "absent" <path:Path> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: ImutExpr1::Present{path, start, end}, start, end })),
+    SimpleExprImut => <>,
+}
+
+/// Imutable languag constructs that can be used without having to worry aobut
+/// sideeffects
+
+ComplexExprImut: ImutExpr1<'input> = {
+    <pp:MatchImut> => ImutExpr1::Match(Box::new(pp)),
+    <comprehension:ForImut> => ImutExpr1::Comprehension(Box::new(comprehension)),
+    ExprImut => <>
+}
+
+SimpleExprImut: ImutExpr1<'input> = {
+    "(" <expr:ComplexExprImut> ")" => expr,
+    AlwaysImutExpr => <>
+}
+
+////////////////////////////// Literals and semi literals //////////////////////////////
+// This section covers literals (strings, nil, etc) and semi literals.
+// At this stage Lists and Records are considered semi literals
+// as we only decide in the next step if they are literals or include
+// variables and need to get constructed during runtime.
+
+/// Basic literals
+Literal: Literal<'input> = {
+    <start:@L> <v:Nil> <end:@L> => Literal{value: v, start, end},
+    <start:@L> <v:Bool> <end:@L> => Literal{value: v, start, end},
+    <start:@L> <v:Int> <end:@L> => Literal{value: v, start, end},
+    <start:@L> <v:Float> <end:@L> => Literal{value: v, start, end},
+    <start:@L> <v:String> <end:@L> => Literal{value: v, start, end},
+}
+
+/// null
+Nil: Value<'input> = {
+    <literal:"nil">  => Value::Null,
+}
+
+/// booleans
+Bool: Value<'input> = {
+    <literal:"bool"> =>  Value::from(literal),
+}
+
+/// integers
+Int: Value<'input> = {
+    <literal:"int">  => Value::from(literal as i64),
+}
+
+/// floats
+Float: Value<'input> = {
+    <literal:"float"> => Value::from(literal.0),
+}
+
+/// strings
+String: Value<'input> = {
+    <literal:StringLiteral>  => Value::String(literal),
+}
+
+/// array semi literals
+List: List1<'input> = {
+    <start:@L> "[" <exprs:ListElements> "]" <end:@L> => List1{start, end, exprs},
+    <start:@L> "[" "]" <end:@L> => List1{start, end, exprs: vec![]},
+}
+
+/// List elements
+ListElements: ImutExprs1<'input> = {
+    <list:ListElements> "," <item:ComplexExprImut> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    ComplexExprImut => vec![<>],
+}
+
+/// A semi literal record
+Record: Record1<'input> = {
+    <start:@L> "{" <fields:Fields> "}" <end:@L> => Record1 { fields: fields, start, end },
+    <start:@L> "{" "}" <end:@L> => Record1 { fields: vec![], start, end }
+}
+
+/// Fields for a static record
+Field: Field1<'input> = {
+    <start:@L> <name:StringLiteral> ":" <value:ComplexExprImut> <end:@L> => {
+        Field1 { name, value, start, end }
+    }
+}
+
+////////////////////////////// Path ////////////////////////////////////////
+// Path define lookups of data that is in either local variable, metadata
+// or the event.
+
+/// A path into one of the scopes
+Path: Path1<'input> = {
+    MetaPath => <>,
+    EventPath => <>,
+    LocalPath => <>,
+}
+
+/// A metadata path
+MetaPath: Path1<'input> = {
+    <start:@L> "$" <segment:PathSegment> <segments:PathSegments> <end:@L> => {
+        let mut segments = segments;
+        segments.insert(0, segment);
+
+        Path1::Meta(MetadataPath1 { segments, start, end })
+    },
+    <start:@L> "$" <segment:PathSegment> <end:@L> => {
+        Path1::Meta(MetadataPath1 { segments: vec![segment], start, end })
+    },
+    <start:@L> "$" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start, end }),
+}
+
+/// Local path
+LocalPath: Path1<'input> = {
+    <start:@L> <segment:PathSegment> <segments:PathSegments> <end:@L> => {
+        let mut segments = segments;
+        segments.insert(0, segment);
+        Path1::Local(LocalPath1 { segments, start, end })
+    },
+    <start:@L> <segment:PathSegment> <end:@L> => {
+        Path1::Local(LocalPath1 { segments:  vec![segment], start, end })
+    },
+}
+
+/// Event path
+EventPath: Path1<'input> = {
+    <start:@L> "event" <segments:PathSegments> <end:@L> => Path1::Event(EventPath1 { segments, start, end }),
+    <start:@L> "event" <end:@L> => Path1::Event(EventPath1 { segments: vec![], start, end }),
+}
+
+/// Segments of a path
+PathSegments: Segments1<'input> = {
+    "." <segment:PathSegment> <segments:PathSegments> => {
+        let mut segments = segments;
+        segments.insert(0, segment);
+        segments
+    },
+    "[" <selector:Selector> "]" <segments:PathSegments> => {
+        let mut segments = segments;
+        segments.insert(0, selector);
+        segments
+    },
+    "[" <selector:Selector> "]" => vec![selector],
+    "." <segment:PathSegment> => vec![segment],
+}
+
+/// Singular part of a path
+PathSegment: Segment1<'input> = {
+    <start:@L> <id:Ident> <end:@L> => Segment1::from_id(id, start, end),
+}
+
+
+/// A path selector aka [...]
+Selector: Segment1<'input> = {
+    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => Segment1::RangeSelector{range_start, range_end, start_lower, end_lower, start_upper, end_upper},
+    <start:@L> <expr:ComplexExprImut> <end:@L>  => Segment1::ElementSelector{expr, start, end},
+}
+
+
+////////////////////////////// Function invocations //////////////////////////////
+// Function invocations consist of a module, function name and an
+// argument list.
+
+/// Function invocation
+Invoke: Invoke1<'input> = {
+    <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => Invoke1 { module: module.id.to_string(), fun: fun.id.to_string(), args, start, end },
+    <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => Invoke1 { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![], start, end },
+}
+
+/// Arguments for function calls
+InvokeArgs: ImutExprs1<'input> = {
+    <list:InvokeArgs> "," <item:ComplexExprImut> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    ComplexExprImut => vec![<>],
+}
+
+////////////////////////////// Terminal expressions //////////////////////////////
+// These expressions terminate execution.
+
+/// drop the current event.
+Drop: Expr1<'input> = {
+    <start:@L> "drop" <end:@L> => Expr1::Drop{start, end } ,
+}
+
+/// emits the current event to a given output
+Emit: Expr1<'input> = {
+    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: Some(port.to_string()) }),
+    <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: None }),
+    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: Some(port.to_string()) }) ,
+    <start:@L> "emit" <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: None }),
+}
+
+
+////////////////////////////// Let expression  //////////////////////////////
+// An expression that assigns a value to a variable
+
+/// Let expression to assign values
+Let: Expr1<'input> = {
 // TODO FIXME investigate multi-let after `event` keyword +change
 //    <start:@L> "let" <exprs:Assignments> <end:@L> "end" => Expr::Let(Let { exprs, start, end }),
     <start:@L> "let" <expr:Assignment> <end:@L> => expr, // Expr::Let(Let { exprs: vec![expr], start, end }),
@@ -168,156 +359,19 @@ Let: Expr1 = {
 //     Assignment => vec![<>],
 // }
 
-Assignment: Expr1 = {
-    <start:@L> <path:Path> @L AssignOp @R <expr:SimpleExpr> <end:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start, end }),
+Assignment: Expr1<'input> = {
+    <start:@L> <path:Path> @L "=" @R <expr:SimpleExpr> <end:@L> => Expr1::Assign(Box::new(Assign1 { path, expr: expr, start, end })),
 }
 
-Drop: Expr1 = {
-    <start:@L> "drop" <end:@L> => Expr1::Drop{start, end } ,
-}
+////////////////////////////// patch expression  //////////////////////////////
+// Patches a input value with a set of instructions
 
-Emit: Expr1 = {
-    <start:@L> "emit" <expr:SimpleExprNoSideffect> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(expr), start, end, port: Some(port) }),
-    <start:@L> "emit" <expr:SimpleExprNoSideffect>  <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(expr), start, end, port: None }),
-
-    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end }))), start, end, port: Some(port) }) ,
-    <start:@L> "emit" <end:@L> => Expr1::Emit(EmitExpr1 { expr: Box::new(Expr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end }))), start, end, port: None }) ,
-}
-
-Nil: LiteralValue1 = {
-    <literal:"nil">  => LiteralValue1::Native(OwnedValue::Null),
-}
-
-Bool: LiteralValue1 = {
-    <literal:"bool"> => LiteralValue1::Native( OwnedValue::from(literal) ),
-}
-
-Int: LiteralValue1 = {
-     <literal:"int">  => LiteralValue1::Native( OwnedValue::from(literal as i64) ),
-}
-
-Float: LiteralValue1 = {
-    <literal:"float"> => LiteralValue1::Native( OwnedValue::from(literal.0) ),
-}
-
-String: LiteralValue1 = {
-    <literal:StringLiteral>  => LiteralValue1::Native( OwnedValue::from(literal) ),
-}
-
-Path: Path1 = {
-    <start:@L> "$" <segments:QualifiedSegments> <end:@L> => Path1::Meta(MetadataPath1 { segments, start, end }),
-    <start:@L> "event" <segments:LocalSegments> <end:@L> => Path1::Event(EventPath1 { segments, start, end }),
-    <start:@L> "event" <end:@L> => Path1::Event(EventPath1 { segments: vec![], start, end }),
-    <start:@L> "$" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start, end }),
-    <start:@L> <segment:PathSegment> <segments:LocalSegments> <end:@L> => {
-        let mut list = segments;
-        list.insert(0, segment);
-        Path1::Local(LocalPath1 { segments: list, start, end })
-    },
-    <start:@L> <segment:PathSegment> <end:@L> => {
-        Path1::Local(LocalPath1 { segments:  vec![segment], start, end })
-    },
-}
-
-LocalSegments: Segments1 = {
-    "." <segment:PathSegment> <segments:LocalSegments> => {
-        let mut segments = segments;
-        segments.insert(0, segment);
-        segments
-    },
-    "[" <selector:Selector> "]" <segments:LocalSegments> => {
-        let mut segments = segments;
-        segments.insert(0, selector);
-        segments
-    },
-    "[" <selector:Selector> "]" => vec![selector],
-    "." <segment:PathSegment> => vec![segment],
-}
-
-Selector: Segment1 = {
-    <start_lower:@L> <range_start:Expr> <end_lower:@L> ":" <start_upper:@L> <range_end:Expr> <end_upper:@L> => Segment1::RangeSelector{range_start, range_end, start_lower, end_lower, start_upper, end_upper},
-    <start:@L> <expr:Expr> <end:@L>  => Segment1::ElementSelector{expr, start, end},
-}
-
-QualifiedSegments: Segments1 = {
-    <segments:QualifiedSegments> "." <segment:PathSegment> => {
-        let mut list = segments;
-        list.push(segment);
-        list
-    },
-    <segments:QualifiedSegments> "[" <segment:Selector> "]" => {
-        let mut list = segments;
-        list.push(segment);
-        list
-    },
-    "["<start:@L> <segment:Selector> <end:@L>"]" => vec![segment],
-    <segment:PathSegment> => vec![segment],
-}
-
-#[inline]
-PathSegment: Segment1 = {
-    <start:@L> <id:Ident> <end:@L> => Segment1::from_id(id, start, end),
-}
-// ArraySegment: Exprs = {
-//     <expr:Expr> ":" <exprs:ArraySegment> => {
-//         let mut exprs = exprs;
-//         exprs.insert(0, expr);
-//         exprs
-//     },
-//     <expr:Expr> => vec![expr],
-// }
-
-ListElements: Exprs1 = {
-    <list:ListElements> "," <item:Expr> => {
-        let mut list = list;
-        list.push(item);
-        list
-    },
-    Expr => vec![<>],
-
-}
-
-List: LiteralValue1 = {
-    "[" <exprs:ListElements> "]" => LiteralValue1::List(exprs),
-    "[" "]" => LiteralValue1::List(vec![]),
-}
-
-ExprOf: Token<'input> = {
-    "of" => Token::Of,
-}
-
-Match: Match1 = {
-  <start:@L> "match" <target:Expr> ExprOf <patterns:Predicates> "end" <end:@L> => Match1 { target, patterns, start, end },
-}
-
-Patch: Patch1 = {
+Patch: Patch1<'input> = {
   // NOTE: ASSUMPTION array and literal targets are banned
-  <start:@L> "patch" <target:Expr> <end:@L> ExprOf <operations:PatchOperations> "end" => Patch1 { target, operations, start, end }
+    <start:@L> "patch" <target:ComplexExprImut> <end:@L> "of" <operations:PatchOperations> "end" => Patch1 { target, operations, start, end }
 }
 
-Merge: Merge1 = {
-  <start:@L> "merge" <target:Expr> ExprOf <expr:Expr> "end" <end:@L> => Merge1 { target, expr, start, end }
-}
-
-Foreach: Comprehension1 = {
-    <start:@L> "for" <target:Expr> ExprOf <cases:ForeachCaseClauses> "end" <end:@L> => Comprehension1{target: Box::new(target), cases: cases, start, end},
-}
-
-ForeachCaseClauses: ComprehensionCases1 = {
-    <e:ForeachCaseClause> => vec![e],
-    <v:ForeachCaseClauses> <e:ForeachCaseClause> => {
-        let mut v = v;
-        v.push(e);
-        v
-    }
-}
-
-ForeachCaseClause: ComprehensionCase1 = {
-    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> "=>" <expr:Expr>  => ComprehensionCase1 { key_name: k.id, value_name: v.id, expr: Box::new(expr), guard, start, end },
-    "case" <start:@L> "(" <k:Ident> "," <v:Ident> ")" <end:@L> "=>" <expr:Expr> => ComprehensionCase1 { key_name: k.id, value_name: v.id, expr: Box::new(expr), guard: None, start, end },
-}
-
-PatchOperations: PatchOperations1 = {
+PatchOperations: PatchOperations1<'input> = {
     <e:PatchOperationClause> => vec![e],
     <v:PatchOperations> "," <e:PatchOperationClause> => {
     let mut v = v;
@@ -326,24 +380,83 @@ PatchOperations: PatchOperations1 = {
   }
 }
 
-PatchOperationClause: PatchOperation1 = {
-    "insert" <ident:Ident> "=>" <expr:Expr> => PatchOperation1::Insert{ ident: ident.id, expr: expr },
-    "upsert" <ident:Ident> "=>" <expr:Expr> => PatchOperation1::Upsert{ ident: ident.id, expr: expr },
-    "update" <ident:Ident> "=>" <expr:Expr> => PatchOperation1::Update{ ident: ident.id, expr: expr },
-    "erase" <ident:Ident> => PatchOperation1::Erase{ ident: ident.id },
+PatchField: ImutExpr1<'input> = {
+    ComplexExprImut => <>
+}
+
+PatchOperationClause: PatchOperation1<'input> = {
+    "insert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Insert{ ident, expr },
+    "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Upsert{ ident, expr },
+    "update" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Update{ ident, expr },
+    "erase" <ident:PatchField> => PatchOperation1::Erase{ ident },
+    //"move" <from:PatchField> "=>" <to:PatchField>  => PatchOperation1::Move{ from, to },
     // "test" <ident:Ident> "=>" <expr:Expr> => PatchOperationClause { kind: PatchOperationKind::Add, ident, Some(expr) },
     // "move" <ident:Ident> <to:RelativePath> => PatchOperationClause { kind: PatchOperationKind::Add, ident, expr: None },
     // "copy" <ident:Ident> <to:RelativePath> => PatchOperationClause { kind: PatchOperationKind::Add, ident, expr: None },
-    "merge" <ident:Ident> "=>" <record_expr:Expr> => PatchOperation1::Merge { ident: ident.id, expr: record_expr },
-    "merge" "=>" <record_expr:Expr> => PatchOperation1::TupleMerge { expr: record_expr },
+    "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Merge { ident, expr },
+    "merge" "=>" <expr:ComplexExprImut> => PatchOperation1::TupleMerge { expr },
 }
 
-MatchTarget: Expr1 = {
-    <start:@L> <path:Path> AssignOp <expr:Expr> <end:@L> => Expr1::Assign(Assign1 { path, expr: Box::new(expr), start, end }),
-    <expr:Expr> => <>,
+
+////////////////////////////// merge expression  //////////////////////////////
+// Merges a perge spec (record) into the target
+
+Merge: Merge1<'input> = {
+    <start:@L> "merge" <target:ComplexExprImut> "of" <expr:ComplexExprImut> "end" <end:@L> => Merge1 { target, expr, start, end }
 }
 
-Predicates: Predicates1 = {
+////////////////////////////// for comprehension (mut)  //////////////////////////////
+// Merges a perge spec (record) into the target
+
+For: Comprehension1<'input> = {
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => Comprehension1{target, cases, start, end},
+}
+
+ForCaseClauses: ComprehensionCases1<'input> = {
+    <e:ForCaseClause> => vec![e],
+    <v:ForCaseClauses> <e:ForCaseClause> => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+}
+
+ForCaseClause: ComprehensionCase1<'input> = {
+    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:Effectors>  => ComprehensionCase1 { key_name: k.id, value_name: v.id, exprs, guard, start, end },
+    "case" <start:@L> "(" <k:Ident> "," <v:Ident> ")" <end:@L> <exprs:Effectors> => ComprehensionCase1 { key_name: k.id, value_name: v.id, exprs, guard: None, start, end },
+}
+
+// ////////////////////////////// for comprehension (imutmut)  //////////////////////////////
+// // Merges a perge spec (record) into the target
+
+ForImut: ImutComprehension1<'input> = {
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ImutComprehension1{target, cases, start, end},
+}
+
+ForCaseClausesImut: ImutComprehensionCases1<'input> = {
+    <e:ForCaseClauseImut> => vec![e],
+    <v:ForCaseClausesImut> <e:ForCaseClauseImut> => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+}
+
+ForCaseClauseImut: ImutComprehensionCase1<'input> = {
+    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:EffectorsImut>  => ImutComprehensionCase1 { key_name: k.id, value_name: v.id, exprs, guard, start, end },
+    "case" <start:@L> "(" <k:Ident> "," <v:Ident> ")" <end:@L> <exprs:EffectorsImut> => ImutComprehensionCase1 { key_name: k.id, value_name: v.id, exprs, guard: None, start, end },
+}
+
+////////////////////////////// match expression (mutating)  //////////////////////////////
+// An expression that assigns a value to a variable
+
+/// A match expression
+Match: Match1<'input> = {
+    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:Predicates> "end" <end:@L> => Match1 { target, patterns, start, end },
+}
+
+/// Predicates for a match statement (aka list of case statements)
+Predicates: Predicates1<'input> = {
     <e:PredicateClause> => vec![e],
     <v:Predicates> <e:PredicateClause> => {
         let mut v = v;
@@ -352,7 +465,8 @@ Predicates: Predicates1 = {
     }
 }
 
-PredicateClause: PredicateClause1 = {
+/// A case statement 
+PredicateClause: PredicateClause1<'input> = {
     <start:@L> "case" <rp:RecordCaseClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: rp, exprs, guard: None, start, end },
     <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: rp, exprs, guard, start, end },
     <start:@L> "case" <ap:ArrayCaseClause> <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: ap, exprs, guard: None, start, end },
@@ -362,30 +476,13 @@ PredicateClause: PredicateClause1 = {
     <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClause1 { pattern: Pattern1::Default, exprs, guard: None, start, end },
 }
 
-RecordCaseClause: Pattern1 = {
-    <start:@L> <segment:PathSegment> AssignOp <rp:RecordPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Record(rp)) }),
-    <rp:RecordPattern> => Pattern1::Record(rp),
-}
-
-ArrayCaseClause: Pattern1 = {
-    <start:@L> <segment:PathSegment> AssignOp <ap:ArrayPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id: Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Array(ap)) }),
-    <ap:ArrayPattern> => Pattern1::Array(ap),
-}
-
-ExprCaseClause: Pattern1 = {
-    <start:@L> <segment:PathSegment> AssignOp <expr:SimpleExprNoSideffect> <end:@L> => Pattern1::Assign(AssignPattern1 { id:  Path1::Local( LocalPath1 { segments: vec![segment], start, end}), pattern: Box::new(Pattern1::Expr(expr)) }),
-    <expr:SimpleExprNoSideffect> => Pattern1::Expr(expr),
-}
-
-WhenClause: Option<Expr1> = {
-    "when" <expr:SimpleExprNoSideffect> => Some(expr),
-}
-
-Effectors: Exprs1 = {
+/// Effoectors aka (=>  ... )
+Effectors: Exprs1<'input> = {
     "=>" <exprs:Block> => exprs
 }
 
-Block: Exprs1 = {
+/// The effectors for a case statement
+Block: Exprs1<'input> = {
     <e:Expr> => vec![e],
     <v:Block> "," <e:Expr> => {
         let mut v = v;
@@ -394,41 +491,112 @@ Block: Exprs1 = {
     }
 }
 
-PredicateFieldPattern: PredicatePattern1 = {
+////////////////////////////// match expression (non mutating)  //////////////////////////////
+// An expression that assigns a value to a variable
+
+/// A match expression
+MatchImut: ImutMatch1<'input> = {
+    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:PredicatesImut> "end" <end:@L> => ImutMatch1 { target, patterns, start, end },
+}
+
+/// Predicates for a match statement (aka list of case statements)
+PredicatesImut: ImutPredicates1<'input> = {
+    <e:PredicateClauseImut> => vec![e],
+    <v:PredicatesImut> <e:PredicateClauseImut> => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+}
+
+/// A case statement 
+PredicateClauseImut: ImutPredicateClause1<'input> = {
+    <start:@L> "case" <rp:RecordCaseClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: rp, exprs, guard: None, start, end },
+    <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: rp, exprs, guard, start, end },
+    <start:@L> "case" <ap:ArrayCaseClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: ap, exprs, guard: None, start, end },
+    <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: ap, exprs, guard, start, end },
+    <start:@L> "case" <lhs:ExprCaseClause> <rhs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: lhs, exprs: rhs, guard: None, start, end },
+    <start:@L> "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: lhs, exprs: rhs, guard, start, end},
+    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => ImutPredicateClause1 { pattern: Pattern1::Default, exprs, guard: None, start, end },
+}
+
+/// Effoectors aka (=>  ... )
+EffectorsImut: ImutExprs1<'input> = {
+    "=>" <exprs:BlockImut> => exprs
+}
+
+/// The effectors for a case statement
+BlockImut: ImutExprs1<'input> = {
+    <e:ComplexExprImut> => vec![e],
+    <v:BlockImut> "," <e:ComplexExprImut> => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+}
+
+////////////////////////////// match expression (shared)  //////////////////////////////
+// An expression that assigns a value to a variable
+
+/// A record pattern aka [name = ] %{...}
+RecordCaseClause: Pattern1<'input> = {
+    <start:@L> <segment:Ident> "=" <rp:RecordPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id: segment.id, pattern: Box::new(Pattern1::Record(rp)) }),
+    <rp:RecordPattern> => Pattern1::Record(rp),
+}
+
+/// A array pattern aka [name = ] %[...]
+ArrayCaseClause: Pattern1<'input> = {
+    <start:@L> <segment:Ident> "=" <ap:ArrayPattern> <end:@L> => Pattern1::Assign(AssignPattern1 { id:segment.id, pattern: Box::new(Pattern1::Array(ap)) }),
+    <ap:ArrayPattern> => Pattern1::Array(ap),
+}
+
+/// An expression clause aka [name = ] <expr>
+ExprCaseClause: Pattern1<'input> = {
+    <start:@L> <segment:Ident> "=" <expr:ComplexExprImut> <end:@L> => Pattern1::Assign(AssignPattern1 { id:  segment.id, pattern: Box::new(Pattern1::Expr(expr)) }),
+    <expr:ComplexExprImut> => Pattern1::Expr(expr),
+}
+
+/// When part of an expression (when ...)
+WhenClause: Option<ImutExpr1<'input>> = {
+    "when" <expr:ComplexExprImut> => Some(expr),
+}
+
+
+/// Predicate Patterns (aka tests) for record pattrens
+PredicateFieldPattern: PredicatePattern1<'input> = {
     <start:@L> <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePattern1::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
-    <start:@L> <assign:Ident> AssignOp <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePattern1::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
+    <start:@L> <assign:Ident> "=" <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePattern1::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
 
     <start:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <end:@L> => PredicatePattern1::RecordPatternEq { lhs: lhs.id, pattern: rp },
     <start:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <end:@L> => PredicatePattern1::ArrayPatternEq { lhs: lhs.id, pattern: ap },
-    // FIXME: should this be op ~ since the assign is seperate?
     <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePattern1::FieldPresent { lhs: lhs.id },
     <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePattern1::FieldAbsent { lhs: lhs.id },
-    <lhs:Ident> <op:"=="> <expr:Expr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: false },
-    <lhs:Ident> <op:"!="> <expr:Expr> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: true },
+    <lhs:Ident> <op:"=="> <expr:ComplexExprImut> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: false },
+    <lhs:Ident> <op:"!="> <expr:ComplexExprImut> => PredicatePattern1::Eq { lhs: lhs.id, rhs: expr, not: true },
 }
 
 TestExpr: TestExpr1 = {
     <start:@L> <id:Ident> <tl: TestLiteral> <end:@L> => {
-        TestExpr1 { id: id.id, test: tl, start, end}
+        TestExpr1 { id: id.id.to_string(), test: tl, start, end}
     },
 }
 
-RecordPattern: RecordPattern1 = {
+RecordPattern: RecordPattern1<'input> = {
     <start:@L> "%{" <fields:PatternFields> "}" <end:@L> => RecordPattern1 { fields: fields, start, end },
     <start:@L> "%{" "}" <end:@L> => RecordPattern1 { fields: vec![], start, end },
 }
 
-ArrayPattern: ArrayPattern1 = {
+ArrayPattern: ArrayPattern1<'input> = {
     <start:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <end:@L> => ArrayPattern1 { exprs, start, end },
 }
 
-ArrayPredicatePattern: ArrayPredicatePattern1 = {
+ArrayPredicatePattern: ArrayPredicatePattern1<'input> = {
     "~" <test:TestExpr> => ArrayPredicatePattern1::Tilde(test),
-    Expr => ArrayPredicatePattern1::Expr(<>),
+    ComplexExprImut => ArrayPredicatePattern1::Expr(<>),
     RecordPattern => ArrayPredicatePattern1::Record(<>),
 }
 
-ArrayPredicatePatterns: ArrayPredicatePatterns1 = {
+ArrayPredicatePatterns: ArrayPredicatePatterns1<'input> = {
     <list:ArrayPredicatePatterns> "," <item:ArrayPredicatePattern> => {
         let mut list = list;
         list.push(item);
@@ -438,54 +606,29 @@ ArrayPredicatePatterns: ArrayPredicatePatterns1 = {
 }
 
 
-PatternFields: PatternFields1 = {
+PatternFields: PatternFields1<'input> = {
     <fields:Sep<PatternFields, PredicateFieldPattern, ",">> => fields,
 }
 
-Record: Record1 = {
-    <start:@L> "{" <fields:Fields> "}" <end:@L> => Record1 { fields: fields, start, end },
-    <start:@L> "{" "}" <end:@L> => Record1 { fields: vec![], start, end }
-}
-
-Field: Box<Field1> = {
-    <start:@L> <name:StringLiteral> ":" <value:Expr> <end:@L> => {
-        Box::new(Field1 { name, value: Box::new(value), start, end })
-    }
-}
-
-Invoke: Invoke1 = {
-    <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => Invoke1 { module: module.id, fun: fun.id, args, start, end },
-    <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => Invoke1 { module: module.id, fun: fun.id, args: vec![], start, end },
-}
-
-InvokeArgs: Exprs1 = {
-    <list:InvokeArgs> "," <item:Expr> => {
-        let mut list = list;
-        list.push(item);
-        list
-    },
-    Expr => vec![<>],
-}
-
 #[inline]
-Fields: Fields1 = {
+Fields: Fields1<'input> = {
     <fields:Sep<Fields, Field, ",">> => fields,
 }
 
 #[inline]
-Ident: Ident = {
+Ident: Ident<'input> = {
     "<ident>" => Ident { id: <>.0 },
 }
 
 #[inline]
-StringLiteral: String = {
-    "string" => <>.to_string(),
-    "heredoc" => <>.join("\n"),
+StringLiteral: Cow<'input, str> = {
+    "string" => <>,
+    "heredoc" => <>.join("\n").into(),
 }
 
 #[inline]
 TestLiteral: String = {
-    "test" => {let t = <>.join(""); dbg!(&t); t},
+    "test" => <>.join(""),
 }
 
 Sep<L, T, D>: L = {
@@ -498,17 +641,43 @@ Sep<L, T, D>: L = {
     <v:L> D  => v,
 }
 
+/// Generaic helper for binary operations
 #[inline]
-BinOp<Op, Current, Next>: Expr1 = {
-    <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => Expr1::Binary(BinExpr1 {
+BinOp<Op, Current, Next>: ImutExpr1<'input> = {
+    <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => ImutExpr1::Binary(Box::new(BinExpr1 {
         kind: op,
-        lhs: Box::new(lhs),
-        rhs: Box::new(rhs),
+        lhs: lhs,
+        rhs: rhs,
         start,
         end,
-    }),
+    })),
 }
 
+BinOr: BinOpKind = {
+    "or" => BinOpKind::Or,
+}
+BinAnd: BinOpKind = {
+    "and" => BinOpKind::And,
+}
+BinEq: BinOpKind = {
+    "==" => BinOpKind::Eq,
+    "!=" => BinOpKind::NotEq,
+}
+BinCmp: BinOpKind = {
+    ">=" => BinOpKind::Gte,
+    ">" => BinOpKind::Gt,
+    "<=" => BinOpKind::Lte,
+    "<" => BinOpKind::Lt,
+}
+BinAdd: BinOpKind = {
+    "+" => BinOpKind::Add,
+    "-" => BinOpKind::Sub,
+}
+BinMul: BinOpKind = {
+    "*" => BinOpKind::Mul,
+    "/" => BinOpKind::Div,
+    "%" => BinOpKind::Mod,
+}
 extern {
     type Location = Location;
     type Error = crate::errors::Error;
@@ -516,6 +685,7 @@ extern {
         "<doc-comment>" => lexer::Token::DocComment(<&'input str>),
         "<single-line-comment>" => lexer::Token::SingleLineComment(<&'input str>),
         "let" => lexer::Token::Let,
+        "const" => lexer::Token::Const,
         "match" => lexer::Token::Match,
         "of" => lexer::Token::Of,
         "end" => lexer::Token::End,
@@ -534,6 +704,7 @@ extern {
         "upsert" => lexer::Token::Upsert,
         "update" => lexer::Token::Update,
         "erase" => lexer::Token::Erase,
+        //"move" => lexer::Token::Move,
         "merge" => lexer::Token::Merge,
         "event" => lexer::Token::Event,
         "present" => lexer::Token::Present,
@@ -572,10 +743,10 @@ extern {
         "bool" => lexer::Token::BoolLiteral(<bool>),
         "int" => lexer::Token::IntLiteral(<i64>),
         "float" => lexer::Token::FloatLiteral(<f64>, <String>),
-        "string" => lexer::Token::StringLiteral(<String>),
+        "string" => lexer::Token::StringLiteral(<Cow<'input, str>>),
         "heredoc" => lexer::Token::HereDoc(_, <Vec<String>>),
         "test" => lexer::Token::TestLiteral(_, <Vec<String>>),
-        "<ident>" => lexer::Token::Ident(<String>, <bool>),
+        "<ident>" => lexer::Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => lexer::Token::BadToken(<String>),
         "<end-of-stream>" => lexer::Token::EndOfStream,
     }

@@ -16,11 +16,9 @@
 #![recursion_limit = "1024"]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 
-#[cfg(feature = "jemallocator")]
-use jemallocator;
-#[cfg(feature = "jemallocator")]
+use mimalloc::MiMalloc;
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[macro_use]
 extern crate log;
@@ -147,7 +145,6 @@ fn run_dun() -> Result<()> {
     let host = matches
         .value_of("host")
         .ok_or_else(|| Error::from("host argument missing"))?;
-;
 
     let w = world.clone();
     let s = server::new(move || {
@@ -227,11 +224,13 @@ fn run_dun() -> Result<()> {
     eprintln!("Listening at: http://{}", host);
     info!("Listening at: http://{}", host);
 
-    s.bind(&host)
-        .map_err(|e| Error::from(format!("Can not bind to {}", e)))?
-        .run();
-    warn!("API stopped");
-    world.stop();
+    if !matches.is_present("no-api") {
+        s.bind(&host)
+            .map_err(|e| Error::from(format!("Can not bind to {}", e)))?
+            .run();
+        warn!("API stopped");
+        world.stop();
+    }
     let _ = handle.join();
     warn!("World stopped");
     Ok(())
@@ -240,20 +239,19 @@ fn run_dun() -> Result<()> {
 fn main() {
     version::print();
     if let Err(ref e) = run_dun() {
-        use std::io::Write;
-        let stderr = &mut ::std::io::stderr();
-        let errmsg = "Error writing to stderr";
 
-        writeln!(stderr, "error: {}", e).expect(errmsg);
-
+        error!("error: {}", e);
+        eprintln!("error: {}", e);
         for e in e.iter().skip(1) {
-            writeln!(stderr, "caused by: {}", e).expect(errmsg);
+            error!("error: {}", e);
+            eprintln!("error: {}", e);
         }
 
         // The backtrace is not always generated. Try to run this example
         // with `RUST_BACKTRACE=1`.
         if let Some(backtrace) = e.backtrace() {
-            writeln!(stderr, "backtrace: {:?}", backtrace).expect(errmsg);
+            error!("backtrace: {:?}", backtrace);
+            eprintln!("backtrace: {:?}", backtrace);
         }
 
         ::std::process::exit(1);

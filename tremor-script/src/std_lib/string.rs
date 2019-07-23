@@ -14,25 +14,25 @@
 
 use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper, MFA};
 use crate::tremor_fn;
-use simd_json::{BorrowedValue, OwnedValue};
+use simd_json::BorrowedValue as Value;
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
         tremor_fn! (string::$name(_context, _input: String) {
-            Ok(OwnedValue::from(_input.$fun()))
+            Ok(Value::from(_input.$fun()))
         })
     };
     ($fun:ident) => {
         tremor_fn! (string::$fun(_context, _input: String) {
-            Ok(OwnedValue::from(_input.$fun()))
+            Ok(Value::from(_input.$fun()))
         })
     }
 }
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
-    fn format<Ctx: Context + 'static>(
+    fn format<'event, Ctx: Context + 'static>(
         _context: &Ctx,
-        args: &[&BorrowedValue],
-    ) -> FResult<OwnedValue> {
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>> {
         fn this_mfa() -> MFA {
             mfa(stringify!($module), stringify!($name), 1)
         }
@@ -45,7 +45,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
 
 
                 match &args[0] {
-                    BorrowedValue::String(format) => {
+                    Value::String(format) => {
                         let mut arg_stack = if args.is_empty() {
                             vec![]
                         } else {
@@ -64,7 +64,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                                     None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)}),
                                 };
 
-                                if let BorrowedValue::String(s) = arg {
+                                if let Value::String(s) = arg {
                                     out.push_str(&s)
                                 } else {
                                     out.push_str(arg.to_string().as_str());
@@ -88,7 +88,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                         }
 
                         if arg_stack.is_empty() {
-                            Ok(OwnedValue::from(out))
+                            Ok(Value::from(out))
                         } else {
                             Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()})
                         }
@@ -106,16 +106,22 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             tremor_fn! (string::replace(_context, _input: String, _from: String, _to: String) {
                 let from: &str = _from;
                 let to: &str = _to;
-                Ok(OwnedValue::from(_input.replace(from, to)))
+                Ok(Value::from(_input.replace(from, to)))
             }),
         )
         .insert(map_function!(is_empty))
         .insert(tremor_fn! (string::len(_context, _input: String) {
-            Ok(OwnedValue::from(_input.len() as i64))
+            Ok(Value::from(_input.len() as i64))
         }))
-        .insert(map_function!(trim))
-        .insert(map_function!(trim_start))
-        .insert(map_function!(trim_end))
+        .insert(tremor_fn! (string::trim(_context, _input: String) {
+            Ok(Value::from(_input.trim().to_string()))
+        }))
+        .insert(tremor_fn! (string::trim_start(_context, _input: String) {
+            Ok(Value::from(_input.trim_start().to_string()))
+        }))
+        .insert(tremor_fn! (string::trim_end(_context, _input: String) {
+            Ok(Value::from(_input.trim_end().to_string()))
+        }))
         .insert(map_function!(lowercase, to_lowercase))
         .insert(map_function!(uppercase, to_uppercase))
         .insert(tremor_fn!(string::capitalize(_context, _input: String) {
@@ -131,13 +137,13 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 use std::cmp::{max,min};
                 let start = max(0, *_start as usize) as usize;
                 let end = min(_input.len(), *_end as usize) as usize;
-                Ok(Value::from(&_input[start..end]))
+                Ok(Value::from((&_input[start..end]).to_string()))
             }),
         )
         .insert(
             tremor_fn! (string::split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
-                Ok(OwnedValue::Array(_input.split(sep).map(OwnedValue::from).collect()))
+                Ok(Value::Array(_input.split(sep).map(|v| Value::from(v.to_string())).collect()))
             }),
         )
         .insert(TremorFnWrapper {
@@ -151,10 +157,10 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 
@@ -242,11 +248,11 @@ mod test {
         let v2 = Value::from(" ");
         assert_val!(
             f(&[&v1, &v2]),
-            OwnedValue::Array(vec![
-                OwnedValue::from("this"),
-                OwnedValue::from("is"),
-                OwnedValue::from("a"),
-                OwnedValue::from("test")
+            Value::Array(vec![
+                Value::from("this"),
+                Value::from("is"),
+                Value::from("a"),
+                Value::from("test")
             ])
         )
     }

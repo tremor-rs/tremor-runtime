@@ -16,6 +16,7 @@
 
 mod ast;
 mod compat;
+mod datetime;
 pub mod errors;
 pub mod grok;
 #[allow(unused, dead_code)]
@@ -28,7 +29,7 @@ mod parser;
 #[allow(unused, dead_code)]
 mod pos;
 pub mod registry;
-mod runtime;
+mod script;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
@@ -50,8 +51,8 @@ pub use simd_json::value::borrowed::Map;
 pub use simd_json::value::borrowed::Value;
 use simd_json::OwnedValue;
 
-pub use crate::interpreter::{LocalMap, Return, Script, ValueStack};
 pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
+pub use crate::script::{Return, Script};
 
 rental! {
     pub mod rentals {
@@ -66,7 +67,7 @@ rental! {
             parsed: borrowed::Value<'raw>
         }
 
-}
+    }
 }
 
 impl PartialEq<simd_json::OwnedValue> for rentals::Value {
@@ -123,13 +124,13 @@ pub use rentals::Value as LineValue;
 mod tests {
     use super::*;
     use crate::errors::*;
-    use ast::{Expr, Helper, Literal, LiteralValue};
+    use ast::{Expr, Helper, ImutExpr, Literal};
     use halfbrown::hashmap;
     use lexer::{TokenFuns, TokenSpan};
     use simd_json::borrowed::{Map, Value};
     use simd_json::json;
 
-    #[derive(Clone, Debug, Default, Serialize)]
+    #[derive(Clone, Debug, Default, Serialize, PartialEq)]
     pub struct FakeContext {}
     impl Context for FakeContext {}
 
@@ -155,9 +156,9 @@ mod tests {
                 .expect("exeuction failed");
             assert_matches!(
                 actual.exprs[0],
-                Expr::Literal(Literal {
+                Expr::Imut(ImutExpr::Literal(Literal {
                     value: $expected, ..
-                })
+                }))
             );
         }};
     }
@@ -166,8 +167,8 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
             let _r: Registry<()> = registry();
-            //let src = format!("{} ", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let src = format!("{} ", $src);
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer(&src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -178,11 +179,10 @@ mod tests {
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
-            let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
-            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut global_map = Value::Object(hashmap! {});
             let value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(
                 Ok(Return::Emit {
@@ -210,13 +210,11 @@ mod tests {
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
-            let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
-            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(&ctx, &mut event, &mut global_map);
-            // dbg!(("eval global", value));
             assert_eq!(global_map, $expected);
         }};
     }
@@ -237,11 +235,10 @@ mod tests {
                 }
             }
             let reg: Registry<FakeContext> = registry::registry();
-            let runnable: interpreter::Script<FakeContext> =
-                interpreter::Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = FakeContext {};
-            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(event, $expected);
         }};
@@ -249,19 +246,19 @@ mod tests {
 
     #[test]
     fn test_literal_expr() {
-        use simd_json::OwnedValue;
+        use simd_json::BorrowedValue;
         use Value::I64;
-        parse_lit!("null;", LiteralValue::Native(OwnedValue::Null));
-        parse_lit!("true;", LiteralValue::Native(OwnedValue::Bool(true)));
-        parse_lit!("false;", LiteralValue::Native(OwnedValue::Bool(false)));
-        parse_lit!("0;", LiteralValue::Native(OwnedValue::I64(0)));
-        parse_lit!("123;", LiteralValue::Native(OwnedValue::I64(123)));
-        parse_lit!("123.456;", LiteralValue::Native(OwnedValue::F64(_))); // 123.456 we can't match aginst float ...
+        parse_lit!("null;", BorrowedValue::Null);
+        parse_lit!("true;", BorrowedValue::Bool(true));
+        parse_lit!("false;", BorrowedValue::Bool(false));
+        parse_lit!("0;", BorrowedValue::I64(0));
+        parse_lit!("123;", BorrowedValue::I64(123));
+        parse_lit!("123.456;", BorrowedValue::F64(_)); // 123.456 we can't match aginst float ...
         parse_lit!(
             "123.456e10;",
-            LiteralValue::Native(OwnedValue::F64(_)) // 123.456e10 we can't match against float
+            BorrowedValue::F64(_) // 123.456e10 we can't match against float
         );
-        parse_lit!("\"hello\";", LiteralValue::Native(OwnedValue::String(_))); // we can't match against a COW
+        parse_lit!("\"hello\";", BorrowedValue::String(_)); // we can't match against a COW
         eval!("null;", Value::Null);
         eval!("true;", Value::Bool(true));
         eval!("false;", Value::Bool(false));
@@ -279,26 +276,7 @@ mod tests {
 
     #[test]
     fn test_let_expr() {
-        //use ast::Assign;
-        //use ast::LocalPath;
-        //use ast::Path;
-        //use ast::Segment;
         use Value::I64;
-        /*
-                parse!(
-                    "let test = null;",
-                    Expr::Assign(Assign {
-                        path: Path::Local(LocalPath {
-                            segments: vec![Segment::Ident("test".to_string())],
-                            start: pos::Location::new(1,5,5),
-                            end: pos::Location::new(1,9,9),
-                        }),
-                        expr: Box::new(Expr::Literal(Literal::Nil)),
-                        start: pos::Location::new(1,5,5),
-                        end: pos::Location::new(1,17,4),
-                    })
-                );
-        */
         eval!("let test = null;", Value::Null);
         eval!("let test = 10;", Value::I64(10));
         eval!("let test = 10.2345;", Value::F64(10.2345));
@@ -321,18 +299,75 @@ mod tests {
     }
 
     #[test]
+    fn test_present() {
+        eval!(r#"let t = {}; present t"#, Value::Bool(true));
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a"#,
+            Value::Bool(true)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b"#,
+            Value::Bool(true)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c"#,
+            Value::Bool(true)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[0]"#,
+            Value::Bool(true)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[1]"#,
+            Value::Bool(true)
+        );
+
+        eval!(r#"let t = {}; present r"#, Value::Bool(false));
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.x"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x.c"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b.c"#,
+            Value::Bool(false)
+        );
+        eval!(
+            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[2]"#,
+            Value::Bool(false)
+        );
+    }
+
+    #[test]
     fn test_assign_local() {
         use Value::I64;
+        dbg!();
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
             Value::Object(hashmap! {
                 std::borrow::Cow::Borrowed("out") => Value::Array(vec![I64(2), I64(4), I64(6), I64(8)]),
             })
         );
+        dbg!();
         eval_global!(
-            "\"hello\"; let test = [2,4,6,8]; let test = [test]; let $out = test;",
+            "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
             Value::Object(hashmap! {
-                std::borrow::Cow::Borrowed("out") => Value::Array(vec![Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+                std::borrow::Cow::Borrowed("out") => Value::Array(vec![Value::Array(vec![I64(4), I64(6), I64(8), I64(10)])]),
             })
         );
     }
@@ -376,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_single_json_expr_is_valid() {
-        eval!("true", Value::Bool(true));
+        eval!("true ", Value::Bool(true));
         eval!("true;", Value::Bool(true));
         eval!(
             "{ \"snot\": \"badger\" }",

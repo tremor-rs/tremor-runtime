@@ -70,6 +70,7 @@ impl Codec for Influx {
 mod tests {
     use super::*;
     use halfbrown::{hashmap, HashMap};
+    use pretty_assertions::assert_eq;
     use simd_json::{json, OwnedValue};
 
     #[test]
@@ -88,7 +89,7 @@ mod tests {
             "measurement": "weather",
             "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
         assert_eq!(e, j)
     }
@@ -104,7 +105,7 @@ mod tests {
             "measurement": "weather",
             "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
         assert_eq!(decoded, e)
     }
@@ -115,7 +116,7 @@ mod tests {
             "measurement": "weather",
            "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
 
         let codec = Influx {};
@@ -132,7 +133,7 @@ mod tests {
                 .into_iter()
                 .cloned()
                 .collect(),
-            1465839830100400200u64,
+            1_465_839_830_100_400_200u64,
         );
 
         assert_eq!(encoded, influx.try_to_bytes().expect("failed to encode"))
@@ -145,7 +146,7 @@ mod tests {
             "measurement": r#"wea,\ ther"#,
             "tags": tags,
             "fields": hashmap!{"temp=erature" => OwnedValue::F64(82.0), r#"too\ \\\"hot""# => OwnedValue::Bool(true)},
-            "timestamp": 1465839830100400200u64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
 
         let codec = Influx {};
@@ -169,7 +170,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us,midwest"},
                     "fields": hashmap!{"temperature" => 82.0},
-                    "timestamp": 1465839830100400200i64
+                    "timestamp": 1_465_839_830_100_400_200i64
                 }),
                 "case 0"
             ),
@@ -181,7 +182,7 @@ mod tests {
                 "measurement": "weather",
                 "tags": hashmap!{"location_place" => "us-midwest"},
                 "fields": hashmap!{"temp=erature" => 82.0},
-                "timestamp": 1465839830100400200i64
+                "timestamp": 1_465_839_830_100_400_200i64
             }),
                 "case 1"
 
@@ -194,7 +195,7 @@ mod tests {
                 "measurement": "weather",
                 "tags": hashmap!{"location place" => "us-midwest"},
                 "fields": hashmap!{"temperature" => 82.0},
-                "timestamp": 1465839830100400200i64
+                "timestamp": 1_465_839_830_100_400_200i64
             }),
                 "case 2"
 
@@ -207,7 +208,7 @@ mod tests {
                 "measurement": "wea,ther",
                 "tags": hashmap!{"location" => "us-midwest"},
                 "fields": hashmap!{"temperature" => 82.0},
-                "timestamp": 1465839830100400200i64
+                "timestamp": 1_465_839_830_100_400_200i64
             }),
                 "case 3"
             ),
@@ -220,7 +221,7 @@ mod tests {
                     "measurement": "wea ther",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature" => 82.0},
-                    "timestamp": 1465839830100400200i64
+                    "timestamp": 1_465_839_830_100_400_200i64
                 }),
                 "case 4"
             ),
@@ -232,7 +233,7 @@ mod tests {
                       "measurement": "weather",
                      "tags": hashmap!{"location" => "us-midwest"}, 
                      "fields": hashmap!{"temperature_str" => OwnedValue::from("too\\ hot\\cold")},
-                     "timestamp": 1465839830100400203i64
+                     "timestamp": 1_465_839_830_100_400_200i64
                  }),
                  "case 5"
              ),
@@ -244,7 +245,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot/cold"#)},
-                    "timestamp": 1465839830100400202i64
+                    "timestamp": 1_465_839_830_100_400_200i64
                 }),
                 "case 6"
             ),
@@ -256,7 +257,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot\cold"#)},
-                    "timestamp": 1465839830100400203i64
+                    "timestamp": 1_465_839_830_100_400_200i64
                 }),
                 "case 7"
 
@@ -268,7 +269,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature_str" => OwnedValue::from(r#"too hot\\cold"#)},
-                    "timestamp": 1465839830100400204i64
+                    "timestamp": 1_465_839_830_100_400_204i64
                 }),
                 "case 8"
 
@@ -304,7 +305,7 @@ mod tests {
             "measurement": "weather",
             "tags" :  hashmap! { "location" => "us-midwest" },
             "fields": hashmap!{"temperature" => 82.0, "bug_concentration" => 98.0},
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         }),
         "case 11"
         ),
@@ -316,7 +317,7 @@ json!({
             "measurement": "weather",
             "tags" :  hashmap! { "location" => "us-midwest" },
             "fields": hashmap!{"temperature" => 82},
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         }),
         "case 12"
 )
@@ -357,7 +358,7 @@ json!({
             "tags" :  hashmap! { "location" => "us-midwest" },
             "fields": hashmap!{"temperature" => 82.0, "bug_concentration" => 98.0},
 
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
         assert_eq!(decoded, e)
     }
@@ -374,14 +375,14 @@ json!({
             "tags" :  hashmap! { "location" => "us-midwest" },
             "fields": hashmap!{"temperature" => 82},
 
-            "timestamp": 1465839830100400200i64
+            "timestamp": 1_465_839_830_100_400_200i64
         });
         assert_eq!(decoded, e)
     }
 
     #[test]
     pub fn live_usecase() {
-        let s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage TotalFetchRequestsPerSec=1993153i,BytesOutPerSec=0i,BytesInPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i 1562179275506000000".to_vec();
+        let s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage BytesInPerSec=0i,BytesOutPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i,TotalFetchRequestsPerSec=1993153i 1562179275506000000".to_vec();
 
         let codec = Influx {};
 
@@ -397,13 +398,13 @@ json!({
                         "topic_name" => "customerEmailServiceMessage",
                         },
                     "fields" : hashmap! {
-                        "TotalFetchRequestsPerSec" => 1993153,
+                        "TotalFetchRequestsPerSec" => 1_993_153,
                         "BytesOutPerSec" => 0,
                         "BytesInPerSec" => 0,
                         "FailedFetchRequestsPerSec" => 0,
                         "FetchMessageConversionsPerSec" => 0
                        },
-                    "timestamp" : 1562179275506000000i64
+                    "timestamp" : 1_562_179_275_506_000_000i64
         });
         let decoded = codec.decode(s.clone()).expect("failed to decode");
         let encoded = codec
@@ -411,7 +412,12 @@ json!({
             .expect("failed to encode");
 
         assert_eq!(decoded, e);
-        assert_eq!(encoded, s);
+        unsafe {
+            assert_eq!(
+                str::from_utf8_unchecked(&encoded),
+                str::from_utf8_unchecked(&s)
+            );
+        }
     }
 
     /*

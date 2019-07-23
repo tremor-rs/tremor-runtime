@@ -305,11 +305,11 @@
          <ul>
             <li><a href="#MulExpr" title="MulExpr" shape="rect">MulExpr</a></li>
          </ul>
-         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="NotExpr" shape="rect">NotExpr:</a></p><img border="0" src="diagram/NotExpr.png" height="37" width="211" usemap="#NotExpr.map"><map name="NotExpr.map"><area shape="rect" coords="91,1,181,33" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="NotExpr" shape="rect">NotExpr:</a></p><img border="0" src="diagram/NotExpr.png" height="37" width="227" usemap="#NotExpr.map"><map name="NotExpr.map"><area shape="rect" coords="91,1,197,33" href="#PresenceExpr" title="PresenceExpr"></map><p>
          
          <div class="ebnf"><code>
                
-               <div><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a>&nbsp;&nbsp;::= 'not' <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
+               <div><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a>&nbsp;&nbsp;::= 'not' <a href="#PresenceExpr" title="PresenceExpr" shape="rect">PresenceExpr</a></div></code></div>
          </p>
       
       <p>referenced by:
@@ -317,7 +317,21 @@
          <ul>
             <li><a href="#UnaryExpr" title="UnaryExpr" shape="rect">UnaryExpr</a></li>
          </ul>
-         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="SimpleExpr" shape="rect">SimpleExpr:</a></p><img border="0" src="diagram/SimpleExpr.png" height="521" width="239" usemap="#SimpleExpr.map"><map name="SimpleExpr.map"><area shape="rect" coords="49,1,109,33" href="#Literal" title="Literal"><area shape="rect" coords="95,45,143,77" href="#Expr" title="Expr"><area shape="rect" coords="49,89,97,121" href="#Path" title="Path"><area shape="rect" coords="49,133,113,165" href="#Record" title="Record"><area shape="rect" coords="49,177,105,209" href="#Match" title="Match"><area shape="rect" coords="49,221,103,253" href="#Patch" title="Patch"><area shape="rect" coords="49,265,107,297" href="#Merge" title="Merge"><area shape="rect" coords="49,309,107,341" href="#FnCall" title="FnCall"><area shape="rect" coords="49,353,89,385" href="#For" title="For"><area shape="rect" coords="49,397,89,429" href="#Let" title="Let"><area shape="rect" coords="49,441,99,473" href="#Drop" title="Drop"><area shape="rect" coords="49,485,97,517" href="#Emit" title="Emit"></map><p>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="PresenceExpr" shape="rect">PresenceExpr:</a></p><img border="0" src="diagram/PresenceExpr.png" height="81" width="279" usemap="#PresenceExpr.map"><map name="PresenceExpr.map"><area shape="rect" coords="159,1,249,33" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#PresenceExpr" title="PresenceExpr" shape="rect">PresenceExpr</a></div>
+               
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( 'present' | 'absent' ) <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="SimpleExpr" shape="rect">SimpleExpr:</a></p><img border="0" src="diagram/SimpleExpr.png" height="565" width="239" usemap="#SimpleExpr.map"><map name="SimpleExpr.map"><area shape="rect" coords="49,1,109,33" href="#Literal" title="Literal"><area shape="rect" coords="95,45,143,77" href="#Expr" title="Expr"><area shape="rect" coords="49,89,97,121" href="#Path" title="Path"><area shape="rect" coords="49,133,113,165" href="#Record" title="Record"><area shape="rect" coords="49,177,105,209" href="#Match" title="Match"><area shape="rect" coords="49,221,103,253" href="#Patch" title="Patch"><area shape="rect" coords="49,265,107,297" href="#Merge" title="Merge"><area shape="rect" coords="49,309,107,341" href="#FnCall" title="FnCall"><area shape="rect" coords="49,353,89,385" href="#For" title="For"><area shape="rect" coords="49,397,89,429" href="#Let" title="Let"><area shape="rect" coords="49,441,105,473" href="#Const" title="Const"><area shape="rect" coords="49,485,99,517" href="#Drop" title="Drop"><area shape="rect" coords="49,529,97,561" href="#Emit" title="Emit"></map><p>
          
          <div class="ebnf"><code>
                
@@ -343,6 +357,8 @@
                
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Let" title="Let" shape="rect">Let</a></div>
                
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Const" title="Const" shape="rect">Const</a></div>
+               
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Drop" title="Drop" shape="rect">Drop</a></div>
                
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a href="#Emit" title="Emit" shape="rect">Emit</a></div></code></div>
@@ -351,8 +367,9 @@
       <p>referenced by:
          
          <ul>
+            <li><a href="#Const" title="Const" shape="rect">Const</a></li>
             <li><a href="#Let" title="Let" shape="rect">Let</a></li>
-            <li><a href="#NotExpr" title="NotExpr" shape="rect">NotExpr</a></li>
+            <li><a href="#PresenceExpr" title="PresenceExpr" shape="rect">PresenceExpr</a></li>
             <li><a href="#RecordPatternFields" title="RecordPatternFields" shape="rect">RecordPatternFields</a></li>
          </ul>
          </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Literal" shape="rect">Literal:</a></p><img border="0" src="diagram/Literal.png" height="257" width="173" usemap="#Literal.map"><map name="Literal.map"><area shape="rect" coords="49,45,97,77" href="#Bool" title="Bool"><area shape="rect" coords="49,89,123,121" href="#INTEGER" title="INTEGER"><area shape="rect" coords="49,133,107,165" href="#FLOAT" title="FLOAT"><area shape="rect" coords="49,177,107,209" href="#String" title="String"><area shape="rect" coords="49,221,103,253" href="#Array" title="Array"></map><p>
@@ -432,6 +449,18 @@
          <div class="ebnf"><code>
                
                <div><a href="#Let" title="Let" shape="rect">Let</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= 'let' <a href="#Path" title="Path" shape="rect">Path</a> '=' <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
+         </p>
+      
+      <p>referenced by:
+         
+         <ul>
+            <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
+         </ul>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="Const" shape="rect">Const:</a></p><img border="0" src="diagram/Const.png" height="37" width="343" usemap="#Const.map"><map name="Const.map"><area shape="rect" coords="105,1,153,33" href="#Path" title="Path"><area shape="rect" coords="223,1,313,33" href="#SimpleExpr" title="SimpleExpr"></map><p>
+         
+         <div class="ebnf"><code>
+               
+               <div><a href="#Const" title="Const" shape="rect">Const</a>&nbsp;&nbsp;&nbsp;&nbsp;::= 'const' <a href="#Path" title="Path" shape="rect">Path</a> '=' <a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></div></code></div>
          </p>
       
       <p>referenced by:
@@ -643,13 +672,13 @@
          <ul>
             <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
          </ul>
-         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="PatchOperation" shape="rect">PatchOperation:</a></p><img border="0" src="diagram/PatchOperation.png" height="257" width="425" usemap="#PatchOperation.map"><map name="PatchOperation.map"><area shape="rect" coords="195,1,227,33" href="#Id" title="Id"><area shape="rect" coords="327,1,375,33" href="#Expr" title="Expr"><area shape="rect" coords="125,221,157,253" href="#Id" title="Id"></map><p>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="PatchOperation" shape="rect">PatchOperation:</a></p><img border="0" src="diagram/PatchOperation.png" height="257" width="441" usemap="#PatchOperation.map"><map name="PatchOperation.map"><area shape="rect" coords="195,1,243,33" href="#Expr" title="Expr"><area shape="rect" coords="343,1,391,33" href="#Expr" title="Expr"><area shape="rect" coords="125,221,157,253" href="#Id" title="Id"></map><p>
          
          <div class="ebnf"><code>
                
                <div><a href="#PatchOperation" title="PatchOperation" shape="rect">PatchOperation</a></div>
                
-               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( ( 'insert' | 'upsert' | 'update' | 'merge' ) <a href="#Id" title="Id" shape="rect">Id</a> | 'merge' ) '=&gt;' <a href="#Expr" title="Expr" shape="rect">Expr</a></div>
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= ( ( 'insert' | 'upsert' | 'update' | 'merge' ) <a href="#Expr" title="Expr" shape="rect">Expr</a> | 'merge' ) '=&gt;' <a href="#Expr" title="Expr" shape="rect">Expr</a></div>
                
                <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 'erase' <a href="#Id" title="Id" shape="rect">Id</a></div></code></div>
          </p>
@@ -723,6 +752,7 @@
       <p>referenced by:
          
          <ul>
+            <li><a href="#Const" title="Const" shape="rect">Const</a></li>
             <li><a href="#Let" title="Let" shape="rect">Let</a></li>
             <li><a href="#SimpleExpr" title="SimpleExpr" shape="rect">SimpleExpr</a></li>
          </ul>
@@ -813,13 +843,13 @@
          <ul>
             <li><a href="#TestExpr" title="TestExpr" shape="rect">TestExpr</a></li>
          </ul>
-         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_ESCAPE" shape="rect">TEST_ESCAPE:</a></p><img border="0" src="diagram/TEST_ESCAPE.png" height="81" width="175"><p>
+         </p><br clear="none"><p style="font-size: 14px; font-weight:bold"><a name="TEST_ESCAPE" shape="rect">TEST_ESCAPE:</a></p><img border="0" src="diagram/TEST_ESCAPE.png" height="125" width="175"><p>
          
          <div class="ebnf"><code>
                
                <div><a href="#TEST_ESCAPE" title="TEST_ESCAPE" shape="rect">TEST_ESCAPE</a></div>
                
-               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '\' [|\]</div></code></div>
+               <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;::= '\' [\n|]</div></code></div>
          </p>
       
       <p>referenced by:

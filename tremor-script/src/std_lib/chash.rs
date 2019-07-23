@@ -34,7 +34,8 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         tremor_fn!(chash::sorted_serialize(_context, _data) {
             let mut d: Vec<u8> = Vec::new();
             sorted_serialize_(_data, &mut d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
-            Ok(Value::String(String::from_utf8(d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Encountered invalid UTF8 in serialisation".to_string()})?))
+            Ok(Value::String(String::from_utf8(d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Encountered invalid UTF8 in serialisation".to_string()})?.into()
+            ))
         }),
     );
 }
@@ -87,10 +88,10 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> io::Result<()> {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{json, BorrowedValue as Value, OwnedValue};
+    use simd_json::{json, BorrowedValue as Value};
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 

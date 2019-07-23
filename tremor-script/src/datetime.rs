@@ -11,25 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
 
-use crate::pos::*;
+use crate::errors::*;
+use chrono::NaiveDateTime;
 
-#[derive(Debug, PartialEq)]
-pub enum NormalizedSegment {
-    FieldRef {
-        id: String,
-        start: Location,
-        end: Location,
-    },
-    Index {
-        idx: usize,
-        start: Location,
-        end: Location,
-    },
-    Range {
-        range_start: usize,
-        range_end: usize,
-        start: Location,
-        end: Location,
-    },
+pub fn _parse(datetime: &str, input_fmt: &str) -> Result<u64> {
+    Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
+        .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
+        .timestamp_nanos() as u64)
 }

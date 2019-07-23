@@ -1,6 +1,6 @@
 test:
   stage: test
-  image: wayfair/tremor/rust:1.35.0
+  image: wayfair/tremor/ci:1.36.0c
   when: always
   # cache:
   #   paths:
@@ -13,6 +13,7 @@ test:
     - make chk_unwrap_ci
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
+    - source /opt/rh/devtoolset-8/enable
     - cargo test --all-features --all
     - cargo clippy --all-features --all
     #- cp target/debug/native/php-src/libs/* /lib64
@@ -20,7 +21,7 @@ test:
 
 api-tests:
   stage: test
-  image: wayfair/tremor/ci:1.35.0
+  image: wayfair/tremor/ci:1.36.0c
   when: always
   # cache:
   #   paths:
@@ -31,6 +32,7 @@ api-tests:
   script:
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
+    - source /opt/rh/devtoolset-8/enable
     # we need to translate the api yaml
     - ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
     - cargo build -p tremor-server -p tremor-tool

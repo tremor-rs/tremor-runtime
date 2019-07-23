@@ -15,7 +15,6 @@
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use regex::Regex;
-use simd_json::OwnedValue;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
@@ -24,7 +23,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
-                Ok(OwnedValue::String(re.replace(input, to).into()))
+                Ok(Value::String(re.replace(input, to).to_string().into()))
             }),
         )
         .insert(
@@ -32,21 +31,21 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
-                Ok(OwnedValue::String(re.replace_all(input, to).into()))
+                Ok(Value::String(re.replace_all(input, to).to_string().into()))
             }),
         )
         .insert(
             tremor_fn! (re::is_match(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
-                Ok(OwnedValue::Bool(re.is_match(input)))
+                Ok(Value::Bool(re.is_match(input)))
             }),
         )
         .insert(
             tremor_fn! (re::split(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
-                Ok(OwnedValue::Array(re.split(input).map(OwnedValue::from).collect()))
+                Ok(Value::Array(re.split(input).map(|v| Value::from(v.to_string())).collect()))
             }),
         );
 }
@@ -54,10 +53,10 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
 

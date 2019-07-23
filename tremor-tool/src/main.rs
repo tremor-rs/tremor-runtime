@@ -229,9 +229,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
 
         match codec.decode(l.as_bytes().to_vec()) {
             Ok(ref json) => {
-                let m = tremor_script::LocalMap::new();
-                let mut global_map =
-                    simd_json::borrowed::Value::Object(tremor_script::LocalMap::new());
+                let mut global_map = simd_json::borrowed::Value::Object(hashmap! {});
                 #[allow(mutable_transmutes)]
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let mut unwind_event: &mut simd_json::borrowed::Value =
@@ -240,14 +238,14 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
                     Ok(_result) => {
                         println!(
                             "{}",
-                            serde_json::json!({"status": true, "data": l, "meta": m, "line": num, "result": _result})
+                            serde_json::json!({"status": true, "data": l, "meta": global_map, "line": num, "result": _result})
                         );
                     }
                     Err(reason) => {
                         let err_str = reason.to_string();
                         println!(
                             "{}",
-                            serde_json::json!({"status": false, "data": l, "error": err_str, "meta": m, "line": num})
+                            serde_json::json!({"status": false, "data": l, "error": err_str, "meta": global_map, "line": num})
                         );
                     }
                 };

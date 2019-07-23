@@ -24,6 +24,7 @@ use codespan::ColumnIndex;
 use codespan::LineIndex;
 use codespan::Span;
 use lalrpop_util;
+use std::borrow::Cow;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -121,7 +122,7 @@ pub enum Token<'input> {
     LineToken(usize),
 
     // Path
-    Ident(String, bool),
+    Ident(Cow<'input, str>, bool),
     Dollar,
     Dot,
 
@@ -130,12 +131,13 @@ pub enum Token<'input> {
     BoolLiteral(bool),
     IntLiteral(i64),
     FloatLiteral(f64, String),
-    StringLiteral(String),
+    StringLiteral(Cow<'input, str>),
     TestLiteral(usize, Vec<String>),
     HereDoc(usize, Vec<String>),
 
     // Keywords
     Let,
+    Const,
     Match,
     Case,
     Of,
@@ -146,6 +148,7 @@ pub enum Token<'input> {
     Upsert,
     Update,
     Erase,
+    //Move,
     Merge,
     Drop,
     Default,
@@ -237,6 +240,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::End => true,
             Token::Fun => true,
             Token::Let => true,
+            Token::Const => true,
             Token::Case => true,
             Token::Of => true,
             Token::When => true,
@@ -248,6 +252,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Upsert => true,
             Token::Update => true,
             Token::Erase => true,
+            //Token::Move => true,
             Token::Merge => true,
             Token::For => true,
             Token::Event => true,
@@ -367,9 +372,11 @@ impl<'input> fmt::Display for Token<'input> {
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
-            Token::StringLiteral(value) => {
-                write!(f, "{}", simd_json::OwnedValue::from(value).to_string())
-            }
+            Token::StringLiteral(value) => write!(
+                f,
+                "{}",
+                simd_json::OwnedValue::from(value.to_string()).to_string()
+            ),
             Token::HereDoc(indent, lines) => {
                 writeln!(f, r#"""""#)?;
                 let space = String::from(" ");
@@ -397,12 +404,14 @@ impl<'input> fmt::Display for Token<'input> {
             Token::BoolLiteral(value) => write!(f, "{}", value),
             Token::BadToken(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
+            Token::Const => write!(f, "const"),
             Token::Match => write!(f, "match"),
             Token::Patch => write!(f, "patch"),
             Token::Insert => write!(f, "insert"),
             Token::Upsert => write!(f, "upsert"),
             Token::Update => write!(f, "update"),
             Token::Erase => write!(f, "erase"),
+            //Token::Move => write!(f, "move"),
             Token::Merge => write!(f, "merge"),
             Token::For => write!(f, "for"),
             Token::Event => write!(f, "event"),
@@ -727,6 +736,7 @@ impl<'input> Lexer<'input> {
         let (end, ident) = self.take_while(start, is_ident_continue);
 
         let token = match ident {
+            "const" => Token::Const,
             "let" => Token::Let,
             "match" => Token::Match,
             "end" => Token::End,
@@ -741,6 +751,7 @@ impl<'input> Lexer<'input> {
             "upsert" => Token::Upsert,
             "update" => Token::Update,
             "erase" => Token::Erase,
+            //"move" => Token::Move,
             "merge" => Token::Merge,
             "for" => Token::For,
             "event" => Token::Event,
@@ -753,7 +764,7 @@ impl<'input> Lexer<'input> {
             "not" => Token::Not,
             "drop" => Token::Drop,
             "emit" => Token::Emit,
-            src => Token::Ident(src.to_string(), false),
+            src => Token::Ident(src.into(), false),
         };
 
         Ok(spanned2(start, end, token))
@@ -826,11 +837,21 @@ impl<'input> Lexer<'input> {
         loop {
             match self.bump() {
                 Some((mut end, '`')) => {
-                    let token = Token::Ident(string, true);
                     // we got to bump end by one so we claim the tailing `"`
+                    let e = end;
+                    let mut s = start;
+                    s.column.0 += 1;
+                    s.absolute.0 += 1;
                     end.column.0 += 1;
                     end.absolute.0 += 1;
-                    return Ok(spanned2(start, end, token));
+                    if let Some(slice) = self.slice(s, e) {
+                        let token = Token::Ident(slice.into(), true);
+                        return Ok(spanned2(start, end, token));
+                    } else {
+                        // Invalid start end case :(
+                        let token = Token::Ident(string.into(), true);
+                        return Ok(spanned2(start, end, token));
+                    }
                 }
                 Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedIdentLiteral(
@@ -886,7 +907,8 @@ impl<'input> Lexer<'input> {
                 // We had two quotes followed by something not a quote so
                 // it is an empty string.
                 _ => {
-                    let token = Token::StringLiteral(string);
+                    //TODO :make slice
+                    let token = Token::StringLiteral(string.into());
                     end.column.0 += 1;
                     end.absolute.0 += 1;
                     Ok(spanned2(start, end, token))
@@ -896,7 +918,7 @@ impl<'input> Lexer<'input> {
                 if let Some(c) = self.escape_code(&string, start)? {
                     string.push(c);
                 };
-                self.qs(start, end, string)
+                self.qs(start, end, true, string)
             }
             Some((end, '\n')) => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, end)).expand_lines(2),
@@ -906,7 +928,7 @@ impl<'input> Lexer<'input> {
             .into()),
             Some((end, ch)) => {
                 string.push(ch);
-                self.qs(start, end, string)
+                self.qs(start, end, false, string)
             }
             None => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, start)).expand_lines(2),
@@ -960,21 +982,36 @@ impl<'input> Lexer<'input> {
         &mut self,
         start: Location,
         mut end: Location,
+        mut has_escapes: bool,
         mut string: String,
     ) -> Result<TokenSpan<'input>> {
         loop {
             match self.bump() {
                 Some((e, '\\')) => {
+                    has_escapes = true;
                     if let Some(c) = self.escape_code(&string, start)? {
                         string.push(c);
                     };
                     end = e;
                 }
                 Some((mut end, '"')) => {
-                    let token = Token::StringLiteral(string);
                     // we got to bump end by one so we claim the tailing `"`
+                    let e = end;
+                    let mut s = start;
+                    s.column.0 += 1;
+                    s.absolute.0 += 1;
                     end.column.0 += 1;
                     end.absolute.0 += 1;
+                    let token = if has_escapes {
+                        // The string was modified so we can't use the slice
+                        Token::StringLiteral(string.into())
+                    } else if let Some(slice) = self.slice(s, e) {
+                        Token::StringLiteral(slice.into())
+                    } else {
+                        // Invalid start end case :(
+                        Token::StringLiteral(string.into())
+                    };
+
                     return Ok(spanned2(start, end, token));
                 }
                 Some((end, '\n')) => {
@@ -1040,7 +1077,6 @@ impl<'input> Lexer<'input> {
                     end.absolute.0 += 1;
                     end.column.0 += 1;
                     let indent = indentation(&strings);
-                    dbg!(indent);
                     let strings = strings
                         .iter()
                         .map(|s| {
@@ -1409,16 +1445,16 @@ mod tests {
     fn paths() {
         lex_ok! {
             "  hello-hahaha8ABC ",
-            "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello-hahaha8ABC".to_string(), false),
+            "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello-hahaha8ABC".into(), false),
         };
         lex_ok! {
-            "  .florp ", "  ~ " => Token::Dot, "   ~~~~~ " => Token::Ident("florp".to_string(), false),
+            "  .florp ", "  ~ " => Token::Dot, "   ~~~~~ " => Token::Ident("florp".into(), false),
         }
         lex_ok! {
-            "  $borp ", "  ~ " => Token::Dollar, "   ~~~~~ " => Token::Ident("borp".to_string(), false),
+            "  $borp ", "  ~ " => Token::Dollar, "   ~~~~~ " => Token::Ident("borp".into(), false),
         }
         lex_ok! {
-            "  $`borp`", "  ~ " => Token::Dollar, "   ~~~~~~~ " => Token::Ident("borp".to_string(), true),
+            "  $`borp`", "  ~ " => Token::Dollar, "   ~~~~~~~ " => Token::Ident("borp".into(), true),
         }
     }
 
@@ -1495,18 +1531,18 @@ mod tests {
 
     #[test]
     fn string() {
-        lex_ok! { r#" "\n" "#, " ~~~~ " => Token::StringLiteral("\n".to_string()), }
-        lex_ok! { r#" "\r" "#, " ~~~~  " => Token::StringLiteral("\r".to_string()), }
-        lex_ok! { r#" "\t" "#, " ~~~  " => Token::StringLiteral("\t".to_string()), }
-        lex_ok! { r#" "\\" "#, " ~~~~  " => Token::StringLiteral("\\".to_string()), }
-        lex_ok! { r#" "\"" "#, " ~~~~ " => Token::StringLiteral("\"".to_string()), }
-        lex_ok! { r#" "\"\"" "#, " ~~~~~ " => Token::StringLiteral("\"\"".to_string()), }
+        lex_ok! { r#" "\n" "#, " ~~~~ " => Token::StringLiteral("\n".into()), }
+        lex_ok! { r#" "\r" "#, " ~~~~  " => Token::StringLiteral("\r".into()), }
+        lex_ok! { r#" "\t" "#, " ~~~  " => Token::StringLiteral("\t".into()), }
+        lex_ok! { r#" "\\" "#, " ~~~~  " => Token::StringLiteral("\\".into()), }
+        lex_ok! { r#" "\"" "#, " ~~~~ " => Token::StringLiteral("\"".into()), }
+        lex_ok! { r#" "\"\"" "#, " ~~~~~ " => Token::StringLiteral("\"\"".into()), }
         lex_ok! {
             r#" "\"\"""\"\"" "#,
-            " ~~~~~ " => Token::StringLiteral("\"\"".to_string()),
-            "       ~~~~~ " => Token::StringLiteral("\"\"".to_string()),
+            " ~~~~~ " => Token::StringLiteral("\"\"".into()),
+            "       ~~~~~ " => Token::StringLiteral("\"\"".into()),
         }
-        lex_ok! { r#" "\\\"" "#, " ~~~~ " => Token::StringLiteral("\\\"".to_string()), }
+        lex_ok! { r#" "\\\"" "#, " ~~~~ " => Token::StringLiteral("\\\"".into()), }
         //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
     }
 }

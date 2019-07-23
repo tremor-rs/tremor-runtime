@@ -61,8 +61,8 @@ lazy_static! {
         use tremor_script::registry::FResult;
         let mut registry: Registry<TremorContext> = tremor_script::registry();
         #[allow(unused_variables)]
-        fn ingest_ns(ctx: &TremorContext, _args: &[&BorrowedValue]) -> FResult<OwnedValue> {
-            Ok(OwnedValue::I64(ctx.ingest_ns as i64))
+        fn ingest_ns<'event>(ctx: &TremorContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
+            Ok(BorrowedValue::I64(ctx.ingest_ns as i64))
         }
         registry
             .insert(TremorFnWrapper {

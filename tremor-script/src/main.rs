@@ -14,6 +14,7 @@
 #![recursion_limit = "265"]
 
 mod ast;
+mod datetime;
 mod errors;
 pub mod grok;
 #[allow(unused, dead_code)]
@@ -26,14 +27,16 @@ mod parser;
 #[allow(unused, dead_code)]
 mod pos;
 mod registry;
-mod runtime;
+mod script;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
+#[macro_use]
+extern crate rental;
 
 use crate::highlighter::{Highlighter, TermHighlighter};
-use crate::interpreter::Return;
+use crate::script::{Return, Script};
 use clap::{App, Arg};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
@@ -46,7 +49,7 @@ extern crate serde_derive;
 
 pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct FakeContext {}
 impl Context for FakeContext {}
 
@@ -115,7 +118,7 @@ fn main() {
 
     let reg: Registry<FakeContext> = registry::registry();
 
-    match interpreter::Script::parse(&raw, &reg) {
+    match Script::parse(&raw, &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable
@@ -125,20 +128,18 @@ fn main() {
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
-                interpreter::Script::<()>::highlight_script_with(&raw, &mut h)
-                    .expect("Highlighter failed");
+                Script::<()>::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
             }
             if matches.is_present("print-ast") {
-                let ast =
-                    serde_json::to_string_pretty(&runnable.script).expect("Failed to render AST");
+                let ast = serde_json::to_string_pretty(&runnable.script.suffix())
+                    .expect("Failed to render AST");
                 println!();
                 let mut h = TermHighlighter::new();
-                interpreter::Script::<()>::highlight_script_with(&ast, &mut h)
-                    .expect("Highlighter failed");
+                Script::<()>::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
             }
             if matches.is_present("print-ast-raw") {
-                let ast =
-                    serde_json::to_string_pretty(&runnable.script).expect("Failed to render AST");
+                let ast = serde_json::to_string_pretty(&runnable.script.suffix())
+                    .expect("Failed to render AST");
                 println!();
                 println!("{}", ast);
             }
@@ -169,7 +170,7 @@ fn main() {
                 simd_json::borrowed::Value::Object(hashmap! {})
             };
 
-            let mut global_map = Value::Object(interpreter::LocalMap::new());
+            let mut global_map = Value::Object(hashmap! {});
             let ctx = FakeContext {};
             let _expr = Value::Null;
             let expr = runnable.run(&ctx, &mut event, &mut global_map);
@@ -224,7 +225,7 @@ fn main() {
         // Handle and print compile time errors.
         Err(e) => {
             let mut h = TermHighlighter::new();
-            if let Err(e) = interpreter::Script::<()>::format_error_from_script(&raw, &mut h, &e) {
+            if let Err(e) = Script::<()>::format_error_from_script(&raw, &mut h, &e) {
                 dbg!(e);
             };
             std::process::exit(1);

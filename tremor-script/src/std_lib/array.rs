@@ -14,39 +14,40 @@
 
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use simd_json::{BorrowedValue, OwnedValue};
+use simd_json::BorrowedValue as Value;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
         .insert(tremor_fn! (array::len(_context, _input: Array) {
-            Ok(OwnedValue::from(_input.len() as i64))
+            Ok(Value::from(_input.len() as i64))
         }))
         .insert(tremor_fn! (array::is_empty(_context, _input: Array) {
-            Ok(OwnedValue::from(_input.is_empty()))
+            Ok(Value::from(_input.is_empty()))
         }))
         .insert(tremor_fn! (array::contains(_context, _input, _contains) {
             match _input {
-                BorrowedValue::Array(input) => Ok(OwnedValue::from(input.contains(&_contains))),
+                Value::Array(input) => Ok(Value::from(input.contains(&_contains))),
                 _ => Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
             }
         }))
         .insert(tremor_fn! (array::push(_context, _input, _value) {
             match _input {
-                BorrowedValue::Array( input) => {
-                    // TODO: This is ugly
-                    let mut input: Vec<OwnedValue> = input.iter().map(|e| e.clone().into()).collect();
-                    let v: OwnedValue = (*_value).clone().into();
-                    input.push(v);
-                    Ok(OwnedValue::Array(input))
+                Value::Array(input) => {
+                    // We clone because we do NOT want to mutate the value
+                    // that was passed in
+                    let mut output = input.clone();
+                    let v: Value = (*_value).clone();
+                    output.push(v);
+                    Ok(Value::Array(output))
                 }
                 _ => Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
             }
         }))
         .insert(tremor_fn! (array::unzip(_context, _input: Array) {
-                let r: FResult<Vec<(OwnedValue, OwnedValue)>> = _input.iter().map(|a| match a {
-                    BorrowedValue::Array(a) => if a.len() == 2 {
-                        let second: OwnedValue = a[0].clone().into();
-                        let first: OwnedValue = a[1].clone().into();
+                let r: FResult<Vec<(Value, Value)>> = _input.iter().map(|a| match a {
+                    Value::Array(a) => if a.len() == 2 {
+                        let second: Value = a[0].clone();
+                        let first: Value = a[1].clone();
                         Ok((first, second))
 
                     } else {
@@ -55,9 +56,9 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                     other => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", other)})
                 }).collect();
                 let (r, l): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
-                Ok(OwnedValue::Array(vec![
-                    OwnedValue::Array(l),
-                    OwnedValue::Array(r),
+                Ok(Value::Array(vec![
+                    Value::Array(l),
+                    Value::Array(r),
                 ]))
         }))
         .insert(tremor_fn!(array::zip(_context, _left: Array, _right: Array) {
@@ -65,52 +66,52 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())});
             };
             // TODO: Dear rust this is stupi! I don't want to call to_owned I just want consume values
-            Ok(OwnedValue::Array(
+            Ok(Value::Array(
                 _left.iter()
                     .zip(_right.iter())
-                    .map(|(l, r)| OwnedValue::Array(vec![l.clone().into(), r.clone().into()]))
+                    .map(|(l, r)| Value::Array(vec![l.clone(), r.clone()]))
                     .collect(),
             ))
         }))
         .insert(
             tremor_fn!(array::flatten(_context, _input) {
-                Ok(OwnedValue::Array(flatten_value(_input)))
+                Ok(Value::Array(flatten_value(_input)))
             }))
         .insert(
             tremor_fn!(array::join(_context, _input: Array, _sep: String) {
                 let input: Vec<String> = _input.iter().map(ToString::to_string).collect();
-                Ok(OwnedValue::from(input.join(_sep)))
+                Ok(Value::from(input.join(_sep)))
             }),
         )
         .insert(tremor_fn!(array::coalesce(_context, _input: Array) {
-            Ok(OwnedValue::Array(_input.iter().filter_map(|v| match v {
-                BorrowedValue::Null => None,
-                other => Some(other.clone().into())
+            Ok(Value::Array(_input.iter().filter_map(|v| match v {
+                Value::Null => None,
+                other => Some(other.clone())
             }).collect()))
         }));
 }
 
 //TODO this is not very nice
-fn flatten_value(v: &BorrowedValue) -> Vec<OwnedValue> {
+fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
     match v {
-        BorrowedValue::Array(a) => {
+        Value::Array(a) => {
             let mut r = Vec::with_capacity(a.len());
             for e in a {
                 r.append(&mut flatten_value(e))
             }
             r
         }
-        other => vec![other.clone().into()],
+        other => vec![other.clone()],
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
     #[test]
@@ -206,11 +207,11 @@ mod test {
         ]);
         assert_val!(
             f(&[&v1, &v2]),
-            OwnedValue::Array(vec![
-                OwnedValue::Array(vec![OwnedValue::from("this"), OwnedValue::from("cake")]),
-                OwnedValue::Array(vec![OwnedValue::from("is"), OwnedValue::from("really")]),
-                OwnedValue::Array(vec![OwnedValue::from("a"), OwnedValue::from("good")]),
-                OwnedValue::Array(vec![OwnedValue::from("test"), OwnedValue::from("cake")]),
+            Value::Array(vec![
+                Value::Array(vec![Value::from("this"), Value::from("cake")]),
+                Value::Array(vec![Value::from("is"), Value::from("really")]),
+                Value::Array(vec![Value::from("a"), Value::from("good")]),
+                Value::Array(vec![Value::from("test"), Value::from("cake")]),
             ])
         );
     }
@@ -226,18 +227,18 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![
-                OwnedValue::Array(vec![
-                    OwnedValue::from("this"),
-                    OwnedValue::from("is"),
-                    OwnedValue::from("a"),
-                    OwnedValue::from("test")
+            Value::Array(vec![
+                Value::Array(vec![
+                    Value::from("this"),
+                    Value::from("is"),
+                    Value::from("a"),
+                    Value::from("test")
                 ]),
-                OwnedValue::Array(vec![
-                    OwnedValue::from("cake"),
-                    OwnedValue::from("really"),
-                    OwnedValue::from("good"),
-                    OwnedValue::from("cake")
+                Value::Array(vec![
+                    Value::from("cake"),
+                    Value::from("really"),
+                    Value::from("good"),
+                    Value::from("cake")
                 ]),
             ])
         );
@@ -255,16 +256,16 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![
-                OwnedValue::from("this"),
-                OwnedValue::from("cake"),
-                OwnedValue::from("is"),
-                OwnedValue::from("really"),
-                OwnedValue::from("a"),
-                OwnedValue::from("good"),
-                OwnedValue::from("test"),
-                OwnedValue::from("cake"),
-                OwnedValue::from("!"),
+            Value::Array(vec![
+                Value::from("this"),
+                Value::from("cake"),
+                Value::from("is"),
+                Value::from("really"),
+                Value::from("a"),
+                Value::from("good"),
+                Value::from("test"),
+                Value::from("cake"),
+                Value::from("!"),
             ])
         );
     }
@@ -288,16 +289,16 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![
-                OwnedValue::from("this"),
-                OwnedValue::from("cake"),
-                OwnedValue::from("is"),
-                OwnedValue::from("really"),
-                OwnedValue::from("a"),
-                OwnedValue::from("good"),
-                OwnedValue::from("test"),
-                OwnedValue::from("cake"),
-                OwnedValue::from("!"),
+            Value::Array(vec![
+                Value::from("this"),
+                Value::from("cake"),
+                Value::from("is"),
+                Value::from("really"),
+                Value::from("a"),
+                Value::from("good"),
+                Value::from("test"),
+                Value::from("cake"),
+                Value::from("!"),
             ])
         );
     }

@@ -43,12 +43,10 @@ pipeline:
             #  rename => { "full_message" => "message" }
             #}
             
-            let event.message = event.full_message;
-            
-            #mutate {
-            #    add_field => [ "logstash_transform", "<%= @fqdn %>" ]
-            #}
-            let event.tremor = system::hostname();
+            let event = patch event of
+              upsert "message" => event.full_message,
+              upsert "tremor" => system::hostname()
+            end;
             
             # require '/etc/logstash/utils/field_formatter'
             # FieldFormatter.load_gelf_field_lists()
@@ -58,7 +56,7 @@ pipeline:
             # once: execute the following expression during compile time?
             # system::evel(<code_path>, <metadata>, <event_data>);
             # let normalized_fields_mapping = once system::eval("/path/to/normalized_fields_mapping.json", {}, {}); TODO
-            let normalized_fields_mapping = {
+            const normalized_fields_mapping = {
               "_action": "action",
               "AjaxRequest": "ajax_request",
               "Application": "application",
@@ -205,16 +203,17 @@ pipeline:
             # contained|["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]|
             
             
-            let event.log_level = match event  of
-              # If we have log level set and log level is one of the known log levels we are good
-              case r = %{ log_level ~= re|| } when array::contains(["DEBUG", "INFO", "WARN", "ERROR", "FATAL"], r.log_level) => r.log_level
-              ## with contains bar
-              # case r = %{ log_level = log_level ~= contained|["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]| } => r.log_level
-              # If short message is set and contains a known log level use that
-              # case _ when re::is_match("(\\d+\\s)*(DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message) => re::replace("(\\d+\\s)*(?P<loglevel>DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message, "$loglevel");
-              case r = %{ log_level = short_message ~= re|(\\d+\\s)*(?P<log_level>DEBUG\|INFO\|WARN\|ERROR\|FATAL)(_LOG_MESSAGE)| } => r.log_level.log_level
-              # default to INFO
-              default => "INFO"
+            let event = merge event of match event of
+                # If we have log level set and log level is one of the known log levels we are good
+                case r = %{ present log_level } when array::contains(["DEBUG", "INFO", "WARN", "ERROR", "FATAL"], r.log_level) => {}
+                ## with contains bar
+                # case r = %{ log_level = log_level ~= contained|["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]| } => r.log_level
+                # If short message is set and contains a known log level use that
+                # case _ when re::is_match("(\\d+\\s)*(DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message) => re::replace("(\\d+\\s)*(?P<loglevel>DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message, "$loglevel");
+                case r = %{ short_message ~= re|(\\d+\\s)*(?P<log_level>DEBUG\|INFO\|WARN\|ERROR\|FATAL)(_LOG_MESSAGE)| } => r.short_message
+                # default to INFO
+                default => {"log_level": "INFO"}
+              end
             end;
             
             
@@ -236,14 +235,12 @@ pipeline:
             # or as a comprehension combining the two above.
             # assumption <array>[<key>] returns nil if key isn't present
             # TODO: nil vs null: now do we describe 'exists' ?
-            let old = event;
-            let event = {};
 
-            for old of
-              case (k, v) when (present normalized_fields_mapping[k]) => let event[normalized_fields_mapping[k]] = v
-              case (k, v) => let event[k] = v
-            end;
-            
+            let event = record::rename(event, normalized_fields_mapping);
+            #for normalized_fields_mapping of 
+            #  case (from, to) => let event = patch event of move from => to end
+            #end;
+
             # # create wf_* fields
             # FieldFormatter.update_wf_host_details(event)
             
@@ -319,83 +316,42 @@ pipeline:
             # 102 
             # 103   end
             
-            # extract ip and port
-            let event = merge event of match event of
-                               case r = %{hp = wf_host_ip ~= dissect|%{wf_host_ip}:%{wf_host_port}|} => r.hp
-                               default => {} # wf_host_port was already been set no need to update it
-                                end
-            end;
-            
-            # save current prod and datacenter
-            # TODO: what would happen of those are not set? become null?
-            let old_pod = match record::contains(event, "wf_pod") of
-              case true => event.wf_pod
-              default => null
-            end;
-            let old_dc = match record::contains(event, "wf_datacenter") of
-              case true => event.wf_datacenter
-              default => null
+
+            match event of
+              case r = %{wf_host_ip ~= dissect|%{wf_host_ip}:%{wf_host_port}|} => let event.wf_host_ip = r.wf_host_ip.wf_host_ip
+              default => null # wf_host_port was already been set no need to update it
             end;
             
             # set defaults;
             # re-set pod and datacenter even if they existed
             # Assumption: cidr/.../ => cidr match
-            let event = merge event of match {"wf_host_ip": event.wf_host_ip} of
-              # case cidr|10.22.0.0/17|    => {"wf_pod": "web01",     "wf_datacenter": "bo3"} TODO
-              case %{wf_host_ip ~= cidr|10.22.0.0/17|}    => {"wf_pod": "web01",     "wf_datacenter": "bo3"}
-              case %{wf_host_ip ~= cidr|10.21.0.0/17|}    => {"wf_pod": "sec01",     "wf_datacenter": "bo3"}
-              case %{wf_host_ip ~= cidr|10.224.0.0/16|}   => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
-              case %{wf_host_ip ~= cidr|10.225.0.0/17|}   => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
-              case %{wf_host_ip ~= cidr|10.225.128.0/17|} => {"wf_pod": "secbo1",    "wf_datacenter": "bo1"}
-              case %{wf_host_ip ~= cidr|10.60.0.0/17|}    => {"wf_pod": "web03",     "wf_datacenter": "se2"}
-              case %{wf_host_ip ~= cidr|10.61.0.0/17|}    => {"wf_pod": "sec03",     "wf_datacenter": "se2"}
-              case %{wf_host_ip ~= cidr|10.236.0.0/17|}   => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
-              case %{wf_host_ip ~= cidr|10.236.128.0/17|} => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
-              case %{wf_host_ip ~= cidr|10.237.0.0/17|}   => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
-              case %{wf_host_ip ~= cidr|10.238.0.0/16|}   => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
-              case %{wf_host_ip ~= cidr|10.237.128.0/17|} => {"wf_pod": "sec04",     "wf_datacenter": "ie2"}
-              case %{wf_host_ip ~= cidr|10.22.128.0/18|}  => {"wf_pod": "cit01",     "wf_datacenter": "bo3"}
-              case %{wf_host_ip ~= cidr|10.22.192.0/19|}  => {"wf_pod": "cit01",     "wf_datacenter": "bo3"}
-              case %{wf_host_ip ~= cidr|10.22.240.0/20|}  => {"wf_pod": "san01",     "wf_datacenter": "bo3"}
-              case %{wf_host_ip ~= cidr|10.24.0.0/16|}    => {"wf_pod": "dev01",     "wf_datacenter": "dev"}
-              case %{wf_host_ip ~= cidr|10.228.0.0/15|}   => {"wf_pod": "devbo1",    "wf_datacenter": "devbo1"}
-              case %{wf_host_ip ~= cidr|10.230.196.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.200.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.206.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.208.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.210.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.231.6.0/24|}   => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.134.0/24|} => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.136.0/24|} => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.230.138.0/24|} => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.231.128.0/24|} => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
-              case %{wf_host_ip ~= cidr|10.60.128.0/18|}  => {"wf_pod": "cit03",     "wf_datacenter": "se2"}
-              case %{wf_host_ip ~= cidr|10.60.192.0/19|}  => {"wf_pod": "cit03",     "wf_datacenter": "se2"}
-              case %{wf_host_ip ~= cidr|10.60.240.0/20|}  => {"wf_pod": "san03",     "wf_datacenter": "se2"}
-              case %{wf_host_ip ~= cidr|10.23.0.0/17|}    => {"wf_pod": "web02",     "wf_datacenter": "ep"}
-              case %{wf_host_ip ~= cidr|10.20.0.0/17|}    => {"wf_pod": "sec02",     "wf_datacenter": "ep"}
-              case %{wf_host_ip ~= cidr|10.11.0.0/16|}    => {"wf_pod": "ma2",       "wf_datacenter": "ma2"}
-              case %{wf_host_ip ~= cidr|10.28.0.0/16|}    => {"wf_pod": "ny1",       "wf_datacenter": "ny1"}
-              case %{wf_host_ip ~= cidr|10.248.0.0/16|}   => {"wf_pod": "se1",       "wf_datacenter": "se1"}
-              case %{wf_host_ip ~= cidr|10.249.0.0/17|}   => {"wf_pod": "se1",       "wf_datacenter": "se1"}
-              case %{wf_host_ip ~= cidr|10.249.128.0/18|} => {"wf_pod": "secse1",    "wf_datacenter": "se1"}
-              case %{wf_host_ip ~= cidr|10.249.192.0/19|} => {"wf_pod": "se1",       "wf_datacenter": "se1"}
-              # Defaults
-              default                    => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
-                                end
-            end;
-            
-            # reset old pod if it was already set
-            # How do de define 'not set'
-            match old_pod of
-              case null => null
-              default => let event.wf_pod = old_pod
-            end;
-            
-            # How do de define 'not set'
-            match old_dc of
-              case null => null
-              default => let event.wf_datacenter = old_dc
+            let event = merge event of match event of
+                case %{present wf_datacenter, present wf_pod}                                                                             => {} # don't overwrite existing settings
+                case %{wf_host_ip ~= cidr|10.225.128.0/17|}                                                                               => {"wf_pod": "secbo1",    "wf_datacenter": "bo1"}
+                case %{wf_host_ip ~= cidr|10.22.0.0/17|}                                                                                  => {"wf_pod": "web01",     "wf_datacenter": "bo3"}
+                case %{wf_host_ip ~= cidr|10.21.0.0/17|}                                                                                  => {"wf_pod": "sec01",     "wf_datacenter": "bo3"}
+                case %{wf_host_ip ~= cidr|10.22.128.0/18,10.22.192.0/19|}                                                                 => {"wf_pod": "cit01",     "wf_datacenter": "bo3"}
+                case %{wf_host_ip ~= cidr|10.22.240.0/20|}                                                                                => {"wf_pod": "san01",     "wf_datacenter": "bo3"}
+                case %{wf_host_ip ~= cidr|10.60.0.0/17|}                                                                                  => {"wf_pod": "web03",     "wf_datacenter": "se2"}
+                case %{wf_host_ip ~= cidr|10.61.0.0/17|}                                                                                  => {"wf_pod": "sec03",     "wf_datacenter": "se2"}
+                case %{wf_host_ip ~= cidr|10.60.128.0/18,10.60.192.0/19|}                                                                 => {"wf_pod": "cit03",     "wf_datacenter": "se2"}
+                case %{wf_host_ip ~= cidr|10.60.240.0/20|}                                                                                => {"wf_pod": "san03",     "wf_datacenter": "se2"}
+                case %{wf_host_ip ~= cidr|10.236.0.0/17,10.236.128.0/17,10.237.0.0/17,10.238.0.0/16|}                                     => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
+                case %{wf_host_ip ~= cidr|10.237.128.0/17|}                                                                               => {"wf_pod": "sec04",     "wf_datacenter": "ie2"}
+                case %{wf_host_ip ~= cidr|10.24.0.0/16|}                                                                                  => {"wf_pod": "dev01",     "wf_datacenter": "dev"}
+                case %{wf_host_ip ~= cidr|10.228.0.0/15|}                                                                                 => {"wf_pod": "devbo1",    "wf_datacenter": "devbo1"}
+                case %{wf_host_ip ~= cidr|10.230.196.0/24,10.230.200.0/24,10.230.206.0/24,10.230.208.0/24,10.230.210.0/24,10.231.6.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
+                case %{wf_host_ip ~= cidr|10.230.134.0/24,10.230.136.0/24,10.230.138.0/24,10.231.128.0/24|}                               => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
+                case %{wf_host_ip ~= cidr|10.23.0.0/17|}                                                                                  => {"wf_pod": "web02",     "wf_datacenter": "ep"}
+                case %{wf_host_ip ~= cidr|10.20.0.0/17|}                                                                                  => {"wf_pod": "sec02",     "wf_datacenter": "ep"}
+                case %{wf_host_ip ~= cidr|10.11.0.0/16|}                                                                                  => {"wf_pod": "ma2",       "wf_datacenter": "ma2"}
+                case %{wf_host_ip ~= cidr|10.28.0.0/16|}                                                                                  => {"wf_pod": "ny1",       "wf_datacenter": "ny1"}
+                case %{wf_host_ip ~= cidr|10.248.0.0/16,10.249.192.0/19,10.249.0.0/17|}                                                   => {"wf_pod": "se1",       "wf_datacenter": "se1"}
+                case %{wf_host_ip ~= cidr|10.249.128.0/18|}                                                                               => {"wf_pod": "secse1",    "wf_datacenter": "se1"}
+                #case %{wf_host_ip ~= cidr|10.224.0.0/16|}                                                                                => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
+                #case %{wf_host_ip ~= cidr|10.225.0.0/17|}                                                                                => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
+                default                                                                                                                   => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
+              end
             end;
             
             # # create slush
@@ -453,7 +409,7 @@ pipeline:
             
             # let store_field_types = once system::eval("/path/to/store_field_types.json", {}, {}); TODO
             
-            let stores_fields = {
+            const stores_fields = {
                 "@timestamp": "date",
                 "account_id": "string",
                 "action": "string",
@@ -534,7 +490,7 @@ pipeline:
                 "purest_resource": "string",
                 "query": "string",
                 "query_parameters": "string",
-                "query_time": "double",
+                "query_time": "float",
                 "redis_query_count": "string",
                 "request_uri": "string",
                 "script_filename": "string",
@@ -578,7 +534,7 @@ pipeline:
                 "x_distil_secure": "string"
               };
             
-            let purest_fields = {
+            const purest_fields = {
               "@timestamp": "date",
               "account_id": "string",
               "agent_id": "string",
@@ -629,7 +585,7 @@ pipeline:
               "port": "integer",
               "purest_resource": "string",
               "purest_service": "string",
-              "query_time": "double",
+              "query_time": "float",
               "request_uri": "string",
               "script_filename": "string",
               "script_name": "string",
@@ -656,7 +612,7 @@ pipeline:
               "worker_list": "string"
             };
             
-            let admin_fields = {
+            const admin_fields = {
               "@timestamp": "date",
               "account_id": "string",
               "action": "string",
@@ -716,7 +672,7 @@ pipeline:
               "previous_inventory": "string",
               "quantity": "integer",
               "query": "string",
-              "query_time": "double",
+              "query_time": "float",
               "request_uri": "string",
               "script_filename": "string",
               "script_name": "string",
@@ -745,7 +701,7 @@ pipeline:
               "worker_list": "string"
             };
             
-            let wms_fields = {
+            const wms_fields = {
               "@timestamp": "date",
               "action": "string",
               "app_open_duration": "integer",
@@ -803,10 +759,10 @@ pipeline:
               "purest_resource": "string",
               "purest_service": "string",
               "query": "string",
-              "query_time": "double",
+              "query_time": "float",
               "request_uri": "string",
               "rf_gun_request_controller_name": "string",
-              "rf_gun_request_elapsed_seconds": "double",
+              "rf_gun_request_elapsed_seconds": "float",
               "rf_gun_request_input_control_number": "string",
               "rf_gun_request_input_hu_id": "string",
               "rf_gun_request_input_load_id": "string",
@@ -844,7 +800,7 @@ pipeline:
               "zone": "string"
             };
             
-            let trns_fields = {
+            const trns_fields = {
               "@timestamp": "date",
               "action": "string",
               "application": "string",
@@ -899,7 +855,7 @@ pipeline:
               "po_num": "string",
               "purest_resource": "string",
               "query": "string",
-              "query_time": "double",
+              "query_time": "float",
               "script_filename": "string",
               "script_name": "string",
               "short_message": "string",
@@ -927,7 +883,7 @@ pipeline:
               "wf_sid": "string"
             };
             
-            let supply_chain_services_fields = {
+            const supply_chain_services_fields = {
               "@timestamp": "date",
               "account_id": "string",
               "action": "string",
@@ -1011,7 +967,7 @@ pipeline:
               "purest_resource": "string",
               "qty_list": "string",
               "query": "string",
-              "query_time": "double",
+              "query_time": "float",
               "requested_uri": "string",
               "requested_uri.string": "string",
               "rg_id": "string",
@@ -1051,7 +1007,7 @@ pipeline:
               "x_distil_secure": "string"
             };
             
-            let solr_fields = {
+            const solr_fields = {
               "@timestamp": "date",
               "application": "string",
               "collection": "string",
@@ -1082,7 +1038,7 @@ pipeline:
               "wf_sid": "string"
             };
             
-            let valid_fields = {
+            const valid_fields = {
               "@timestamp": "date",
               "account_id": "string",
               "action": "string",
@@ -1145,7 +1101,7 @@ pipeline:
               "php_tte_ms": "float",
               "purest_resource": "string",
               "query": "string",
-              "query_time": "double",
+              "query_time": "float",
               "script_filename": "string",
               "script_name": "string",
               "short_message": "string",
@@ -1188,7 +1144,8 @@ pipeline:
             # remove datatypes such as double and generalize to float
             # remove dataypte data as it is treated as striong
             
-            let valid_fields = match event of
+            
+            let fields = match event of
               case %{logger_topic == "WMS"} => wms_fields
               case %{logger_topic == "TRANS"} => trans_fields
               case %{present logger_topic} => valid_fields
@@ -1201,30 +1158,29 @@ pipeline:
               case %{application == "solrcloud"} => solr_fields
               default => valid_fields
             end;
-            
-            
-            let slush = {};
-            
+                        
+            let slush = {};            
+
             for event of
                # this is ugly but since we can't short circut with `and`, and
                # valid_fields[k] will error the execution we have to make a own clause
                # for it.
-               case (k, v) when (absent valid_fields[k]) => null
-               case (k, v) => match let d = {"k": k, "v": v, "e": valid_fields[k], "t": type::as_string(v)} of
-                 case %{} when (d.t == d.e) => let valid[k] = v, null
-                 case %{e == "ip", v ~= cidr ||} => let valid[k] = v, null
-                 case %{e == "date", t == "string"} => let valid[k] = v, null
-                 default => let slush[k] = v, null
-               end
+               case (k, v) when (present fields[k]) =>
+                  let t = type::as_string(v),
+                  match {"v": v, "e": fields[k], "t": t} of
+                    case %{e == t} => null
+                    case %{e == "date", t == "string"} => null
+                    case %{e == "ip", v ~= cidr ||} => null
+                    default => let event = patch event of erase k end, let slush[k] = v
+                  end
+               case (k, v) => null
             end;
+                        
+            let slush = json::encode(slush);
             
-            let event = valid;
-            
-            let slush = array::join(for slush of case (k, v) => string::format("{} = {}", k, v) end, "\n");
-            
-            let event.slush = match string::len(slush) > 10000 of
-              case true => string::substr(slush, 0, 10000)
-              default => slush
+            match string::len(slush) > 10000 of
+              case true => let event.slush = string::substr(slush, 0, 10000)
+              default => null
             end;
             
             # We dont' have the time function yet as we need to collect examples and see what functions are needed
@@ -1232,20 +1188,10 @@ pipeline:
             # event_time = DateTime.strptime(event_time, '%Y-%m-%dT%H:%M:%S%z').to_time.utc.to_i
             # event.set('start_timestamp', event_time)
             
-            let event.start_timestamp = datetime::parse(re::replace("\\.\\d+Z$", event["@timestamp"], "+00:00"), "%Y-%m-%dT%H:%M:%S%z");
+            # let event.start_timestamp = datetime::parse(re::replace("\\.\\d+Z$", event["@timestamp"], "+00:00"), "%Y-%m-%dT%H:%M:%S%z");
+            let event.start_timestamp = datetime::parse(event["@timestamp"], "%Y-%m-%dT%H:%M:%S%.3fZ") / 100;
              
-            event
-            # Do we even need that? And what does it do?
-            # <%-
-            # if (@throttle_settings['present'])
-            # gen_throttle_key_code = 'throttle_fields = ['
-            # @throttle_settings['fields'].each do |field|
-            # gen_throttle_key_code += "'" + field + "',"
-            # end
-            # gen_throttle_key_code += "] \n                "
-            # gen_throttle_key_code += "FieldFormatter.set_throttle_key(event, throttle_fields)"
-            # end
-            # -%>           
+            event         
 
     links:
       in: [ runtime ]

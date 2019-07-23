@@ -15,25 +15,30 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
-use crate::ast;
-use crate::interpreter;
-use crate::registry;
 use crate::registry::Context;
-use simd_json::borrowed::{Map, Value};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Debug)]
 struct FakeContext {}
 impl Context for FakeContext {}
 
 fn eval(src: &str) -> String {
+    /*
+    use crate::ast;
+    use crate::interpreter;
+    use crate::registry;
+    use simd_json::borrowed::{Map, Value};
+
     let reg: registry::Registry<FakeContext> = registry::registry();
     let mut helper = ast::Helper::new(&reg);
     let script: ast::Script1 = serde_json::from_str(src).expect("");
     let script: ast::Script<_> = script.up(&mut helper).expect("");
 
+    let script = interpreter::rentals::Script::new(Box::new(src.to_string()), |_| script);
+
     let runnable = interpreter::Script {
         script,
         source: String::new(),
+        locals: helper.locals.clone(),
         warnings: helper.into_warnings(),
     };
     // let runnable: interpreter::Script = interpreter::Script::parse(src, &reg).expect("parse failed");
@@ -46,6 +51,9 @@ fn eval(src: &str) -> String {
         serde_json::to_string_pretty(&value.expect("")).expect("")
     );
     result
+    TODO
+     */
+    String::from(src)
 }
 
 #[no_mangle]

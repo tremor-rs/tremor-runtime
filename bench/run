@@ -17,5 +17,5 @@ then
 fi
 
 echo "######## $1"
-target/release/tremor-server -c $file bench/link.yaml
+target/release/tremor-server --no-api -c $file bench/link.yaml
 

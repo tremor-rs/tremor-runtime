@@ -31,7 +31,7 @@ impl InfluxDatapoint {
     pub fn try_to_bytes(self) -> Result<Vec<u8>> {
         let mut output = self.measurement.escape();
 
-        let tag_collection = self
+        let mut tag_collection = self
             .tags
             .iter()
             .map(|(key, value)| {
@@ -41,6 +41,7 @@ impl InfluxDatapoint {
                 op
             })
             .collect::<Vec<String>>();
+        tag_collection.sort();
 
         let tags = tag_collection.join(",");
         if !tags.is_empty() {
@@ -51,7 +52,6 @@ impl InfluxDatapoint {
         output.push_str(" ");
 
         let mut field_collection = vec![];
-
         for (key, field) in self.fields.iter() {
             let value = match field {
                 OwnedValue::String(s) => Ok(process_string(s)),
@@ -70,7 +70,7 @@ impl InfluxDatapoint {
             op.push_str(&value);
             field_collection.push(op);
         }
-
+        field_collection.sort();
         let fields = field_collection.join(",");
         output.push_str(&fields);
         output.push(' ');
@@ -397,6 +397,7 @@ mod tests {
         };
         assert_eq!(Ok(r), parse(s))
     }
+
     #[test]
     fn parse_int_value() {
         let s = "weather temperature=82i 1465839830100400200";
@@ -410,6 +411,7 @@ mod tests {
         };
         assert_eq!(Ok(r), parse(s))
     }
+
     #[test]
     fn parse_str_value() {
         let s = "weather,location=us-midwest temperature=\"too warm\" 1465839830100400200";

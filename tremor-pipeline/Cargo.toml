@@ -26,8 +26,6 @@ log = "0.4"
 criterion = "0.2"
 xz2 = "0.1"
 base64 = "*"
-jemallocator = "0.1"
-
 
 [[bench]]
 name = "distsys"

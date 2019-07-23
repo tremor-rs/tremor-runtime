@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-use crate::errors::*;
+use crate::datetime::*;
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
@@ -116,11 +116,6 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         .insert(tremor_fn!(datetime::without_subseconds(_context, _n: I64) {
             Ok(Value::from(_without_subseconds(*_n as u64)))
         }));
-}
-pub fn _parse(datetime: &str, input_fmt: &str) -> Result<u64> {
-    Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
-        .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
-        .timestamp_nanos() as u64)
 }
 
 pub fn _iso8601(datetime: u64) -> String {
@@ -278,6 +273,13 @@ pub const fn _with_years(n: u32) -> u64 {
 mod tests {
     use super::*;
 
+    #[test]
+    pub fn parse_at_timestamp() {
+        let time = "2019-06-17T13:15:40.752Z";
+        //let time = "2019-06-17T13:15:40.752";
+        let output = _parse(time, "%Y-%m-%dT%H:%M:%S%.3fZ").expect("cannot parse datetime string");
+        assert_eq!(output, 1560777340752000000);
+    }
     #[test]
     pub fn parse_parses_it_to_ts() {
         let output = _parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z")

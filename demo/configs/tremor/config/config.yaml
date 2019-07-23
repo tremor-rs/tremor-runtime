@@ -168,3 +168,12 @@ binding:
     links:
       '/pipeline/system::metrics/system/out': [ '/pipeline/enrich/system/in' ]
       '/pipeline/enrich/system/out': [ '/offramp/influxdb/system/in', '/offramp/system::stdout/system/in' ]
+
+mapping:
+  /binding/loadgen-info/loadgen:
+    instance: "loadgen"
+  /binding/loadgen-error/loadgen:
+    instance: "loadgen"
+  /binding/demo/demo:
+    instance: "demo"
+  /binding/metrics/system: {}

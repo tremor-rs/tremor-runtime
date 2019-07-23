@@ -8,6 +8,10 @@ Codecs are used to describe how to decode data from the wire and encode it back 
 
 En- and decodes [JSON](https://json.org), for encoding a minified format is used (excluding newlines and spaces).
 
+### string
+
+Treats the event as non structured string. It is required that the input **is valid utf8** or the decoding will fail.
+
 ### msgpack
 
 [Msgpack](https://msgpack.org) works based on the msgpack binary format that is structurally compatible with JSON.

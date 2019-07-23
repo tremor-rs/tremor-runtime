@@ -1,7 +1,16 @@
 FROM centos:7 as builder
 
-ARG rust_version=1.35.0
-RUN yum install git make gcc clang openssl-static libstdc++-static bison  autoconf -y
+ARG rust_version=1.36.0
+RUN yum install centos-release-scl -y && \
+    yum install devtoolset-8-gcc devtoolset-8-gcc-c++ jq git2u make gcc clang openssl-static libstdc++-static bison autoconf -y && \
+    yum clean all
+RUN curl -OL https://github.com/Kitware/CMake/releases/download/v3.15.0/cmake-3.15.0.tar.gz && \
+    tar -xzf cmake-3.15.0.tar.gz && \
+    cd cmake-3.15.0 && \
+    ./bootstrap && \
+    make && \
+    make install && \
+    cd .. && rm -rf cmake-3.15.0 cmake-3.15.0.tar.gz
 RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 
 COPY Cargo.* ./
@@ -21,7 +30,8 @@ COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
 
 RUN source $HOME/.cargo/env &&\
-  cargo build --release --all
+    source /opt/rh/devtoolset-8/enable &&\
+    cargo build --release --all
 
 FROM centos:7
 ARG rust_version=stable

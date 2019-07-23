@@ -15,7 +15,7 @@
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
 use serde_json;
-use simd_json::{to_owned_value, OwnedValue};
+use simd_json::to_owned_value;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
@@ -26,24 +26,25 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             println!("{}", &s);
             // Screw you rust
             let mut bytes = unsafe{s.as_bytes_mut()};
-            to_owned_value(&mut bytes).map_err(to_runtime_error)
+            // We need to do this since otherwise we depend on the clone of s
+            to_owned_value(&mut bytes).map_err(to_runtime_error).map(Value::from)
         }))
         .insert(tremor_fn! (json::encode(_context, _input) {
-            serde_json::to_string(_input).map(OwnedValue::from).map_err(to_runtime_error)
+            serde_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
         }))
         .insert(tremor_fn! (json::encode_pretty(_context, _input) {
-            serde_json::to_string_pretty(_input).map(OwnedValue::from).map_err(to_runtime_error)
+            serde_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
         }));
 }
 
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, OwnedValue};
+    use simd_json::BorrowedValue as Value;
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(OwnedValue::from($r)))
+            assert_eq!($e, Ok(Value::from($r)))
         };
     }
     #[test]
@@ -52,11 +53,11 @@ mod test {
         let v = Value::from(r#"["this","is","a","cake"]"#);
         assert_val!(
             f(&[&v]),
-            OwnedValue::Array(vec![
-                OwnedValue::from("this"),
-                OwnedValue::from("is"),
-                OwnedValue::from("a"),
-                OwnedValue::from("cake")
+            Value::Array(vec![
+                Value::from("this"),
+                Value::from("is"),
+                Value::from("a"),
+                Value::from("cake")
             ])
         );
     }
@@ -69,7 +70,7 @@ mod test {
             Value::from("a"),
             Value::from("cake"),
         ]);
-        assert_val!(f(&[&v]), OwnedValue::from(r#"["this","is","a","cake"]"#));
+        assert_val!(f(&[&v]), Value::from(r#"["this","is","a","cake"]"#));
     }
     #[test]
     fn encode_pretty() {
@@ -82,7 +83,7 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            OwnedValue::from(
+            Value::from(
                 r#"[
   "this",
   "is",
