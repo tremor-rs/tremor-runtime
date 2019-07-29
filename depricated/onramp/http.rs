@@ -211,11 +211,11 @@ where
 }
 
 fn data_v1(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let len = req.state().len;
-    let i = req.state().idx.get() + 1 % len;
-    req.state().idx.set(i);
+    let len = data.len;
+    let i = data.idx.get() + 1 % len;
+    data.idx.set(i);
 
-    let p = req.state().pipeline[i].clone();
+    let p = data.pipeline[i].clone();
     req.json()
         .from_err()
         .and_then(move |event: EventWrapper| {
@@ -241,11 +241,11 @@ fn data_v1(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Er
 }
 
 fn raw(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let len = req.state().len;
-    let i = req.state().idx.get() + 1 % len;
-    req.state().idx.set(i);
+    let len = data.len;
+    let i = data.idx.get() + 1 % len;
+    data.idx.set(i);
 
-    let p = req.state().pipeline[i].clone();
+    let p = data.pipeline[i].clone();
     req.body()
         .from_err()
         .and_then(move |body| {

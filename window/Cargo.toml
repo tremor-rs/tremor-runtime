@@ -9,4 +9,4 @@ license = "Apache-2.0"
 chrono = "0.4"
 
 [dev-dependencies]
-proptest = "0.8.5"
+proptest = "0.9.4"

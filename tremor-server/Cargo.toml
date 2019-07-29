@@ -8,26 +8,15 @@ edition = "2018"
 tremor-runtime = { path = "../" }
 tremor-api = { path = "../tremor-api" }
 serde_yaml = "0.8"
-clap = { version = "2.27", features = ["yaml"] }
-env_logger = "0.5"
+clap = { version = "2", features = ["yaml"] }
+env_logger = "0.6"
 log = "0.4"
 log4rs = "0.8"
-actix-web = { version = "0.7", features = ["alpn"] }
+actix-web = "1"
+actix-files = "0.1"
+actix-cors = "0.1"
 mimalloc = { version = "*", default-features = false }
 
-
-#serde = "1"
-#serde_derive = "1"
-#serde_json = "1"
-#reqwest = "0.8"
-#prometheus = { version = "0.4", features = ["process"] }
-#tremor-script = { path = "../tremor-script" }
-#tremor-pipeline = { path = "../tremor-pipeline" }
-#actix = "0.7"
-#uuid = { version = "0.7", features = ["serde", "v4"]}
-#window = { path = "../window" }
-#lazy_static = "0.2"
-#error-chain="0.12"
 
 [features]
 default = []

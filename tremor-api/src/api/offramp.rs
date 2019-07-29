@@ -13,7 +13,11 @@
 // limitations under the License.
 
 use crate::api::*;
-use actix_web::{error, HttpRequest, Path};
+use actix_web::{
+    error,
+    web::{Data, Path},
+    HttpRequest,
+};
 use tremor_runtime::errors::*;
 
 #[derive(Serialize)]
@@ -22,32 +26,31 @@ struct OffRampWrap {
     instances: Vec<String>,
 }
 
-pub fn list_artefact(req: HttpRequest<State>) -> ApiResult {
-    let res: Result<Vec<String>> = req.state().world.repo.list_offramps().map(|l| {
+pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> ApiResult {
+    let res: Result<Vec<String>> = data.world.repo.list_offramps().map(|l| {
         l.iter()
             .filter_map(tremor_runtime::url::TremorURL::artefact)
             .collect()
     });
-    reply(req, res, false, 200)
+    reply(req, data, res, false, 200)
 }
 
-pub fn publish_artefact((req, data_raw): (HttpRequest<State>, String)) -> ApiResult {
-    let data: tremor_runtime::config::OffRamp = decode(&req, &data_raw)?;
-    let url = build_url(&["offramp", &data.id])?;
-    let res = req.state().world.repo.publish_offramp(url, false, data);
-    reply(req, res, true, 201)
+pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> ApiResult {
+    let decoded_data: tremor_runtime::config::OffRamp = decode(&req, &data_raw)?;
+    let url = build_url(&["offramp", &decoded_data.id])?;
+    let res = data.world.repo.publish_offramp(url, false, decoded_data);
+    reply(req, data, res, true, 201)
 }
 
-pub fn unpublish_artefact((req, id): (HttpRequest<State>, Path<String>)) -> ApiResult {
+pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> ApiResult {
     let url = build_url(&["offramp", &id])?;
-    let res = req.state().world.repo.unpublish_offramp(url);
-    reply(req, res, true, 200)
+    let res = data.world.repo.unpublish_offramp(url);
+    reply(req, data, res, true, 200)
 }
 
-pub fn get_artefact((req, id): (HttpRequest<State>, Path<String>)) -> ApiResult {
+pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> ApiResult {
     let url = build_url(&["offramp", &id])?;
-    let res = req
-        .state()
+    let res = data
         .world
         .repo
         .find_offramp(url)
@@ -62,8 +65,8 @@ pub fn get_artefact((req, id): (HttpRequest<State>, Path<String>)) -> ApiResult 
                     .filter_map(tremor_runtime::url::TremorURL::instance)
                     .collect(),
             });
-            reply(req, res, false, 200)
+            reply(req, data, res, false, 200)
         }
-        None => Err(error::ErrorNotFound("Artefact not found")),
+        None => Err(error::ErrorNotFound(r#"{"error": "Artefact not found"}"#)),
     }
 }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use actix_web::http::StatusCode;
-use actix_web::{error, HttpMessage, HttpRequest, HttpResponse};
+use actix_web::{error, web::Data, HttpMessage, HttpRequest, HttpResponse};
 use log::error;
 use serde::{Deserialize, Serialize};
 use tremor_runtime::errors::{Error as TremorError, ErrorKind, Result as TremmorResult};
@@ -40,7 +40,7 @@ pub enum ResourceType {
     Yaml,
 }
 
-pub fn content_type(req: &HttpRequest<State>) -> Option<ResourceType> {
+pub fn content_type(req: &HttpRequest) -> Option<ResourceType> {
     let ct: &str = match req.headers().get("Content-type") {
         Some(x) => x.to_str().ok()?,
         None => req.content_type(),
@@ -52,7 +52,7 @@ pub fn content_type(req: &HttpRequest<State>) -> Option<ResourceType> {
     }
 }
 
-pub fn accept(req: &HttpRequest<State>) -> ResourceType {
+pub fn accept(req: &HttpRequest) -> ResourceType {
     // TODO implement correctly / RFC compliance
     let accept: Option<&str> = match req.headers().get("Accept") {
         Some(x) => x.to_str().ok(),
@@ -72,20 +72,20 @@ pub fn c(c: u16) -> StatusCode {
 pub fn handle_errors(e: TremorError) -> error::Error {
     match e.0 {
         ErrorKind::UnpublishFailedNonZeroInstances(_) => {
-            error::ErrorConflict("Resource still has active instances")
+            error::ErrorConflict(r#"{"error": "Resource still has active instances"}"#)
         }
-        ErrorKind::ArtifactNotFound(_) => error::ErrorNotFound("Not found"),
+        ErrorKind::ArtifactNotFound(_) => error::ErrorNotFound(r#"{"error": "Artefact not found"}"#),
         ErrorKind::PublishFailedAlreadyExists(_) => {
-            error::ErrorConflict("An resouce with the requested ID already exists")
+            error::ErrorConflict(r#"{"error": "An resouce with the requested ID already exists"}"#)
         }
 
         ErrorKind::UnpublishFailedSystemArtefact(_) => {
-            error::ErrorForbidden("System Artefacts can not be unpublished")
+            error::ErrorForbidden(r#"{"error": "System Artefacts can not be unpublished"}"#)
         }
 
         e => {
             error!("Unhandled error: {}", e);
-            error::ErrorInternalServerError(format!("Internal server error: {}", e))
+            error::ErrorInternalServerError(r#"{"error": "Internal server error"}"#)
         }
     }
 }
@@ -117,14 +117,15 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: u16) -> ApiResul
 }
 
 pub fn reply<T: Serialize>(
-    req: HttpRequest<State>,
+    req: HttpRequest,
+    data: Data<State>,
     res: TremmorResult<T>,
     persist: bool,
     ok_code: u16,
 ) -> ApiResult {
     match res {
         Ok(res) => {
-            if persist && req.state().world.save_config().is_err() {
+            if persist && data.world.save_config().is_err() {
                 return Err(error::ErrorInternalServerError("failed to save state"));
             };
             serialize(accept(&req), &res, ok_code)
@@ -133,7 +134,7 @@ pub fn reply<T: Serialize>(
     }
 }
 
-fn decode<T>(req: &HttpRequest<State>, data_raw: &str) -> Result<T, error::Error>
+fn decode<T>(req: &HttpRequest, data_raw: &str) -> Result<T, error::Error>
 where
     for<'de> T: Deserialize<'de>,
 {

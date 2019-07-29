@@ -41,14 +41,15 @@ use tremor_runtime::version;
 
 use crate::errors::*;
 use crate::url::TremorURL;
-use actix_web::middleware::cors::Cors;
+use actix_cors::Cors;
+use actix_files as fs;
+
 use actix_web::{
-    fs,
-    http,
     //error,
     middleware,
-    server,
+    web,
     App,
+    HttpServer,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -147,79 +148,61 @@ fn run_dun() -> Result<()> {
         .ok_or_else(|| Error::from("host argument missing"))?;
 
     let w = world.clone();
-    let s = server::new(move || {
-        App::with_state(tremor_api::State { world: w.clone() })
-            .configure(|app| {
-                Cors::for_app(app)
-                    .resource("/binding", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::binding::list_artefact);
-                        r.method(http::Method::POST)
-                            .with(tremor_api::binding::publish_artefact);
-                    })
-                    .resource("/binding/{aid}", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::binding::get_artefact);
-                        r.method(http::Method::DELETE)
-                            .with(tremor_api::binding::unpublish_artefact);
-                    })
-                    .resource("/binding/{aid}/{sid}", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::binding::get_servant);
-                        r.method(http::Method::POST)
-                            .with(tremor_api::binding::link_servant);
-                        r.method(http::Method::DELETE)
-                            .with(tremor_api::binding::unlink_servant);
-                    })
-                    .resource("/pipeline", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::pipeline::list_artefact);
-                        r.method(http::Method::POST)
-                            .with(tremor_api::pipeline::publish_artefact);
-                    })
-                    .resource("/pipeline/{aid}", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::pipeline::get_artefact);
-                        r.method(http::Method::DELETE)
-                            .with(tremor_api::pipeline::unpublish_artefact);
-                    })
-                    .resource("/onramp", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::onramp::list_artefact);
-                        r.method(http::Method::POST)
-                            .with(tremor_api::onramp::publish_artefact);
-                    })
-                    .resource("/onramp/{aid}", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::onramp::get_artefact);
-                        r.method(http::Method::DELETE)
-                            .with(tremor_api::onramp::unpublish_artefact);
-                    })
-                    .resource("/offramp", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::offramp::list_artefact);
-                        r.method(http::Method::POST)
-                            .with(tremor_api::offramp::publish_artefact);
-                    })
-                    .resource("/offramp/{aid}", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::offramp::get_artefact);
-                        r.method(http::Method::DELETE)
-                            .with(tremor_api::offramp::unpublish_artefact);
-                    })
-                    .resource("/version", |r| {
-                        r.method(http::Method::GET)
-                            .with(tremor_api::version::get_version);
-                    })
-                    .register()
-            })
-            .handler(
-                "/api-docs",
-                fs::StaticFiles::new("static")
-                    .expect("Missing static directoy")
-                    .index_file("index.html"),
+    let s = HttpServer::new(move || {
+        App::new()
+            .data(tremor_api::State { world: w.clone() })
+            .wrap(middleware::Logger::default())
+            .wrap(Cors::new())
+            .service(
+                web::resource("/binding")
+                    .route(web::get().to(tremor_api::binding::list_artefact))
+                    .route(web::post().to(tremor_api::binding::publish_artefact)),
             )
-            .middleware(middleware::Logger::default())
+            .service(
+                web::resource("/binding/{aid}")
+                    .route(web::get().to(tremor_api::binding::get_artefact))
+                    .route(web::delete().to(tremor_api::binding::unpublish_artefact)),
+            )
+            .service(
+                web::resource("/binding/{aid}/{sid}")
+                    .route(web::get().to(tremor_api::binding::get_servant))
+                    .route(web::post().to(tremor_api::binding::link_servant))
+                    .route(web::delete().to(tremor_api::binding::unlink_servant)),
+            )
+            .service(
+                web::resource("/pipeline")
+                    .route(web::get().to(tremor_api::pipeline::list_artefact))
+                    .route(web::post().to(tremor_api::pipeline::publish_artefact)),
+            )
+            .service(
+                web::resource("/pipeline/{aid}")
+                    .route(web::get().to(tremor_api::pipeline::get_artefact))
+                    .route(web::delete().to(tremor_api::pipeline::unpublish_artefact)),
+            )
+            .service(
+                web::resource("/onramp")
+                    .route(web::get().to(tremor_api::onramp::list_artefact))
+                    .route(web::post().to(tremor_api::onramp::publish_artefact)),
+            )
+            .service(
+                web::resource("/onramp/{aid}")
+                    .route(web::get().to(tremor_api::onramp::get_artefact))
+                    .route(web::delete().to(tremor_api::onramp::unpublish_artefact)),
+            )
+            .service(
+                web::resource("/offramp")
+                    .route(web::get().to(tremor_api::offramp::list_artefact))
+                    .route(web::post().to(tremor_api::offramp::publish_artefact)),
+            )
+            .service(
+                web::resource("/offramp/{aid}")
+                    .route(web::get().to(tremor_api::offramp::get_artefact))
+                    .route(web::delete().to(tremor_api::offramp::unpublish_artefact)),
+            )
+            .service(
+                web::resource("/version").route(web::get().to(tremor_api::version::get_version)),
+            )
+            .service(fs::Files::new("/api-docs", "static").index_file("index.html"))
     });
     eprintln!("Listening at: http://{}", host);
     info!("Listening at: http://{}", host);
@@ -227,7 +210,7 @@ fn run_dun() -> Result<()> {
     if !matches.is_present("no-api") {
         s.bind(&host)
             .map_err(|e| Error::from(format!("Can not bind to {}", e)))?
-            .run();
+            .run()?;
         warn!("API stopped");
         world.stop();
     }
@@ -239,7 +222,6 @@ fn run_dun() -> Result<()> {
 fn main() {
     version::print();
     if let Err(ref e) = run_dun() {
-
         error!("error: {}", e);
         eprintln!("error: {}", e);
         for e in e.iter().skip(1) {

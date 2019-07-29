@@ -25,7 +25,7 @@ log = "0.4"
 [dev-dependencies]
 criterion = "0.2"
 xz2 = "0.1"
-base64 = "*"
+base64 = "0.10"
 
 [[bench]]
 name = "distsys"

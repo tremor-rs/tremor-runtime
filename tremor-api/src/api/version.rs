@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::api::resource_models as rm;
-use crate::api::{reply, State};
-use actix_web::{HttpRequest, Responder};
+use crate::api::{reply, resource_models as rm, State};
+use actix_web::{web::Data, HttpRequest, Responder};
 
-pub fn get_version(req: HttpRequest<State>) -> impl Responder {
+pub fn get_version((req, data): (HttpRequest, Data<State>)) -> impl Responder {
     let payload = rm::Version::new();
-    reply(req, Ok(payload), false, 200)
+    reply(req, data, Ok(payload), false, 200)
 }

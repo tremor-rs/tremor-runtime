@@ -56,12 +56,14 @@ lazy_static! {
 }
 
 pub type SystemAddr = Addr<Manager>;
+pub type ActixHandle = JoinHandle<std::result::Result<(), std::io::Error>>;
+
 #[derive(Debug)]
 pub struct Manager {
     pub offramp: Addr<offramp::Manager>,
     pub onramp: Addr<onramp::Manager>,
-    pub offramp_t: JoinHandle<i32>,
-    pub onramp_t: JoinHandle<i32>,
+    pub offramp_t: ActixHandle,
+    pub onramp_t: ActixHandle,
     pub qsize: usize,
 }
 
@@ -656,10 +658,7 @@ impl World {
         Err(format!("Binding {:?} not found.", id).into())
     }
 
-    pub fn start(
-        qsize: usize,
-        storage_directory: Option<String>,
-    ) -> Result<(Self, JoinHandle<i32>)> {
+    pub fn start(qsize: usize, storage_directory: Option<String>) -> Result<(Self, ActixHandle)> {
         use std::sync::mpsc;
 
         let (tx, rx) = mpsc::channel();

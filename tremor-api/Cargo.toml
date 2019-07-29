@@ -11,6 +11,6 @@ serde = "1"
 serde_derive = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-hashbrown = "0.2"
 log = "0.4"
-actix-web = { version = "0.7", features = ["alpn"] }
+actix-web = "1"
+hashbrown = { version = "0.5", features = ["serde"] }

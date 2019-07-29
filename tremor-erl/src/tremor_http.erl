@@ -76,7 +76,17 @@ get_(URL, Opts, C) ->
         {response, fin, Code, _Hdrs} when Code >= 400 ->
             gun:close(ConnPid),
             {error, Code};
-        {response, nofin, _Status, _Hdrs} ->
+        {response, nofin, Code, _Hdrs} when Code >= 400 ->
+            case  gun:await_body(ConnPid, StreamRef) of
+                {ok, Body1} ->
+                    _Body2 = decode(Body1),
+                    gun:close(ConnPid),
+                    {error, Code};
+                E1 ->
+                    gun:close(ConnPid),
+                    E1
+            end;
+        {response, nofin, _Code, _Hdrs} ->
             case  gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
                     Body2 = decode(Body1),
@@ -103,7 +113,16 @@ delete(Path, Opts, C) ->
         {response, fin, _Status, _Hdrs} ->
             gun:close(ConnPid),
             ok;
-        {response, nofin, _Status, _Hdrs} ->
+        {response, nofin, Code, _Hdrs} when Code >= 400 ->
+            case  gun:await_body(ConnPid, StreamRef) of
+                {ok, Body1} ->
+                    _Body2 = decode(Body1),
+                    gun:close(ConnPid),
+                    {error, Code};
+                E1 ->
+                    gun:close(ConnPid),
+                    E1
+            end;        {response, nofin, _Status, _Hdrs} ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
                     Body2 = decode(Body1),
@@ -139,6 +158,16 @@ post(Path, Body, C) ->
         {response, _, 204, _Hdrs}  ->
             gun:close(ConnPid),
             ok;
+        {response, nofin, Code, _Hdrs} when Code >= 400 ->
+            case gun:await_body(ConnPid, StreamRef) of
+                {ok, Body1} ->
+                    Body2 = decode(Body1),
+                    gun:close(ConnPid),
+                    {error, Code};
+                E1 ->
+                    gun:close(ConnPid),
+                    E1
+            end;
         {response, nofin, Code, _Hdrs} when Code == 200 orelse Code == 201 ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->

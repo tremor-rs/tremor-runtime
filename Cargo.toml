@@ -13,7 +13,6 @@ members = [
     "tremor-tool",
     "tremor-script",
     "window",
-    "property_testing",
     "tremor-pipeline",
     "tremor-api",
     "dissect",
@@ -27,13 +26,13 @@ lto = true
 opt-level = 3
 
 [dependencies]
-actix = "0.7"
-base64 = "0.9"
+actix = "0.8"
+base64 = "0.10"
 chrono = "0.4"
 elastic = "0.20"
 error-chain="0.12"
 futures = "0.1"
-hashbrown = { version = "0.2", features = ["serde"] }
+hashbrown = { version = "0.5", features = ["serde"] }
 hostname = "0.1"
 libc = "0.2"
 log4rs = "0.8"
@@ -43,13 +42,13 @@ rmp-serde = "0.13"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-simd-json = "0.1.15"
+simd-json = "0.1"
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
-url = "1"
+url = "1.7" # we can't update because of deps ...
 log = "0.4"
 serde_derive = "1"
-lazy_static = "0.2"
+lazy_static = "1"
 tokio-threadpool = "0.1"
 halfbrown = "0.1"
 
