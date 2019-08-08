@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dflt;
 use crate::onramp::prelude::*;
-use base64;
 use serde_yaml::Value;
 use std::fs::File;
 use std::io::{BufRead, Read};
@@ -32,8 +30,6 @@ pub struct Config {
     pub interval: Option<u64>,
     /// Number of iterations to stop after
     pub iters: Option<u64>,
-    #[serde(default = "dflt::d_false")]
-    pub base64: bool,
 }
 
 pub struct Blaster {
@@ -77,20 +73,17 @@ fn onramp_loop(
     rx: Receiver<OnrampMsg>,
     data: Vec<u8>,
     config: Config,
-    codec: Box<dyn Codec>,
+    preprocessors: Vec<String>,
+    codec: String,
 ) -> Result<()> {
+    let mut codec = codec::lookup(&codec)?;
+    let mut preprocessors = make_preprocessors(&preprocessors)?;
+
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
         .lines()
-        .map(|e| -> Result<Vec<u8>> {
-            let data = e?;
-            if config.base64 {
-                Ok(base64::decode(&data)?)
-            } else {
-                Ok(data.as_bytes().to_vec())
-            }
-        })
+        .map(|e| -> Result<Vec<u8>> { Ok(e?.as_bytes().to_vec()) })
         .collect();
     acc.elements = elements?;
     acc.consuming = acc.elements.clone();
@@ -137,22 +130,21 @@ fn onramp_loop(
         }
 
         if let Some(data) = acc.consuming.pop() {
-            send_event(&pipelines, &codec, id, data);
+            send_event(&pipelines, &mut preprocessors, &mut codec, id, data);
             id += 1;
         }
     }
 }
 
 impl Onramp for Blaster {
-    fn start(&mut self, codec: String) -> Result<OnrampAddr> {
-        let codec = codec::lookup(&codec)?;
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
         let (tx, rx) = bounded(0);
         let data2 = self.data.clone();
         let config2 = self.config.clone();
 
         thread::Builder::new()
             .name(format!("onramp-blaster-{}", "???"))
-            .spawn(|| onramp_loop(rx, data2, config2, codec))?;
+            .spawn(|| onramp_loop(rx, data2, config2, preprocessors, codec))?;
         Ok(tx)
     }
 

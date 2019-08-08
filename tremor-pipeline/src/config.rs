@@ -152,10 +152,12 @@ pub struct Pipeline {
     pub nodes: Vec<Node>,
     #[serde(default = "dflt")]
     pub links: IndexMap<OutputPort, Vec<InputPort>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics_interval_s: Option<u64>,
     // #[serde(default = "d_idxmap")]
     // pub imports: IndexMap<InputPort, String>,
     // #[serde(default = "d_idxmap")]
-    // pub exports: IndexMap<OutputPort, Vec<String>>,
+    // pub exports: IndexMap<OutputPort, Vec<String>>
 }
 
 #[cfg(test)]

@@ -47,11 +47,17 @@ impl OnrampImpl for File {
     }
 }
 
-fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result<()> {
+fn onramp_loop(
+    rx: Receiver<OnrampMsg>,
+    config: Config,
+    preprocessors: Vec<String>,
+    codec: String,
+) -> Result<()> {
     let source_data_file = FSFile::open(&config.source)?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
-    let codec = codec::lookup(&codec)?;
+    let mut codec = codec::lookup(&codec)?;
+    let mut preprocessors = make_preprocessors(&preprocessors)?;
     let ext = Path::new(&config.source)
         .extension()
         .map(std::ffi::OsStr::to_str);
@@ -86,7 +92,13 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
             }
         };
 
-        send_event(&pipelines, &codec, id, line?.as_bytes().to_vec());
+        send_event(
+            &pipelines,
+            &mut preprocessors,
+            &mut codec,
+            id,
+            line?.as_bytes().to_vec(),
+        );
         id += 1;
     }
 
@@ -99,13 +111,13 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
 }
 
 impl Onramp for File {
-    fn start(&mut self, codec: String) -> Result<OnrampAddr> {
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
         thread::Builder::new()
             .name(format!("onramp-file-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, codec) {
+                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

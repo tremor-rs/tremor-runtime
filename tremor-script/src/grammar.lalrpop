@@ -129,8 +129,8 @@ MulExprImut: ImutExpr1<'input> = {
 
 /// Mathematical unary expressions (unary +, unary - )
 UnaryExprImut: ImutExpr1<'input> = {
-    <start:@L> "+" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: expr, start, end })),
-    <start:@L> "-" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: expr, start, end })),
+    <start:@L> "+" <expr:UnaryExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Plus, expr: expr, start, end })),
+    <start:@L> "-" <expr:UnaryExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Minus, expr: expr, start, end })),
     UnarySimpleExprImut => <>,
 }
 
@@ -389,10 +389,9 @@ PatchOperationClause: PatchOperation1<'input> = {
     "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Upsert{ ident, expr },
     "update" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Update{ ident, expr },
     "erase" <ident:PatchField> => PatchOperation1::Erase{ ident },
-    //"move" <from:PatchField> "=>" <to:PatchField>  => PatchOperation1::Move{ from, to },
+    "move" <from:PatchField> "=>" <to:PatchField>  => PatchOperation1::Move{ from, to },
+    "copy" <from:PatchField> "=>" <to:PatchField>  => PatchOperation1::Copy{ from, to },
     // "test" <ident:Ident> "=>" <expr:Expr> => PatchOperationClause { kind: PatchOperationKind::Add, ident, Some(expr) },
-    // "move" <ident:Ident> <to:RelativePath> => PatchOperationClause { kind: PatchOperationKind::Add, ident, expr: None },
-    // "copy" <ident:Ident> <to:RelativePath> => PatchOperationClause { kind: PatchOperationKind::Add, ident, expr: None },
     "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperation1::Merge { ident, expr },
     "merge" "=>" <expr:ComplexExprImut> => PatchOperation1::TupleMerge { expr },
 }
@@ -704,7 +703,8 @@ extern {
         "upsert" => lexer::Token::Upsert,
         "update" => lexer::Token::Update,
         "erase" => lexer::Token::Erase,
-        //"move" => lexer::Token::Move,
+        "move" => lexer::Token::Move,
+        "copy" => lexer::Token::Copy,
         "merge" => lexer::Token::Merge,
         "event" => lexer::Token::Event,
         "present" => lexer::Token::Present,

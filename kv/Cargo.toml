@@ -5,5 +5,5 @@ authors = ["Heinz Gies <hgies@wayfair.com>"]
 edition = "2018"
 
 [dependencies]
-halfbrown = "0.1"
 simd-json = "0.1"
+serde = "1"

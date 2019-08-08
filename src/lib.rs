@@ -45,6 +45,7 @@ pub mod lifecycle;
 pub mod metrics;
 pub mod offramp;
 pub mod onramp;
+pub mod preprocessor;
 pub mod registry;
 pub mod repository;
 pub mod rest;

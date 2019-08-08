@@ -117,9 +117,15 @@ impl FunctionError {
     }
 }
 
-pub trait Context: Default + Clone + PartialEq + std::fmt::Debug {}
+pub trait Context: Default + Clone + PartialEq + std::fmt::Debug {
+    fn ingest_ns(&self) -> u64;
+}
 
-impl Context for () {}
+impl Context for () {
+    fn ingest_ns(&self) -> u64 {
+        0
+    }
+}
 
 #[derive(Clone)]
 pub struct TremorFnWrapper<Ctx: Context> {

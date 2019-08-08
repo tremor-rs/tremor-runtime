@@ -134,6 +134,7 @@ where
         }
     }
      */
+
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         h.highlight(tokens)

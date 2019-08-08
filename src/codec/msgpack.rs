@@ -21,12 +21,10 @@ use tremor_script::LineValue;
 pub struct MsgPack {}
 
 impl Codec for MsgPack {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
-        let r = LineValue::try_new(Box::new(data), |data| rmps::from_slice(data));
-        match r {
-            Ok(v) => Ok(v),
-            Err(e) => Err(e.0.into()),
-        }
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
+        LineValue::try_new(Box::new(data), |data| rmps::from_slice(data))
+            .map(Some)
+            .map_err(|e| e.0.into())
     }
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
         Ok(rmps::to_vec(&data)?)

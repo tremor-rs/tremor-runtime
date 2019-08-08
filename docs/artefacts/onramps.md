@@ -11,6 +11,10 @@ All onramps are of the form:
 onramp:
   - id: <unique onramp id>
     type: <onramp name>
+    preprocessors: # can be omitted
+      - <preprocessor 1>
+      - <preprocessor 2>
+      - ...
     codec: <codec of the data>
     config:
       <key>: <value>
@@ -22,7 +26,7 @@ The `config` contains a map (key-value pairs) specific to the onramp type.
 
 ## Supported Onramps
 
-### Kafka
+### kafka
 
 The Kafka onramp connects to one or more Kafka topics. It uses librdkafka to handle connections and can use the full set of [librdkaka configuration options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
@@ -50,6 +54,35 @@ onramp:
         - snotbadger
       group_id: demo
 ```
+
+### udp
+
+The ump onramp allows receiving data via UDP datagrams.
+
+Supported configuration options are:
+
+- `host` - The IP to listen on
+- `port` - The Port to listen on
+
+Example:
+
+```yaml
+onramp:
+  - id: udp
+    type: udp
+    preprocessors:
+      - decompress
+      - gelf-chunking
+      - decompress
+    codec: json
+    config:
+      port: 12201
+      host: '127.0.0.1'
+```
+
+
+
+
 
 ### file
 

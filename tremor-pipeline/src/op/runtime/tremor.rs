@@ -23,7 +23,11 @@ use tremor_script::{self, Return, Script};
 pub struct TremorContext {
     pub ingest_ns: u64,
 }
-impl tremor_script::Context for TremorContext {}
+impl tremor_script::Context for TremorContext {
+    fn ingest_ns(&self) -> u64 {
+        self.ingest_ns
+    }
+}
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {

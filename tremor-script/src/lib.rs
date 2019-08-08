@@ -130,10 +130,6 @@ mod tests {
     use simd_json::borrowed::{Map, Value};
     use simd_json::json;
 
-    #[derive(Clone, Debug, Default, Serialize, PartialEq)]
-    pub struct FakeContext {}
-    impl Context for FakeContext {}
-
     macro_rules! parse_lit {
         ($src:expr, $expected:pat) => {{
             let _vals: Value = json!({}).into();
@@ -178,10 +174,10 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<FakeContext> = registry::registry();
-            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry<()> = registry::registry();
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = FakeContext {};
+            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
             let value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(
@@ -209,10 +205,10 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<FakeContext> = registry::registry();
-            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry<()> = registry::registry();
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = FakeContext {};
+            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(global_map, $expected);
@@ -234,10 +230,10 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<FakeContext> = registry::registry();
-            let runnable: Script<FakeContext> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry<()> = registry::registry();
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = FakeContext {};
+            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(&ctx, &mut event, &mut global_map);
             assert_eq!(event, $expected);

@@ -1,0 +1,62 @@
+[licenses]
+# If a crate doesn't have a license, error
+unlicensed = "deny"
+# If a crate has a LICENSE* file, but it can't be determined, error
+unknown = "deny"
+# We want really high confidence when inferring licenses from text
+confidence_threshold = 0.92
+# The only licenses we allow. These must be valid SPDX identifiers, at least syntactically,
+# but nothing stops you from using your own license identifier for your private crates
+allow = [
+    #"Embark-Proprietary",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    #"FTL",
+    "ISC",
+    "LLVM-exception",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Zlib",
+]
+
+skip = [
+    # Criterion plot just links to the toplevel license
+    # in said LICENSE file, but is basically OpenSSL for older parts, and ISC
+    # for newer parts
+    # { name = "criterion-plot", licenses = [] },
+]
+
+[[licenses.ignore]]
+name = "criterion-plot"
+license_files = [
+    # Those are just links
+    { path = "LICENSE-APACHE", hash = 0xa577772b },
+    { path = "LICENSE-MIT", hash = 0x343f7050 },
+]
+
+[[licenses.ignore]]
+name = "crossbeam-channel"
+license_files = [
+    # Cobbled together licenses
+    { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
+]
+
+[[licenses.ignore]]
+name = "onig"
+license_files = [
+    # MIT license but as .md file w/ formating
+    { path = "LICENSE.md", hash = 0xb2a66000 },
+]
+
+[[licenses.ignore]]
+name = "onig_sys"
+license_files = [
+    # MIT license but as .md file w/ formating
+    { path = "LICENSE.md", hash = 0x47af881f },
+]

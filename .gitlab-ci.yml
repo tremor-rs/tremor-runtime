@@ -2,10 +2,21 @@ test:
   stage: test
   image: wayfair/tremor/ci:1.36.0c
   when: always
-  # cache:
-  #   paths:
-  #     - target
-  #     - .cargo
+  tags:
+    - docker
+  script:
+    - source $HOME/.cargo/env
+    - export CARGO_HOME=.cargo
+    - source /opt/rh/devtoolset-8/enable
+    - cargo test --all-features --all
+    - cargo clippy --all-features --all
+    - make it
+
+
+meta-checks:
+  stage: test
+  image: wayfair/tremor/ci:1.36.0c
+  when: always
   tags:
     - docker
   script:
@@ -14,10 +25,8 @@ test:
     - source $HOME/.cargo/env
     - export CARGO_HOME=.cargo
     - source /opt/rh/devtoolset-8/enable
-    - cargo test --all-features --all
-    - cargo clippy --all-features --all
-    #- cp target/debug/native/php-src/libs/* /lib64
-    - make it
+    - cargo install cargo-deny
+    - cargo deny check
 
 api-tests:
   stage: test
@@ -61,6 +70,27 @@ api-tests:
     - ~/go/bin/coyote -c tests/coyote.yml
     - cd ..
     - pkill tremor-server
+
+script-tests:
+  stage: test
+  image: wayfair/tremor/ci:1.36.0c
+  when: always
+  # cache:
+  #   paths:
+  #     - target
+  #     - .cargo
+  tags:
+    - docker
+  script:
+    - source $HOME/.cargo/env
+    - export CARGO_HOME=.cargo
+    - source /opt/rh/devtoolset-8/enable
+    # Test tremor-script
+    - cd tremor-script
+    - cargo build
+    - erl -noshell -eval "eqc:registration(\"${EQC_LICENSE}\")" -eval "eqc:start()" -eval "init:stop()"
+    - ls ../target/debug
+    - LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../target/debug" rebar3 as eqc eqc
 
 # The bench server got claimed for something else :(
 

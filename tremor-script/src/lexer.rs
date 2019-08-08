@@ -148,7 +148,8 @@ pub enum Token<'input> {
     Upsert,
     Update,
     Erase,
-    //Move,
+    Move,
+    Copy,
     Merge,
     Drop,
     Default,
@@ -252,7 +253,8 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Upsert => true,
             Token::Update => true,
             Token::Erase => true,
-            //Token::Move => true,
+            Token::Move => true,
+            Token::Copy => true,
             Token::Merge => true,
             Token::For => true,
             Token::Event => true,
@@ -411,7 +413,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Upsert => write!(f, "upsert"),
             Token::Update => write!(f, "update"),
             Token::Erase => write!(f, "erase"),
-            //Token::Move => write!(f, "move"),
+            Token::Move => write!(f, "move"),
+            Token::Copy => write!(f, "copy"),
             Token::Merge => write!(f, "merge"),
             Token::For => write!(f, "for"),
             Token::Event => write!(f, "event"),
@@ -621,20 +624,26 @@ impl<'input> Lexer<'input> {
     where
         F: FnMut(char) -> bool,
     {
+        let mut e = start;
         while let Some((end, ch)) = self.lookahead() {
+            e = end;
             if terminate(ch) {
                 if let Some(slice) = self.slice(start, end) {
                     return (end, slice);
                 } else {
                     // Invalid start end case :(
-                    return (start, "");
+                    return (end, "<ERROR>");
                 }
             } else {
                 self.bump();
             }
         }
-
-        (start, "")
+        if let Some(slice) = self.slice(start, e) {
+            return (e, slice);
+        } else {
+            // Invalid start end case :(
+            return (e, "<ERROR>");
+        }
     }
 
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
@@ -751,7 +760,8 @@ impl<'input> Lexer<'input> {
             "upsert" => Token::Upsert,
             "update" => Token::Update,
             "erase" => Token::Erase,
-            //"move" => Token::Move,
+            "move" => Token::Move,
+            "copy" => Token::Copy,
             "merge" => Token::Merge,
             "for" => Token::For,
             "event" => Token::Event,
@@ -1440,7 +1450,8 @@ mod tests {
             assert_eq!(lexed_tokens, vec![Err($error)]);
         }};
     }
-    */
+     */
+
     #[test]
     fn paths() {
         lex_ok! {

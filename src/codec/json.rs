@@ -21,8 +21,9 @@ use tremor_script::LineValue;
 pub struct JSON {}
 
 impl Codec for JSON {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(Box::new(data), |data| simd_json::to_borrowed_value(data))
+            .map(Some)
             .map_err(|e| e.0.into())
     }
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {

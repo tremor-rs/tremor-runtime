@@ -32,6 +32,7 @@ mod kafka;
 mod rest;
 mod stderr;
 mod stdout;
+mod udp;
 
 pub enum OfframpMsg {
     Event { event: Event, input: String },
@@ -67,6 +68,7 @@ pub fn lookup(name: String, config: Option<OpConfig>) -> Result<Box<dyn Offramp>
         "rest" => rest::Rest::from_config(&config),
         "stdout" => stdout::StdOut::from_config(&config),
         "stderr" => stderr::StdErr::from_config(&config),
+        "udp" => udp::Udp::from_config(&config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

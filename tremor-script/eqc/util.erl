@@ -28,5 +28,9 @@ round(Number, Precision) ->
 
 clamp(Number, Precision) when is_float(Number) ->
     list_to_float(float_to_list(round(Number, Precision + 1), [{decimals, 10}]));
+clamp({K, V}, Precision) ->
+    {K, clamp(V, Precision)};
+clamp(L, Precision) when is_list(L)->
+    [clamp(E, Precision) || E <- L];
 clamp(Number, _) ->
     Number.

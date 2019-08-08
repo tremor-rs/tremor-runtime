@@ -74,7 +74,9 @@ pub fn handle_errors(e: TremorError) -> error::Error {
         ErrorKind::UnpublishFailedNonZeroInstances(_) => {
             error::ErrorConflict(r#"{"error": "Resource still has active instances"}"#)
         }
-        ErrorKind::ArtifactNotFound(_) => error::ErrorNotFound(r#"{"error": "Artefact not found"}"#),
+        ErrorKind::ArtifactNotFound(_) => {
+            error::ErrorNotFound(r#"{"error": "Artefact not found"}"#)
+        }
         ErrorKind::PublishFailedAlreadyExists(_) => {
             error::ErrorConflict(r#"{"error": "An resouce with the requested ID already exists"}"#)
         }

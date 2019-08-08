@@ -15,8 +15,8 @@ log4rs = "0.8"
 actix-web = "1"
 actix-files = "0.1"
 actix-cors = "0.1"
-mimalloc = { version = "*", default-features = false }
-
+#mimalloc = { version = "*", default-features = false }
+jemallocator = "0.3.2"
 
 [features]
 default = []

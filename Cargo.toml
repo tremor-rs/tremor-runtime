@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.2"
+version = "0.5.3"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -51,6 +51,10 @@ serde_derive = "1"
 lazy_static = "1"
 tokio-threadpool = "0.1"
 halfbrown = "0.1"
+libflate = "0.1"
+sysinfo = "0.9"
+snap = "0.2.5"
+lz4 = "1.23.1"
 
 # will be in new graph
 tremor-script = { path = "tremor-script" }

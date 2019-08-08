@@ -49,10 +49,6 @@ extern crate serde_derive;
 
 pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
 
-#[derive(Clone, Debug, Default, Serialize, PartialEq)]
-pub struct FakeContext {}
-impl Context for FakeContext {}
-
 fn main() {
     let matches = App::new("tremor-script")
         .version("0.5.0")
@@ -116,7 +112,7 @@ fn main() {
         .read_to_string(&mut raw)
         .expect("");
 
-    let reg: Registry<FakeContext> = registry::registry();
+    let reg: Registry<()> = registry::registry();
 
     match Script::parse(&raw, &reg) {
         Ok(runnable) => {
@@ -171,9 +167,8 @@ fn main() {
             };
 
             let mut global_map = Value::Object(hashmap! {});
-            let ctx = FakeContext {};
             let _expr = Value::Null;
-            let expr = runnable.run(&ctx, &mut event, &mut global_map);
+            let expr = runnable.run(&(), &mut event, &mut global_map);
             match expr {
                 // Seperate out the speical case of emiting the inbound evet,
                 // this way we don't have to clone it on the way out and can

@@ -18,8 +18,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -record(state, {
-  locals = #{},
-  globals = #{},
-  event
-}).
+                locals = #{},
+                %% globals = #{},
+                %% event = #{},
+                script = []
+               }).
 
+
+-record(vars, {
+               %% globals = #{},
+               %% event = #{},
+               locals = #{}
+              }).

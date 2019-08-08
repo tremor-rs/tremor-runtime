@@ -51,6 +51,8 @@ pub struct OnRamp {
     pub description: String,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
     pub codec: Option<String>,
+    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
+    pub preprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: dynaconfig::ConfigMap,
 }

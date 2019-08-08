@@ -20,8 +20,8 @@ use tremor_script::{LineValue, Value};
 pub struct Null {}
 
 impl Codec for Null {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
-        Ok(LineValue::new(Box::new(data), |_| Value::Null))
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
+        Ok(Some(LineValue::new(Box::new(data), |_| Value::Null)))
     }
     fn encode(&self, _data: LineValue) -> Result<Vec<u8>> {
         Ok(vec![])

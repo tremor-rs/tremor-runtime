@@ -83,6 +83,36 @@ impl<'value> Default for LocalValue<'value> {
     }
 }
 
+#[inline]
+fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
+    use Value::*;
+    let error = std::f64::EPSILON;
+    match (lhs, rhs) {
+        (Object(l), Object(r)) => {
+            if l.len() == r.len() {
+                l.iter()
+                    .all(|(k, lv)| r.get(k).map(|rv| val_eq(lv, rv)) == Some(true))
+            } else {
+                false
+            }
+        }
+        (Array(l), Array(r)) => {
+            if l.len() == r.len() {
+                l.iter().zip(r.iter()).all(|(l, r)| val_eq(l, r))
+            } else {
+                false
+            }
+        }
+        (Bool(l), Bool(r)) => *l == *r,
+        (String(l), String(r)) => *l == *r,
+        (I64(l), I64(r)) => *l == *r,
+        (I64(l), F64(r)) => ((*l as f64) - *r).abs() < error,
+        (F64(l), I64(r)) => (*l - (*r as f64)).abs() < error,
+        (F64(l), F64(r)) => (*l - *r).abs() < error,
+        _ => false, // Error case
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 #[inline]
 pub fn exec_binary<'run, 'event: 'run>(
@@ -94,44 +124,36 @@ pub fn exec_binary<'run, 'event: 'run>(
     // - snot badger - Darach
     use BinOpKind::*;
     use Value::*;
-    let error = std::f64::EPSILON;
     match (&op, lhs, rhs) {
         (Eq, Null, Null) => Some(static_bool!(true)),
         (NotEq, Null, Null) => Some(static_bool!(false)),
         (And, Bool(l), Bool(r)) => Some(static_bool!(*l && *r)),
         (Or, Bool(l), Bool(r)) => Some(static_bool!(*l || *r)),
-        (NotEq, Object(l), Object(r)) => Some(static_bool!(*l != *r)),
-        (NotEq, Array(l), Array(r)) => Some(static_bool!(*l != *r)),
-        (NotEq, Bool(l), Bool(r)) => Some(static_bool!(*l != *r)),
-        (NotEq, String(l), String(r)) => Some(static_bool!(*l != *r)),
-        (NotEq, I64(l), I64(r)) => Some(static_bool!(*l != *r)),
-        (NotEq, I64(l), F64(r)) => Some(static_bool!(((*l as f64) - *r).abs() > error)),
-        (NotEq, F64(l), I64(r)) => Some(static_bool!((*l - (*r as f64)).abs() > error)),
-        (NotEq, F64(l), F64(r)) => Some(static_bool!((*l - *r).abs() > error)),
-        (Eq, Object(l), Object(r)) => Some(static_bool!(*l == *r)),
-        (Eq, Array(l), Array(r)) => Some(static_bool!(*l == *r)),
-        (Eq, Bool(l), Bool(r)) => Some(static_bool!(*l == *r)),
-        (Eq, String(l), String(r)) => Some(static_bool!(*l == *r)),
-        (Eq, I64(l), I64(r)) => Some(static_bool!(*l == *r)),
-        (Eq, I64(l), F64(r)) => Some(static_bool!(((*l as f64) - *r).abs() < error)),
-        (Eq, F64(l), I64(r)) => Some(static_bool!((*l - (*r as f64)).abs() < error)),
-        (Eq, F64(l), F64(r)) => Some(static_bool!((*l - *r).abs() < error)),
+        // FIXME - do we want this?
+        // This is to make sure that == in a expression
+        // and a record pattern behaves the same.
+        (Eq, l, r) => Some(static_bool!(val_eq(l, r))),
+        (NotEq, l, r) => Some(static_bool!(!val_eq(l, r))),
         (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
         (Gte, I64(l), F64(r)) => Some(static_bool!((*l as f64) >= *r)),
         (Gte, F64(l), I64(r)) => Some(static_bool!(*l >= (*r as f64))),
         (Gte, F64(l), F64(r)) => Some(static_bool!(*l >= *r)),
+        (Gte, String(l), String(r)) => Some(static_bool!(l >= r)),
         (Gt, I64(l), I64(r)) => Some(static_bool!(*l > *r)),
         (Gt, I64(l), F64(r)) => Some(static_bool!((*l as f64) > *r)),
         (Gt, F64(l), I64(r)) => Some(static_bool!(*l > (*r as f64))),
         (Gt, F64(l), F64(r)) => Some(static_bool!(*l > *r)),
+        (Gt, String(l), String(r)) => Some(static_bool!(l > r)),
         (Lt, I64(l), I64(r)) => Some(static_bool!(*l < *r)),
         (Lt, I64(l), F64(r)) => Some(static_bool!((*l as f64) < *r)),
         (Lt, F64(l), I64(r)) => Some(static_bool!(*l < (*r as f64))),
         (Lt, F64(l), F64(r)) => Some(static_bool!(*l < *r)),
+        (Lt, String(l), String(r)) => Some(static_bool!(l < r)),
         (Lte, I64(l), I64(r)) => Some(static_bool!(*l <= *r)),
         (Lte, I64(l), F64(r)) => Some(static_bool!((*l as f64) <= *r)),
         (Lte, F64(l), I64(r)) => Some(static_bool!(*l <= (*r as f64))),
         (Lte, F64(l), F64(r)) => Some(static_bool!(*l <= *r)),
+        (Lte, String(l), String(r)) => Some(static_bool!(l <= r)),
 
         (Add, String(l), String(r)) => Some(Cow::Owned(format!("{}{}", *l, *r).into())),
         (Add, I64(l), I64(r)) => Some(Cow::Owned(I64(*l + *r))),
@@ -151,6 +173,26 @@ pub fn exec_binary<'run, 'event: 'run>(
         (Div, F64(l), I64(r)) => Some(Cow::Owned(F64(*l / (*r as f64)))),
         (Div, F64(l), F64(r)) => Some(Cow::Owned(F64(*l / *r))),
         (Mod, I64(l), I64(r)) => Some(Cow::Owned(I64(*l % *r))),
+        _ => None,
+    }
+}
+
+#[inline]
+pub fn exec_unary<'run, 'event: 'run>(
+    op: UnaryOpKind,
+    val: &Value<'event>,
+) -> Option<Cow<'run, Value<'event>>> {
+    // Lazy Heinz doesn't want to write that 10000 times
+    // - snot badger - Darach
+    use UnaryOpKind::*;
+    use Value::*;
+    match (&op, val) {
+        (Minus, I64(x)) => Some(Cow::Owned(I64(-*x))),
+        (Minus, F64(x)) => Some(Cow::Owned(F64(-*x))),
+        (Plus, I64(x)) => Some(Cow::Owned(I64(*x))),
+        (Plus, F64(x)) => Some(Cow::Owned(F64(*x))),
+        (Not, Bool(true)) => Some(static_bool!(false)), // This is not true
+        (Not, Bool(false)) => Some(static_bool!(true)), // this is not false
         _ => None,
     }
 }
@@ -424,7 +466,7 @@ where
                     let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
                     let new_value = stry!(expr.run(context, event, meta, local, consts));
                     if obj.contains_key(&new_key) {
-                        return error_patch_insert_key_exists(outer, expr, new_key.to_string());
+                        return error_patch_key_exists(outer, expr, new_key.to_string());
                     } else {
                         obj.insert(new_key, new_value.into_owned());
                     }
@@ -447,18 +489,29 @@ where
                     let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
                     obj.remove(&new_key);
                 }
-                /*
                 PatchOperation::Move { from, to } => {
-                    let from =
-                        stry!(from.eval_to_string(context, event, meta, local, consts));
-                    let to =
-                        stry!(to.eval_to_string(context, event, meta, local, consts));
+                    let from = stry!(from.eval_to_string(context, event, meta, local, consts));
+                    let to = stry!(to.eval_to_string(context, event, meta, local, consts));
 
+                    if obj.contains_key(&to) {
+                        return error_patch_key_exists(outer, expr, to.to_string());
+                    }
                     if let Some(old) = obj.remove(&from) {
                         obj.insert(to, old);
                     }
                 }
-                */
+                PatchOperation::Copy { from, to } => {
+                    let from = stry!(from.eval_to_string(context, event, meta, local, consts));
+                    let to = stry!(to.eval_to_string(context, event, meta, local, consts));
+
+                    if obj.contains_key(&to) {
+                        return error_patch_key_exists(outer, expr, to.to_string());
+                    }
+                    if let Some(old) = obj.get(&from) {
+                        let old = old.clone();
+                        obj.insert(to, old);
+                    }
+                }
                 PatchOperation::Merge { ident, expr } => {
                     let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
                     let merge_spec = stry!(expr.run(context, event, meta, local, consts));
@@ -566,7 +619,7 @@ where
         Pattern::Expr(ref expr) => {
             let v = stry!(expr.run(context, event, meta, local, consts));
             let vb: &Value = v.borrow();
-            if target == vb {
+            if val_eq(target, vb) {
                 test_guard(outer, context, event, meta, local, consts, guard)
             } else {
                 Ok(false)
@@ -602,7 +655,7 @@ where
                 Pattern::Expr(ref expr) => {
                     let v = stry!(expr.run(context, event, meta, local, consts));
                     let vb: &Value = v.borrow();
-                    if target == vb {
+                    if val_eq(target, vb) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, a.idx, v.into_owned()));
@@ -653,7 +706,7 @@ where
                     }
                     _ => return Ok(None),
                 };
-                if let Ok(x) = test.extractor.extract(result_needed, &testee) {
+                if let Ok(x) = test.extractor.extract(result_needed, &testee, context) {
                     if result_needed {
                         acc.insert(key, x);
                     }
@@ -674,7 +727,7 @@ where
                 };
                 let rhs = stry!(rhs.run(context, event, meta, local, consts));
                 let vb: &Value = rhs.borrow();
-                let r = testee == vb;
+                let r = val_eq(testee, vb);
                 let m = if *not { !r } else { r };
 
                 if m {
@@ -817,7 +870,7 @@ where
                             let vb: &Value = r.borrow();
 
                             // NOTE: We are creating a new value here so we have to clone
-                            if candidate == vb && result_needed {
+                            if val_eq(candidate, vb) && result_needed {
                                 acc.push(Value::Array(vec![Value::Array(vec![
                                     Value::I64(idx),
                                     r.into_owned(),
@@ -825,7 +878,9 @@ where
                             }
                         }
                         ArrayPredicatePattern::Tilde(test) => {
-                            if let Ok(r) = test.extractor.extract(result_needed, &candidate) {
+                            if let Ok(r) =
+                                test.extractor.extract(result_needed, &candidate, context)
+                            {
                                 if result_needed {
                                     acc.push(Value::Array(vec![Value::Array(vec![
                                         Value::I64(idx),

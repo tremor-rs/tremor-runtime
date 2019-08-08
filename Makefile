@@ -22,14 +22,6 @@ demo: image
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
 
-clippy-install:
-	rustup update
-	rustup install nightly
-	rustup component add clippy
-
-clippy:
-	CARGO_TARGET_DIR=target.clippy cargo +nightly clippy
-
 it:
 	integration_testing/runner
 

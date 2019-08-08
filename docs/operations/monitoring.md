@@ -39,13 +39,19 @@ The `tags` section explains where this measurement was taken:
 
 The example above measures all events that left the `in` of pipeline `main`.
 
-Metrics are published to the `system::metrics` pipeline every 10 second or if an event was received by the pipeline (whatever happened later).
-
-
+Metrics are published to the `system::metrics` pipeline every 10 second or if an event was received by the pipeline (whatever happened later).=
 
 In addition to the general pipeline metrics some operators do generate their own metrics, for details please check on the documentation for the operator in question.
 
+To enable monitoring you have to specify the `metrics_interval_s` key in the pipeline, followed by the amount of seconds that should pass between emits
 
+## Operator level metrics
+
+In addition to the metrics provided by the pipeline itself, some operators can  generate additional metrics.
+
+The details are documented on a per operator level. Currently the following operators provide custom metrics:
+
+* [grouper::bucket](../../artefacts/operators/#grouperbucket)
 
 ## Enriching
 
@@ -99,6 +105,7 @@ offramp:
 
 pipeline:
   - id: main
+    metrics_interval_s: 10
     interface:
       inputs:
         - in
@@ -139,7 +146,7 @@ binding:
 
 ```
 
-a
+
 
 ```
 +---------+                                        +---------+
@@ -179,12 +186,4 @@ Tremor instruments this pipeline on the points `a` to `l`. As follows (timestamp
 - `k` as `events,node=batch,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=1 …` this is a tricky one, we got 25 events into this, however we batch by 20 events, so the first 20 events that come in get send out as a batch so we have `1` as a count - it should be noted that at the time of this snapshot `5` more events are currently held by the batch step but not send out. If we had a batch size of 30 defined we would see no output events here.
 - `b` as `events,node=out,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=1 …` the events that make it to the output to be written, since we wrote only a single batch we get a count of `1` here as in `k`
 
-As mentioned above: In addition to the metrics provided by the pipeline itself, some operators can take generate additional metrics. In this example we have the `bucket` operator that will provide statistics on the different classes so in the following additional metrics would be generated:
 
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=logger_info,node=bucket,action=pass count=15 …` The events that were classified as `logger_info` and were passed on.
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=logger_info,node=bucket,action=overflow count=2 …` The events that were classified as `logger_info` and overflow.
-
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=logger,node=bucket,action=pass count=10 …` The events that were classified as `logger` and were passed on.
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=logger,node=bucket,action=overflow count=1 …` The events that were classified as `logger_info` and overflow.
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=default,node=bucket,action=pass count=5 …` The events that were classified as `default` and were passed on.
-- `bucketing,pipeline=tremor:///pipeline/main/01,port=out,direction=output,class=default,node=bucket,action=overflow count=2 …` The events that were classified as `default` and overflow.

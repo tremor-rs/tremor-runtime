@@ -40,10 +40,16 @@ impl OnrampImpl for Metronome {
     }
 }
 
-fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result<()> {
+fn onramp_loop(
+    rx: Receiver<OnrampMsg>,
+    config: Config,
+    preprocessors: Vec<String>,
+    codec: String,
+) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
-    let codec = codec::lookup(&codec)?;
+    let mut codec = codec::lookup(&codec)?;
+    let mut preprocessors = make_preprocessors(&preprocessors)?;
 
     loop {
         if pipelines.is_empty() {
@@ -77,19 +83,19 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
         let data =
             serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
         if let Ok(data) = data {
-            send_event(&pipelines, &codec, id, data);
+            send_event(&pipelines, &mut preprocessors, &mut codec, id, data);
         }
         id += 1;
     }
 }
 
 impl Onramp for Metronome {
-    fn start(&mut self, codec: String) -> Result<OnrampAddr> {
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
         thread::Builder::new()
             .name(format!("onramp-metronome-{}", "???"))
-            .spawn(|| onramp_loop(rx, config, codec))?;
+            .spawn(|| onramp_loop(rx, config, preprocessors, codec))?;
         Ok(tx)
     }
 

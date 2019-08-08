@@ -81,7 +81,35 @@ offramp:
       topic: demo
 ```
 
-## REST - Representational State Transfer
+###udp
+
+The UDP offramp sends data to a given host and port as UDP datagram.
+
+The default codec is `json`.
+
+Supported configuration options are:
+
+- `host` - the local host to send data from
+- `port` - the local port to send data from
+- `dst_host` - the destination host to send data to
+- `dst_port` - the destination port to send data to.
+
+Example:
+
+```yaml
+offramp:
+  - id: udp-out
+    type: udp
+    config:
+      host: '10.11.12.13'
+			port: 1234
+			dst_host: '20.21.22.23'
+			dst_port: 2345
+```
+
+
+
+### REST - Representational State Transfer
 
 The REST offramp is used to send events or batches of events to a REST endpoint either via a `POST` or `PUT` request. By default, a `POST` request is used. Batched events are send in a single request.
 

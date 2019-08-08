@@ -19,10 +19,11 @@ pub mod influx;
 pub mod json;
 pub mod msgpack;
 pub mod null;
+pub mod statsd;
 pub mod string;
 
 pub trait Codec: Send {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue>;
+    fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
     fn encode(&self, data: LineValue) -> Result<Vec<u8>>;
 }
 
@@ -33,6 +34,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "influx" => Ok(Box::new(influx::Influx {})),
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
+        "statsd" => Ok(Box::new(string::String {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }

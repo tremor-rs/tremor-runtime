@@ -156,7 +156,7 @@ Array grammar:
 Array literals in `tremor-script` are a comma-delimited set of expressions bracketed by the square brakcets '[' and ']'.
 
 ```tremor
-[ 1, 2, "foobar", 3.456e10, let a = 10, { "some": "json-like-document" }, null ]
+[ 1, 2, "foobar", 3.456e10, { "some": "json-like-document" }, null ]
 ```
 
 #### Records
@@ -403,8 +403,8 @@ Discover if the `store.book` path is an array, record or primitive structure:
 
 ```tremor
 match store.book of
-  case %[] => "store.book is an array-like data-structure",
-  case %{} => "store.book is a record-like data-structure",
+  case %[] => "store.book is an array-like data-structure"
+  case %{} => "store.book is a record-like data-structure"
   default => "store.book is a primitive data-type"
 end
 ```
@@ -413,7 +413,7 @@ Find all fiction books in the store:
 
 ```tremor
 let found = match store.book of
-  case fiction = %[ %{ category ~= "fiction" } ] => fiction,
+  case fiction = %[ %{ category ~= "fiction" } ] => fiction
   default => []
 end;
 emit found;
@@ -489,7 +489,7 @@ let sneaky_json = "
 ";
 
 match sneaky_json of
-  case json ~= json|| => json;
+  case json ~= json|| => json
   default => drop "this is not the json we were looking for"
 end;
 ```
@@ -613,10 +613,16 @@ end
 Merge expressions defines a difference against a targetted record and applies that difference to produce
 a result record. Merge operations in `tremor-script` follow merge-semantics defined in [RFC 7386](https://tools.ietf.org/html/rfc7386).
 
+```tremor
+let event = merge event of {"some": "record"} end
+```
+
+
+
 |Given|Merge|Result|Explanation|
 |---|---|---|---|
 |`{"a":"b"}`|`{"a":"c"}`|`{"a":"c"}`|Insert/Update field 'a'|
-|`{"a":"b"}`|`{"b":"c"}`|`{"a":"b", "b":"c"}|Insert field 'b'|
+|`{"a":"b"}`|`{"b":"c"}`|`{"a":"b", "b":"c"}`|Insert field 'b'|
 |`{"a":"b"}`|`{"a":null}`|`{}`|Erase field 'a'|
 |`{"a":"b","b":"c"}`|`{"a":null}`|`{"b":"c"}`|Erase field 'a'|
 |`{"a": [{"b":"c"}]}`|`{"a": [1]}`|`{"a": [1]}`|Replace field 'a' with literal array|
@@ -642,9 +648,9 @@ the `copy` and `move` operations and with the addition of an `upsert` operation 
 
 |Example|Expression|Result|Explanation|
 |---|---|---|---|
-|`let foo = {"foo":"bar"}`|`patch foo of insert baz => "qux" end`|`{"foo":"bar","baz":"qux"}`|Add baz field|
-|`let foo = {"foo":"bar"}`|`patch foo of erase foo, baz => "qux" end`|`{"baz":"qux"}`|Erase foo and add baz field|
-|`let foo = {"foo":"bar"}`|`patch foo of upsert bar => null end`|`{"foo":null}`|Set foo to null, or reset to null if field already exists|
+|`let foo = {"foo":"bar"}`|`patch foo of insert "baz" => "qux" end`|`{"foo":"bar","baz":"qux"}`|Add baz field|
+|`let foo = {"foo":"bar","baz":"qux"}`|`patch foo of erase "foo" end`|`{"baz":"qux"}`|Erase foo and add baz field|
+|`let foo = {"foo":"bar"}`|`patch foo of upsert "foo" => null end`|`{"foo":null}`|Set foo to null, or reset to null if field already exists|
 
 ### For comprehensions
 

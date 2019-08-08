@@ -18,7 +18,6 @@ COPY .cargo ./.cargo
 # Main library
 COPY src ./src
 # supporting libraries
-COPY property_testing ./property_testing
 COPY window ./window
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script

@@ -4,6 +4,22 @@ Tremor started with a straight forward problem statement:
 
 **During peak events logs and metrics going to Elastic Search and InfluxDB back up in Kafka queues  removing visibility from the system.**
 
+## tremor-0.5.3 (stable)
+
+In this release the focus was set on the ingest layer for Logstash and Telegraf. By adding support for UDP as well as reassembling GELF chunks we can replace both Telegraf, Logstash as well as the home grown GELF proxy that currently needs to be deployed alongside of Logstash.
+
+Part of the work was to introduce pre-processors that allow to handle binary manipulation on incoming messages without the codec needing to be aware of them. Examples would be decompression, base64 encoding, splitting multi line messages or assembling GELF chunks.
+
+While the involved code in this release is small the operational win that comes with a now unified logging and metrics pipeline is significant.
+
+## tremor-0.5.2 (stable)
+
+tremor-0.5.2 resolved the degenerate case we detected in the 0.5.0 release and put tremor way ahead of Logstash in all our benchmarks.
+
+The performance work resulted in finding a lack of functionality in the last release, it was not possible to delete a field from a record from a key stored in a variable - this was resolved as well changing the syntax of the `patch` statement to require escaping of keys.
+
+In addition this patch included small improvements in documentation to improve operator experience when first using tremor. 
+
 ## tremor-0.5.1 (stable)
 
 With this release we are experimenting with a shorter release cycle. While both 0.4 and 0.5 introduced major changes they lay a stable foundation that makes it easier to ship small features and wins to our users much more frequently.

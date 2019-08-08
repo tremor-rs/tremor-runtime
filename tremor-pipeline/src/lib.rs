@@ -410,6 +410,7 @@ pub struct ExecutableGraph {
     metrics: Vec<NodeMetrics>,
     metrics_idx: usize,
     last_metrics: u64,
+    metric_interval: Option<u64>,
 }
 
 type Returns = Vec<(String, Event)>;
@@ -422,11 +423,13 @@ impl ExecutableGraph {
         returns: &mut Returns,
     ) -> Result<()> {
         // Resolve the input stream or entrypoint for this enqueue operation
-        if event.ingest_ns - self.last_metrics > 10_000_000_000 {
-            let mut tags = HashMap::new();
-            tags.insert("pipeline".to_string(), self.id.clone());
-            self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
-            self.last_metrics = event.ingest_ns;
+        if let Some(ival) = self.metric_interval {
+            if event.ingest_ns - self.last_metrics > ival {
+                let mut tags = HashMap::new();
+                tags.insert("pipeline".to_string(), self.id.clone());
+                self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
+                self.last_metrics = event.ingest_ns;
+            }
         }
         self.stack
             .push((self.inputs[stream_name], "in".to_string(), event));
@@ -610,6 +613,7 @@ impl Pipeline {
             inputs.insert(k.clone(), i2pos[&idx]);
         }
 
+        let metric_interval = self.config.metrics_interval_s.map(|s| s * 1_000_000_000);
         Ok(ExecutableGraph {
             metrics: iter::repeat(NodeMetrics::default())
                 .take(graph.len())
@@ -623,6 +627,7 @@ impl Pipeline {
             port_indexes,
             contraflow,
             signalflow,
+            metric_interval,
         })
     }
 }

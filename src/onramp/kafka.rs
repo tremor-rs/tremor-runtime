@@ -93,8 +93,15 @@ impl ConsumerContext for LoggingConsumerContext {
 
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
-fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result<()> {
-    let codec = codec::lookup(&codec)?;
+fn onramp_loop(
+    rx: Receiver<OnrampMsg>,
+    config: Config,
+    preprocessors: Vec<String>,
+    codec: String,
+) -> Result<()> {
+    let mut codec = codec::lookup(&codec)?;
+    let mut preprocessors = make_preprocessors(&preprocessors)?;
+
     let hostname = match get_hostname() {
         Some(h) => h,
         None => "tremor-host.local".to_string(),
@@ -216,7 +223,13 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
                 if let Some(data) = m.payload_view::<[u8]>() {
                     if let Ok(data) = data {
                         id += 1;
-                        send_event(&pipelines, &codec, id, data.to_vec());
+                        send_event(
+                            &pipelines,
+                            &mut preprocessors,
+                            &mut codec,
+                            id,
+                            data.to_vec(),
+                        );
                     } else {
                         error!("failed to fetch data from kafka")
                     }
@@ -232,14 +245,14 @@ fn onramp_loop(rx: Receiver<OnrampMsg>, config: Config, codec: String) -> Result
 }
 
 impl Onramp for Kafka {
-    fn start(&mut self, codec: String) -> Result<OnrampAddr> {
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
         //        let id = self.id.clone();
         thread::Builder::new()
             .name(format!("onramp-kafka-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, codec) {
+                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

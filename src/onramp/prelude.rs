@@ -15,42 +15,71 @@
 pub use super::{Onramp, OnrampAddr, OnrampImpl, OnrampMsg};
 pub use crate::codec::{self, Codec};
 pub use crate::errors::*;
+pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
 use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+use std::mem;
 pub use std::thread;
 pub use tremor_pipeline::Event;
 
+pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
+    preprocessors.iter().map(|n| preprocessor::lookup(&n)).collect()
+}
 // We are borrowing a dyn box as we don't want to pass ownership.
 #[allow(clippy::borrowed_box)]
 pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
-    codec: &Box<dyn Codec>,
+    preprocessors: &mut [Box<dyn Preprocessor>],
+    codec: &mut Box<dyn Codec>,
     id: u64,
     data: Vec<u8>,
 ) {
-    if let Ok(value) = codec.decode(data) {
-        let event = tremor_pipeline::Event {
-            is_batch: false,
-            id,
-            meta: tremor_pipeline::MetaMap::new(),
-            value,
-            ingest_ns: nanotime(),
-            kind: None,
-        };
-        let len = pipelines.len();
-        for (input, addr) in &pipelines[..len - 1] {
-            if let Some(input) = input.instance_port() {
-                let _ = addr.addr.send(PipelineMsg::Event {
-                    input,
-                    event: event.clone(),
-                });
+    let ingest_ns = nanotime();
+    let mut data = vec![data];
+    let mut data1 = Vec::new();
+    for pp in preprocessors {
+        data1.clear();
+        for d in &data {
+            match pp.process(ingest_ns, d) {
+                Ok(mut r) => data1.append(&mut r),
+                Err(e) => {
+                    error!("Preprocessor error {}", e);
+                    return;
+                }
             }
         }
-        let (input, addr) = &pipelines[len - 1];
-        if let Some(input) = input.instance_port() {
-            let _ = addr.addr.send(PipelineMsg::Event { input, event });
+        mem::swap(&mut data, &mut data1);
+    }
+
+    for d in data {
+        match codec.decode(d, ingest_ns) {
+            Ok(Some(value)) => {
+                let event = tremor_pipeline::Event {
+                    is_batch: false,
+                    id,
+                    meta: tremor_pipeline::MetaMap::new(),
+                    value,
+                    ingest_ns,
+                    kind: None,
+                };
+                let len = pipelines.len();
+                for (input, addr) in &pipelines[..len - 1] {
+                    if let Some(input) = input.instance_port() {
+                        let _ = addr.addr.send(PipelineMsg::Event {
+                            input,
+                            event: event.clone(),
+                        });
+                    }
+                }
+                let (input, addr) = &pipelines[len - 1];
+                if let Some(input) = input.instance_port() {
+                    let _ = addr.addr.send(PipelineMsg::Event { input, event });
+                }
+            }
+            Ok(None) => (),
+            Err(e) => error!("{}", e),
         }
     }
 }

@@ -13,7 +13,7 @@
       command: curl -vs --stderr - http://localhost:9898/version
       stdout_has:
         - HTTP/1.1 200 OK
-        - '{"version":"0.5.2"}'
+        - '{"version":"0.5.3"}'
     - name: GET /onramp
       command: curl -vs --stderr - http://localhost:9898/onramp
       stdout_has:

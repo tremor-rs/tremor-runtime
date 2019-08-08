@@ -31,14 +31,17 @@ static ERL_NIF_TERM ts_eval(ErlNifEnv* env, int argc,
    if (!enif_inspect_binary(env, argv[0], &ast)) {
       return enif_make_badarg(env);
    }
-   char ast_c_str[8192];
-   strncpy(ast_c_str, ast.data, ast.size);
+   char * ast_c_str = malloc(ast.size + 1);
+   memcpy(ast_c_str, ast.data, ast.size);
    ast_c_str[ast.size] = 0;
 
-   char *json_value = tremor_script_c_eval(ast_c_str);
+   char json_value[8192];
+   json_value[0] = 0;
+   tremor_script_c_eval(ast_c_str, json_value, 8192);
    result.size = strlen(json_value);
    enif_alloc_binary(result.size, &result);
    memcpy(result.data, json_value, result.size);
+   free(ast_c_str);
    return enif_make_binary(env, &result);
 }
 

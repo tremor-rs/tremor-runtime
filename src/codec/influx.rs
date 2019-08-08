@@ -40,7 +40,7 @@ use super::Codec;
 use crate::errors::*;
 use std::str;
 use tremor_script::{
-    influx::{parse, InfluxDatapoint},
+    influx::{parse, try_to_bytes},
     LineValue,
 };
 
@@ -48,20 +48,24 @@ use tremor_script::{
 pub struct Influx {}
 
 impl Codec for Influx {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+    fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(Box::new(data), |raw| {
-            let s = str::from_utf8(&raw)?;
-            let parsed = parse(s)?;
-            Ok(simd_json::serde::to_owned_value(parsed)?.into())
+            parse(str::from_utf8(raw)?, ingest_ns)
         })
-        .map_err(|e| e.0)
+        .map_err(|e| e.0.into())
+        .map(Some)
     }
 
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
         data.rent(|json| {
-            let influx: InfluxDatapoint = simd_json::serde::from_borrowed_value(json.clone())?;
-            let bytes = influx.try_to_bytes()?;
-            Ok(bytes)
+            if let Some(bytes) = try_to_bytes(json) {
+                Ok(bytes)
+            } else {
+                Err(ErrorKind::InvalidInfluxData(
+                    "This event does not conform with the influx schema ".into(),
+                )
+                .into())
+            }
         })
     }
 }
@@ -71,35 +75,35 @@ mod tests {
     use super::*;
     use halfbrown::{hashmap, HashMap};
     use pretty_assertions::assert_eq;
-    use simd_json::{json, OwnedValue};
+    use simd_json::{json, BorrowedValue as Value, OwnedValue};
 
     #[test]
     fn unparse_test() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
-        let d = parse(s).expect("failed to parse");
+        let d = parse(s, 0).expect("failed to parse");
         // This is a bit ugly but to make a sensible compairison we got to convert the data
         // from an object to json to an object
-        let j: OwnedValue = serde_json::from_str(
-            serde_json::to_string(&d)
-                .expect("failed to encode")
-                .as_str(),
-        )
-        .expect("failed to decode");
-        let e: OwnedValue = json!({
+        let j: Value = d.into();
+        let j: OwnedValue = j.into();
+        let e = json!({
             "measurement": "weather",
             "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
             "timestamp": 1_465_839_830_100_400_200i64
         });
+
         assert_eq!(e, j)
     }
 
     #[test]
     pub fn decode() {
         let s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
-        let decoded = codec.decode(s).expect("failed to decode");
+        let decoded = codec
+            .decode(s, 0)
+            .expect("failed to decode")
+            .expect("failed to decode");
 
         let e: OwnedValue = json!({
             "measurement": "weather",
@@ -123,20 +127,15 @@ mod tests {
 
         let encoded = codec.encode(s.into()).expect("failed to encode");
 
-        let influx = InfluxDatapoint::from_parts(
-            "weather",
-            [("location".to_owned(), "us-midwest".to_owned())]
-                .into_iter()
-                .cloned()
-                .collect(),
-            [("temperature".to_owned(), 82.0.into())]
-                .into_iter()
-                .cloned()
-                .collect(),
-            1_465_839_830_100_400_200u64,
-        );
+        let influx: Value = json!({
+            "measurement": "weather",
+            "tags": hashmap!{"location" => "us-midwest"},
+            "fields": hashmap!{"temperature" => 82.0},
+            "timestamp": 1_465_839_830_100_400_200i64
+        })
+        .into();
 
-        assert_eq!(encoded, influx.try_to_bytes().expect("failed to encode"))
+        assert_eq!(encoded, try_to_bytes(&influx).expect("failed to encode"))
     }
 
     #[test]
@@ -282,7 +281,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature_str" => OwnedValue::from("too hot\\\\cold")},
-                    "timestamp": 1465839830100400205i64
+                    "timestamp": 1_465_839_830_100_400_205i64
                 }),
                 "case 9"
 
@@ -294,7 +293,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": hashmap!{"location" => "us-midwest"},
                     "fields": hashmap!{"temperature_str" => OwnedValue::from("too hot\\\\\\cold")},
-                    "timestamp": 1465839830100400206i64
+                    "timestamp": 1_465_839_830_100_400_206i64
                 }),
                 "case 10"
             ),
@@ -329,13 +328,16 @@ json!({
         let pairs = get_data_for_tests();
 
         pairs.iter().for_each(|case| {
-            let codec = Influx {};
+            let mut codec = Influx {};
 
             let encoded = codec
                 .encode(case.1.clone().into())
                 .expect("failed to encode");
 
-            let decoded = codec.decode(encoded.clone()).expect("failed to dencode");
+            let decoded = codec
+                .decode(encoded.clone(), 0)
+                .expect("failed to dencode")
+                .expect("failed to decode");
 
             if decoded != case.1 {
                 println!("{} fails while decoding", &case.2);
@@ -349,9 +351,12 @@ json!({
         let s =
             b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200"
                 .to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
-        let decoded = codec.decode(s).expect("failed to decode");
+        let decoded = codec
+            .decode(s, 0)
+            .expect("failed to decode")
+            .expect("failed to decode");
 
         let e: OwnedValue = json!({
             "measurement": "weather",
@@ -366,9 +371,12 @@ json!({
     #[test]
     pub fn parse_int_value() {
         let s = b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
-        let decoded = codec.decode(s).expect("failed to decode");
+        let decoded = codec
+            .decode(s, 0)
+            .expect("failed to decode")
+            .expect("failed to decode");
 
         let e: OwnedValue = json!({
             "measurement": "weather",
@@ -384,7 +392,7 @@ json!({
     pub fn live_usecase() {
         let s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage BytesInPerSec=0i,BytesOutPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i,TotalFetchRequestsPerSec=1993153i 1562179275506000000".to_vec();
 
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let e: OwnedValue = json!({
                     "measurement" : "kafka_BrokerTopicMetrics",
@@ -406,10 +414,11 @@ json!({
                        },
                     "timestamp" : 1_562_179_275_506_000_000i64
         });
-        let decoded = codec.decode(s.clone()).expect("failed to decode");
-        let encoded = codec
-            .encode(decoded.clone().into())
-            .expect("failed to encode");
+        let decoded = codec
+            .decode(s.clone(), 0)
+            .expect("failed to decode")
+            .expect("failed to decode");
+        let encoded = codec.encode(decoded.clone()).expect("failed to encode");
 
         assert_eq!(decoded, e);
         unsafe {
@@ -456,7 +465,7 @@ json!({
 
         b.iter(|| {
             for s in sarr {
-                parse(s);
+                parse(s, 0);
             }
         });
     }

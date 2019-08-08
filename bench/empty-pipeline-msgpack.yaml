@@ -5,8 +5,9 @@ onramp:
   - id: blaster
     type: blaster
     codec: msgpack
+    preprocessors:
+      - base64
     config:
-      base64: true
       source: ./demo/data/data.msgpack.xz
 
 offramp:

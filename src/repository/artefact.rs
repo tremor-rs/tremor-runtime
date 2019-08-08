@@ -283,10 +283,16 @@ impl Artefact for OnrampArtefact {
         } else {
             stream.default_codec().to_string()
         };
+        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
+            preprocessors.clone()
+        } else {
+            vec![]
+        };
         let res = world
             .system
             .send(CreateOnramp {
                 id: servant_id,
+                preprocessors,
                 codec,
                 stream,
             })

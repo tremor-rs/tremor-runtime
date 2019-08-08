@@ -225,10 +225,11 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
         if l.is_empty() || l.starts_with('#') {
             continue;
         }
-        let codec = tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
+        let mut codec =
+            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
 
-        match codec.decode(l.as_bytes().to_vec()) {
-            Ok(ref json) => {
+        match codec.decode(l.as_bytes().to_vec(), 0) {
+            Ok(Some(ref json)) => {
                 let mut global_map = simd_json::borrowed::Value::Object(hashmap! {});
                 #[allow(mutable_transmutes)]
                 #[allow(clippy::transmute_ptr_to_ptr)]
@@ -249,6 +250,12 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
                         );
                     }
                 };
+            }
+            Ok(_) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"status": false, "data": l, "error": "failed to decode", "line": num})
+                );
             }
             Err(reason) => {
                 let err_str = reason.to_string();
@@ -336,9 +343,11 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
     for (num, line) in input.lines().enumerate() {
         let l = line?;
-        let codec = tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
+        let mut codec =
+            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
         let json = codec
-            .decode(l.as_bytes().to_vec())
+            .decode(l.as_bytes().to_vec(), 0)
+            .expect("Failed to decode input JSON")
             .expect("Failed to decode input JSON");
         let m = hashmap! {};
 

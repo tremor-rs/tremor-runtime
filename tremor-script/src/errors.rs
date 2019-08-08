@@ -136,7 +136,7 @@ impl ErrorKind {
             BinaryDrop(outer, inner) => (Some(*outer), Some(*inner)),
             BinaryEmit(outer, inner) => (Some(*outer), Some(*inner)),
             ExtraToken(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InsertKeyExists(outer, inner, _) => (Some(*outer), Some(*inner)),
+            PatchKeyExists(outer, inner, _) => (Some(*outer), Some(*inner)),
             InvalidAssign(outer, inner) => (Some(*outer), Some(*inner)),
             InvalidBinary(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
             InvalidDrop(outer, inner) => (Some(*outer), Some(*inner)),
@@ -194,7 +194,7 @@ impl ErrorKind {
         use ErrorKind::*;
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute == outer.1.absolute => Some("It looks like a `;` is missing at the end of the script".into()),
-            UnrecognizedToken(_, _, t, _) if t == "default" => Some("You might have a trailing `,` in the prior statement".into()),
+            UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())
             }
@@ -498,9 +498,9 @@ error_chain! {
         /*
          * Patch
          */
-        InsertKeyExists(expr: Range, inner: Range, key: String) {
-            description("The key that is supposed to be inserted already exists")
-                display("The key that is supposed to be inserted already exists: {}", key)
+        PatchKeyExists(expr: Range, inner: Range, key: String) {
+            description("The key that is supposed to be written to already exists")
+                display("The key that is supposed to be written to already exists: {}", key)
         }
         UpdateKeyMissing(expr: Range, inner: Range, key:String) {
             description("The key that is supposed to be updated does not exists")
@@ -579,12 +579,12 @@ pub fn error_oops<T, O: BaseExpr>(outer: &O) -> Result<T> {
     Err(ErrorKind::Oops(outer.extent()).into())
 }
 
-pub fn error_patch_insert_key_exists<T, O: BaseExpr, I: BaseExpr>(
+pub fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     key: String,
 ) -> Result<T> {
-    Err(ErrorKind::InsertKeyExists(outer.extent(), inner.extent(), key).into())
+    Err(ErrorKind::PatchKeyExists(outer.extent(), inner.extent(), key).into())
 }
 
 pub fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(

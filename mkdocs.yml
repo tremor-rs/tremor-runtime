@@ -19,49 +19,50 @@ markdown_extensions:
       permalink: true
 nav:
   - Home: index.md
-  - 'Architecture Overview': Overview.md
-  - History: History.md
+  - 'Architecture Overview': overview.md
+  - Tremor Script:
+    - Overview: tremor-script.md
+    - Function Reference:
+      - Overview: tremor-script/functions.md
+      - array: tremor-script/functions/array.md
+      - chash: tremor-script/functions/chash.md
+      - datetime: tremor-script/functions/datetime.md
+      - record: tremor-script/functions/record.md
+      - re: tremor-script/functions/re.md
+      - string: tremor-script/functions/string.md
+      - system: tremor-script/functions/system.md
+      - type: tremor-script/functions/type.md
+    - Extractor Reference:
+      -  Overview: tremor-script/extractors.md
+      -  Base64: tremor-script/extractors/base64.md
+      -  CIDR: tremor-script/extractors/cidr.md
+      -  Dissect: tremor-script/extractors/dissect.md
+      -  Glob: tremor-script/extractors/glob.md
+      -  Influx: tremor-script/extractors/influx.md
+      -  JSON: tremor-script/extractors/json.md
+      -  KV: tremor-script/extractors/kv.md
+      -  Regex: tremor-script/extractors/regex.md
+    - Recipes: tremor-script/recipes.md
   - Operations:
-    - Configuration: Configuration.md
-    - Monitoring.md
-    - Tremor Script:
-      - Overview: tremor-script.md
-      - Function Reference:
-          - Overview: tremor-script/functions.md
-          - array: tremor-script/functions/array.md
-          - chash: tremor-script/functions/chash.md
-          - datetime: tremor-script/functions/datetime.md
-          - record: tremor-script/functions/record.md
-          - re: tremor-script/functions/re.md
-          - string: tremor-script/functions/string.md
-          - system: tremor-script/functions/system.md
-          - type: tremor-script/functions/type.md
-      - Extractor Reference:
-          -  Overview: tremor-script/extractors.md
-          -  Base64: tremor-script/extractors/base64.md
-          -  CIDR: tremor-script/extractors/cidr.md
-          -  Dissect: tremor-script/extractors/dissect.md
-          -  Glob: tremor-script/extractors/glob.md
-          -  Influx: tremor-script/extractors/influx.md
-          -  JSON: tremor-script/extractors/json.md
-          -  KV: tremor-script/extractors/kv.md
-          -  Regex: tremor-script/extractors/regex.md
-      - Recipes: tremor-script/recipes.md
-    - API: Api.md
-    - Tremor Tool: CLI.md
-    - Configuration Walkthrough: ConfigurationWalkthrough.md
+    - Configuration: operations/configuration.md
+    - Monitoring: operations/monitoring.md
+    - Tremor Tool: operations/cli.md
+    - Configuration Walkthrough: operations/configuration-walkthrough.md
   - Artefacts:
-    - Codecs: codecs.md
-    - Onramps: onramps.md
-    - Offramps: offramps.md
-    - Operators: operators.md
+    - Preprocessors: artefacts/preprocessors.md
+    - Codecs: artefacts/codecs.md
+    - Onramps: artefacts/onramps.md
+    - Offramps: artefacts/offramps.md
+    - Operators: artefacts/operators.md
   - Development:
-    - 'Quick Start Guide': QuickStart.md
-    - Profiling: Profiling.md
-    - 'Debugging with LLDB': Debugging.md
+    - 'Quick Start Guide': development/quick-start.md
+    - Profiling: development/profiling.md
+    - 'Debugging with LLDB': development/debugging.md
     - Benchmarking:
-      - Overview: Benchmarking.md
-      - Logstash: benchmarks/LogstashBenchmark.md
-    - Testing: Testing.md
-    - Investigation: IssueInvestigation.md
+      - Overview: development/benchmarking.md
+      - Logstash: development/benchmarks/LogstashBenchmark.md
+    - Testing: development/testing.md
+    - Investigation: development/issue-investigation.md
+  - API: api.md
+  - History: history.md
   - 'Glossary': Glossary.md

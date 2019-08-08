@@ -22,7 +22,7 @@ use tremor_script::LineValue;
 pub struct String {}
 
 impl Codec for String {
-    fn decode(&self, data: Vec<u8>) -> Result<LineValue> {
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         let v: std::result::Result<
             LineValue,
             rental::RentalError<std::str::Utf8Error, std::boxed::Box<std::vec::Vec<u8>>>,
@@ -30,7 +30,7 @@ impl Codec for String {
             Ok(Value::from(std::str::from_utf8(data.as_slice())?))
         });
         if let Ok(v) = v {
-            Ok(v)
+            Ok(Some(v))
         } else {
             Err(ErrorKind::BadUTF8InString.into())
         }

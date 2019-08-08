@@ -25,6 +25,7 @@ mod file;
 mod kafka;
 mod metronome;
 mod prelude;
+mod udp;
 
 pub trait OnrampImpl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
@@ -37,7 +38,7 @@ pub enum OnrampMsg {
 pub type OnrampAddr = Sender<OnrampMsg>;
 
 pub trait Onramp: Send {
-    fn start(&mut self, codec: String) -> Result<OnrampAddr>;
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr>;
     fn default_codec(&self) -> &str;
 }
 
@@ -47,6 +48,7 @@ pub fn lookup(name: String, config: Option<Value>) -> Result<Box<dyn Onramp>> {
         "file" => file::File::from_config(&config),
         "kafka" => kafka::Kafka::from_config(&config),
         "metronome" => metronome::Metronome::from_config(&config),
+        "udp" => udp::Udp::from_config(&config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }
 }
@@ -65,6 +67,7 @@ pub struct CreateOnramp {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
     pub codec: String,
+    pub preprocessors: Vec<String>,
 }
 
 impl fmt::Debug for CreateOnramp {
@@ -80,7 +83,7 @@ impl Message for CreateOnramp {
 impl Handler<CreateOnramp> for Manager {
     type Result = Result<OnrampAddr>;
     fn handle(&mut self, mut req: CreateOnramp, _ctx: &mut Context<Self>) -> Self::Result {
-        req.stream.start(req.codec)
+        req.stream.start(req.codec, req.preprocessors)
     }
 }
 

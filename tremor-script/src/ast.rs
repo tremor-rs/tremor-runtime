@@ -15,7 +15,7 @@
 mod base_expr;
 use crate::errors::*;
 //use crate::interpreter::Interpreter;
-use crate::interpreter::exec_binary;
+use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
 use crate::registry::{Context, Registry, TremorFn};
 use crate::tilde::Extractor;
@@ -331,6 +331,7 @@ impl<'script> List1<'script> {
         })
     }
 }
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct List<'script, Ctx: Context + Clone + 'static> {
     pub start: Location,
@@ -352,6 +353,7 @@ fn reduce2<'script, Ctx: Context + Clone + 'static>(
 ) -> Result<Value<'script>> {
     match expr {
         ImutExpr::Literal(Literal { value: v, .. }) => Ok(v),
+        //ImutExpr::Unary(Literal { value: v, .. }) => Ok(v),
         _ => unreachable!(),
     }
 }
@@ -493,8 +495,19 @@ impl<'script> ImutExpr1<'script> {
                 } => {
                     let start = u1.start;
                     let end = u1.end;
-                    let expr = ImutExpr::Unary(Box::new(u1));
-                    let value = reduce2(expr)?;
+                    let expr = reduce2(u1.expr)?;
+                    let value = if let Some(v) = exec_unary(u1.kind, &expr) {
+                        v.into_owned()
+                    } else {
+                        return Err(ErrorKind::InvalidUnary(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            u1.kind,
+                            expr.kind(),
+                        )
+                        .into());
+                    };
+
                     let lit = Literal { start, end, value };
                     ImutExpr::Literal(lit)
                 }
@@ -1148,12 +1161,14 @@ pub enum PatchOperation1<'script> {
     Erase {
         ident: ImutExpr1<'script>,
     },
-    /*
-    Move {
-        from: Expr1<'script>,
-        to: Expr1<'script>,
+    Copy {
+        from: ImutExpr1<'script>,
+        to: ImutExpr1<'script>,
     },
-    */
+    Move {
+        from: ImutExpr1<'script>,
+        to: ImutExpr1<'script>,
+    },
     Merge {
         ident: ImutExpr1<'script>,
         expr: ImutExpr1<'script>,
@@ -1185,12 +1200,14 @@ impl<'script> PatchOperation1<'script> {
             Erase { ident } => PatchOperation::Erase {
                 ident: ident.up(helper)?,
             },
-            /*
+            Copy { from, to } => PatchOperation::Copy {
+                from: from.up(helper)?,
+                to: to.up(helper)?,
+            },
             Move { from, to } => PatchOperation::Move {
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             },
-            */
             Merge { ident, expr } => PatchOperation::Merge {
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
@@ -1219,12 +1236,14 @@ pub enum PatchOperation<'script, Ctx: Context + Clone + 'static> {
     Erase {
         ident: ImutExpr<'script, Ctx>,
     },
-    /*
-    Move {
-        from: Expr<'script, Ctx>,
-        to: Expr<'script, Ctx>,
+    Copy {
+        from: ImutExpr<'script, Ctx>,
+        to: ImutExpr<'script, Ctx>,
     },
-    */
+    Move {
+        from: ImutExpr<'script, Ctx>,
+        to: ImutExpr<'script, Ctx>,
+    },
     Merge {
         ident: ImutExpr<'script, Ctx>,
         expr: ImutExpr<'script, Ctx>,

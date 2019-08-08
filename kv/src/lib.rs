@@ -27,12 +27,12 @@
 // | allow_duplicate_values | not supported, since we deal with JSON maps             | No        |
 // | default_keys           | should be handled in TS (via assignment)                | TS        |
 // | exclude_keys           | should behandled in TS (via delete_keys?)               | TS        |
-// | field_split            | supported, array of characters                          | Yes       |
-// | field_split_pattern    | currently not supported                                 | No        |
+// | field_split            | supported, array of strings                             | Yes       |
+// | field_split_pattern    | not supported                                           | No        |
 // | include_brackets       | should be handled in TS (via map + dissect?)            | TS        |
 // | include_keys           | should be handled in TS (via select)                    | TS        |
 // | prefix                 | should be handled in TS (via map + string::format)      | TS        |
-// | recursive              | currently not supported                                 | No        |
+// | recursive              | not supported                                           | No        |
 // | remove_char_key        | should be handled in TS (via map + re::replace)         | TS        |
 // | remove_char_value      | should be handled in TS (via map + re::replace)         | TS        |
 // | source                 | handled in TS at call time                              | TS        |
@@ -44,40 +44,158 @@
 // | transform_value        | should be handled in TS (via map + ?)                   | TS        |
 // | trim_key               | should be handled in TS (via map + ?)                   | TS        |
 // | trim_value             | should be handled in TS (via map + ?)                   | TS        |
-// | value_split            | supported, array of characters                          | Yes       |
-// | value_split_pattern    | currently not supported                                 | No        |
+// | value_split            | supported, array of strings                             | Yes       |
+// | value_split_pattern    | not supported                                           | No        |
 // | whitespace             | we always run in 'lenient mode' as is the default of LS | No        |
 
+use serde::Serialize;
 use simd_json::value::borrowed::{Map, Value};
+use std::fmt;
 
-/// Splits a string that represents KV pairs.
-///
-/// * input - The input string
-/// * field_seperator - An array of characters that seperate fields
-/// * key_seperator - An array of characters that seperats the key from a value
-///
-/// Note: Fields that have on value are dropped.
-pub fn split<'input>(
-    input: &'input str,
-    field_seperator: &[char],
-    key_seperator: &[char],
-) -> Option<Map<'input>> {
-    let r: Map = input
-        .split(|c| field_seperator.contains(&c))
-        .filter_map(|field| {
-            let kv: Vec<&str> = field.split(|c| key_seperator.contains(&c)).collect();
-            if kv.len() == 2 {
-                Some((kv[0].into(), Value::from(kv[1])))
-            } else {
-                None
-            }
-        })
-        .collect();
-    if r.is_empty() {
-        None
-    } else {
-        Some(r)
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    InvalidPattern(usize),
+    DoubleSeperator(String),
+}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidPattern(p) => write!(f, "invalid pattern at character {}", p),
+            Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
+        }
     }
+}
+
+impl std::error::Error for Error {}
+
+#[derive(PartialEq, Debug, Clone, Serialize)]
+pub struct Pattern {
+    field_seperators: Vec<String>,
+    key_seperators: Vec<String>,
+}
+
+impl std::default::Default for Pattern {
+    fn default() -> Self {
+        Self {
+            field_seperators: vec![" ".to_string()],
+            key_seperators: vec![":".to_string()],
+        }
+    }
+}
+impl Pattern {
+    pub fn compile(pattern: &str) -> Result<Self, Error> {
+        let mut field_seperators = Vec::new();
+        let mut key_seperators = Vec::new();
+        let mut i = 0;
+        loop {
+            if pattern[i..].starts_with("%{key}") {
+                i += 6;
+                if let Some(i1) = pattern[i..].find("%{val}") {
+                    if i1 != 0 {
+                        key_seperators.push(pattern[i..i + i1].to_string());
+                    }
+                    i += i1 + 6;
+                } else {
+                    return Err(Error::InvalidPattern(i));
+                }
+            } else {
+                if let Some(i1) = pattern[i..].find("%{key}") {
+                    if i1 != 0 {
+                        field_seperators.push(pattern[i..i + i1].to_string());
+                    }
+                    i += i1;
+                } else if !pattern[i..].is_empty() {
+                    field_seperators.push(pattern[i..].to_string());
+
+                    break;
+                } else {
+                    break;
+                }
+            }
+        }
+        if field_seperators.is_empty() {
+            field_seperators.push(" ".to_string())
+        }
+        if key_seperators.is_empty() {
+            key_seperators.push(":".to_string())
+        }
+        field_seperators.sort();
+        key_seperators.sort();
+        field_seperators.dedup();
+        key_seperators.dedup();
+
+        for fs in &field_seperators {
+            if key_seperators.iter().any(|ks| ks.find(fs).is_some()) {
+                return Err(Error::DoubleSeperator(fs.to_string()));
+            }
+
+            if field_seperators
+                .iter()
+                .any(|fs2| fs2 != fs && fs2.contains(fs))
+            {
+                return Err(Error::DoubleSeperator(fs.to_string()));
+            }
+        }
+
+        for ks in &key_seperators {
+            if field_seperators.iter().any(|fs| fs.find(ks).is_some()) {
+                return Err(Error::DoubleSeperator(ks.to_string()));
+            }
+
+            if key_seperators
+                .iter()
+                .any(|ks2| ks2 != ks && ks2.contains(ks))
+            {
+                return Err(Error::DoubleSeperator(ks.to_string()));
+            }
+        }
+
+        Ok(Self {
+            field_seperators,
+            key_seperators,
+        })
+    }
+    /// Splits a string that represents KV pairs.
+    ///
+    /// * input - The input string
+    /// * field_seperator - An array of characters that seperate fields
+    /// * key_seperator - An array of characters that seperats the key from a value
+    ///
+    /// Note: Fields that have on value are dropped.
+    pub fn run<'input>(&self, input: &'input str) -> Option<Map<'input>> {
+        let r: Map = multi_split(input, &self.field_seperators)
+            .iter()
+            .filter_map(|field| {
+                let kv: Vec<&str> = multi_split(field, &self.key_seperators);
+                if kv.len() == 2 {
+                    Some((kv[0].into(), Value::from(kv[1])))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if r.is_empty() {
+            None
+        } else {
+            Some(r)
+        }
+    }
+}
+
+fn multi_split<'input>(input: &'input str, seperators: &[String]) -> Vec<&'input str> {
+    use std::mem;
+    let mut i: Vec<&str> = vec![input];
+    let mut i1 = vec![];
+    let mut r: Vec<&str>;
+    for s in seperators {
+        i1.clear();
+        for e in &i {
+            r = e.split(s.as_str()).collect();
+            i1.append(&mut r);
+        }
+        mem::swap(&mut i, &mut i1);
+    }
+    i
 }
 
 #[cfg(test)]
@@ -85,30 +203,124 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_multisplit() {
+        let seps = vec![String::from(" "), String::from(";")];
+        let input = "this=is;a=test for:seperators";
+
+        let i = multi_split(input, &seps);
+        assert_eq!(i, vec!["this=is", "a=test", "for:seperators"]);
+    }
+    #[test]
     fn simple_split() {
-        let r = split("this=is a=test", &[' '], &['=']).expect("Failed to split input");
+        let kv = Pattern::compile("%{key}=%{val}").expect("Failed to build pattern");
+        let r = kv.run("this=is a=test").expect("Failed to split input");
         assert_eq!(r.len(), 2);
         assert_eq!(r["this"], "is");
         assert_eq!(r["a"], "test");
     }
 
     #[test]
+    fn simple_split2() {
+        let kv = Pattern::compile("&%{key}=%{val}").expect("Failed to build pattern");
+        let r = kv.run("this=is&a=test").expect("Failed to split input");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+    }
+
+    #[test]
+    fn simple_split3() {
+        let kv = Pattern::compile("&").expect("Failed to build pattern");
+        let r = kv.run("this:is&a:test").expect("Failed to split input");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+    }
+
+    #[test]
+    fn simple_split4() {
+        let kv = Pattern::compile("%{key}%{%{val}").expect("Failed to build pattern");
+        let r = kv.run("this%{is a%{test").expect("Failed to split input");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+    }
+
+    #[test]
+    fn simple_split5() {
+        let kv = Pattern::compile("%{key}%{key}%{val}").expect("Failed to build pattern");
+        dbg!(&kv);
+        let r = kv
+            .run("this%{key}is a%{key}test")
+            .expect("Failed to split input");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+    }
+
+    #[test]
+    fn invalid_pattern() {
+        let kv = Pattern::compile("%{key} %{val} ");
+        assert_eq!(kv.err(), Some(Error::DoubleSeperator(String::from(" "))));
+        let kv = Pattern::compile("%{key}=%{val}; %{key}:%{val} %{key}:%{val}");
+        assert_eq!(kv.err(), Some(Error::DoubleSeperator(String::from(" "))));
+        let kv = Pattern::compile("%{key}=%{val};%{key}:%{val} :%{key}:%{val}");
+        assert_eq!(kv.err(), Some(Error::DoubleSeperator(String::from(":"))));
+    }
+    #[test]
     fn one_field() {
-        let r = split("this=is", &[' '], &['=']).expect("Failed to split input");
+        let kv = Pattern::compile("%{key}=%{val}").expect("Failed to build pattern");
+        let r = kv.run("this=is").expect("Failed to split input");
         assert_eq!(r.len(), 1);
         assert_eq!(r["this"], "is");
     }
 
     #[test]
     fn no_split() {
-        let r = split("this is a test", &[' '], &['=']);
+        let kv = Pattern::compile("%{key}=%{val}").expect("Failed to build pattern");
+        let r = kv.run("this is a test");
         assert!(r.is_none());
     }
 
     #[test]
     fn different_seperatpors() {
-        let r = split("this=is;a=test for:seperators", &[' ', ';'], &['=', ':'])
+        let kv = Pattern::compile("%{key}=%{val};%{key}:%{val} %{key}:%{val}")
+            .expect("Failed to build pattern");
+        let r = kv
+            .run("this=is;a=test for:seperators")
             .expect("Failed to split input");
+        dbg!(&r);
+        dbg!(&kv);
+        assert_eq!(r.len(), 3);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+        assert_eq!(r["for"], "seperators");
+    }
+
+    #[test]
+    fn different_seperatpors2() {
+        let kv = Pattern::compile("%{key}=%{val}%{key}:%{val} %{key}:%{val};")
+            .expect("Failed to build pattern");
+        let r = kv
+            .run("this=is;a=test for:seperators")
+            .expect("Failed to split input");
+        dbg!(&r);
+        dbg!(&kv);
+        assert_eq!(r.len(), 3);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+        assert_eq!(r["for"], "seperators");
+    }
+
+    #[test]
+    fn invalid_pattern2() {
+        let kv = Pattern::compile("%{key}=%{val};%{key}:%{val} %{key}:%{val}")
+            .expect("Failed to build pattern");
+        let r = kv
+            .run("this=is;a=test for:seperators")
+            .expect("Failed to split input");
+        dbg!(&r);
+        dbg!(&kv);
         assert_eq!(r.len(), 3);
         assert_eq!(r["this"], "is");
         assert_eq!(r["a"], "test");

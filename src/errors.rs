@@ -117,6 +117,7 @@ error_chain! {
         MsgPackEncoderError(rmp_serde::encode::Error);
         GrokError(grok::Error);
         DateTimeParseError(chrono::ParseError);
+        SnappyError(snap::Error);
     }
 
     errors {
@@ -180,6 +181,16 @@ error_chain! {
                 display("Unknown namespace: {}", n)
         }
 
+        InvalidGELFHeader {
+            description("Invalid GELF header")
+                display("Invalid GELF header")
+        }
+
+        InvalidStatsD {
+            description("Invalid statsd metric")
+                display("Invalid statsd metric")
+        }
+
 
         UnknownSubPipeline(p: String) {
             description("Reference to unknown sub-pipeline")
@@ -215,7 +226,11 @@ error_chain! {
         }
         BadUTF8InString {
             description("Bad UTF8 in input string")
-                display("Bad UTF8 in input string")
+
+        }
+        InvalidCompression {
+            description("Data can't be decompressed")
+                display("The data did not contain a known magic header to identify a supported compression")
         }
     }
 }

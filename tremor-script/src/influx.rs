@@ -14,111 +14,63 @@
 // limitations under the License.
 
 use crate::errors::*;
-use halfbrown::{hashmap, HashMap};
-use simd_json::{BorrowedValue, OwnedValue};
+use halfbrown::HashMap;
+use simd_json::value::borrowed::{Map, Value};
+use simd_json::value::ValueTrait;
 use std::borrow::Cow;
 use std::str::Chars;
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct InfluxDatapoint {
-    measurement: String,
-    tags: HashMap<String, String>,
-    fields: HashMap<String, OwnedValue>,
-    timestamp: u64,
-}
+pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
+    let mut output = v.get("measurement")?.as_string()?.escape();
 
-impl InfluxDatapoint {
-    pub fn try_to_bytes(self) -> Result<Vec<u8>> {
-        let mut output = self.measurement.escape();
-
-        let mut tag_collection = self
-            .tags
-            .iter()
-            .map(|(key, value)| {
-                let mut op = key.escape().to_owned();
-                op.push('=');
-                op.push_str(&value.escape());
-                op
-            })
-            .collect::<Vec<String>>();
-        tag_collection.sort();
-
-        let tags = tag_collection.join(",");
-        if !tags.is_empty() {
-            output.push_str(",");
-            output.push_str(&tags);
-        }
-
-        output.push_str(" ");
-
-        let mut field_collection = vec![];
-        for (key, field) in self.fields.iter() {
-            let value = match field {
-                OwnedValue::String(s) => Ok(process_string(s)),
-
-                OwnedValue::F64(num) => Ok(num.to_string()),
-                OwnedValue::I64(num) => Ok(num.to_string() + "i"),
-
-                OwnedValue::Bool(b) => Ok(b.to_string()),
-                _ => Err(ErrorKind::InvalidInfluxData(
-                    "Arrays are not supported for field values".into(),
-                )),
-            }?;
-
+    let mut tag_collection = v
+        .get("tags")?
+        .as_object()?
+        .iter()
+        .filter_map(|(key, value)| {
             let mut op = key.escape().to_owned();
             op.push('=');
-            op.push_str(&value);
-            field_collection.push(op);
-        }
-        field_collection.sort();
-        let fields = field_collection.join(",");
-        output.push_str(&fields);
-        output.push(' ');
+            op.push_str(&value.as_string()?.escape());
+            Some(op)
+        })
+        .collect::<Vec<String>>();
+    tag_collection.sort();
 
-        output.push_str(&self.timestamp.to_string());
-
-        Ok(output.into())
+    let tags = tag_collection.join(",");
+    if !tags.is_empty() {
+        output.push_str(",");
+        output.push_str(&tags);
     }
 
-    pub fn from_parts(
-        measurement: &str,
-        tags: HashMap<String, String>,
-        fields: HashMap<String, OwnedValue>,
-        timestamp: u64,
-    ) -> InfluxDatapoint {
-        InfluxDatapoint {
-            measurement: measurement.to_owned(),
-            tags,
-            fields,
-            timestamp,
-        }
-    }
-}
+    output.push_str(" ");
+    let fields = v.get("fields")?.as_object()?;
+    let mut field_collection = Vec::with_capacity(fields.len());
+    for (key, field) in fields.iter() {
+        let value = match field {
+            Value::String(s) => process_string(s),
+            Value::F64(num) => num.to_string(),
+            Value::I64(num) => num.to_string() + "i",
+            Value::Bool(b) => b.to_string(),
+            _ => return None,
+        };
 
-#[allow(clippy::implicit_hasher)]
-impl<'influx> From<InfluxDatapoint> for HashMap<Cow<'influx, str>, BorrowedValue<'influx>> {
-    fn from(x: InfluxDatapoint) -> HashMap<Cow<'influx, str>, BorrowedValue<'influx>> {
-        let tags = x
-            .tags
-            .into_iter()
-            .map(|(x, y)| (x.into(), BorrowedValue::from(y)))
-            .collect();
-        let fields = x
-            .fields
-            .into_iter()
-            .map(|(x, y)| (x.into(), BorrowedValue::from(y)))
-            .collect();
-        hashmap!(
-            "measurement".into() => x.measurement.into(),
-            "tags".into() => BorrowedValue::Object(tags),
-            "fields".into() => BorrowedValue::Object(fields),
-            "timestamp".into() => x.timestamp.into()
-        )
+        let mut op = key.escape().to_owned();
+        op.push('=');
+        op.push_str(&value);
+        field_collection.push(op);
     }
+    field_collection.sort();
+    let fields = field_collection.join(",");
+    output.push_str(&fields);
+    output.push(' ');
+
+    output.push_str(&v.get("timestamp")?.as_u64()?.to_string());
+
+    Some(output.into())
 }
 
 fn process_string(s: &str) -> String {
-    let mut out = String::new();
+    let mut out = String::from(r#"""#);
     s.chars().for_each(|ch| match ch {
         c if c == '\\' || c == '\"' => {
             out.push('\\');
@@ -126,62 +78,59 @@ fn process_string(s: &str) -> String {
         }
         c => out.push(c),
     });
-
-    format!("\"{}\"", out)
+    out.push('"');
+    out
 }
 
-pub fn parse(data: &str) -> Result<InfluxDatapoint> {
-    let mut data = String::from(data);
-    loop {
-        if let Some(c) = data.pop() {
-            if c != '\n' {
-                data.push(c);
-                break;
-            }
-        } else {
-            return Err(ErrorKind::InvalidInfluxData("Empty.".into()).into());
-        }
+pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Value<'input>> {
+    let data = data.trim_end();
+    if data.is_empty() {
+        return Err(ErrorKind::InvalidInfluxData("Empty.".into()).into());
     }
 
-    let mut chars = data.as_mut_str().chars();
+    let mut chars = data.chars();
     let (measurement, c) = parse_to_char2(&mut chars, ',', ' ')?;
     let tags = if c == ',' {
         parse_tags(&mut chars)?
     } else {
-        HashMap::new()
+        Map::new()
     };
 
     let fields = parse_fields(&mut chars)?;
-    let timestamp = chars.as_str().parse()?;
+    let timestamp_str = chars.as_str();
+    let timestamp = if timestamp_str.is_empty() {
+        ingest_ns
+    } else {
+        chars.as_str().parse()?
+    };
 
-    Ok(InfluxDatapoint {
-        measurement,
-        tags,
-        fields,
-        timestamp,
-    })
+    let mut m = Map::with_capacity(4);
+    m.insert_nocheck("measurement".into(), Value::String(measurement));
+    m.insert_nocheck("tags".into(), Value::Object(tags));
+    m.insert_nocheck("fields".into(), Value::Object(fields));
+    m.insert_nocheck("timestamp".into(), timestamp.into());
+    Ok(Value::Object(m))
 }
 
-fn parse_string(chars: &mut Chars) -> Result<(OwnedValue, char)> {
+fn parse_string<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>)> {
     let val = parse_to_char(chars, '"')?;
     match chars.next() {
-        Some(',') => Ok((OwnedValue::from(val), ',')),
-        Some(' ') => Ok((OwnedValue::from(val), ' ')),
+        c @ Some(',') | c @ Some(' ') | c @ None => Ok((Value::String(val), c)),
         _ => Err(ErrorKind::InvalidInfluxData("Unexpected character after string".into()).into()),
     }
 }
 
-fn float_or_bool(s: &str) -> Result<OwnedValue> {
+fn float_or_bool(s: &str) -> Result<Value<'static>> {
     match s {
-        "t" | "T" | "true" | "True" | "TRUE" => Ok(OwnedValue::from(true)),
-        "f" | "F" | "false" | "False" | "FALSE" => Ok(OwnedValue::from(false)),
-        _ => Ok(OwnedValue::F64(
+        "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::from(true)),
+        "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::from(false)),
+        _ => Ok(Value::F64(
             s.parse()
                 .map_err(|_| ErrorKind::InvalidInfluxData(s.to_owned()))?,
         )),
     }
 }
-fn parse_value(chars: &mut Chars) -> Result<(OwnedValue, char)> {
+fn parse_value<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>)> {
     let mut res = String::new();
     match chars.next() {
         Some('"') => return parse_string(chars),
@@ -190,13 +139,13 @@ fn parse_value(chars: &mut Chars) -> Result<(OwnedValue, char)> {
         }
         Some(c) => res.push(c),
     }
-    while let Some(c) = chars.next() {
-        match c {
-            ',' => return Ok((float_or_bool(&res)?, ',')),
-            ' ' => return Ok((float_or_bool(&res)?, ' ')),
-            'i' => match chars.next() {
-                Some(' ') => return Ok((OwnedValue::I64(res.parse()?), ' ')),
-                Some(',') => return Ok((OwnedValue::I64(res.parse()?), ',')),
+    loop {
+        match chars.next() {
+            c @ Some(',') | c @ Some(' ') | c @ None => return Ok((float_or_bool(&res)?, c)),
+            Some('i') => match chars.next() {
+                c @ Some(' ') | c @ Some(',') | c @ None => {
+                    return Ok((Value::I64(res.parse()?), c))
+                }
                 Some(c) => {
                     return Err(ErrorKind::InvalidInfluxData(format!(
                         "Unexpected character '{}', expected ' ' or ','.",
@@ -204,37 +153,30 @@ fn parse_value(chars: &mut Chars) -> Result<(OwnedValue, char)> {
                     ))
                     .into());
                 }
-                None => {
-                    return Err(
-                        ErrorKind::InvalidInfluxData("Unexpected end of line".into()).into(),
-                    );
-                }
             },
-            '\\' => {
+            Some('\\') => {
                 if let Some(c) = chars.next() {
                     res.push(c);
+                } else {
+                    return Err(ErrorKind::InvalidInfluxData("Escape without value.".into()).into());
                 }
             }
-            _ => res.push(c),
+            Some(c) => res.push(c),
         }
     }
-    Err(
-        ErrorKind::InvalidInfluxData("Unexpected character or end of value definition".into())
-            .into(),
-    )
 }
 
-fn parse_fields(chars: &mut Chars) -> Result<HashMap<String, OwnedValue>> {
+fn parse_fields<'input>(chars: &mut Chars) -> Result<Map<'input>> {
     let mut res = HashMap::new();
     loop {
         let key = parse_to_char(chars, '=')?;
 
         let (val, c) = parse_value(chars)?;
         match c {
-            ',' => {
+            Some(',') => {
                 res.insert(key, val);
             }
-            ' ' => {
+            Some(' ') | None => {
                 res.insert(key, val);
                 return Ok(res);
             }
@@ -243,7 +185,7 @@ fn parse_fields(chars: &mut Chars) -> Result<HashMap<String, OwnedValue>> {
     }
 }
 
-fn parse_tags(chars: &mut Chars) -> Result<HashMap<String, String>> {
+fn parse_tags<'input>(chars: &mut Chars) -> Result<Map<'input>> {
     let mut res = HashMap::new();
     loop {
         let (key, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
@@ -254,25 +196,25 @@ fn parse_tags(chars: &mut Chars) -> Result<HashMap<String, String>> {
         if c == '=' {
             return Err(ErrorKind::InvalidInfluxData("= found in tag value".into()).into());
         }
-        res.insert(key, val);
+        res.insert(key, Value::String(val));
         if c == ' ' {
             return Ok(res);
         }
     }
 }
 
-fn parse_to_char3(
+fn parse_to_char3<'input>(
     chars: &mut Chars,
     end1: char,
     end2: Option<char>,
     end3: Option<char>,
-) -> Result<(String, char)> {
+) -> Result<(Cow<'input, str>, char)> {
     let mut res = String::new();
     while let Some(c) = chars.next() {
         match c {
-            c if c == end1 => return Ok((res, end1)),
-            c if Some(c) == end2 => return Ok((res, c)),
-            c if Some(c) == end3 => return Ok((res, c)),
+            c if c == end1 => return Ok((res.into(), end1)),
+            c if Some(c) == end2 => return Ok((res.into(), c)),
+            c if Some(c) == end3 => return Ok((res.into(), c)),
             '\\' => match chars.next() {
                 Some(c) if c == '\\' || c == end1 || Some(c) == end2 || Some(c) == end3 => {
                     res.push(c)
@@ -298,10 +240,14 @@ fn parse_to_char3(
     .into())
 }
 
-fn parse_to_char2(chars: &mut Chars, end1: char, end2: char) -> Result<(String, char)> {
+fn parse_to_char2<'input>(
+    chars: &mut Chars,
+    end1: char,
+    end2: char,
+) -> Result<(Cow<'input, str>, char)> {
     parse_to_char3(chars, end1, Some(end2), None)
 }
-fn parse_to_char(chars: &mut Chars, end: char) -> Result<String> {
+fn parse_to_char<'input>(chars: &mut Chars, end: char) -> Result<Cow<'input, str>> {
     let (res, _) = parse_to_char3(chars, end, None, None)?;
     Ok(res)
 }
@@ -309,6 +255,23 @@ fn parse_to_char(chars: &mut Chars, end: char) -> Result<String> {
 trait Escaper {
     type Escaped;
     fn escape(&self) -> Self::Escaped;
+}
+impl<'input> Escaper for Cow<'input, str> {
+    type Escaped = String;
+    // type Unescaped = String;
+
+    fn escape(&self) -> Self::Escaped {
+        let mut out = String::new();
+        self.chars().for_each(|ch| match ch {
+            c if c == ',' || c == ' ' || c == '\\' || c == '=' || c == '\"' => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        });
+
+        out
+    }
 }
 impl Escaper for String {
     type Escaped = String;
@@ -331,101 +294,123 @@ impl Escaper for String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halfbrown::hashmap;
-    use simd_json::OwnedValue;
+
+    use simd_json::json;
 
     #[test]
     fn parse_simple() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::from(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_simple2() {
         let s = "weather,location=us-midwest,season=summer temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string(),
-                "season".to_string() => "summer".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest",
+                "season": "summer"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::from(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_simple3() {
         let s =
             "weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::from(82.0),
-                "bug_concentration".to_string() => OwnedValue::from(98.0),
+            "fields": {
+                "temperature": 82.0,
+                "bug_concentration": 98.0,
 
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
+    }
+
+    #[test]
+    fn parse_no_timestamp() {
+        let s = "weather temperature=82i";
+        let parsed = parse(s, 1465839830100400200u64).expect("failed to parse");
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {},
+            "fields": {
+                "temperature": 82
+            },
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(r, parsed);
     }
 
     #[test]
     fn parse_float_value() {
         let s = "weather temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: HashMap::new(),
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::F64(82.0)
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {},
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_int_value() {
         let s = "weather temperature=82i 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: HashMap::new(),
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::I64(82)
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {},
+            "fields": {
+                "temperature": 82
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_str_value() {
         let s = "weather,location=us-midwest temperature=\"too warm\" 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::from("too warm")
+            "fields": {
+                "temperature": "too warm"
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_true_value() {
@@ -436,18 +421,19 @@ mod tests {
             "weather,location=us-midwest too_hot=t 1465839830100400200",
             "weather,location=us-midwest too_hot=T 1465839830100400200",
         ];
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "too_hot".to_string() => OwnedValue::Bool(true)
+            "fields": {
+                "too_hot": true
             },
-            timestamp: 1465839830100400200,
-        };
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
         for s in sarr {
-            assert_eq!(Ok(r.clone()), parse(s))
+            assert_eq!(Ok(r.clone()), parse(s, 0))
         }
     }
     #[test]
@@ -459,211 +445,224 @@ mod tests {
             "weather,location=us-midwest too_hot=f 1465839830100400200",
             "weather,location=us-midwest too_hot=F 1465839830100400200",
         ];
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "too_hot".to_string() => OwnedValue::Bool(false)
+            "fields": {
+                "too_hot": false
             },
-            timestamp: 1465839830100400200,
-        };
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
         for s in sarr {
-            assert_eq!(Ok(r.clone()), parse(s))
+            assert_eq!(Ok(r.clone()), parse(s, 0))
         }
     }
     // Note: Escapes are escaped twice since we need one level of escaping for rust!
     #[test]
     fn parse_escape1() {
         let s = "weather,location=us\\,midwest temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us,midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us,midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::F64(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape2() {
         let s = "weather,location=us-midwest temp\\=rature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temp=rature".to_string() => OwnedValue::F64(82.0)
+            "fields": {
+                "temp=rature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_escape3() {
         let s = "weather,location\\ place=us-midwest temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location place".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location place": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::F64(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape4() {
         let s = "wea\\,ther,location=us-midwest temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "wea,ther".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "wea,ther",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::F64(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_escape5() {
         let s = "wea\\ ther,location=us-midwest temperature=82 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "wea ther".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "wea ther",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::F64(82.0)
+            "fields": {
+                "temperature": 82.0
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape6() {
         let s = "weather,location=us-midwest temperature=\"too\\\"hot\\\"\" 1465839830100400200";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature".to_string() => OwnedValue::from("too\"hot\"")
+            "fields": {
+                "temperature": "too\"hot\""
             },
-            timestamp: 1465839830100400200,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400200i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape7() {
         let s = "weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400201";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot/cold")
+            "fields": {
+                "temperature_str": "too hot/cold"
             },
-            timestamp: 1465839830100400201,
-        };
-        assert_eq!(Ok(r), parse(s));
+            "timestamp": 1465839830100400201i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0));
     }
 
     #[test]
     fn parse_escape8() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\cold\" 1465839830100400202";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot\\cold")
+            "fields": {
+                "temperature_str": "too hot\\cold"
             },
-            timestamp: 1465839830100400202,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400202i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape9() {
         let s =
             "weather,location=us-midwest temperature_str=\"too hot\\\\cold\" 1465839830100400203";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot\\cold")
+            "fields": {
+                "temperature_str": "too hot\\cold"
             },
-            timestamp: 1465839830100400203,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400203i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
     #[test]
     fn parse_escape10() {
         let s =
             "weather,location=us-midwest temperature_str=\"too hot\\\\\\cold\" 1465839830100400204";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot\\\\cold")
+            "fields": {
+                "temperature_str": "too hot\\\\cold"
             },
-            timestamp: 1465839830100400204,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400204i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_escape11() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\cold\" 1465839830100400205";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
 
 
-                "location".to_string() => "us-midwest".to_string()
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot\\\\cold")
+            "fields": {
+                "temperature_str": "too hot\\\\cold"
             },
-            timestamp: 1_465_839_830_100_400_205,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1_465_839_830_100_400_205i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
     #[test]
     fn parse_escape12() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\\\cold\" 1465839830100400206";
-        let r = InfluxDatapoint {
-            measurement: "weather".to_string(),
-            tags: hashmap! {
-                "location".to_string() => "us-midwest".to_string()
+        let r: Value = json!({
+            "measurement": "weather",
+            "tags": {
+                "location": "us-midwest"
             },
-            fields: hashmap! {
-                "temperature_str".to_string() => OwnedValue::from("too hot\\\\\\cold")
+            "fields": {
+                "temperature_str": "too hot\\\\\\cold"
             },
-            timestamp: 1465839830100400206,
-        };
-        assert_eq!(Ok(r), parse(s))
+            "timestamp": 1465839830100400206i64,
+        })
+        .into();
+        assert_eq!(Ok(r), parse(s, 0))
     }
 
 }

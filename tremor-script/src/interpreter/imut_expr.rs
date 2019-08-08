@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{
-    exec_binary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
+    exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
     test_predicate_expr, LocalStack, FALSE, TRUE,
 };
 use crate::ast::*;
@@ -282,14 +282,9 @@ where
         expr: &'script UnaryExpr<'script, Ctx>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let rhs = stry!(expr.expr.run(context, event, meta, local, consts));
-        match (&expr.kind, rhs.borrow()) {
-            (UnaryOpKind::Minus, Value::I64(x)) => Ok(Cow::Owned(Value::I64(-*x))),
-            (UnaryOpKind::Minus, Value::F64(x)) => Ok(Cow::Owned(Value::F64(-*x))),
-            (UnaryOpKind::Plus, Value::I64(x)) => Ok(Cow::Owned(Value::I64(*x))),
-            (UnaryOpKind::Plus, Value::F64(x)) => Ok(Cow::Owned(Value::F64(*x))),
-            (UnaryOpKind::Not, Value::Bool(true)) => Ok(Cow::Borrowed(&FALSE)), // This is not true
-            (UnaryOpKind::Not, Value::Bool(false)) => Ok(Cow::Borrowed(&TRUE)), // this is not false
-            (op, val) => error_invalid_unary(self, &expr.expr, *op, &val),
+        match exec_unary(expr.kind, &rhs) {
+            Some(v) => Ok(v),
+            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs),
         }
     }
 

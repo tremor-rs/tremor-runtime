@@ -38,3 +38,34 @@ translates to:
   "timestamp": 1465839830100400200
 }
 ```
+
+### statsd
+
+Just as the influx, the statsd codec translates a single statsd measurement into a structured format. The structure is as follows:
+
+```
+sam:7|c|@0.1
+```
+
+Translates to:
+
+```json
+{
+  "type": "c",
+  "metric": "sam",
+  "value": 7,
+  "sample_rate": 0.1
+}
+```
+
+The following types are supported:
+
+* `c` for `counter`
+* `ms` for `timing`
+* `g` for `gauge`
+* `h`  for `histogram`
+* `s` for `sets`
+
+
+
+For **gauge** there is also the field `action` which might be `add` if the value was prefixed with a `+`, or `sub` if the value was prefixed with a `-`
