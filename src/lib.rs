@@ -41,10 +41,12 @@ pub mod errors;
 #[macro_use]
 pub mod functions;
 pub mod codec;
+pub mod google;
 pub mod lifecycle;
 pub mod metrics;
 pub mod offramp;
 pub mod onramp;
+pub mod postprocessor;
 pub mod preprocessor;
 pub mod registry;
 pub mod repository;

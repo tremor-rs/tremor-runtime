@@ -8,7 +8,8 @@ Returns a string representation for the value type:
 
 * `"null"`
 * `"bool"`
-* `"number"`
+* `"integer"`
+* `"float"`
 * `"string"`
 * `"array"`
 * `"object"`

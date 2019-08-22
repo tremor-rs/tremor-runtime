@@ -36,6 +36,6 @@ mod test {
     fn parse() {
         let f = fun("integer", "parse");
         let v = Value::from("42");
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
     }
 }

@@ -22,7 +22,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
         .insert(
         tremor_fn! (datetime::parse(_context, _input : String,  _input_fmt: String) {
-             let res = _parse(&_input, _input_fmt);
+             let res = _parse(&_input, _input_fmt, has_tz(_input_fmt));
              match res {
                  Ok(x) => Ok(Value::from(x)),
                  Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error:  format!("Cannot Parse {} to valid timestamp", e), 
@@ -277,20 +277,25 @@ mod tests {
     pub fn parse_at_timestamp() {
         let time = "2019-06-17T13:15:40.752Z";
         //let time = "2019-06-17T13:15:40.752";
-        let output = _parse(time, "%Y-%m-%dT%H:%M:%S%.3fZ").expect("cannot parse datetime string");
+        let output =
+            _parse(time, "%Y-%m-%dT%H:%M:%S%.3fZ", false).expect("cannot parse datetime string");
         assert_eq!(output, 1560777340752000000);
     }
     #[test]
     pub fn parse_parses_it_to_ts() {
-        let output = _parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z")
-            .expect("cannot parse datetime string");
+        let output = _parse(
+            "1983 Apr 13 12:09:14.274 +0000",
+            "%Y %b %d %H:%M:%S%.3f %z",
+            true,
+        )
+        .expect("cannot parse datetime string");
 
         assert_eq!(output, 419083754274000000);
     }
 
     #[test]
     pub fn parse_unix_ts() {
-        let output = _parse("1560777212", "%s").expect("cannot parse datetime string");
+        let output = _parse("1560777212", "%s", false).expect("cannot parse datetime string");
 
         assert_eq!(output, 1560777212000000000);
     }

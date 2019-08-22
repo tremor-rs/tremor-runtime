@@ -24,23 +24,17 @@ Zips two arrays, returning a new array of tuples with the first element being pa
 
 Note: `left` and `right` need to have the same length.
 
-Example:
-
 ```rust
 left = [1, 2, 3];
 right = ["a", "b", "c"];
 array::zip(left, right) == [[1, "a"], [2, "b"], [3, "c"]]
 ```
 
-
-
 ### array::unzip(array) -> array
 
 Unzips an array of tuples into an array of two arrays.
 
 Note: `array`'s elements need to be arrays of two elements.
-
-**Example:**
 
 ```rust
 array::unzip([[1, "a"], [2, "b"], [3, "c"]]) ==  [[1, 2, 3], ["a", "b", "c"]]
@@ -49,8 +43,6 @@ array::unzip([[1, "a"], [2, "b"], [3, "c"]]) ==  [[1, 2, 3], ["a", "b", "c"]]
 ### array::flatten(array) -> array
 
 Flattens a nested array recursively.
-
-**Example:**
 
 ```rust
 array::flatten([[1, 2, 3], ["a", "b", "c"]]) = [1, 2, 3, "a", "b", "c"]
@@ -61,7 +53,7 @@ array::flatten([[1, 2, 3], ["a", "b", "c"]]) = [1, 2, 3, "a", "b", "c"]
 Returns the array with `null` values removed.
 
 ```rust
-array::flatten([1, null, 2, null, 3]) = [1, 2, 3]
+array::coalesce([1, null, 2, null, 3]) = [1, 2, 3]
 ```
 
 ### array::join(array, string) -> string

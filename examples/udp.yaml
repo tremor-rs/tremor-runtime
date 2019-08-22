@@ -1,0 +1,35 @@
+onramp:
+  - id: udp
+    type: udp
+    preprocessors:
+      - lines
+    codec: json
+    config:
+      host: "localhost"
+      port: 9000
+
+offramp:
+  - id: console
+    type: stdout
+    config:
+      prefix: "UDP "
+
+binding:
+  - id: udp
+    links:
+      '/onramp/udp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+
+mapping:
+  /binding/udp/01:
+    instance: "01"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]

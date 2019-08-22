@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.3"
+version = "0.5.4-rc1"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Colin Clark <colclark@wayfair.com>", "Cyndy Pooley <cpooley@wayfair.com>", "Ivan Monov <imonov@wayfair.com>", "Gordon Guthrie <gguthrie@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -31,7 +31,7 @@ base64 = "0.10"
 chrono = "0.4"
 elastic = "0.20"
 error-chain="0.12"
-futures = "0.1"
+futures = "0.1.25"
 hashbrown = { version = "0.5", features = ["serde"] }
 hostname = "0.1"
 libc = "0.2"
@@ -46,6 +46,7 @@ simd-json = "0.1"
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "1.7" # we can't update because of deps ...
+
 log = "0.4"
 serde_derive = "1"
 lazy_static = "1"
@@ -55,7 +56,9 @@ libflate = "0.1"
 sysinfo = "0.9"
 snap = "0.2.5"
 lz4 = "1.23.1"
-
+actix-web = "1"
+openssl = "0.10"
+actix-router = "0.1.5"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
 
@@ -81,15 +84,12 @@ rdkafka = {version = "0.21", optional = true}
 rdkafka-sys = {version = "1", optional = true}
 
 #Google cloud stuff
-# google-storage1 = "1"
-# google-pubsub1 = "1"
-# hyper-rustls = "0.6"
-# yup-oauth2 = "1"
+google-storage1 = "1"
+google-pubsub1 = "1.0.10"
+hyper-rustls = "0.6"
+yup-oauth2 = "1"
 
-# This project intentionally uses an old version of Hyper. See
-# https://github.com/Byron/google-apis-rs/issues/173 for more
-# information.
-# hyper = "0.10"
+hyper = "0.10"
 
 # logstash grok patterns
 grok = "1"
@@ -98,11 +98,9 @@ grok = "1"
 # uuid = { version = "0.7", features = ["serde", "v4"] }
 # window = { path = "window" }
 # rand = "0.5"
-# actix-web = { version = "0.7", features = ["alpn"] }
 # bytes = "0.4"
 # futures-channel = "0.2"
 # futures-timer = "0.1"
-# openssl = { version="0.10" }
 # lru = "0.1"
 
 [dev-dependencies]
@@ -111,7 +109,7 @@ criterion = "0.2"
 pretty_assertions = "0.6.1"
 
 [features]
-default = ["mssql", "kafka", "bench"]
+default = ["mssql", "kafka", "bench" ]
 kafka = ["rdkafka", "rdkafka-sys" ]
 bench = ["xz2", "hdrhistogram" ]
 php-runtime = []

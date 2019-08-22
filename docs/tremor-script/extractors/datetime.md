@@ -1,6 +1,6 @@
 # Datetime
 
-The datetime extractor parses the input into a timestamp. The format of the target needs to be specified as a parameter to the extractor. The extractor is equivalent to the [Datetime::parse(…)](../functions/datetime/#datetimeparsedatetime-input_format).
+The datetime extractor parses the input into a timestamp. The format of the target needs to be specified as a parameter to the extractor. The extractor is equivalent to the [Datetime::parse(…)](../functions/datetime.md#datetimeparsedatetime-input_format).
 
 ## Predicate
 
@@ -14,7 +14,7 @@ If the predicate parses, the extractor returns the 64-bit nanosecond-precise UTC
 
 ```tremor
 match { "test" : "2019-01-01 09:42" } of
-  case foo = %{ test ~= datetime|%Y-%m-%d %H:%M| } => foo
+  case foo = %{ test ~= datetime|%Y-%m-%d %H:%M| } => foo.test
   default => "ko"
 end;
 ## output: 1546335720000000000

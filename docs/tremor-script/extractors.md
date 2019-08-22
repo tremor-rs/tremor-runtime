@@ -30,16 +30,33 @@ Both the predicate and extraction form of extraction use operators with a `~` ( 
 
 When only validity against the pattern is desired, then the extraction overhead can be eliminated or reduced depending on the implementation of the extractor configured.
 
+Extractors implicitly check if a field is present. If a field isn't present in the record, the predicate will fail and it will check the next predicate. Thus, no further explicit check such as `present <field>` is required.
+
+## Note:
+
+Extractors should not be followed by a function that uses the same field as the one in the extractor. This could result in unintended behaviour as the latter function might return the original value instead of the extracted value
+
+e.g.
+```tremor
+match { "superman" = "message_key: ruler: batman" } of
+  case r = %{superman ~= grok|(?<message_key>(.\|\\n){0,200})|, present superman}
+    => let event.new_ruler = r.superman.name
+ default => "switch to marvel"
+end;
+```
+This will result in unintended behaviour because `present` will return the original string instead of the record extracted by grok.
+
 ## Available extractors
 
 The different extractors available are:
 
 * [Base64](./base64)
-* [JSON](./json)
+* [CIDR](./cidr)
+* [Datetime](./datetime)
 * [Dissect](./dissect)
-* [Grok](./grok)
 * [Glob](./glob)
-* [Cidr](./cidr)
-* [KV](./kv)
+* [Grok](./grok)
 * [Influx](./influx)
+* [JSON](./json)
+* [KV](./kv)
 * [Regex (Re)](./regex)

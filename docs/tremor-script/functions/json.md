@@ -10,8 +10,6 @@ Decodes a string containing a JSON structure.
 json::decode("[1, 2, 3, 4]") => [1, 2, 3, 4]
 ```
 
-
-
 ### json::encode(any) -> string
 
 Encodes a data structure into a json string using minimal encoding.
@@ -25,7 +23,7 @@ json::encode([1, 2, 3, 4]) = "[1,2,3,4]"
 Encodes a data structure into a prettified json string.
 
 ```rust
-json::encode([1, 2, 3, 4]) =
+json::encode_pretty([1, 2, 3, 4]) =
 "[
   1,
   2,

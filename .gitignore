@@ -25,3 +25,5 @@ __pycache__
 tremor-script/_build
 tremor-script/c_src/*.o
 tremor-script/priv
+**/*.gcda
+**/*.gcno

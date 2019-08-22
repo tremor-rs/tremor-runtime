@@ -24,6 +24,8 @@ use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
 use crate::dflt;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
@@ -76,6 +78,7 @@ pub struct Kafka {
     topic: String,
     key: Option<String>,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl fmt::Debug for Kafka {
@@ -112,6 +115,7 @@ impl OfframpImpl for Kafka {
                 producer,
                 topic: config.topic.clone(),
                 pipelines: HashMap::new(),
+                postprocessors: vec![],
                 key,
             }))
         } else {
@@ -154,5 +158,9 @@ impl Offramp for Kafka {
     }
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }

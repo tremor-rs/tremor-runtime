@@ -21,12 +21,16 @@ nav:
   - Home: index.md
   - 'Architecture Overview': overview.md
   - Tremor Script:
-    - Overview: tremor-script.md
+    - Overview: tremor-script/index.md
     - Function Reference:
       - Overview: tremor-script/functions.md
       - array: tremor-script/functions/array.md
       - chash: tremor-script/functions/chash.md
       - datetime: tremor-script/functions/datetime.md
+      - integer: tremor-script/functions/integer.md
+      - json: tremor-script/functions/json.md
+      - math: tremor-script/functions/math.md
+      - random: tremor-script/functions/random.md
       - record: tremor-script/functions/record.md
       - re: tremor-script/functions/re.md
       - string: tremor-script/functions/string.md
@@ -36,8 +40,10 @@ nav:
       -  Overview: tremor-script/extractors.md
       -  Base64: tremor-script/extractors/base64.md
       -  CIDR: tremor-script/extractors/cidr.md
+      -  Datetime: tremor-script/extractors/datetime.md
       -  Dissect: tremor-script/extractors/dissect.md
       -  Glob: tremor-script/extractors/glob.md
+      -  Grok: tremor-script/extractors/grok.md
       -  Influx: tremor-script/extractors/influx.md
       -  JSON: tremor-script/extractors/json.md
       -  KV: tremor-script/extractors/kv.md
@@ -50,6 +56,7 @@ nav:
     - Configuration Walkthrough: operations/configuration-walkthrough.md
   - Artefacts:
     - Preprocessors: artefacts/preprocessors.md
+    - Postprocessors: artefacts/postprocessors.md
     - Codecs: artefacts/codecs.md
     - Onramps: artefacts/onramps.md
     - Offramps: artefacts/offramps.md

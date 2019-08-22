@@ -197,12 +197,18 @@ impl Artefact for OfframpArtefact {
         } else {
             codec::lookup(offramp.default_codec())?
         };
+        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
+            postprocessors.clone()
+        } else {
+            vec![]
+        };
         let res = world
             .system
             .send(CreateOfframp {
                 id: servant_id,
                 codec,
                 offramp,
+                postprocessors,
             })
             .wait()??;
         Ok(res)

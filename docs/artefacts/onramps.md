@@ -149,3 +149,35 @@ onramp:
     config:
       source: ./demo/data/data.json.xz
 ```
+
+### tcp
+
+This listens on a specified port for inbound tcp data.
+
+The onramp can leverage preprocessors to segment data before codecs are applied and events are forwarded
+to pipelines.
+
+The default [codec](../codecs) is `json`.
+
+Supported configuration options are:
+* `host` - The host to advertise as
+* `port` - The TCP port to listen on
+* `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
+* `ttl` - Set the socket's time-to-live ( default: 64 )
+
+Example:
+
+```yaml
+onramp:
+  - id: tcp
+    type: tcp
+    preprocessors:
+      - base64
+      - lines
+    codec: json
+    config:
+      host: "localhost"
+      port: 9000
+      is_non_blocking: true
+      ttl: 32
+```

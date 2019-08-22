@@ -18,7 +18,7 @@ To use `{` or `}` as string literals in your format string, it needs to be escap
 string::format("{{ this is a string format in parenthesis }}")
 ```
 
-this will output: 
+this will output:
 ```
 { this is a string format in parenthesis }
 ```
@@ -41,11 +41,11 @@ Trims whitespaces both at the start and end of the `input` string.
 
 ### string::trim_start(input) -> string
 
-Trims whitespaces both at the start of the `input` string.
+Trims whitespaces at the start of the `input` string.
 
 ### string::trim_end(input) -> string
 
-Trims whitespaces both at the end of the `input` string.
+Trims whitespaces at the end of the `input` string.
 
 ### string::lowercase(input) -> string
 
@@ -59,6 +59,10 @@ Turns all characters in the `input` string to upper case.
 
 Turns the first character in the `input` string to upper case. This does not ignore leading non letters!
 
-### string::split(input, seperator) -> array
+### string::substr(input, start, end) -> string
+
+Get all characters from index `start` to `end-1`.
+
+### string::split(input, separator) -> array
 
 Splits the `input` string at every occurrence of the `separator` string and turns the result in an array.

@@ -15,6 +15,10 @@
 #![allow(dead_code)]
 use std::{convert, f64};
 
+pub fn d_true() -> bool {
+    true
+}
+
 pub fn d_false() -> bool {
     false
 }
@@ -67,6 +71,10 @@ where
 
 pub fn d_none<T>() -> Option<T> {
     None
+}
+
+pub fn d_ttl() -> u32 {
+    64
 }
 
 pub fn dflt<T: Default>() -> T {

@@ -6,7 +6,7 @@
     - name: GET /version
       command: ../target/debug/tremor-tool -f json api version
       stdout_has:
-        - '{"version":"0.5.3"}'
+        - '{"version":"0.5.4-rc1"}'
     - name: GET /onramp
       command: ../target/debug/tremor-tool -f json api onramp list
       stdout_has:

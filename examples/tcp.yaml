@@ -1,0 +1,35 @@
+onramp:
+  - id: tcp
+    type: tcp
+    preprocessors:
+      - lines
+    codec: json
+    config:
+      host: "localhost"
+      port: 9000
+
+offramp:
+  - id: console
+    type: stdout
+    config:
+      prefix: "TCP "
+
+binding:
+  - id: tcp
+    links:
+      '/onramp/tcp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+
+mapping:
+  /binding/tcp/01:
+    instance: "01"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]

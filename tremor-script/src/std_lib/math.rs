@@ -14,7 +14,6 @@
 
 use crate::registry::{Context, Registry};
 use crate::tremor_fn;
-use rand::Rng;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     registry
@@ -71,19 +70,6 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 (Value::I64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
-        }))
-        .insert(tremor_fn! (math::random(_context, low, high) {
-            match (low, high) {
-                // TODO support float types?
-                (Value::I64(low), Value::I64(high)) if low < high => Ok(Value::I64({
-                    // TODO figure out how to cache this here
-                    let mut rng = rand::thread_rng();
-                    // random value between low and high (not including high)
-                    rng.gen_range(low, high)
-                })),
-                (Value::I64(_low), Value::I64(_high)) => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "Invalid arguments. First argument must be lower than second argument".to_string()}),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
         }));
 }
 
@@ -102,37 +88,56 @@ mod test {
     fn floor() {
         let f = fun("math", "floor");
         let v = Value::from(42);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
         let v = Value::from(42.9);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
     }
     #[test]
     fn ceil() {
         let f = fun("math", "ceil");
         let v = Value::from(42);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
         let v = Value::from(41.1);
-        assert_val!(f(&[&v]), Value::from(42));
-        let v = Value::from(42);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
     }
 
     #[test]
     fn round() {
         let f = fun("math", "round");
         let v = Value::from(42);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
         let v = Value::from(41.4);
-        assert_val!(f(&[&v]), Value::from(41));
+        assert_val!(f(&[&v]), 41);
         let v = Value::from(41.5);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
     }
     #[test]
     fn trunc() {
         let f = fun("math", "trunc");
         let v = Value::from(42);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
         let v = Value::from(42.9);
-        assert_val!(f(&[&v]), Value::from(42));
+        assert_val!(f(&[&v]), 42);
+    }
+
+    #[test]
+    fn max() {
+        let f = fun("math", "max");
+        let v1 = Value::from(41);
+        let v2 = Value::from(42);
+        assert_val!(f(&[&v1, &v2]), 42);
+        let v1 = Value::from(41.5);
+        let v2 = Value::from(42);
+        assert_val!(f(&[&v1, &v2]), 42);
+    }
+    #[test]
+    fn min() {
+        let f = fun("math", "min");
+        let v1 = Value::from(42);
+        let v2 = Value::from(43);
+        assert_val!(f(&[&v1, &v2]), 42);
+        let v1 = Value::from(42);
+        let v2 = Value::from(42.5);
+        assert_val!(f(&[&v1, &v2]), 42);
     }
 }

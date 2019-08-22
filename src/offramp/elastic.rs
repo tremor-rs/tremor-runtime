@@ -44,13 +44,15 @@ use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
 use elastic::prelude::SyncClientBuilder;
 use halfbrown::HashMap;
-use hostname::get_hostname;
+// use hostname::get_hostname;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use serde_yaml;
 use simd_json::{json, OwnedValue};
 use std::convert::From;
+use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
-use std::{fmt, str};
 use threadpool::ThreadPool;
 use tremor_pipeline::MetaMap;
 use tremor_script::{LineValue, Value};
@@ -70,21 +72,15 @@ struct Destination {
     url: String,
 }
 
-impl fmt::Debug for Destination {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.url)
-    }
-}
-
-#[derive(Debug)]
 pub struct Elastic {
     client_idx: usize,
     clients: Vec<Destination>,
-    config: Config,
+    // config: Config,
     pool: ThreadPool,
     queue: AsyncSink<u64>,
-    hostname: String,
+    // hostname: String,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl OfframpImpl for Elastic {
@@ -105,19 +101,20 @@ impl OfframpImpl for Elastic {
 
             let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
-            let hostname = match get_hostname() {
-                Some(h) => h,
-                None => "tremor-host.local".to_string(),
-            };
+            //let hostname = match get_hostname() {
+            //    Some(h) => h,
+            //    None => "tremor-host.local".to_string(),
+            //};
 
             Ok(Box::new(Elastic {
                 client_idx: 0,
                 pipelines: HashMap::new(),
-                config,
+                postprocessors: vec![],
+                // config,
                 pool,
                 clients,
                 queue,
-                hostname,
+                // hostname,
             }))
         } else {
             Err("Elastic offramp requires a configuration.".into())
@@ -263,5 +260,9 @@ impl Offramp for Elastic {
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }

@@ -1,4 +1,4 @@
-This document provides a few recipes for common patterns in tremor script. Please not however that it neither is exhaustive nor should those patterns considered the 'only way' to perform certain tasks.
+This document provides a few recipes for common patterns in tremor script. Please note however that it neither is exhaustive nor should those patterns considered the 'only way' to perform certain tasks.
 
 
 
@@ -78,7 +78,7 @@ end;
 
 ## Boolean decisions
 
-To make boolean decisions we can match on `true` or `false`. 
+To make boolean decisions we can match on `true` or `false`.
 
 ```tremor
 match type::is_object(event) of
@@ -165,6 +165,32 @@ pipeline:
     # ...
     links:
      script/blue: ["blue"]
-     script/green: ["green"]     
+     script/green: ["green"]
 ```
 
+
+## Percentage drops of events
+
+To drop a percentage of all events, functions in the [random](functions/random.md) module can be used.
+
+We generate a random number in a range and based on the outcome, we decide whether we want to drop an event or not. Example:
+
+```tremor
+# drop 50% of the events
+match random::integer(0, 100) < 50 of
+  case true => drop
+  default => null
+end
+```
+
+Most of the time, we want to do this only for certain matching events (as opposed to all events).
+
+```tremor
+let random_number = random::integer(0, 100);
+match event of
+  case %{key == "blue"} when random_number < 25 => drop   # drop 25% of blue events
+  case %{key == "yellow"} when random_number < 75 => drop # drop 75% of yellow events
+  case %{key == "red"} => drop                            # drop 100% of red events
+  default => null                                         # drop 0% of other events
+end
+```

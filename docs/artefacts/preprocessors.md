@@ -23,7 +23,7 @@ The compression algorithm is detected automatically from the supported formats, 
 Supported formats:
 
 * gzip
-* lzip
+* zlib
 * xz
 * snappy
 * lz4

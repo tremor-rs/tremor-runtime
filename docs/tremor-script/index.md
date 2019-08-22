@@ -130,7 +130,7 @@ The language does not support literal character or Unicode code-points at this t
 "I am a string"
 ```
 
-### HereDocs
+##### HereDocs
 
 To deal with pre formatted strings in tremor script we allow for **here docs** they are started by using triple quotes `"""`  that terminate the line (aka `"""bla`  isn't legal) .
 
@@ -138,7 +138,7 @@ Here docs can in indented, the indentation will be truncated to the lowest numbe
 
 ```tremor
 """
-    I am 
+    I am
    a
     long
     multi-line
@@ -243,7 +243,7 @@ Grab the books from the store (the same using key, index and escaped key notatio
 let capture = event.store.book;
 # index and escaped notation can acomodate keys that include 'odd' characters such as whitespaces or dots.
 let capture = event.store["book"];
-let capture = event.store.`book`; 
+let capture = event.store.`book`;
 ```
 
 Grab the first book:
@@ -364,11 +364,11 @@ when data is well-formed but not valid and the data needs to be __diverted__ int
 flow. The emit clause can be deployed for this purpose by specifying an optional named port.
 
 ```tremor
-emit { 
-  "event": event, 
-  "status": "malformed", 
-  "description": 
-  "required field `loglevel` is absent" 
+emit {
+  "event": event,
+  "status": "malformed",
+  "description":
+  "required field `loglevel` is absent"
 } => "invalid";
 ```
 

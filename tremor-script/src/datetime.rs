@@ -14,10 +14,56 @@
 //
 
 use crate::errors::*;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 
-pub fn _parse(datetime: &str, input_fmt: &str) -> Result<u64> {
-    Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
-        .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
-        .timestamp_nanos() as u64)
+pub fn _parse(datetime: &str, input_fmt: &str, has_timezone: bool) -> Result<u64> {
+    if has_timezone {
+        Ok(DateTime::parse_from_str(datetime, input_fmt)
+            .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
+            .timestamp_nanos() as u64)
+    } else {
+        Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
+            .map_err(|e| Error::from(format!("Datetime Parse Error: {:?}", e)))?
+            .timestamp_nanos() as u64)
+    }
+}
+
+pub fn has_tz(fmt: &str) -> bool {
+    let mut chrs = fmt.chars();
+    while let Some(c) = chrs.next() {
+        if c == '%' {
+            match chrs.next() {
+                Some('+') | Some('z') | Some('Z') => return true,
+                Some(':') | Some('#') => {
+                    if chrs.next() == Some('z') {
+                        return true;
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn test_simple_string_with_format() {
+        let format = "%Y-%m-%dT%T%.6f%:z";
+        let output = _parse("2019-08-07T16:41:12.159975-04:00", format, has_tz(format))
+            .expect("parse datetime");
+        assert_eq!(output, 1565210472159975000);
+    }
+
+    #[test]
+    pub fn test_simple_string_without_tz() {
+        let format = "%Y-%m-%dT%T%.6f";
+        let output = _parse("2019-08-07T20:41:12.159975", format, has_tz(format))
+            .expect("cannot parse datetime");
+        assert_eq!(output, 1565210472159975000);
+    }
+
 }

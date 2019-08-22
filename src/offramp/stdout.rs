@@ -24,20 +24,23 @@
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
 
-#[derive(Debug, Clone)]
 pub struct StdOut {
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl OfframpImpl for StdOut {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         Ok(Box::new(StdOut {
             pipelines: HashMap::new(),
+            postprocessors: vec![],
         }))
     }
 }
@@ -61,5 +64,9 @@ impl Offramp for StdOut {
     }
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper, MFA};
+use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper};
 use crate::tremor_fn;
 use simd_json::BorrowedValue as Value;
 
@@ -33,17 +33,13 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         _context: &Ctx,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
-        fn this_mfa() -> MFA {
-            mfa(stringify!($module), stringify!($name), 1)
-        }
+        let this_mfa = || mfa("string", "format", args.len());
 
         match args.len() {
             0 => Err(FunctionError::BadArity {
                 mfa: this_mfa(), calling_a: args.len()
             }),
             _ => {
-
-
                 match &args[0] {
                     Value::String(format) => {
                         let mut arg_stack = if args.is_empty() {
@@ -147,7 +143,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             }),
         )
         .insert(TremorFnWrapper {
-            module: "string".to_owned(),
+            module: "string".to_string(),
             name: "format".to_string(),
             fun: format,
             argc: 2,

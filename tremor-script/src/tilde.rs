@@ -26,7 +26,7 @@
 use base64;
 use halfbrown::{hashmap, HashMap};
 
-use crate::datetime::_parse;
+use crate::datetime;
 use crate::grok::*;
 use crate::influx;
 use crate::registry::Context;
@@ -213,6 +213,7 @@ pub enum Extractor {
     Influx,
     Datetime {
         format: String,
+        has_timezone: bool,
     },
 }
 
@@ -331,6 +332,7 @@ impl Extractor {
             "influx" => Extractor::Influx,
             "datetime" => Extractor::Datetime {
                 format: rule_text.to_string(),
+                has_timezone: datetime::has_tz(rule_text),
             },
             other => {
                 return Err(ExtractorError {
@@ -476,10 +478,14 @@ impl Extractor {
                         msg: "The input is invalid".into(),
                     }),
                 },
-                Extractor::Datetime { ref format } => {
-                    let d = _parse(s, format).map_err(|e| ExtractorError {
-                        msg: format!("Invalid datetime specified: {}", e.to_string()),
-                    })?;
+                Extractor::Datetime {
+                    ref format,
+                    has_timezone,
+                } => {
+                    let d =
+                        datetime::_parse(s, format, *has_timezone).map_err(|e| ExtractorError {
+                            msg: format!("Invalid datetime specified: {}", e.to_string()),
+                        })?;
                     if !result_needed {
                         return Ok(Value::Null);
                     };
@@ -522,8 +528,12 @@ impl PartialEq<Extractor> for Extractor {
             }
             (Extractor::Influx, Extractor::Influx) => true,
             (
-                Extractor::Datetime { format: format_l },
-                Extractor::Datetime { format: format_r },
+                Extractor::Datetime {
+                    format: format_l, ..
+                },
+                Extractor::Datetime {
+                    format: format_r, ..
+                },
             ) => format_l == format_r,
             _ => false,
         }

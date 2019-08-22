@@ -24,6 +24,8 @@
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
@@ -36,13 +38,13 @@ struct DebugBucket {
     cnt: u64,
 }
 
-#[derive(Debug, Clone)]
 pub struct Debug {
     last: Instant,
     update_time: Duration,
     buckets: HashMap<String, DebugBucket>,
     cnt: u64,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl OfframpImpl for Debug {
@@ -53,6 +55,7 @@ impl OfframpImpl for Debug {
             buckets: HashMap::new(),
             cnt: 0,
             pipelines: HashMap::new(),
+            postprocessors: vec![],
         }))
     }
 }
@@ -94,5 +97,9 @@ impl Offramp for Debug {
     }
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }

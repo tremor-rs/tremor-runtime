@@ -23,6 +23,8 @@
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
@@ -32,10 +34,10 @@ use std::fs::File as FSFile;
 use std::io::Write;
 
 /// An offramp that write a given file
-#[derive(Debug)]
 pub struct File {
     file: FSFile,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 #[derive(Deserialize)]
@@ -52,6 +54,7 @@ impl OfframpImpl for File {
             Ok(Box::new(File {
                 file,
                 pipelines: HashMap::new(),
+                postprocessors: vec![],
             }))
         } else {
             Err("Blackhole offramp requires a config".into())
@@ -84,5 +87,9 @@ impl Offramp for File {
     }
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }

@@ -49,11 +49,9 @@ pub struct Influx {}
 
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(data), |raw| {
-            parse(str::from_utf8(raw)?, ingest_ns)
-        })
-        .map_err(|e| e.0.into())
-        .map(Some)
+        LineValue::try_new(Box::new(data), |raw| parse(str::from_utf8(raw)?, ingest_ns))
+            .map_err(|e| e.0.into())
+            .map(Some)
     }
 
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {

@@ -17,6 +17,8 @@ use crate::async_sink::{AsyncSink, SinkDequeueError};
 use crate::codec::Codec;
 use crate::dflt;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::rest::HttpC;
 use crate::system::{PipelineAddr, PipelineMsg};
 use crate::url::TremorURL;
@@ -47,7 +49,6 @@ pub struct Config {
     pub headers: HashMap<String, String>,
 }
 
-#[derive(Debug)]
 pub struct Rest {
     client_idx: usize,
     clients: Vec<HttpC>,
@@ -55,6 +56,7 @@ pub struct Rest {
     pool: ThreadPool,
     queue: AsyncSink<u64>,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl OfframpImpl for Rest {
@@ -72,6 +74,7 @@ impl OfframpImpl for Rest {
             Ok(Box::new(Rest {
                 client_idx: 0,
                 pipelines: HashMap::new(),
+                postprocessors: vec![],
                 config,
                 pool,
                 clients,
@@ -180,6 +183,10 @@ impl Offramp for Rest {
     }
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

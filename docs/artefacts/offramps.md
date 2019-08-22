@@ -87,6 +87,8 @@ The UDP offramp sends data to a given host and port as UDP datagram.
 
 The default codec is `json`.
 
+When the UDP onramp gets a batch of messages it will send each element of the batch as a own UDP datagram.
+
 Supported configuration options are:
 
 - `host` - the local host to send data from
@@ -158,7 +160,7 @@ offramp:
 
 ### stdout
 
-The standard out offramp prints each event to the stdout output. 
+The standard out offramp prints each event to the stdout output.
 
 This operator does not support configuration.
 
@@ -166,8 +168,8 @@ Example:
 
 ```yaml
 offramp:
-  - id: dbg
-    type: debug
+  - id: console
+    type: stdout
 ```
 
 ### blackhole
@@ -176,7 +178,7 @@ The blackhole offramp is used for benchmarking it takes measurements of the end 
 
 Supported configuration options are:
 
-* `warmup_secs` - Number of seconds after startup in which latency won't be measured to allow for a warmup period. 
+* `warmup_secs` - Number of seconds after startup in which latency won't be measured to allow for a warmup period.
 * `stop_after_secs` - Stop tremor after a given number of seconds and print the histogram.
 * `significant_figures` - Significant figures for the HDR histogram. (the first digits of each measurement that are kept as precise values)
 
@@ -207,4 +209,36 @@ Example:
 offramp:
   - id: dbg
     type: debug
+```
+
+### tcp
+
+This connects on a specified port for distributing outbound tcp data.
+
+The offramp can leverage postprocessors to frame data after codecs are applied and events are forwarded
+to external TCP protocol distribution endpoints.
+
+The default [codec](../codecs) is `json`.
+
+Supported configuration options are:
+* `host` - The host to advertise as
+* `port` - The TCP port to listen on
+* `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
+* `ttl` - Set the socket's time-to-live ( default: 64 )
+* `is_no_delay` - Set the socket's nagle ( delay ) algorithm to disabled ( default: true )
+
+Example:
+
+```yaml
+offramp:
+  - id: tcp
+    type: tcp
+    codec: json
+    postprocessors:
+      - gzip
+      - base64
+      - lines
+    config:
+      host: "localhost"
+      port: 9000
 ```

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # UDP Offramp
+//! # TCP Offramp
 //!
-//! Sends each message as a udp datagram
+//! Sends each message as a tcp stream
 //!
 //! ## Configuration
 //!
@@ -22,19 +22,21 @@
 
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
+use crate::dflt;
 use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
+use crate::offramp::prelude::{make_postprocessors, postprocess};
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
 use serde_yaml;
-use std::net::UdpSocket;
+use std::io::Write;
+use std::net::TcpStream;
 
-/// An offramp that write a given file
-pub struct Udp {
-    socket: UdpSocket,
+/// An offramp streams over TCP/IP
+pub struct Tcp {
+    stream: TcpStream,
     config: Config,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
@@ -42,43 +44,61 @@ pub struct Udp {
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    /// Host to use as source
     pub host: String,
     pub port: u16,
-    pub dst_host: String,
-    pub dst_port: u16,
+    #[serde(default = "dflt::d_false")]
+    pub is_non_blocking: bool,
+    #[serde(default = "dflt::d_ttl")]
+    pub ttl: u32,
+    #[serde(default = "dflt::d_true")]
+    pub is_no_delay: bool,
 }
 
-impl OfframpImpl for Udp {
+impl OfframpImpl for Tcp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            let socket = UdpSocket::bind((config.host.as_str(), config.port))?;
-            socket.connect((config.dst_host.as_str(), config.dst_port))?;
-            Ok(Box::new(Udp {
+            let stream = TcpStream::connect((config.host.as_str(), config.port))?;
+            stream
+                .set_nonblocking(config.is_non_blocking)
+                .expect("cannot set non-blocking");
+            stream.set_ttl(config.ttl).expect("cannot set ttl");
+            stream
+                .set_nodelay(config.is_no_delay)
+                .expect("cannot set no delay");
+            Ok(Box::new(Tcp {
                 config,
-                socket,
+                stream,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
             }))
         } else {
-            Err("Blackhole offramp requires a config".into())
+            Err("TCP offramp requires a config".into())
         }
     }
 }
 
-impl Offramp for Udp {
-    // TODO
+impl Offramp for Tcp {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
             if let Ok(ref raw) = codec.encode(event.value) {
-                //TODO: Error handling
-                if let Err(e) = self.socket.send(&raw) {
-                    error!(
-                        "Failed wo send UDP datagram to {}:{} => {}",
-                        self.config.dst_host, self.config.dst_port, e
-                    )
+                match postprocess(&mut self.postprocessors, raw.to_vec()) {
+                    Ok(packets) => {
+                        for packet in packets {
+                            if let Err(e) = self.stream.write(&packet) {
+                                error!(
+                                    "Failed wo send over TCP stream to {}:{} => {}",
+                                    self.config.host, self.config.port, e
+                                )
+                            }
+                        }
+                    }
+                    Err(e) => error!(
+                        "Failed to postprocess before sending over TCP stream to {}:{} => {}",
+                        self.config.host, self.config.port, e
+                    ),
                 }
+                self.stream.flush().expect("failed to flush stream");
             }
         }
     }

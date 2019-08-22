@@ -25,7 +25,10 @@ pub use std::thread;
 pub use tremor_pipeline::Event;
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
-    preprocessors.iter().map(|n| preprocessor::lookup(&n)).collect()
+    preprocessors
+        .iter()
+        .map(|n| preprocessor::lookup(&n))
+        .collect()
 }
 // We are borrowing a dyn box as we don't want to pass ownership.
 #[allow(clippy::borrowed_box)]

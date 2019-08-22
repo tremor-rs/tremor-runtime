@@ -23,6 +23,8 @@
 use super::{Offramp, OfframpImpl};
 use crate::codec::Codec;
 use crate::errors::*;
+use crate::offramp::prelude::make_postprocessors;
+use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::utils;
@@ -49,9 +51,8 @@ pub struct Config {
 }
 
 /// A null offramp that records histograms
-#[derive(Debug, Clone)]
 pub struct Blackhole {
-    config: Config,
+    // config: Config,
     stop_after: u64,
     warmup: u64,
     has_stop_limit: bool,
@@ -59,6 +60,7 @@ pub struct Blackhole {
     run_secs: f64,
     bytes: usize,
     pipelines: HashMap<TremorURL, PipelineAddr>,
+    postprocessors: Postprocessors,
 }
 
 impl OfframpImpl for Blackhole {
@@ -67,7 +69,7 @@ impl OfframpImpl for Blackhole {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let now_ns = utils::nanotime();
             Ok(Box::new(Blackhole {
-                config: config.clone(),
+                // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
                 stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
                 warmup: now_ns + config.warmup_secs * 1_000_000_000,
@@ -78,6 +80,7 @@ impl OfframpImpl for Blackhole {
                     config.significant_figures as u8,
                 )?,
                 pipelines: HashMap::new(),
+                postprocessors: vec![],
                 bytes: 0,
             }))
         } else {
@@ -126,6 +129,10 @@ impl Offramp for Blackhole {
     }
     fn default_codec(&self) -> &str {
         "null"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
+        self.postprocessors = make_postprocessors(postprocessors)
+            .expect("failed to setup post processors for stdout");
     }
 }
 

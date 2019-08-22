@@ -19,6 +19,7 @@ mod dummy;
 mod integer;
 mod json;
 mod math;
+mod random;
 mod re;
 mod record;
 mod string;
@@ -35,6 +36,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     json::load(registry);
     math::load(registry);
     r#type::load(registry);
+    random::load(registry);
     re::load(registry);
     record::load(registry);
     string::load(registry);

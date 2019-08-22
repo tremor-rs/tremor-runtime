@@ -9,7 +9,7 @@ per minute and 10 million metrics per second.
 
 Tremor runs 24x7 365 days per year and is implemented in the Rust programming language.
 
-Click for an [Architectural overview](./Overview.md) or [Canned History](./History.md) of the project.
+Click for an [Architectural overview](./overview) or [Canned History](./history) of the project.
 
 ## Contact
 
