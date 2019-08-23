@@ -3787,7 +3787,7 @@ dependencies = [
  "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_yaml 0.8.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.1.0",
- "tremor-runtime 0.5.3",
+ "tremor-runtime 0.5.4-rc1",
 ]
 
 [[package]]
@@ -3815,7 +3815,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.5.3"
+version = "0.5.4-rc1"
 dependencies = [
  "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-router 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3913,7 +3913,7 @@ dependencies = [
  "log4rs 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_yaml 0.8.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-api 0.1.0",
- "tremor-runtime 0.5.3",
+ "tremor-runtime 0.5.4-rc1",
 ]
 
 [[package]]
@@ -3931,7 +3931,7 @@ dependencies = [
  "serde_yaml 0.8.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.1.0",
- "tremor-runtime 0.5.3",
+ "tremor-runtime 0.5.4-rc1",
  "tremor-script 0.1.0",
 ]
 

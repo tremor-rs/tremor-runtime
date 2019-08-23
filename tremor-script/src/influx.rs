@@ -20,6 +20,7 @@ use simd_json::value::ValueTrait;
 use std::borrow::Cow;
 use std::str::Chars;
 
+#[allow(dead_code)]
 pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     let mut output = v.get("measurement")?.as_string()?.escape();
 
@@ -69,6 +70,7 @@ pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     Some(output.into())
 }
 
+#[allow(dead_code)]
 fn process_string(s: &str) -> String {
     let mut out = String::from(r#"""#);
     s.chars().for_each(|ch| match ch {
