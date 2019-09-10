@@ -13,9 +13,13 @@
 // limitations under the License.
 
 use crate::onramp::prelude::*;
+use mio::net::UdpSocket;
+use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde_yaml::Value;
-use std::net;
 use std::thread;
+use std::time::Duration;
+
+const ONRAMP: Token = Token(0);
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -33,7 +37,7 @@ pub struct Udp {
 }
 
 impl OnrampImpl for Udp {
-    fn from_config(config: &Option<Value>) -> Result<Box<Onramp>> {
+    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             Ok(Box::new(Udp { config }))
@@ -55,12 +59,16 @@ fn onramp_loop(
     // Limit of a UDP package
     let mut buf = [0; 65535];
 
-    info!("[UDP Onramp] listening on {}:{}", config.host, config.port);
-    let socket = net::UdpSocket::bind(format!("{}:{}", config.host, config.port))?;
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
 
+    info!("[UDP Onramp] listening on {}:{}", config.host, config.port);
+    let poll = Poll::new()?;
+
+    let socket = UdpSocket::bind(&format!("{}:{}", config.host, config.port).parse()?)?;
+    poll.register(&socket, ONRAMP, Ready::readable(), PollOpt::edge())?;
+
+    let mut events = Events::with_capacity(1024);
     loop {
         while pipelines.is_empty() {
             match rx.recv()? {
@@ -85,15 +93,36 @@ fn onramp_loop(
                 }
             }
         };
-        let (amt, _src) = socket.recv_from(&mut buf)?;
-        send_event(
-            &pipelines,
-            &mut preprocessors,
-            &mut codec,
-            id,
-            buf[0..amt].to_vec(),
-        );
-        id += 1;
+
+        poll.poll(&mut events, Some(Duration::from_millis(100)))?;
+        for event in events.iter() {
+            match event.token() {
+                // Our ECHOER is ready to be read from.
+                ONRAMP => loop {
+                    use std::io::ErrorKind;
+                    match socket.recv(&mut buf) {
+                        Ok(n) => {
+                            send_event(
+                                &pipelines,
+                                &mut preprocessors,
+                                &mut codec,
+                                id,
+                                buf[0..n].to_vec(),
+                            );
+                            id += 1;
+                        }
+                        Err(e) => {
+                            if e.kind() == ErrorKind::WouldBlock {
+                                break;
+                            } else {
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                },
+                _ => unreachable!(),
+            }
+        }
     }
 }
 

@@ -8,7 +8,7 @@ Online codecs, preprocessors can be chained to perform multiple operations in su
 
 ### lines
 
-Splits the input into lines (character 13 `\n`) 
+Splits the input into lines (character 13 `\n`)
 
 ### base64
 
@@ -31,3 +31,7 @@ Supported formats:
 ### gelf-chunking
 
 Reassembles messages that were split apart using the [GELF chunking protocol](https://docs.graylog.org/en/3.0/pages/gelf.html#gelf-via-udp). The message content is decompressed after reassembly so no additional decompression is needed.
+
+### remove-empty
+
+Removes empty messages (aka zero len).

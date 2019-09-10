@@ -107,6 +107,9 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
         )
         .insert(map_function!(is_empty))
         .insert(tremor_fn! (string::len(_context, _input: String) {
+            Ok(Value::from(_input.chars().count() as i64))
+        }))
+        .insert(tremor_fn! (string::bytes(_context, _input: String) {
             Ok(Value::from(_input.len() as i64))
         }))
         .insert(tremor_fn! (string::trim(_context, _input: String) {
@@ -126,13 +129,17 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 None => Value::from(""),
                 Some(f) => Value::from(f.to_uppercase().collect::<String>() + c.as_str()),
             })
-
         }))
         .insert(
             tremor_fn!(string::substr(_context, _input: String, _start: I64, _end: I64) {
-                use std::cmp::{max,min};
-                let start = max(0, *_start as usize) as usize;
-                let end = min(_input.len(), *_end as usize) as usize;
+                // Since rust doens't handle UTF8 indexes we have to translate this
+                // _input.char_indices() - get an iterator over codepoint indexes
+                //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple 
+                //   .map(|v| v.0) - map to the first argument (byte index)
+                //   .unwrap_or_else(|| 0) - since this is an option we need to safely extract the value so we default it to 0 for start or len for end
+                let start = _input.char_indices().nth(*_start as usize).map(|v| v.0).unwrap_or_else(|| 0);
+                let end = _input.char_indices().nth(*_end as usize).map(|v| v.0).unwrap_or_else(|| _input.len());
+
                 Ok(Value::from((&_input[start..end]).to_string()))
             }),
         )
@@ -234,7 +241,15 @@ mod test {
         let v = Value::from("this is a test");
         let s = Value::from(5);
         let e = Value::from(7);
-        assert_val!(f(&[&v, &s, &e]), "is")
+        assert_val!(f(&[&v, &s, &e]), "is");
+        let f = fun("string", "substr");
+        let v = Value::from("♥ utf8");
+        let s = Value::from(0);
+        let e = Value::from(1);
+        assert_val!(f(&[&v, &s, &e]), "♥");
+        let s = Value::from(2);
+        let e = Value::from(6);
+        assert_val!(f(&[&v, &s, &e]), "utf8");
     }
 
     #[test]

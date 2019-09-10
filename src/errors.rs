@@ -118,6 +118,7 @@ error_chain! {
         GrokError(grok::Error);
         DateTimeParseError(chrono::ParseError);
         SnappyError(snap::Error);
+        AddrParseError(std::net::AddrParseError);
     }
 
     errors {
@@ -181,9 +182,9 @@ error_chain! {
                 display("Unknown namespace: {}", n)
         }
 
-        InvalidGELFHeader {
+        InvalidGELFHeader(len: usize, initial: Option<[u8; 2]>) {
             description("Invalid GELF header")
-                display("Invalid GELF header")
+                display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
 
         InvalidStatsD {

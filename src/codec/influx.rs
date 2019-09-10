@@ -47,11 +47,34 @@ use tremor_script::{
 #[derive(Clone)]
 pub struct Influx {}
 
+// This is ugly but we need to handle comments, thanks rental!
+enum RentalSnot {
+    Error(Error),
+    Skip,
+}
+
+impl From<std::str::Utf8Error> for RentalSnot {
+    fn from(e: std::str::Utf8Error) -> Self {
+        RentalSnot::Error(e.into())
+    }
+}
+
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(data), |raw| parse(str::from_utf8(raw)?, ingest_ns))
-            .map_err(|e| e.0.into())
-            .map(Some)
+        let r: std::result::Result<LineValue, RentalSnot> =
+            LineValue::try_new(Box::new(data), |raw| {
+                match parse(str::from_utf8(raw)?, ingest_ns) {
+                    Ok(None) => Err(RentalSnot::Skip),
+                    Ok(Some(v)) => Ok(v),
+                    Err(e) => Err(RentalSnot::Error(e.into())),
+                }
+            })
+            .map_err(|e| e.0);
+        match r {
+            Ok(v) => Ok(Some(v)),
+            Err(RentalSnot::Skip) => Ok(None),
+            Err(RentalSnot::Error(e)) => Err(e),
+        }
     }
 
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
@@ -78,10 +101,12 @@ mod tests {
     #[test]
     fn unparse_test() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
-        let d = parse(s, 0).expect("failed to parse");
+        let d = parse(s, 0)
+            .expect("failed to parse")
+            .expect("failed to parse");
         // This is a bit ugly but to make a sensible compairison we got to convert the data
         // from an object to json to an object
-        let j: Value = d.into();
+        let j: Value = d;
         let j: OwnedValue = j.into();
         let e = json!({
             "measurement": "weather",
@@ -91,6 +116,35 @@ mod tests {
         });
 
         assert_eq!(e, j)
+    }
+
+    #[test]
+    fn unparse_empty() {
+        let s = "";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  ";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  \n";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = " \t \n";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+    }
+
+    #[test]
+    fn unparse_comment() {
+        let s = "# bla";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  # bla";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = " \t \n# bla";
+        let d = parse(s, 0).expect("failed to parse");
+        assert!(d.is_none());
     }
 
     #[test]

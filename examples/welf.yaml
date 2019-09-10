@@ -1,29 +1,30 @@
 onramp:
-  - id: tcp
-    type: tcp
+  - id: udp
+    type: udp
     preprocessors:
       - decompress
-      - gelf-chunking-tcp
+      - gelf-chunking
+      - decompress
     codec: json
     config:
-      host: "localhost"
+      host: 0.0.0.0
       port: 9000
-      ttl: 64
 
 offramp:
   - id: console
-    type: stdout
+    type: rest
     config:
-      prefix: "TCP "
+      endpoints:
+
 
 binding:
-  - id: tcp
+  - id: udp
     links:
-      '/onramp/tcp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/onramp/udp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
 
 mapping:
-  /binding/tcp/01:
+  /binding/udp/01:
     instance: "01"
 
 pipeline:
@@ -33,5 +34,8 @@ pipeline:
         - in
       outputs:
         - out
+      node:
+        - id: batch
+          type: batc
     links:
       in: [ out ]

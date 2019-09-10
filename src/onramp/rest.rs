@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::Error;
 use crate::onramp::prelude::*;
+use crate::utils;
 use actix_router::ResourceDef;
 use actix_web::{
-    dev::Payload, web, web::Data, App, FromRequest, HttpRequest, HttpServer, ResponseError,
+    dev::Payload, web, web::Data, App, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
+use futures::future::{result, Future};
 use halfbrown::HashMap;
+use http::{Method, StatusCode};
 use serde_yaml::Value;
 use simd_json::json;
-// use std::thread;
-// use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-// use futures::stream::Stream;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -37,9 +38,15 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RestConfig {
-    method: Vec<HttpMethod>,
     path: String,
+    allow: Vec<ResourceConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResourceConfig {
+    method: HttpMethod,
     params: Option<Vec<String>>,
+    status_code: usize,
 }
 
 fn dflt_host() -> String {
@@ -51,27 +58,27 @@ fn dflt_port() -> u32 {
 }
 
 #[derive(Clone, Debug)]
-pub struct Http {
+pub struct Rest {
     pub config: Config,
 }
 
-impl OnrampImpl for Http {
+impl OnrampImpl for Rest {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Http { config }))
+            Ok(Box::new(Rest { config }))
         } else {
-            Err("Missing config for HTTP onramp".into())
+            Err("Missing config for REST onramp".into())
         }
     }
 }
 
-impl Onramp for Http {
+impl Onramp for Rest {
     fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
         thread::Builder::new()
-            .name(format!("onramp-metronome-{}", "???"))
+            .name(format!("onramp-rest-{}", "???"))
             .spawn(|| onramp_loop(rx, config, preprocessors, codec))?;
 
         Ok(tx)
@@ -84,20 +91,19 @@ impl Onramp for Http {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub enum HttpMethod {
-    GET,
+    //    GET,
     POST,
     PUT,
     PATCH,
     DELETE,
-    HEAD,
+    //    HEAD,
 }
-
-impl ResponseError for Error {}
 
 #[derive(Clone)]
 struct OnrampState {
     tx: Option<Sender<Response>>,
     config: Config,
+    preprocessors: Vec<Box<dyn Preprocessor>>,
 }
 
 impl Default for OnrampState {
@@ -105,9 +111,13 @@ impl Default for OnrampState {
         OnrampState {
             tx: None,
             config: Config::default(),
+            preprocessors: vec![],
         }
     }
 }
+
+impl actix_web::error::ResponseError for Error {}
+
 impl FromRequest for OnrampState {
     type Config = Self;
     type Error = Error;
@@ -122,30 +132,58 @@ impl FromRequest for OnrampState {
         }
     }
 }
-fn handler(sp: (Data<OnrampState>, web::Bytes, HttpRequest)) -> Result<()> {
+fn handler(
+    sp: (Data<OnrampState>, web::Bytes, HttpRequest),
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let state = sp.0;
     let payload = sp.1;
     let req = sp.2;
     let tx = state.tx.clone();
-    let data = std::str::from_utf8(&payload);
     let tx = match tx {
         Some(tx) => tx,
         None => unreachable!(),
     };
-    if let Ok(data) = data {
-        let pp = path_params(state.config.resources.clone(), req.match_info().path());
-        let response = Response {
-            path: req.path().to_string(),
-            actual_path: pp.0,
-            query_params: req.query_string().to_owned(),
-            path_params: pp.1,
-            headers: header(req.headers()),
-            body: data.to_string(),
-            method: req.method().as_str().to_owned(),
+
+    // apply preprocessors
+    let data = payload.to_vec();
+
+    let preprocessors: Preprocessors = state.preprocessors.clone(); // PERF find a way to avoid clone
+    for mut pp in preprocessors {
+        match pp.process(utils::nanotime(), &data) {
+            Ok(r) => {
+                for data in r {
+                    let data = std::str::from_utf8(&data).expect("invalid utf8 content");
+                    let data = data.trim(); // PERF trim in place
+                    if data.is_empty() {
+                        continue;
+                    }
+                    let pp = path_params(state.config.resources.clone(), req.match_info().path());
+                    let response = Response {
+                        path: req.path().to_string(),
+                        actual_path: pp.0,
+                        query_params: req.query_string().to_owned(),
+                        path_params: pp.1,
+                        headers: header(req.headers()),
+                        body: data.to_string(), // FIXME apply codecs to body content?
+                        method: req.method().as_str().to_owned(),
+                    };
+
+                    let _ = tx.send(response);
+                }
+            }
+            Err(e) => {
+                return Box::new(futures::future::err(e));
+            }
         };
-        let _ = tx.send(response);
     }
-    std::result::Result::<(), Error>::Ok(())
+
+    let status = StatusCode::from_u16(match *req.method() {
+        Method::POST => 201u16,
+        Method::DELETE => 200u16,
+        _ => 204u16,
+    })
+    .expect("bad status code");
+    Box::new(result(Ok(HttpResponse::build(status).body("".to_string()))))
 }
 
 fn header(headers: &actix_web::http::header::HeaderMap) -> HashMap<String, String> {
@@ -184,12 +222,14 @@ fn onramp_loop(
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
     let (dt, dr) = bounded::<Response>(1);
+    let preprocessors = make_preprocessors(&preprocessors)?;
     let _ = thread::Builder::new()
-        .name(format!("onramp-http-{}", "???"))
+        .name(format!("onramp-rest-{}", "???"))
         .spawn(move || {
             let data = Data::new(OnrampState {
                 tx: Some(dt),
                 config,
+                preprocessors,
             });
             let s = HttpServer::new(move || {
                 App::new()
@@ -206,7 +246,7 @@ fn onramp_loop(
         })?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut codec = codec::lookup(&codec).expect("");
-    let mut preprocessors = make_preprocessors(&preprocessors).expect("");
+    let mut preprocessors = Vec::<Box<dyn preprocessor::Preprocessor>>::new();
 
     loop {
         if pipelines.is_empty() {

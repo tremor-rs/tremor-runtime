@@ -23,10 +23,10 @@ use std::fmt;
 mod blaster;
 mod file;
 mod gsub;
-mod http;
 mod kafka;
 mod metronome;
 mod prelude;
+mod rest;
 mod tcp;
 mod udp;
 
@@ -56,7 +56,7 @@ pub fn lookup(name: String, config: Option<Value>) -> Result<Box<dyn Onramp>> {
         "metronome" => metronome::Metronome::from_config(&config),
         "udp" => udp::Udp::from_config(&config),
         "tcp" => tcp::Tcp::from_config(&config),
-        "rest" => http::Http::from_config(&config),
+        "rest" => rest::Rest::from_config(&config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }
 }

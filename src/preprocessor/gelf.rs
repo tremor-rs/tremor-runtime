@@ -15,15 +15,39 @@
 use super::Preprocessor;
 use crate::errors::*;
 use hashbrown::{hash_map::Entry, HashMap};
+use rand::{self, RngCore};
+use std::any::Any;
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct GELF {
     buffer: HashMap<u64, GELFMsgs>,
     last_buffer: HashMap<u64, GELFMsgs>,
     last_swap: u64,
     cnt: usize,
+    is_tcp: bool,
+}
+
+impl GELF {
+    pub fn default() -> Self {
+        GELF {
+            buffer: HashMap::new(),
+            last_buffer: HashMap::new(),
+            last_swap: 0,
+            cnt: 0,
+            is_tcp: false,
+        }
+    }
+    pub fn tcp() -> Self {
+        GELF {
+            buffer: HashMap::new(),
+            last_buffer: HashMap::new(),
+            last_swap: 0,
+            cnt: 0,
+            is_tcp: true,
+        }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -46,11 +70,30 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
     // We got to do that for badly compressed / non standard conform
     // gelf messages
     match bin.get(0..2) {
+        // WELF magic header - wayfair uncompressed gelf
+        Some(&[0x1f, 0x3c]) => {
+            // If we are less then 2 byte we can not be a proper Package
+            if bin.len() < 2 {
+                Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
+            } else {
+                // FIXME: we would allow up to 255 chunks
+                Ok(GELFSegment {
+                    id: rand::rngs::OsRng.next_u64(),
+                    seq: 0,
+                    count: 1,
+                    data: bin[2..].to_vec(),
+                })
+            }
+        }
         // GELF magic header
         Some(&[0x1e, 0x0f]) => {
             // If we are less then 12 byte we can not be a proper Package
             if bin.len() < 12 {
-                Err(ErrorKind::InvalidGELFHeader.into())
+                if bin.len() >= 2 {
+                    Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([bin[0], bin[1]])).into())
+                } else {
+                    Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
+                }
             } else {
                 // FIXME: we would allow up to 255 chunks
                 Ok(GELFSegment {
@@ -74,15 +117,23 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
             count: 1,
             data: bin.to_vec(),
         }),
-        _ => Err(ErrorKind::InvalidGELFHeader.into()),
+        _ => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([bin[0], bin[1]])).into()),
     }
 }
 
 impl Preprocessor for GELF {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
     fn process(&mut self, ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(ingest_ns, msg) {
-            Ok(vec![data])
+            let len = if self.is_tcp {
+                data.len() - 1
+            } else {
+                data.len()
+            };
+            Ok(vec![data[0..len].to_vec()])
         } else {
             Ok(vec![])
         }
@@ -113,7 +164,13 @@ impl GELF {
                             m.stored += 1;
                             *d = Some(msg.data);
                         } else {
-                            error!("double chunk for index {} for {}", idx, m.segments.len());
+                            warn!(
+                                "Discarding out of range chunk {}/{} for {} ({} bytes)",
+                                idx,
+                                m.count,
+                                key,
+                                msg.data.len()
+                            );
                             return None;
                         };
                         if m.stored == m.count {
@@ -128,7 +185,6 @@ impl GELF {
                         None
                     }
                 }
-
                 Entry::Vacant(_v_last) => {
                     let mut m = GELFMsgs {
                         bytes: msg.data.len(),
@@ -139,7 +195,13 @@ impl GELF {
                     if let Some(d) = m.segments.get_mut(idx) {
                         *d = Some(msg.data);
                     } else {
-                        error!("Chunk out of order index {} for {}", idx, m.segments.len());
+                        warn!(
+                            "Discarding out of range chunk {}/{} for {} ({} bytes)",
+                            idx,
+                            m.count,
+                            key,
+                            msg.data.len()
+                        );
                         return None;
                     };
                     if m.stored == m.count {
@@ -158,7 +220,13 @@ impl GELF {
                         m.stored += 1;
                         *d = Some(msg.data);
                     } else {
-                        error!("Chunk out of order index {} for {}", idx, m.segments.len());
+                        warn!(
+                            "Discarding out of range chunk {}/{} for {} ({} bytes)",
+                            idx,
+                            m.count,
+                            key,
+                            msg.data.len()
+                        );
                         return None;
                     };
                     if m.stored == m.count {

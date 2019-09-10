@@ -1,0 +1,56 @@
+onramp:
+  - id: gelf-tcp
+    type: tcp
+    preprocessors:
+      - decompress
+      - gelf-chunking-tcp
+      - decompress
+    codec: json
+    config:
+      host: 'localhost'
+      port: 12202
+
+offramp:
+  - id: console
+    type: stdout
+    config:
+      prefix: 'GELF (TCP): '
+
+binding:
+  - id: gelf-tcp
+    links:
+      '/onramp/gelf-tcp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/{instance}/in' ]
+
+mapping:
+  /binding/gelf-tcp/01:
+    instance: '01'
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - error
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            match event of
+              # if timestamp is not set by clients:
+              # http://docs.graylog.org/en/latest/pages/gelf.html#gelf-payload-specification
+              # TODO ignore _id field as per spec
+              case %{absent timestamp} =>
+                let event.timestamp = system::ingest_ns() / 1000000000
+              default =>
+                null
+            end;
+            event;
+    links:
+      in: [ runtime ]
+      runtime: [ out ]
+      runtime/error: [ error ]

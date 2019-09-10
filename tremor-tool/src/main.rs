@@ -213,7 +213,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
     file.read_to_string(&mut script)
         .expect("Unable to read the file");
 
-    let input: Box<BufRead> = match cmd.value_of("DATA") {
+    let input: Box<dyn BufRead> = match cmd.value_of("DATA") {
         None => Box::new(BufReader::new(io::stdin())),
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };
@@ -283,7 +283,7 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
         .ok_or("TEST_PATTERN not provided")?;
     let patterns_file = cmd.value_of("patterns").ok_or("patterns not provided")?;
 
-    let input: Box<BufRead> = match cmd.value_of("DATA") {
+    let input: Box<dyn BufRead> = match cmd.value_of("DATA") {
         None => Box::new(BufReader::new(io::stdin())),
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };
@@ -336,7 +336,7 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let pipeline = &runtime.pipes[0];
     let mut flow = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
 
-    let input: Box<BufRead> = match cmd.value_of("DATA") {
+    let input: Box<dyn BufRead> = match cmd.value_of("DATA") {
         None => Box::new(BufReader::new(io::stdin())),
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };

@@ -18,7 +18,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use base64;
 use criterion::{criterion_group, criterion_main, BatchSize, Benchmark, Criterion, Throughput};
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use rmp_serde as rmps;
 use serde_yaml;
 use std::fs::File;
@@ -64,7 +64,8 @@ fn benchmark_json(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).expect("filed in pipeline");
+                        let mut r = Vec::new();
+                        exec.enqueue("in", e, &mut r).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -111,7 +112,8 @@ fn benchmark_msgpack(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).expect("filed in pipeline");
+                        let mut r = Vec::new();
+                        exec.enqueue("in", e, &mut r).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -158,7 +160,8 @@ fn benchmark_sql(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).expect("filed in pipeline");
+                        let mut r = Vec::new();
+                        exec.enqueue("in", e, &mut r).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,
@@ -205,7 +208,8 @@ fn benchmark_sql_msgpack(c: &mut Criterion) {
                 || lines.clone(),
                 |data| {
                     for e in data.into_iter() {
-                        exec.enqueue("in", e).expect("filed in pipeline");
+                        let mut r = Vec::new();
+                        exec.enqueue("in", e, &mut r).expect("filed in pipeline");
                     }
                 },
                 BatchSize::SmallInput,

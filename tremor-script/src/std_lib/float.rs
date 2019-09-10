@@ -12,34 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod array;
-mod chash;
-mod datetime;
-mod dummy;
-mod float;
-mod integer;
-mod json;
-mod math;
-mod random;
-mod re;
-mod record;
-mod string;
-mod r#type;
-
 use crate::registry::{Context, Registry};
+use crate::tremor_fn;
 
 pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
-    array::load(registry);
-    chash::load(registry);
-    datetime::load(registry);
-    dummy::load(registry);
-    integer::load(registry);
-    float::load(registry);
-    json::load(registry);
-    math::load(registry);
-    r#type::load(registry);
-    random::load(registry);
-    re::load(registry);
-    record::load(registry);
-    string::load(registry);
+    registry.insert(tremor_fn! (float::parse(_context, _input: String) {
+        _input.parse::<f64>().map_err(to_runtime_error).map(Value::from)
+    }));
+}
+
+#[cfg(test)]
+mod test {
+    use crate::registry::fun;
+    use simd_json::BorrowedValue as Value;
+
+    macro_rules! assert_val {
+        ($e:expr, $r:expr) => {
+            assert_eq!($e, Ok(Value::from($r)))
+        };
+    }
+
+    #[test]
+    fn parse() {
+        let f = fun("float", "parse");
+        let v = Value::from("42.314");
+        assert_val!(f(&[&v]), 42.314);
+    }
 }

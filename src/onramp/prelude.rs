@@ -34,7 +34,7 @@ pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
 #[allow(clippy::borrowed_box)]
 pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
-    preprocessors: &mut [Box<dyn Preprocessor>],
+    preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     id: u64,
     data: Vec<u8>,
@@ -44,11 +44,11 @@ pub fn send_event(
     let mut data1 = Vec::new();
     for pp in preprocessors {
         data1.clear();
-        for d in &data {
+        for (i, d) in data.iter().enumerate() {
             match pp.process(ingest_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("Preprocessor error {}", e);
+                    error!("Preprocessor[{}] error {}", i, e);
                     return;
                 }
             }

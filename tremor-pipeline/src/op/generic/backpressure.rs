@@ -101,9 +101,7 @@ impl Operator for Backpressure {
             } else {
                 self.backoff = 0;
             }
-        } else {
-            return;
-        };
+        }
     }
 }
 

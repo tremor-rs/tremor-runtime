@@ -35,7 +35,7 @@ pub struct Tcp {
 }
 
 impl OnrampImpl for Tcp {
-    fn from_config(config: &Option<Value>) -> Result<Box<Onramp>> {
+    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             Ok(Box::new(Tcp { config }))
@@ -62,7 +62,9 @@ fn onramp_loop(
     endpoint
         .set_nonblocking(config.is_non_blocking)
         .expect("cannot set non-blocking");
-    endpoint.set_ttl(config.ttl).expect("cannot set ttl");
+    // if config.ttl > 0 {
+    //    endpoint.set_ttl(config.ttl).expect("cannot set ttl");
+    // }
 
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;

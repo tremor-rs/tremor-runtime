@@ -193,7 +193,7 @@ pub struct OperatorNode {
     id: String,
     kind: NodeKind,
     _type: String,
-    op: Box<Operator>,
+    op: Box<dyn Operator>,
 }
 
 impl Operator for OperatorNode {

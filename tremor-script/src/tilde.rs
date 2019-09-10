@@ -470,7 +470,10 @@ impl Extractor {
                 }
                 Extractor::Influx => match influx::parse(s, ctx.ingest_ns()) {
                     Ok(ref _x) if !result_needed => Ok(Value::Null),
-                    Ok(x) => {
+                    Ok(None) => Err(ExtractorError {
+                        msg: "The input is invalid".into(),
+                    }),
+                    Ok(Some(x)) => {
                         let r: OwnedValue = x.into();
                         Ok(r.into())
                     }

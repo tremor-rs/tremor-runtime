@@ -1,23 +1,30 @@
 onramp:
-  - id: metronome
-    type: metronome
-    config:
-      source: demo/data/data.json.xz
-      interval: 500 # 2 events/s
+  - id: rest
+    type: rest
+    preprocessors:
+      - lines
     codec: json
+    config:
+      host: "localhost"
+      port: 9000
+      resources:
+        - path: /write?db=test.db
+          allow:
+            - method: POST
+              status_code: 204
 
 offramp:
+  - id: console
+    type: stdout
+    codec: json
   - id: rest
     type: rest
     config:
       endpoints:
-#        - http://127.0.0.1:8086/write?db=tremor
-        - http://127.0.0.1:8080/write?db=tremor
+        - http://localhost:8086/write?db=tremor
       headers:
         'Content-Type': 'application/json'
     codec: influx
-  - id: console
-    type: stdout
 
 pipeline:
   - id: demo
@@ -31,18 +38,9 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            # fake a metric via transforming a periodic metronome event
-            {
-              "measurement": "test",
-              "tags": {
-                "host": system::hostname(),
-              },
-              "fields": {
-                "random_value": random::integer(0,100)
-              },
-              "timestamp": event.ingest_ns
-            }
-
+            match event of
+                case rp = %{ body ~= influx|| } => let msg = rp.body, let msg.timestamp = system::ingest_ns(), msg
+            end
     links:
       in: [ to_influx ]
       to_influx: [ out ]
@@ -51,8 +49,9 @@ pipeline:
 binding:
   - id: default
     links:
-      '/onramp/metronome/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
+      '/onramp/rest/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
       '/pipeline/demo/{instance}/out': [ '/offramp/rest/{instance}/in', '/offramp/console/{instance}/in'  ]
+#      '/pipeline/demo/{instance}/out': [ '/offramp/console/{instance}/in'  ]
 
 mapping:
   /binding/default/01:

@@ -119,8 +119,8 @@ impl Rest {
             if let Ok(t) = r {
                 m.insert("time".into(), json!(t));
             } else {
-                error!("Elastic search error: {:?}", r);
-                m.insert("error".into(), json!("Failed to send to ES"));
+                error!("REST offramp error: {:?}", r);
+                m.insert("error".into(), json!("Failed to send"));
             };
             let insight = Event {
                 is_batch: false,
@@ -147,14 +147,14 @@ impl Rest {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 //TODO: how do we handle this?
-                error!("Dropped data due to es overload");
-                Err("Dropped data due to es overload".into())
+                error!("Dropped data due to overload");
+                Err("Dropped data due to overload".into())
             }
             _ => {
                 if self.enqueue_send_future(payload).is_err() {
                     // TODO: handle reply to the pipeline
-                    error!("Failed to enqueue send request to elastic");
-                    Err("Failed to enqueue send request to elastic".into())
+                    error!("Failed to enqueue send request");
+                    Err("Failed to enqueue send request".into())
                 } else {
                     Ok(())
                 }

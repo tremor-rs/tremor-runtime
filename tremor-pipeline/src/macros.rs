@@ -21,7 +21,7 @@ macro_rules! op {
             fn from_node(
                 &self,
                 $node: &crate::NodeConfig,
-            ) -> crate::errors::Result<Box<crate::op::Operator>> {
+            ) -> crate::errors::Result<Box<dyn crate::op::Operator>> {
                 $constructor
             }
         }
@@ -29,7 +29,7 @@ macro_rules! op {
             fn new() -> Self {
                 $factory {}
             }
-            pub fn new_boxed() -> Box<crate::op::InitializableOperator> {
+            pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator> {
                 Box::new(Self::new())
             }
         }

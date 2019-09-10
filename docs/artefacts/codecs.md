@@ -43,7 +43,7 @@ translates to:
 
 Just as the influx, the statsd codec translates a single statsd measurement into a structured format. The structure is as follows:
 
-```
+```text
 sam:7|c|@0.1
 ```
 
@@ -65,7 +65,5 @@ The following types are supported:
 * `g` for `gauge`
 * `h`  for `histogram`
 * `s` for `sets`
-
-
 
 For **gauge** there is also the field `action` which might be `add` if the value was prefixed with a `+`, or `sub` if the value was prefixed with a `-`

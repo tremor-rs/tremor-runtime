@@ -13,7 +13,7 @@
       command: curl -vs --stderr - http://localhost:9898/version
       stdout_has:
         - HTTP/1.1 200 OK
-        - '{"version":"0.5.4-rc1"}'
+        - '{"version":"0.5.4"}'
     - name: GET /onramp
       command: curl -vs --stderr - http://localhost:9898/onramp
       stdout_has:
@@ -23,12 +23,13 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "system::stderr"
     - name: GET /pipeline
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::metrics"]'
+        - "system::metrics"
     - name: GET /binding
       command: curl -vs --stderr - http://localhost:9898/binding
       stdout_has:
@@ -44,7 +45,7 @@
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::metrics"]'
+        - "system::metrics"
     - name: Publish pipeline ( JSON )
       command: >
         curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.yaml -H "Content-type: application/yaml" http://localhost:9898/pipeline
@@ -60,7 +61,8 @@
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["main","system::metrics"]'
+        - "system::metrics"
+        - "main"
     - name: GET /pipeline/main should 200 after publish
       command: curl -vs --stderr - http://localhost:9898/pipeline/main
       stdout_has:
@@ -73,7 +75,7 @@
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::metrics"]'
+        - "system::metrics"
 - name: REST API - Interactive deploy/undeploy of a pipeline ( JSON )
   entries:
     - name: GET /pipeline/main should 404 before publish
@@ -84,7 +86,7 @@
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::metrics"]'
+        - "system::metrics"
     - name: Publish pipeline ( JSON )
       command: >
         curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.json -H "Content-type: application/json" -H "Accept: application/yaml" http://localhost:9898/pipeline
@@ -117,7 +119,7 @@
       command: curl -vs --stderr - http://localhost:9898/pipeline
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::metrics"]'
+        - "system::metrics"
 - name: REST API - Interactive deploy/undeploy of an onramp ( YAML )
   entries:
     - name: GET /onramp/blaster should 404 before publish
@@ -144,7 +146,7 @@
       command: curl -vs --stderr - http://localhost:9898/onramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["blaster"]'
+        - "blaster"
     - name: GET /onramp/blaster should 200 after publish
       command: curl -vs --stderr - http://localhost:9898/onramp/blaster
       stdout_has:
@@ -211,7 +213,8 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "system::stderr"
     - name: Publish offramp ( JSON )
       command: >
         curl -vs -stderr -X POST --data-binary @tests/bench-offramp.yaml -H "Content-type: application/yaml" http://localhost:9898/offramp
@@ -227,7 +230,9 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["blackhole","system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "blackhole"
+        - "system::stderr"
     - name: GET /offramp/blackhole should 200 after publish
       command: curl -vs --stderr - http://localhost:9898/offramp/blackhole
       stdout_has:
@@ -240,7 +245,8 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "system::stderr"
 - name: REST API - Interactive deploy/undeploy of a offramp ( JSON )
   entries:
     - name: GET /offramp/blackhole should 404 before publish
@@ -251,7 +257,8 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "system::stderr"
     - name: Publish offramp ( JSON )
       command: >
         curl -vs -stderr -X POST --data-binary @tests/bench-offramp.json -H "Content-type: application/json" -H "Accept: application/yaml" http://localhost:9898/offramp
@@ -268,7 +275,9 @@
         curl -vs --stderr - -H "Accept: application/yaml" http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '- blackhole\n- "system::stderr"\n- "system::stdout"'
+        - "system::stdout"
+        - "blackhole"
+        - "system::stderr"
     - name: GET /offramp/blackhole should 200 after publish
       command: >
         curl -vs --stderr - -H "Accept: application/yaml" http://localhost:9898/offramp/blackhole
@@ -283,7 +292,8 @@
       command: curl -vs --stderr - http://localhost:9898/offramp
       stdout_has:
         - HTTP/1.1 200 OK
-        - '\["system::stderr","system::stdout"]'
+        - "system::stdout"
+        - "system::stderr"
 - name: REST API - Interactive deploy/undeploy of a binding ( YAML )
   entries:
     - name: GET /binding/default should 404 before publish
@@ -294,7 +304,7 @@
       command: curl -vs --stderr - http://localhost:9898/binding
       stdout_has:
         - HTTP/1.1 200 OK
-        - "\\[]"
+        - '\[]'
     - name: Publish binding ( YAML )
       command: >
         curl -vs -stderr -X POST --data-binary @tests/bench-binding.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding
@@ -310,7 +320,7 @@
       command: curl -vs --stderr - http://localhost:9898/binding
       stdout_has:
         - HTTP/1.1 200 OK
-        - "\\[\"default\"]"
+        - "default"
     - name: GET /binding/default should 200 after publish
       command: curl -vs --stderr - http://localhost:9898/binding/default
       stdout_has:
@@ -323,7 +333,7 @@
       command: curl -vs --stderr - http://localhost:9898/binding
       stdout_has:
         - HTTP/1.1 200 OK
-        - "\\[]"
+        - '\[]'
 - name: REST API - Interactive deploy/undeploy of a binding ( JSON )
   entries:
     - name: GET /binding/default should 404 before publish
@@ -351,7 +361,7 @@
         curl -vs --stderr - -H "Accept: application/yaml" http://localhost:9898/binding
       stdout_has:
         - HTTP/1.1 200 OK
-        - "- default"
+        - default
     - name: GET /binding/default should 200 after publish
       command: >
         curl -vs --stderr - -H "Accept: application/yaml" http://localhost:9898/binding/default
@@ -366,7 +376,7 @@
       command: curl -vs --stderr - http://localhost:9898/binding
       stdout_has:
         - HTTP/1.1 200 OK
-        - "\\[]"
+        - '\[]'
 # - name: REST API - Deployment acceptance tests
 #   entries:
 #     - name: Publish passthrough pipeline

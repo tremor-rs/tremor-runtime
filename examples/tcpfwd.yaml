@@ -9,7 +9,8 @@ offramp:
   - id: tcp
     type: tcp
     postprocessors:
-      - gelf
+      - gelf-chunking
+      - gzip
     config:
       host: "localhost"
       port: 9000

@@ -1,0 +1,13 @@
+[package]
+name = "http-bench-server"
+version = "0.1.0"
+authors = ["Heinz Gies <hgies@wayfair.com>"]
+edition = "2018"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-web = "1"
+bytes = "0.4.12"
+futures = "0.1.29"

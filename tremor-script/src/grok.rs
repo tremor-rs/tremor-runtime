@@ -38,7 +38,7 @@ pub struct GrokPattern {
 impl GrokPattern {
     pub fn from_file(file_path: String, definition: String) -> Result<GrokPattern> {
         let file = File::open(file_path.clone())?;
-        let input: Box<BufRead> = Box::new(BufReader::new(file));
+        let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
         let mut grok = Grok::default();
         let recognizer = grok.compile(&PATTERNS_FILE_TUPLE, true)?;

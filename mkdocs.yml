@@ -28,6 +28,7 @@ nav:
       - chash: tremor-script/functions/chash.md
       - datetime: tremor-script/functions/datetime.md
       - integer: tremor-script/functions/integer.md
+      - float: tremor-script/functions/float.md
       - json: tremor-script/functions/json.md
       - math: tremor-script/functions/math.md
       - random: tremor-script/functions/random.md

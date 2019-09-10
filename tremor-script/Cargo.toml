@@ -44,5 +44,5 @@ lalrpop = "0.17"
 matches = "0.1.8"
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3.0"
 matches = "0.1"

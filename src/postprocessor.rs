@@ -123,7 +123,7 @@ mod test {
         assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, &data));
         assert_eq!(
             Ok(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
-            line.process(0, "foob".as_bytes())
+            line.process(0, b"foob")
         );
     }
 
@@ -137,9 +137,6 @@ mod test {
         // FIXME throws invalid length but it should not
         // assert_eq!(Ok(vec![vec![b'C',b'g',b'=',b'=']]), post.process(0, "\n".as_bytes()));
 
-        assert_eq!(
-            Ok(vec!["c25vdA==".as_bytes().to_vec()]),
-            post.process(0, "snot".as_bytes())
-        );
+        assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, b"snot"));
     }
 }

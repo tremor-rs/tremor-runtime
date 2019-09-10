@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 getopts = "0.2"
-rand = "0.6.4"
+rand = "0.7.0"

@@ -181,3 +181,55 @@ onramp:
       is_non_blocking: true
       ttl: 32
 ```
+
+### rest ( alpha )
+
+The rest onramp listens on a specified port for inbound RESTful ( http ) data.
+
+The onramp can leverage preprocessors to segment rest body content but does not currently
+support codecs. Body content is presumed to be UTF-8 encoded.
+
+Supported configuration options are:
+
+* `host` - The host to advertise as
+* `port` - The TCP port to listen on
+* `resources` - A set of HTTP method / relative paths to accept
+  - `path` - The ( possibly parameterized ) path for which a set of HTTP methods is acceptable
+    - `allow`
+      - `methods` - Array of acceptable HTTP methods for this path
+      - `method` - GET, PUT, POST, PATCH, or DELETE
+      - `params` - An optional set of required parameters
+      - `status_code` - An override for the HTTP status code to return to with the response
+
+Status codes:
+
+|Method|Default status code|
+|---|---|
+|POST|`201`|
+|DELETE|`200`|
+|_other_|`204`|
+
+Example:
+
+```yaml
+onramp:
+  - id: rest
+    type: rest
+    preprocessors:
+      - lines
+    codec: json
+    config:
+      host: "localhost"
+      port: 9000
+      resources:
+        - path: /write?db=test.db
+          allow:
+            - method: POST
+              status_code: 204
+```
+
+Known limitations:
+
+Currently paths and path parameters are neither checked nor validated, nor are required parameters.
+Response status code configuration is also not currently respected. It is currently not possible to
+configure rest onramps via swagger, raml or openapi configuration files.

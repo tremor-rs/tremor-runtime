@@ -38,7 +38,7 @@ pub struct Blaster {
 }
 
 impl OnrampImpl for Blaster {
-    fn from_config(config: &Option<Value>) -> Result<Box<Onramp>> {
+    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let mut source_data_file = File::open(&config.source)?;

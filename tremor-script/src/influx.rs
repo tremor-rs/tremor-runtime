@@ -84,11 +84,12 @@ fn process_string(s: &str) -> String {
     out
 }
 
-pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Value<'input>> {
-    let data = data.trim_end();
-    if data.is_empty() {
-        return Err(ErrorKind::InvalidInfluxData("Empty.".into()).into());
-    }
+pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'input>>> {
+    let data = data.trim();
+
+    if data.is_empty() || data.starts_with('#') {
+        return Ok(None);
+    };
 
     let mut chars = data.chars();
     let (measurement, c) = parse_to_char2(&mut chars, ',', ' ')?;
@@ -111,7 +112,7 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Value<'input>>
     m.insert_nocheck("tags".into(), Value::Object(tags));
     m.insert_nocheck("fields".into(), Value::Object(fields));
     m.insert_nocheck("timestamp".into(), timestamp.into());
-    Ok(Value::Object(m))
+    Ok(Some(Value::Object(m)))
 }
 
 fn parse_string<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>)> {
@@ -313,7 +314,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_simple2() {
@@ -330,7 +331,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_simple3() {
@@ -349,7 +350,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -365,7 +366,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(r, parsed);
+        assert_eq!(Some(r), parsed);
     }
 
     #[test]
@@ -380,7 +381,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -395,7 +396,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -412,7 +413,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_true_value() {
@@ -435,7 +436,7 @@ mod tests {
         })
         .into();
         for s in sarr {
-            assert_eq!(Ok(r.clone()), parse(s, 0))
+            assert_eq!(Ok(Some(r.clone())), parse(s, 0));
         }
     }
     #[test]
@@ -459,7 +460,7 @@ mod tests {
         })
         .into();
         for s in sarr {
-            assert_eq!(Ok(r.clone()), parse(s, 0))
+            assert_eq!(Ok(Some(r.clone())), parse(s, 0));
         }
     }
     // Note: Escapes are escaped twice since we need one level of escaping for rust!
@@ -477,7 +478,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -494,7 +495,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_escape3() {
@@ -510,7 +511,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -527,7 +528,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_escape5() {
@@ -543,7 +544,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -560,7 +561,7 @@ mod tests {
             "timestamp": 1465839830100400200i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -577,7 +578,7 @@ mod tests {
             "timestamp": 1465839830100400201i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0));
+        assert_eq!(Ok(Some(r)), parse(s, 0));
     }
 
     #[test]
@@ -594,7 +595,7 @@ mod tests {
             "timestamp": 1465839830100400202i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -612,7 +613,7 @@ mod tests {
             "timestamp": 1465839830100400203i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
     #[test]
@@ -630,7 +631,7 @@ mod tests {
             "timestamp": 1465839830100400204i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_escape11() {
@@ -648,7 +649,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_205i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
     #[test]
     fn parse_escape12() {
@@ -664,7 +665,7 @@ mod tests {
             "timestamp": 1465839830100400206i64,
         })
         .into();
-        assert_eq!(Ok(r), parse(s, 0))
+        assert_eq!(Ok(Some(r)), parse(s, 0))
     }
 
 }

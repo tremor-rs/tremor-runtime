@@ -16,15 +16,15 @@
 #![recursion_limit = "1024"]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 
-/*
 use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-*/
 
+/*
 use jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+*/
 
 #[macro_use]
 extern crate log;

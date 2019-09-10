@@ -22,10 +22,10 @@ halfbrown = "0.1"
 log = "0.4"
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3.0"
 xz2 = "0.1"
 base64 = "0.10"
 
-[[bench]]
-name = "distsys"
-harness = false
+#[[bench]]
+#name = "distsys"
+#harness = false

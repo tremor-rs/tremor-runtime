@@ -37,7 +37,7 @@ pub struct File {
 }
 
 impl OnrampImpl for File {
-    fn from_config(config: &Option<Value>) -> Result<Box<Onramp>> {
+    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             Ok(Box::new(File { config }))
