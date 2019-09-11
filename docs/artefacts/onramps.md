@@ -61,8 +61,8 @@ The ump onramp allows receiving data via UDP datagrams.
 
 Supported configuration options are:
 
-- `host` - The IP to listen on
-- `port` - The Port to listen on
+* `host` - The IP to listen on
+* `port` - The Port to listen on
 
 Example:
 
@@ -79,10 +79,6 @@ onramp:
       port: 12201
       host: '127.0.0.1'
 ```
-
-
-
-
 
 ### file
 
@@ -160,6 +156,7 @@ to pipelines.
 The default [codec](../codecs) is `json`.
 
 Supported configuration options are:
+
 * `host` - The host to advertise as
 * `port` - The TCP port to listen on
 * `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
@@ -194,12 +191,12 @@ Supported configuration options are:
 * `host` - The host to advertise as
 * `port` - The TCP port to listen on
 * `resources` - A set of HTTP method / relative paths to accept
-  - `path` - The ( possibly parameterized ) path for which a set of HTTP methods is acceptable
-    - `allow`
-      - `methods` - Array of acceptable HTTP methods for this path
-      - `method` - GET, PUT, POST, PATCH, or DELETE
-      - `params` - An optional set of required parameters
-      - `status_code` - An override for the HTTP status code to return to with the response
+  * `path` - The ( possibly parameterized ) path for which a set of HTTP methods is acceptable
+    * `allow`
+      * `methods` - Array of acceptable HTTP methods for this path
+      * `method` - GET, PUT, POST, PATCH, or DELETE
+      * `params` - An optional set of required parameters
+      * `status_code` - An override for the HTTP status code to return to with the response
 
 Status codes:
 
@@ -233,3 +230,24 @@ Known limitations:
 Currently paths and path parameters are neither checked nor validated, nor are required parameters.
 Response status code configuration is also not currently respected. It is currently not possible to
 configure rest onramps via swagger, raml or openapi configuration files.
+
+### ws
+
+Websocket onramp. Receiving either binary or text packages from a websocket connection. the url is: `ws://<host>:<port>/`
+
+Supported configuration options are:
+
+* `host` - The IP to listen on
+* `port` - The Port to listen on
+
+Example:
+
+```yaml
+onramp:
+  - id: ws
+    type: ws
+    codec: json
+    config:
+      port: 12201
+      host: '127.0.0.1'
+```

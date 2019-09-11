@@ -29,6 +29,7 @@ mod prelude;
 mod rest;
 mod tcp;
 mod udp;
+mod ws;
 
 pub trait OnrampImpl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
@@ -57,6 +58,7 @@ pub fn lookup(name: String, config: Option<Value>) -> Result<Box<dyn Onramp>> {
         "udp" => udp::Udp::from_config(&config),
         "tcp" => tcp::Tcp::from_config(&config),
         "rest" => rest::Rest::from_config(&config),
+        "ws" => ws::Ws::from_config(&config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }
 }
