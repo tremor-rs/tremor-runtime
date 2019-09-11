@@ -48,6 +48,7 @@ threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "1.7" # we can't update because of deps ...
 mio = "0.6"
+actix-web-actors = "1.0.2"
 
 log = "0.4"
 serde_derive = "1"
@@ -118,6 +119,8 @@ bench = ["xz2", "hdrhistogram" ]
 php-runtime = []
 mssql = []
 drop_copy = []
+# used for autobahn testing - all WS inputs will be echoed back to the server
+ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
