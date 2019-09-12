@@ -27,3 +27,5 @@ tremor-script/c_src/*.o
 tremor-script/priv
 **/*.gcda
 **/*.gcno
+*.swp
+.*.swp
