@@ -121,27 +121,6 @@ onramp:
       interval: 10000
 ```
 
-### ws
-
-Sends events over a websocket connection. Each event is a websocket message.
-
-The default [codec](../codecs) is `json`.
-
-Supported configuration options are:
-
-* `url` - Websocket endpoint to send data to.
-* `binary` - If data should be send as binary instead of text (default: `fase`).
-
-Example:
-
-```yaml
-onramp:
-  - id: metronome
-    type: metronome
-    config:
-      url: "ws://localhost:1234"
-```
-
 ### blaster
 
 NOTE: This onramp is for benchmarking use, it should not be deployed in a live production system.
