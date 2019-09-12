@@ -12,7 +12,7 @@ FEATURES="drop_copy kafka mssql php-runtime"
 help() {
     cat <<EOF
 Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
-tremor-server test runner for basic and property tests
+tremor-server test runner
   -h         show this help
   -l         lists all tests
   -n NAME    creates a new basic test from the template
@@ -37,9 +37,6 @@ while getopts hdlt:c:n: opt; do
         l)
             echo "basic tests:"
             ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;* ;g"
-            echo ""
-            echo "property tests:"
-            ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;* ;g"
             exit 0
             ;;
         n)
@@ -115,73 +112,7 @@ fi
 
 echo "tests: $tests"
 
-# run the property tests
 
-# if [ -z "${tests}" ]
-# then
-#     propertytests=$(ls -d ${BASEDIR}/property/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/property/;;g")
-# fi
-
-for test in $propertytests
-do
-
-    TEST_DIR="${BASEDIR}/property/${test}.test"
-
-    got_file="${TEST_DIR}/got.json"
-    exp_file="${TEST_DIR}/exp.json"
-    log_file="${TEST_DIR}/log.txt"
-
-    yaml_file="${TEST_DIR}/config.yaml"
-    if [ ! -f "${yaml_file}" ]
-    then
-        error "${test}: file '${yaml_file}' not found"
-        exit 1
-    fi
-
-    sed -e "s;{in};${data_file};" -e "s;{out};${gen_file};" -e "s;{dir};${TEST_DIR};" $yaml_file > "${yaml_file}.out";
-
-    readme_file="${TEST_DIR}/README.md"
-    if [ ! -f "${readme_file}" ]
-    then
-        error "${test}: file '${readme_file}' not found"
-        exit 1
-    fi
-
-    SCRIPT_DIR="${TEST_DIR}/scripts"
-
-    cat ${readme_file}
-
-    # run the setup script
-    ${SCRIPT_DIR}/setup.sh ${SCRIPT_DIR} $exp_file
-
-    # start tremor detached
-    $run_cmd -m --config "${yaml_file}.out" 2> ${log_file} &
-    # get the PID to kill tremor later on
-    TREMOR_PID=$!
-
-    # need to let tremor start
-    ${SCRIPT_DIR}/check_for_liveness.sh ${SCRIPT_DIR}
-
-    # run the test
-    ${SCRIPT_DIR}/run_test.sh ${SCRIPT_DIR}
-
-    # capture the 'got' for comparison against the exp
-    ${SCRIPT_DIR}/check_finished.sh ${SCRIPT_DIR} ${got_file}
-
-    if diff ${got_file} ${exp_file} > /dev/null
-    then
-        ok "${test}: passed"
-        PASSED_TESTS="${PASSED_TESTS}$test "
-    else
-        error "${test}: failed"
-        FAILED_TESTS="${FAILED_TESTS}$test "
-    fi
-
-    kill -9 $TREMOR_PID
-
-done
-
-# now run basic tests
 if [ -z "${tests}" ]
 then
     basictests=$(ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;;g")
@@ -235,6 +166,9 @@ do
         exit 1
     fi
 
+    pre_file="${TEST_DIR}/pre_run"
+    post_file="${TEST_DIR}/post_run"
+
     # reset config
     should_crash=0
     threads=1
@@ -258,8 +192,16 @@ do
         warn "${test}:  skipped"
     else
         xzcat $in_file > $data_file
+        if [ -f $pre_file ] 
+        then
+            $pre_file "${TEST_DIR}" "$run_cmd"
+        fi
         if $run_cmd --config "${yaml_file}.out" "${mapping_file}" 2> ${log_file}
         then
+            if [ -f $post_file ] 
+            then
+                $post_file "${TEST_DIR}" 0
+            fi
             if [ "${should_crash}" -eq 0 ] # if we do not wanted this test to crash
             then
                 xzcat ${out_file} > ${exp_file}
@@ -281,6 +223,10 @@ do
             fi
         else
             exit_code=$?
+            if [ -f $post_file ] 
+            then
+                code=$($post_file "${TEST_DIR}" "${exit_code}")
+            fi
             rm ${data_file}
             if [ ${exit_code} -eq 139 ]
             then
