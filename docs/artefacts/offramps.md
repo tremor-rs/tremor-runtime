@@ -19,11 +19,11 @@ offramp:
 
 Each tremor runtime comes with some pre-configured offramos that can be used.
 
-### stdout
+### system::stdout
 
 The offramp `/offramp/system::stdout/system` can be used to print to STDOUT. Data will be formatted as JSON.
 
-### Stderr
+### system::sderr
 
 The offramp `/offramp/system::stderr/system` can be used to print to STDERR. Data will be formatted as JSON.
 
@@ -81,7 +81,28 @@ offramp:
       topic: demo
 ```
 
-###udp
+### ws
+
+Sends events over a websocket connection. Each event is a websocket message.
+
+The default [codec](../codecs) is `json`.
+
+Supported configuration options are:
+
+* `url` - Websocket endpoint to send data to.
+* `binary` - If data should be send as binary instead of text (default: `fase`).
+
+Example:
+
+```yaml
+onramp:
+  - id: metronome
+    type: metronome
+    config:
+      url: "ws://localhost:1234"
+```
+
+### udp
 
 The UDP offramp sends data to a given host and port as UDP datagram.
 
@@ -91,10 +112,10 @@ When the UDP onramp gets a batch of messages it will send each element of the ba
 
 Supported configuration options are:
 
-- `host` - the local host to send data from
-- `port` - the local port to send data from
-- `dst_host` - the destination host to send data to
-- `dst_port` - the destination port to send data to.
+* `host` - the local host to send data from
+* `port` - the local port to send data from
+* `dst_host` - the destination host to send data to
+* `dst_port` - the destination port to send data to.
 
 Example:
 
@@ -104,12 +125,10 @@ offramp:
     type: udp
     config:
       host: '10.11.12.13'
-			port: 1234
-			dst_host: '20.21.22.23'
-			dst_port: 2345
+      port: 1234
+      dst_host: '20.21.22.23'
+      dst_port: 2345
 ```
-
-
 
 ### REST - Representational State Transfer
 
@@ -221,6 +240,7 @@ to external TCP protocol distribution endpoints.
 The default [codec](../codecs) is `json`.
 
 Supported configuration options are:
+
 * `host` - The host to advertise as
 * `port` - The TCP port to listen on
 * `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
