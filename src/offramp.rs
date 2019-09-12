@@ -37,6 +37,7 @@ mod stderr;
 mod stdout;
 mod tcp;
 mod udp;
+mod ws;
 
 pub enum OfframpMsg {
     Event { event: Event, input: String },
@@ -59,7 +60,7 @@ pub trait Offramp: Send {
     fn remove_pipeline(&mut self, _id: TremorURL) -> bool;
 }
 
-trait OfframpImpl {
+pub trait OfframpImpl {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>;
 }
 
@@ -77,6 +78,7 @@ pub fn lookup(name: String, config: Option<OpConfig>) -> Result<Box<dyn Offramp>
         "stderr" => stderr::StdErr::from_config(&config),
         "tcp" => tcp::Tcp::from_config(&config),
         "udp" => udp::Udp::from_config(&config),
+        "ws" => ws::Ws::from_config(&config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

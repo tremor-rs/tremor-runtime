@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use super::{Offramp, OfframpAddr};
+pub use super::{Offramp, OfframpAddr, OfframpImpl};
 pub use crate::codec::{self, Codec};
+pub use crate::dflt::*;
 pub use crate::errors::*;
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
 use crate::utils::nanotime;
+pub use crate::{Event, OpConfig};
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 use std::mem;
 pub use std::thread;
-pub use tremor_pipeline::Event;
 
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
     postprocessors
