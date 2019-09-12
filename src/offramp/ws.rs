@@ -81,8 +81,7 @@ impl OfframpImpl for Ws {
                             .map_err(|e| {
                                 println!("Error: {}", e);
                             })
-                            .map(move |(response, framed)| {
-                                println!("{:?}", response);
+                            .map(move |(_response, framed)| {
                                 let (sink, stream) = framed.split();
                                 let addr = WsOfframpWorker::create(|ctx| {
                                     WsOfframpWorker::add_stream(stream, ctx);

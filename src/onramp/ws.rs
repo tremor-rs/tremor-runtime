@@ -173,6 +173,7 @@ fn onramp_loop(
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
     let mut no_pp = vec![];
+
     // Those are needed for the select! macro
     #[allow(clippy::zero_ptr, clippy::drop_copy)]
     loop {
