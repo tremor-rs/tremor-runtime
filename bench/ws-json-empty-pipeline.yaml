@@ -1,0 +1,54 @@
+# Blaster side of the WS benchmark
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: json
+    config:
+      source: ./demo/data/data.json.xz
+  - id: ws-in
+    type: ws
+    codec: json
+    config:
+      host: 127.0.0.1
+      port: 4242
+
+offramp:
+  - id: ws-out
+    type: ws
+    codec: json
+    config:
+      url: "ws://127.0.0.1:4242"
+  - id: blackhole
+    type: blackhole
+    codec: json
+    config:
+      warmup_secs: 10
+      stop_after_secs: 40
+      significant_figures: 2      
+
+
+binding:
+  - id: bench
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+  - id: blackhole
+    links:
+      '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+      
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+
+  
+mapping:
+  /binding/blackhole/01:
+    instance: "01"
