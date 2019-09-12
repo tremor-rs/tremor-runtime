@@ -1,0 +1,31 @@
+onramp:
+  - id: metronome
+    type: metronome
+    config:
+      interval: 1000
+
+offramp:
+  - id: ws
+    type: ws
+    config:
+      url: "ws://localhost:1234"
+
+binding:
+  - id: ws
+    links:
+      '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/ws/{instance}/in' ]
+
+mapping:
+  /binding/ws/01:
+    instance: "01"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
