@@ -223,10 +223,12 @@ fn onramp_loop(
                 if let Some(data) = m.payload_view::<[u8]>() {
                     if let Ok(data) = data {
                         id += 1;
+                        let mut ingest_ns = nanotime();
                         send_event(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut ingest_ns,
                             id,
                             data.to_vec(),
                         );

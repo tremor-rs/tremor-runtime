@@ -48,7 +48,7 @@ impl OnrampImpl for Ws {
 }
 
 enum WsOnrampMessage {
-    Data(Vec<u8>),
+    Data(u64, Vec<u8>),
 }
 
 /// websocket connection is long running connection, it easier
@@ -81,10 +81,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
             ws::Message::Text(bin) => {
                 #[cfg(feature = "ws-echo")]
                 ctx.text(&bin);
-                let ingest_ns = nanotime();
-                if let Ok(data) = handle_pp(&mut self.preprocessors, ingest_ns, bin.into_bytes()) {
+                let mut ingest_ns = nanotime();
+                if let Ok(data) = handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.into_bytes()) {
                     for d in data {
-                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(d)) {
+                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(ingest_ns, d)) {
                             error!("Websocket onramp message error: {}", e)
                         }
                     }
@@ -93,10 +93,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
             ws::Message::Binary(bin) => {
                 #[cfg(feature = "ws-echo")]
                 ctx.binary(bin.clone());
-                let ingest_ns = nanotime();
-                if let Ok(data) = handle_pp(&mut self.preprocessors, ingest_ns, bin.to_vec()) {
+                let mut ingest_ns = nanotime();
+                if let Ok(data) = handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.to_vec()) {
                     for d in data {
-                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(d)) {
+                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(ingest_ns, d)) {
                             error!("Websocket onramp message error: {}", e)
                         }
                     }
@@ -193,9 +193,9 @@ fn onramp_loop(
             },
             recv(main_rx) -> msg => match msg {
                 Err(e) => return Err(format!("Crossbream receive error: {}", e).into()),
-                Ok(WsOnrampMessage::Data(data)) => {
+                Ok(WsOnrampMessage::Data(mut ingest_ns, data)) => {
                     id += 1;
-                    send_event(&pipelines, &mut no_pp, &mut codec, id, data);
+                    send_event(&pipelines, &mut no_pp, &mut codec, &mut ingest_ns, id, data);
                 }
             }
         }

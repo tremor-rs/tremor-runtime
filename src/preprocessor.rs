@@ -19,10 +19,12 @@ use crate::errors::*;
 use base64;
 use std::any::Any;
 
+use byteorder::{BigEndian, ReadBytesExt};
+
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {
     fn as_any(&self) -> &dyn Any;
-    fn process(&mut self, ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
 fn downcast<T: Preprocessor + 'static>(this: &dyn Preprocessor) -> Option<&T> {
@@ -66,6 +68,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
         "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
         "gelf-chunking-tcp" => Ok(Box::new(gelf::GELF::tcp())),
+        "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -100,7 +103,7 @@ impl Preprocessor for FilterEmpty {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         if data.is_empty() {
             Ok(vec![])
         } else {
@@ -129,12 +132,12 @@ impl Preprocessor for Influx {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let data = data.trim();
         if data.is_empty() {
             Ok(vec![])
         } else {
-            match self.codec.decode(data.to_vec(), ingest_ns) {
+            match self.codec.decode(data.to_vec(), *ingest_ns) {
                 Ok(Some(x)) => Ok(vec![self.json.encode(x).expect("could not encode")]),
                 Ok(None) => Ok(vec![]),
                 Err(e) => {
@@ -152,8 +155,21 @@ impl Preprocessor for Lines {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
+    }
+}
+
+#[derive(Clone)]
+struct ExtractIngresTs {}
+impl Preprocessor for ExtractIngresTs {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        use std::io::Cursor;
+        *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
+        Ok(vec![data[8..].to_vec()])
     }
 }
 
@@ -163,7 +179,7 @@ impl Preprocessor for Base64 {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::decode(&data)?])
     }
 }
@@ -174,7 +190,7 @@ impl Preprocessor for Gzip {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
         use std::io::Read;
         let mut decoder =
@@ -191,7 +207,7 @@ impl Preprocessor for Decompress {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Read;
 
         let r = match data.get(0..6) {

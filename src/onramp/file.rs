@@ -92,11 +92,13 @@ fn onramp_loop(
             }
         };
 
+        let mut ingest_ns = nanotime();
         send_event(
             &pipelines,
             &mut preprocessors,
             &mut codec,
-            id,
+            &mut ingest_ns,
+            id,            
             line?.as_bytes().to_vec(),
         );
         id += 1;

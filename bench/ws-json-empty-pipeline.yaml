@@ -9,6 +9,8 @@ onramp:
   - id: ws-in
     type: ws
     codec: json
+    preprocessors:
+      - ingest-ns
     config:
       host: 127.0.0.1
       port: 4242
@@ -17,15 +19,18 @@ offramp:
   - id: ws-out
     type: ws
     codec: json
+    postprocessors:
+      - ingest-ns
     config:
       url: "ws://127.0.0.1:4242"
+      binary: true
   - id: blackhole
     type: blackhole
     codec: json
     config:
       warmup_secs: 10
       stop_after_secs: 40
-      significant_figures: 2      
+      significant_figures: 3
 
 
 binding:
@@ -37,7 +42,7 @@ binding:
     links:
       '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-      
+
 pipeline:
   - id: main
     interface:

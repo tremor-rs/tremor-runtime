@@ -33,7 +33,7 @@ fn encode_gelf(id: u64, data: &[u8]) -> Result<Vec<u8>> {
 }
 
 impl Postprocessor for GELF {
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: u64, _egest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = encode_gelf(self.id, data)?;
         self.id += 1;
         Ok(vec![msg])

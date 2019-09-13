@@ -82,7 +82,7 @@ impl Offramp for Tcp {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
             if let Ok(ref raw) = codec.encode(event.value) {
-                match postprocess(&mut self.postprocessors, raw.to_vec()) {
+                match postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec()) {
                     Ok(packets) => {
                         for packet in packets {
                             if let Err(e) = self.stream.write(&packet) {

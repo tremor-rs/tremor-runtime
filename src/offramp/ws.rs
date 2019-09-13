@@ -113,7 +113,7 @@ impl Offramp for Ws {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
             if let Ok(raw) = codec.encode(event.value) {
-                match postprocess(&mut self.postprocessors, raw) {
+                match postprocess(&mut self.postprocessors, event.ingest_ns, raw) {
                     Ok(datas) => {
                         for raw in datas {
                             if self.config.binary {

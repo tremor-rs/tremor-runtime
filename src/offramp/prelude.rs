@@ -35,6 +35,7 @@ pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> 
 #[allow(clippy::borrowed_box)]
 pub fn postprocess(
     postprocessors: &mut [Box<dyn Postprocessor>],
+    ingres_ns: u64,
     data: Vec<u8>,
 ) -> Result<Vec<Vec<u8>>> {
     let egress_ns = nanotime();
@@ -44,7 +45,7 @@ pub fn postprocess(
     for pp in postprocessors {
         data1.clear();
         for d in &data {
-            match pp.process(egress_ns, d) {
+            match pp.process(ingres_ns, egress_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(_e) => {
                     return Err("Postprocessor error {}".into());

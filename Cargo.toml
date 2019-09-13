@@ -36,6 +36,7 @@ awc = "0.2.5"
 
 base64 = "0.10"
 bytes = "0.4"
+byteorder = "1"
 chrono = "0.4"
 elastic = "0.20"
 error-chain="0.12"

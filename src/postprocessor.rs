@@ -16,11 +16,12 @@ mod gelf;
 
 use crate::errors::*;
 use base64;
+use byteorder::{BigEndian, WriteBytesExt};
 
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 
 pub trait Postprocessor: Send {
-    fn process(&mut self, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+    fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
 #[deny(clippy::ptr_arg)]
@@ -33,6 +34,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "xz2" => Ok(Box::new(CompressXz2 {})),
         "snappy" => Ok(Box::new(CompressSnappy {})),
         "lz4" => Ok(Box::new(CompressLz4 {})),
+        "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
         "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
@@ -40,7 +42,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 
 struct Lines {}
 impl Postprocessor for Lines {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut framed = data.to_vec(); // FIXME PERF TODO prefer to in-place extend
         framed.push(b'\n');
         Ok(vec![framed])
@@ -49,14 +51,14 @@ impl Postprocessor for Lines {
 
 struct Base64 {}
 impl Postprocessor for Base64 {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::encode(&data).as_bytes().to_vec()])
     }
 }
 
 struct CompressGzip {}
 impl Postprocessor for CompressGzip {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
         use std::io::Write;
         let mut encoder = Encoder::new(Vec::new())?;
@@ -67,7 +69,7 @@ impl Postprocessor for CompressGzip {
 
 struct CompressZlib {}
 impl Postprocessor for CompressZlib {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         use std::io::Write;
         let mut encoder = Encoder::new(Vec::new())?;
@@ -78,7 +80,7 @@ impl Postprocessor for CompressZlib {
 
 struct CompressXz2 {}
 impl Postprocessor for CompressXz2 {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Write;
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), 9);
@@ -89,7 +91,7 @@ impl Postprocessor for CompressXz2 {
 
 struct CompressSnappy {}
 impl Postprocessor for CompressSnappy {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use snap::Encoder;
         let len: usize = data.len();
         let max_compress_len: usize = snap::max_compress_len(len);
@@ -102,13 +104,25 @@ impl Postprocessor for CompressSnappy {
 
 struct CompressLz4 {}
 impl Postprocessor for CompressLz4 {
-    fn process(&mut self, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         use std::io::Write;
         let buffer = Vec::<u8>::new();
         let mut encoder = EncoderBuilder::new().level(4).build(buffer)?;
         encoder.write_all(&data)?;
         Ok(vec![encoder.finish().0])
+    }
+}
+
+struct AttachIngresTS {}
+impl Postprocessor for AttachIngresTS {
+    fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        use std::io::Write;
+        let mut res = Vec::with_capacity(data.len() + 8);
+        res.write_u64::<BigEndian>(ingres_ns)?;
+        res.write_all(&data)?;
+
+        Ok(vec![res])
     }
 }
 
@@ -120,10 +134,10 @@ mod test {
     fn line() {
         let mut line = Lines {};
         let data: [u8; 0] = [];
-        assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, &data));
+        assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, 0, &data));
         assert_eq!(
             Ok(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
-            line.process(0, b"foob")
+            line.process(0, 0, b"foob")
         );
     }
 
@@ -132,11 +146,11 @@ mod test {
         let mut post = Base64 {};
         let data: [u8; 0] = [];
 
-        assert_eq!(Ok(vec![vec![]]), post.process(0, &data));
+        assert_eq!(Ok(vec![vec![]]), post.process(0, 0, &data));
 
         // FIXME throws invalid length but it should not
         // assert_eq!(Ok(vec![vec![b'C',b'g',b'=',b'=']]), post.process(0, "\n".as_bytes()));
 
-        assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, b"snot"));
+        assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, 0, b"snot"));
     }
 }
