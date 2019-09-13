@@ -95,6 +95,7 @@ fn onramp_loop(
         };
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
+        let mut ingest_ns = nanotime();
         for event in events.iter() {
             match event.token() {
                 // Our ECHOER is ready to be read from.
@@ -106,6 +107,7 @@ fn onramp_loop(
                                 &pipelines,
                                 &mut preprocessors,
                                 &mut codec,
+                                &mut ingest_ns,
                                 id,
                                 buf[0..n].to_vec(),
                             );

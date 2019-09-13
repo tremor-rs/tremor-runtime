@@ -97,6 +97,7 @@ fn onramp_loop(
             }
         }
 
+        let mut ingest_ns = nanotime();
         for stream in endpoint.incoming() {
             match stream {
                 Ok(mut stream) => match stream.read(&mut buf) {
@@ -108,6 +109,7 @@ fn onramp_loop(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut ingest_ns,
                             id,
                             buf[0..len].to_vec(),
                         );

@@ -54,7 +54,7 @@ impl Preprocessor for Lines {
     */
 
     // TODO separate out some of the logic here in other functions for readability
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut result: Vec<Vec<u8>> = Vec::new();
         let mut message_start_index = 0;
 

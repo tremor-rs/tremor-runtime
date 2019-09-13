@@ -115,6 +115,7 @@ fn onramp_loop(
 
         // wait for events and then process them
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
+        let mut ingest_ns = nanotime();
         for event in events.iter() {
             match event.token() {
                 ONRAMP => loop {
@@ -153,7 +154,7 @@ fn onramp_loop(
                                 Ok(n) => {
                                     // TODO remove later
                                     trace!(
-                                        "Read {} bytes: {}",
+                                        "Read {} bytes: {:?}",
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
@@ -161,6 +162,7 @@ fn onramp_loop(
                                         &pipelines,
                                         &mut preprocessors,
                                         &mut codec,
+                                        &mut ingest_ns,
                                         id,
                                         buffer[0..n].to_vec(),
                                     );

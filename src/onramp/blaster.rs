@@ -130,7 +130,8 @@ fn onramp_loop(
         }
 
         if let Some(data) = acc.consuming.pop() {
-            send_event(&pipelines, &mut preprocessors, &mut codec, id, data);
+            let mut ingest_ns = nanotime();
+            send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, data);
             id += 1;
         }
     }

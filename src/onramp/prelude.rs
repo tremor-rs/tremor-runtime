@@ -18,7 +18,7 @@ pub use crate::errors::*;
 pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
-use crate::utils::nanotime;
+pub use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 use std::mem;
 pub use std::thread;
@@ -30,16 +30,12 @@ pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
         .map(|n| preprocessor::lookup(&n))
         .collect()
 }
-// We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(clippy::borrowed_box)]
-pub fn send_event(
-    pipelines: &[(TremorURL, PipelineAddr)],
+
+pub fn handle_pp(
     preprocessors: &mut Preprocessors,
-    codec: &mut Box<dyn Codec>,
-    id: u64,
+    ingest_ns: &mut u64,
     data: Vec<u8>,
-) {
-    let ingest_ns = nanotime();
+) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
     let mut data1 = Vec::new();
     for pp in preprocessors {
@@ -49,40 +45,54 @@ pub fn send_event(
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
                     error!("Preprocessor[{}] error {}", i, e);
-                    return;
+                    return Err(e);
                 }
             }
         }
         mem::swap(&mut data, &mut data1);
     }
+    Ok(data)
+}
 
-    for d in data {
-        match codec.decode(d, ingest_ns) {
-            Ok(Some(value)) => {
-                let event = tremor_pipeline::Event {
-                    is_batch: false,
-                    id,
-                    meta: tremor_pipeline::MetaMap::new(),
-                    value,
-                    ingest_ns,
-                    kind: None,
-                };
-                let len = pipelines.len();
-                for (input, addr) in &pipelines[..len - 1] {
+// We are borrowing a dyn box as we don't want to pass ownership.
+#[allow(clippy::borrowed_box)]
+pub fn send_event(
+    pipelines: &[(TremorURL, PipelineAddr)],
+    preprocessors: &mut Preprocessors,
+    codec: &mut Box<dyn Codec>,
+    ingest_ns: &mut u64,
+    id: u64,
+    data: Vec<u8>,
+) {
+    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
+        for d in data {
+            match codec.decode(d, *ingest_ns) {
+                Ok(Some(value)) => {
+                    let event = tremor_pipeline::Event {
+                        is_batch: false,
+                        id,
+                        meta: tremor_pipeline::MetaMap::new(),
+                        value,
+                        ingest_ns: *ingest_ns,
+                        kind: None,
+                    };
+                    let len = pipelines.len();
+                    for (input, addr) in &pipelines[..len - 1] {
+                        if let Some(input) = input.instance_port() {
+                            let _ = addr.addr.send(PipelineMsg::Event {
+                                input,
+                                event: event.clone(),
+                            });
+                        }
+                    }
+                    let (input, addr) = &pipelines[len - 1];
                     if let Some(input) = input.instance_port() {
-                        let _ = addr.addr.send(PipelineMsg::Event {
-                            input,
-                            event: event.clone(),
-                        });
+                        let _ = addr.addr.send(PipelineMsg::Event { input, event });
                     }
                 }
-                let (input, addr) = &pipelines[len - 1];
-                if let Some(input) = input.instance_port() {
-                    let _ = addr.addr.send(PipelineMsg::Event { input, event });
-                }
+                Ok(None) => (),
+                Err(e) => error!("{}", e),
             }
-            Ok(None) => (),
-            Err(e) => error!("{}", e),
         }
-    }
+    };
 }
