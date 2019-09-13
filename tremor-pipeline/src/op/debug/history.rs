@@ -130,7 +130,7 @@ mod test {
             Some(OwnedValue::Array(ref history)) => {
                 assert_eq!(2, history.len());
             }
-            _ => assert!(false),
+            _ => unreachable!()
         }
     }
 }
