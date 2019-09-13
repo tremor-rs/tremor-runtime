@@ -263,13 +263,13 @@ tremor_script_eval(Init, Spec) ->
 
 -spec prop_simple_expr() -> eqc:property().
 prop_simple_expr() ->
-    ?FORALL(Params, ?SUCHTHAT(Ast, spec:gen(initial_state()), spec:valid([Ast])), 
-            begin 
+    ?FORALL(Params, ?SUCHTHAT(Ast, spec:gen(initial_state()), spec:valid([Ast])),
+            begin
                 RustResult = remote_eval(tremor_script_eval, [Params]),
                 { _, ModelResult } = model:eval(Params),
                 ?WHENFAIL(
-                   io:format("SIMPLE EXPR MODEL FAILED!\n~p\n~s\n~p ~p", 
-                             [Params, gen_script:gen(Params), ModelResult, RustResult]), 
+                   io:format("SIMPLE EXPR MODEL FAILED!\n~p\n~s\n~p ~p",
+                             [Params, gen_script:gen(Params), ModelResult, RustResult]),
                              %% The real ( rust ) and model simulation ( erlang ) results should be equivalent
                              ModelResult =:= RustResult
                   )
