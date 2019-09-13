@@ -70,6 +70,10 @@ Some of the more interesting profiling templates are:
 
 `strace` is a tool that allows tracing sys calls in linux, it can be helpful to determine what system calls do occur during a observed issue. For example this can rule in our out specific kernel calls such as IO, muteness, threading, networking and so on.
 
+### `websocat` (prody: nay)
+
+[`websocat`](https://github.com/vi/websocat) is a websocket client that can be used to interact with trmeors websocket onramp and offramp for testing.
+
 ## Methodology
 
 There is no 'one way' to investigate an issue as what you find during the process will guide the next steps. Having seen and investigated other problems will help as it gives you a set of heuristics to go "oh I've seen this before last time it was X" but it is not required.
