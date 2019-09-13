@@ -18,7 +18,7 @@ pub use crate::errors::*;
 pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
-use crate::utils::nanotime;
+pub use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 use std::mem;
 pub use std::thread;
@@ -33,7 +33,7 @@ pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
 
 pub fn handle_pp(
     preprocessors: &mut Preprocessors,
-    ingest_ns: u64,
+    ingest_ns: &mut u64,
     data: Vec<u8>,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
@@ -60,20 +60,20 @@ pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
+    ingest_ns: &mut u64,
     id: u64,
     data: Vec<u8>,
 ) {
-    let ingest_ns = nanotime();
     if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
         for d in data {
-            match codec.decode(d, ingest_ns) {
+            match codec.decode(d, *ingest_ns) {
                 Ok(Some(value)) => {
                     let event = tremor_pipeline::Event {
                         is_batch: false,
                         id,
                         meta: tremor_pipeline::MetaMap::new(),
                         value,
-                        ingest_ns,
+                        ingest_ns: *ingest_ns,
                         kind: None,
                     };
                     let len = pipelines.len();

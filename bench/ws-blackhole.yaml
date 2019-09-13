@@ -4,6 +4,8 @@ onramp:
   - id: ws-in
     type: ws
     codec: json
+    preprocessors:
+      - ingest-ns
     config:
       host: 127.0.0.1
       port: 4242

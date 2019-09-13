@@ -14,7 +14,6 @@
 
 use crate::errors::Error;
 use crate::onramp::prelude::*;
-use crate::utils;
 use actix_router::ResourceDef;
 use actix_web::{
     dev::Payload, web, web::Data, App, FromRequest, HttpRequest, HttpResponse, HttpServer,
@@ -148,8 +147,9 @@ fn handler(
     let data = payload.to_vec();
 
     let preprocessors: Preprocessors = state.preprocessors.clone(); // PERF find a way to avoid clone
+    let mut ingest_ns = nanotime();
     for mut pp in preprocessors {
-        match pp.process(utils::nanotime(), &data) {
+        match pp.process(&mut ingest_ns, &data) {
             Ok(r) => {
                 for data in r {
                     let data = std::str::from_utf8(&data).expect("invalid utf8 content");
@@ -263,7 +263,8 @@ fn onramp_loop(
             match dr.try_recv() {
                 Ok(data) => {
                     let data = json!(data).to_string().into_bytes();
-                    send_event(&pipelines, &mut preprocessors, &mut codec, 0, data);
+                    let mut ingest_ns = nanotime();
+                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, 0, data);
                     continue;
                 }
                 Err(TryRecvError::Empty) => (),
