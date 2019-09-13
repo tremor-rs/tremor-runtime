@@ -178,6 +178,7 @@ pub enum SignalKind {
     // Resume, TODO debug trace
     // Step, TODO ( into, over, to next breakpoint )
     Control,
+    WindowClose(u64, u64),
 }
 
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
@@ -445,8 +446,14 @@ impl ExecutableGraph {
     #[inline]
     fn next(&mut self, returns: &mut Returns) -> Result<bool> {
         if let Some((idx, port, event)) = self.stack.pop() {
-            // count ingres
+            // If we have emitted a singal event we got to handle it as a singal flow
+            // the singal flow will
+            if event.kind.is_some() {
+                self.signalflow(event)?;
+                return Ok(!self.stack.is_empty());
+            }
 
+            // count ingres
             let node = unsafe { self.graph.get_unchecked_mut(idx) };
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
@@ -562,7 +569,13 @@ impl ExecutableGraph {
         insight
     }
 
-    pub fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<()> {
+    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
+        self.signalflow(signal)?;
+        self.run(returns)?;
+        Ok(())
+    }
+
+    pub fn signalflow(&mut self, mut signal: Event) -> Result<()> {
         for idx in 0..self.signalflow.len() {
             let i = self.signalflow[idx];
             let res = {
@@ -570,7 +583,8 @@ impl ExecutableGraph {
                 op.on_signal(&mut signal)?
             };
             self.enqueue_events(i, res);
-            self.run(returns)?
+            // We shouldn't call run in signal flow it should just enqueue
+            // self.run(returns)?
         }
         Ok(())
     }
