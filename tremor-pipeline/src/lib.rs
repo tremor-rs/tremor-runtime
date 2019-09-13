@@ -447,7 +447,7 @@ impl ExecutableGraph {
         if let Some((idx, port, event)) = self.stack.pop() {
             // count ingres
 
-            let node = &mut self.graph[idx];
+            let node = unsafe { self.graph.get_unchecked_mut(idx) };
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
             } else {
@@ -455,10 +455,15 @@ impl ExecutableGraph {
                 // got to discuss this.
                 let res = node.on_event(&port, event)?;
                 for (out_port, _) in &res {
-                    if let Some(count) = self.metrics[idx].outputs.get_mut(out_port) {
+                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
+                        .outputs
+                        .get_mut(out_port)
+                    {
                         *count += 1;
                     } else {
-                        self.metrics[idx].outputs.insert(out_port.clone(), 1);
+                        unsafe { self.metrics.get_unchecked_mut(idx) }
+                            .outputs
+                            .insert(out_port.clone(), 1);
                     }
                 }
                 self.enqueue_events(idx, res);
@@ -476,8 +481,12 @@ impl ExecutableGraph {
         timestamp: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
-            tags.insert("node".to_owned(), self.graph[i].id.clone());
-            if let Ok(metrics) = self.graph[i].metrics(tags.clone(), timestamp) {
+            tags.insert("node".to_owned(), unsafe {
+                self.graph.get_unchecked(i).id.clone()
+            });
+            if let Ok(metrics) =
+                unsafe { self.graph.get_unchecked(i) }.metrics(tags.clone(), timestamp)
+            {
                 for v in metrics {
                     self.stack.push((
                         self.metrics_idx,
@@ -517,18 +526,28 @@ impl ExecutableGraph {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
                 let len = outgoing.len();
                 for (idx, in_port) in outgoing.iter().take(len - 1) {
-                    if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
+                        .inputs
+                        .get_mut(in_port)
+                    {
                         *count += 1;
                     } else {
-                        self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                        unsafe { self.metrics.get_unchecked_mut(*idx) }
+                            .inputs
+                            .insert(in_port.clone(), 1);
                     }
                     self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
-                let (idx, in_port) = &outgoing[len - 1];
-                if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                let (idx, in_port) = unsafe { outgoing.get_unchecked(len - 1) };
+                if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
+                    .inputs
+                    .get_mut(in_port)
+                {
                     *count += 1;
                 } else {
-                    self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                    unsafe { self.metrics.get_unchecked_mut(*idx) }
+                        .inputs
+                        .insert(in_port.clone(), 1);
                 }
                 self.stack.push((*idx, in_port.clone(), event))
             }
@@ -537,17 +556,17 @@ impl ExecutableGraph {
 
     pub fn contraflow(&mut self, mut insight: Event) -> Event {
         for idx in &self.contraflow {
-            let op = &mut self.graph[*idx]; // We know this exists
+            let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
             op.on_contraflow(&mut insight);
         }
         insight
     }
 
     pub fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<()> {
-        for idx in 0..self.contraflow.len() {
-            let i = self.contraflow[idx];
+        for idx in 0..self.signalflow.len() {
+            let i = self.signalflow[idx];
             let res = {
-                let op = &mut self.graph[i]; // We know this exists
+                let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 op.on_signal(&mut signal)?
             };
             self.enqueue_events(i, res);
@@ -746,9 +765,9 @@ mod test {
         e.enqueue("in1", event1, &mut results)
             .expect("failed to enqueue event");
         assert_eq!(results.len(), 6);
-        for i in 0..=5 {
-            assert_eq!(results[i].0, "out");
-            assert_eq!(results[i].1.id, 1);
+        for r in &results {
+            assert_eq!(r.0, "out");
+            assert_eq!(r.1.id, 1);
         }
         assert_eq!(
             results[0].1.meta["debug::history"],
@@ -795,9 +814,9 @@ mod test {
         e.enqueue("in2", event2, &mut results)
             .expect("failed to enqueue event");
         assert_eq!(results.len(), 3);
-        for i in 0..=2 {
-            assert_eq!(results[i].0, "out");
-            assert_eq!(results[i].1.id, 2);
+        for r in &results {
+            assert_eq!(r.0, "out");
+            assert_eq!(r.1.id, 2);
         }
         assert_eq!(
             results[0].1.meta["debug::history"],
