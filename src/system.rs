@@ -189,7 +189,7 @@ impl Handler<CreatePipeline> for Manager {
                             pipeline.contraflow(insight);
                         }
                         PipelineMsg::Signal(signal) => {
-                            match pipeline.signalflow(signal, &mut eventset) {
+                            match pipeline.enqueue_signal(signal, &mut eventset) {
                                 Ok(()) => {
                                     if let Err(e) = send_events(&mut eventset, &dests) {
                                         error!("Failed to send event: {}", e)
