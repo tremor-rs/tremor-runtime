@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{Helper, Warning};
+use crate::ast::Warning;
 use crate::errors::*;
 use crate::highlighter::{DumbHighlighter, Highlighter};
-use crate::interpreter::{Cont, LocalStack};
+pub use crate::interpreter::AggrType;
+use crate::interpreter::{Cont, ExecOpts, LocalStack};
 use crate::lexer::{self, TokenFuns};
 use crate::parser::grammar;
 use crate::pos::Range;
-use crate::registry::{Context, Registry};
+use crate::registry::{AggrRegistry, Context, Registry};
 use crate::stry;
-use halfbrown::HashMap;
 use simd_json::borrowed::Value;
 use std::io::Write;
 
@@ -65,7 +65,7 @@ where
     pub script: rentals::Script<Ctx>,
     pub source: String, //tokens: Vec<std::result::Result<TokenSpan<'script>, LexerError>>
     pub warnings: Vec<Warning>,
-    pub locals: HashMap<String, usize>,
+    pub locals: usize,
 }
 
 rental! {
@@ -90,13 +90,18 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(script: &'script str, reg: &Registry<Ctx>) -> Result<Self> {
+    pub fn parse(
+        script: &'script str,
+        reg: &Registry<Ctx>,
+        aggr_reg: &AggrRegistry,
+    ) -> Result<Self> {
         let mut source = script.to_string();
         //FIXME: There is a bug in the lexer that requires a tailing ' ' otherwise
         //       it will not recognize a singular 'keywkrd'
         //       Also: darach is a snot badger!
         source.push(' ');
-        let mut helper = Helper::new(reg);
+        let mut warnings = vec![];
+        let mut locals = 0;
         let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
             let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
             let mut filtered_tokens = Vec::new();
@@ -108,10 +113,11 @@ where
                 }
             }
 
-            let script = grammar::ScriptParser::new()
+            let (script, local_count, ws) = grammar::ScriptParser::new()
                 .parse(filtered_tokens)?
-                .up(&mut helper)?;
-
+                .up_script(reg, aggr_reg)?;
+            warnings = ws;
+            locals = local_count;
             Ok(script)
         })
         .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
@@ -119,8 +125,8 @@ where
         Ok(Script {
             script,
             source,
-            locals: helper.locals.clone(),
-            warnings: helper.into_warnings(),
+            locals,
+            warnings: warnings,
         })
     }
 
@@ -183,17 +189,30 @@ where
     pub fn run(
         &'script self,
         context: &'run Ctx,
+        aggr: AggrType,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
         // FIXME: find a way to pre-allocate this
-        let mut local = LocalStack::with_size(self.locals.len());
+        let mut local = LocalStack::with_size(self.locals);
 
         let script = self.script.suffix();
         let mut exprs = script.exprs.iter().peekable();
+        let opts = ExecOpts {
+            result_needed: true,
+            aggr,
+        };
         while let Some(expr) = exprs.next() {
             if exprs.peek().is_none() {
-                match stry!(expr.run(true, context, event, meta, &mut local, &script.consts,)) {
+                match stry!(expr.run(
+                    opts.with_result(),
+                    context,
+                    &script.aggregates,
+                    event,
+                    meta,
+                    &mut local,
+                    &script.consts,
+                )) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {
@@ -207,7 +226,15 @@ where
                     }
                 }
             } else {
-                match stry!(expr.run(false, context, event, meta, &mut local, &script.consts,)) {
+                match stry!(expr.run(
+                    opts.without_result(),
+                    context,
+                    &script.aggregates,
+                    event,
+                    meta,
+                    &mut local,
+                    &script.consts,
+                )) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {

@@ -51,7 +51,10 @@ pub use simd_json::value::borrowed::Map;
 pub use simd_json::value::borrowed::Value;
 use simd_json::OwnedValue;
 
-pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
+pub use crate::registry::{
+    aggr_registry, registry, AggrRegistry, Context, Registry, TremorAggrFn, TremorAggrFnWrapper,
+    TremorFn, TremorFnWrapper,
+};
 pub use crate::script::{Return, Script};
 
 rental! {
@@ -134,6 +137,7 @@ mod tests {
         ($src:expr, $expected:pat) => {{
             let _vals: Value = json!({}).into();
             let r: Registry<()> = registry();
+            let ar: AggrRegistry = aggr_registry();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
@@ -144,7 +148,7 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let mut helper = Helper::new(&r);
+            let mut helper = Helper::new(&r, &ar);
             let actual = parser::grammar::ScriptParser::new()
                 .parse(filtered_tokens)
                 .expect("exeuction failed")
@@ -175,7 +179,8 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let aggr_reg: AggrRegistry = aggr_registry();
+            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
@@ -206,7 +211,8 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let aggr_reg: AggrRegistry = aggr_registry();
+            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
@@ -231,7 +237,8 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let aggr_reg: AggrRegistry = aggr_registry();
+            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});

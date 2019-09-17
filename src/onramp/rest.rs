@@ -264,7 +264,14 @@ fn onramp_loop(
                 Ok(data) => {
                     let data = json!(data).to_string().into_bytes();
                     let mut ingest_ns = nanotime();
-                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, 0, data);
+                    send_event(
+                        &pipelines,
+                        &mut preprocessors,
+                        &mut codec,
+                        &mut ingest_ns,
+                        0,
+                        data,
+                    );
                     continue;
                 }
                 Err(TryRecvError::Empty) => (),

@@ -84,7 +84,14 @@ fn onramp_loop(
             serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
         let mut ingest_ns = nanotime();
         if let Ok(data) = data {
-            send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, data);
+            send_event(
+                &pipelines,
+                &mut preprocessors,
+                &mut codec,
+                &mut ingest_ns,
+                id,
+                data,
+            );
         }
         id += 1;
     }

@@ -118,7 +118,14 @@ fn onramp_loop(
                     let decoded = base64::decode(&body.data.unwrap_or_default())
                         .expect("could not base64 decode");
 
-                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, decoded);
+                    send_event(
+                        &pipelines,
+                        &mut preprocessors,
+                        &mut codec,
+                        &mut ingest_ns,
+                        id,
+                        decoded,
+                    );
                     id += 1;
 
                     if ack_id != "" {

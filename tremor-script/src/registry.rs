@@ -20,6 +20,14 @@ use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
 
+pub trait TremorAggrFn {
+    fn accumulate<'event>(&mut self, arg: &Value<'event>) -> FResult<()>;
+    fn compensate<'event>(&mut self, arg: &Value<'event>) -> FResult<()>;
+    fn emit<'event>(&self) -> FResult<Value<'event>>;
+    fn init(&mut self);
+    fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
+}
+
 pub type TremorFn<Ctx> = for<'event> fn(&Ctx, &[&Value<'event>]) -> FResult<Value<'event>>;
 pub type FResult<T> = std::result::Result<T, FunctionError>;
 
@@ -38,6 +46,13 @@ pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
         }
     }));
     crate::std_lib::load(&mut registry);
+    registry
+}
+
+#[allow(unused_variables)]
+pub fn aggr_registry() -> AggrRegistry {
+    let mut registry = AggrRegistry::default();
+    crate::std_lib::load_aggr(&mut registry);
     registry
 }
 
@@ -62,6 +77,7 @@ pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError 
         error: format!("{}", e),
     }
 }
+
 #[derive(Debug, PartialEq)]
 pub enum FunctionError {
     BadArity { mfa: MFA, calling_a: usize },
@@ -135,11 +151,6 @@ pub struct TremorFnWrapper<Ctx: Context> {
     pub argc: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct Registry<Ctx: Context + 'static> {
-    functions: HashMap<String, HashMap<String, TremorFnWrapper<Ctx>>>,
-}
-
 impl<Ctx: Context + 'static> TremorFnWrapper<Ctx> {
     pub fn invoke<'event>(&self, context: &Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>> {
         (self.fun)(context, args)
@@ -155,6 +166,11 @@ impl<Ctx: Context + 'static> PartialEq for TremorFnWrapper<Ctx> {
     fn eq(&self, other: &TremorFnWrapper<Ctx>) -> bool {
         self.module == other.module && self.name == other.name
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Registry<Ctx: Context + 'static> {
+    functions: HashMap<String, HashMap<String, TremorFnWrapper<Ctx>>>,
 }
 
 #[macro_export]
@@ -313,6 +329,101 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
     }
 
     pub fn insert(&mut self, function: TremorFnWrapper<Ctx>) -> &mut Registry<Ctx> {
+        match self.functions.get_mut(&function.module) {
+            Some(module) => {
+                module.insert(function.name.clone(), function);
+            }
+
+            None => {
+                let mut module = HashMap::new();
+                let module_name = function.module.clone();
+                module.insert(function.name.clone(), function);
+                self.functions.insert(module_name, module);
+            }
+        }
+        self
+    }
+}
+
+pub struct TremorAggrFnWrapper {
+    pub module: String,
+    pub name: String,
+    pub fun: Box<dyn TremorAggrFn>,
+    pub argc: usize,
+}
+
+impl Clone for TremorAggrFnWrapper {
+    fn clone(&self) -> Self {
+        TremorAggrFnWrapper {
+            module: self.module.clone(),
+            name: self.name.clone(),
+            fun: self.fun.snot_clone(),
+            argc: self.argc,
+        }
+    }
+}
+
+impl TremorAggrFnWrapper {
+    pub fn accumulate<'event>(&mut self, arg: &Value<'event>) -> FResult<()> {
+        self.fun.accumulate(arg)
+    }
+    pub fn compensate<'event>(&mut self, arg: &Value<'event>) -> FResult<()> {
+        self.fun.compensate(arg)
+    }
+    pub fn emit<'event>(&mut self) -> FResult<Value<'event>> {
+        self.fun.emit()
+    }
+    pub fn init<'event>(&mut self) {
+        self.fun.init()
+    }
+}
+
+impl fmt::Debug for TremorAggrFnWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(aggr){}::{}", self.module, self.name)
+    }
+}
+impl PartialEq for TremorAggrFnWrapper {
+    fn eq(&self, other: &TremorAggrFnWrapper) -> bool {
+        self.module == other.module && self.name == other.name
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AggrRegistry {
+    functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
+}
+
+impl Default for AggrRegistry {
+    fn default() -> Self {
+        AggrRegistry {
+            functions: HashMap::new(),
+        }
+    }
+}
+
+impl AggrRegistry {
+    pub fn find(&self, module: &str, function: &str) -> FResult<&TremorAggrFnWrapper> {
+        if let Some(functions) = self.functions.get(module) {
+            if let Some(rf) = functions.get(function) {
+                // TODO: We couldn't return the function wrapper but we can return
+                // the function It's not a big issue but it would have been nice to
+                // know why.
+                Ok(rf)
+            } else {
+                Err(FunctionError::MissingFunction {
+                    m: module.to_string(),
+                    f: function.to_string(),
+                })
+            }
+        } else {
+            Err(FunctionError::MissingModule {
+                m: module.to_string(),
+            })
+        }
+    }
+
+    pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut AggrRegistry {
         match self.functions.get_mut(&function.module) {
             Some(module) => {
                 module.insert(function.name.clone(), function);

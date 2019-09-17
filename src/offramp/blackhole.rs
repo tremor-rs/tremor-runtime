@@ -122,9 +122,8 @@ impl Offramp for Blackhole {
                     self.bytes += v.len();
                 };
                 if let Err(e) = self.delivered.record(delta_ns) {
-                        error!("HDR Histogram error: {:?}", e)
-                    }
-
+                    error!("HDR Histogram error: {:?}", e)
+                }
             }
         }
     }

@@ -17,15 +17,13 @@ use crate::errors::*;
 //use crate::interpreter::Interpreter;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
-use crate::registry::{Context, Registry, TremorFn};
+use crate::registry::{AggrRegistry, Context, Registry, TremorAggrFnWrapper, TremorFn};
 use crate::tilde::Extractor;
 pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
-use simd_json::value::borrowed;
-use simd_json::value::ValueTrait;
+use simd_json::value::{borrowed, ValueTrait};
 use simd_json::BorrowedValue as Value;
-use std::borrow::Borrow;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -40,35 +38,41 @@ pub struct Warning {
     pub msg: String,
 }
 
-pub struct Helper<'h, Ctx>
+pub struct Helper<'script, 'registry, Ctx>
 where
     Ctx: Context + Clone + 'static,
+    'script: 'registry,
 {
-    reg: &'h Registry<Ctx>,
+    reg: &'registry Registry<Ctx>,
+    aggr_reg: &'registry AggrRegistry,
+    is_in_aggr: bool,
+    aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
     warnings: Vec<Warning>,
     local_idx: usize,
     shadowed_vars: Vec<String>,
     pub locals: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
+    pub aggr_ids: usize,
 }
 
-impl<'h, Ctx> Helper<'h, Ctx>
+impl<'script, 'registry, Ctx> Helper<'script, 'registry, Ctx>
 where
     Ctx: Context + Clone + 'static,
+    'script: 'registry,
 {
-    pub fn new(reg: &'h Registry<Ctx>) -> Self {
+    pub fn new(reg: &'registry Registry<Ctx>, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
+            aggr_reg,
+            is_in_aggr: false,
+            aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
             consts: HashMap::new(),
             local_idx: 0,
             shadowed_vars: Vec::new(),
+            aggr_ids: 0,
         }
-    }
-
-    pub fn into_warnings(self) -> Vec<Warning> {
-        self.warnings
     }
 
     fn register_shadow_var(&mut self, id: &str) -> usize {
@@ -128,10 +132,12 @@ where
 }
 
 impl<'script> Script1<'script> {
-    pub fn up<Ctx: Context + Clone + 'static>(
+    pub fn up_script<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
-    ) -> Result<Script<'script, Ctx>> {
+        reg: &'registry Registry<Ctx>,
+        aggr_reg: &'registry AggrRegistry,
+    ) -> Result<(Script<'script, Ctx>, usize, Vec<Warning>)> {
+        let mut helper = Helper::new(reg, aggr_reg);
         let mut consts: Vec<Value> = vec![];
         let mut exprs = vec![];
         let len = self.exprs.len();
@@ -152,7 +158,7 @@ impl<'script> Script1<'script> {
                         .into());
                     }
                     helper.consts.insert(name.to_string(), consts.len());
-                    let expr = expr.up(helper)?;
+                    let expr = expr.up(&mut helper)?;
                     if i == len - 1 {
                         exprs.push(Expr::Imut(ImutExpr::Local {
                             id: name.clone(),
@@ -165,7 +171,7 @@ impl<'script> Script1<'script> {
 
                     consts.push(reduce2(expr)?);
                 }
-                other => exprs.push(other.up(helper)?),
+                other => exprs.push(other.up(&mut helper)?),
             }
         }
 
@@ -196,7 +202,17 @@ impl<'script> Script1<'script> {
             return Err(ErrorKind::EmptyScript.into());
         }
 
-        Ok(Script { exprs, consts })
+        // let aggregates  = Vec::new();
+        // mem::swap(&mut aggregates, &mut helper.aggregates);
+        Ok((
+            Script {
+                exprs,
+                consts,
+                aggregates: helper.aggregates,
+            },
+            helper.locals.len(),
+            helper.warnings,
+        ))
     }
 }
 
@@ -204,6 +220,7 @@ impl<'script> Script1<'script> {
 pub struct Script<'script, Ctx: Context + Clone + 'static> {
     pub exprs: Exprs<'script, Ctx>,
     pub consts: Vec<Value<'script>>,
+    pub aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -257,9 +274,9 @@ pub struct Field1<'script> {
 }
 
 impl<'script> Field1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Field<'script, Ctx>> {
         Ok(Field {
             start: self.start,
@@ -288,9 +305,9 @@ pub struct Record1<'script> {
 impl_expr1!(Record1);
 
 impl<'script> Record1<'script> {
-    pub fn up<Ctx: Context + Clone + 'static>(
+    pub fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Record<'script, Ctx>> {
         let fields: Result<Fields<'script, Ctx>> =
             self.fields.into_iter().map(|p| p.up(helper)).collect();
@@ -318,9 +335,9 @@ pub struct List1<'script> {
 impl_expr1!(List1);
 
 impl<'script> List1<'script> {
-    pub fn up<Ctx: Context + Clone + 'static>(
+    pub fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<List<'script, Ctx>> {
         let exprs: Result<ImutExprs<'script, Ctx>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
@@ -378,9 +395,9 @@ pub enum Expr1<'script> {
 }
 
 impl<'script> Expr1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Expr<'script, Ctx>> {
         Ok(match self {
             Expr1::Const { start, end, .. } => {
@@ -448,6 +465,7 @@ pub enum ImutExpr1<'script> {
     Unary(Box<UnaryExpr1<'script>>),
     Literal(Literal<'script>),
     Invoke(Invoke1<'script>),
+    InvokeAggr(InvokeAggr1<'script>),
     Present {
         path: Path1<'script>,
         start: Location,
@@ -456,9 +474,9 @@ pub enum ImutExpr1<'script> {
 }
 
 impl<'script> ImutExpr1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ImutExpr<'script, Ctx>> {
         Ok(match self {
             ImutExpr1::Binary(b) => match b.up(helper)? {
@@ -572,13 +590,21 @@ impl<'script> ImutExpr1<'script> {
             },
             ImutExpr1::Literal(l) => ImutExpr::Literal(l),
             ImutExpr1::Invoke(i) => {
-                let i = i.up(helper)?;
-                match i.args.len() {
-                    1 => ImutExpr::Invoke1(i),
-                    2 => ImutExpr::Invoke2(i),
-                    3 => ImutExpr::Invoke3(i),
-                    _ => ImutExpr::Invoke(i),
+                if i.is_aggregate(helper) {
+                    ImutExpr::InvokeAggr(i.to_aggregate(helper).up(helper)?)
+                } else {
+                    let i = i.up(helper)?;
+                    match i.args.len() {
+                        1 => ImutExpr::Invoke1(i),
+                        2 => ImutExpr::Invoke2(i),
+                        3 => ImutExpr::Invoke3(i),
+                        _ => ImutExpr::Invoke(i),
+                    }
                 }
+            }
+            ImutExpr1::InvokeAggr(i) => {
+                let i = i.up(helper)?;
+                ImutExpr::InvokeAggr(i)
             }
             ImutExpr1::Match(m) => ImutExpr::Match(Box::new(m.up(helper)?)),
             ImutExpr1::Comprehension(c) => ImutExpr::Comprehension(Box::new(c.up(helper)?)),
@@ -672,6 +698,7 @@ pub enum ImutExpr<'script, Ctx: Context + Clone + 'static> {
     Invoke2(Invoke<'script, Ctx>),
     Invoke3(Invoke<'script, Ctx>),
     Invoke(Invoke<'script, Ctx>),
+    InvokeAggr(InvokeAggr),
 }
 
 fn is_lit<'script, Ctx: Context + Clone + 'static>(e: &ImutExpr<'script, Ctx>) -> bool {
@@ -690,6 +717,7 @@ impl<'script, Ctx: Context + Clone + 'static> BaseExpr for ImutExpr<'script, Ctx
             ImutExpr::Invoke1(e) => e.s(),
             ImutExpr::Invoke2(e) => e.s(),
             ImutExpr::Invoke3(e) => e.s(),
+            ImutExpr::InvokeAggr(e) => e.s(),
             ImutExpr::List(e) => e.s(),
             ImutExpr::Literal(e) => e.s(),
             ImutExpr::Local { start, .. } => *start,
@@ -710,6 +738,7 @@ impl<'script, Ctx: Context + Clone + 'static> BaseExpr for ImutExpr<'script, Ctx
             ImutExpr::Invoke1(e) => e.e(),
             ImutExpr::Invoke2(e) => e.e(),
             ImutExpr::Invoke3(e) => e.e(),
+            ImutExpr::InvokeAggr(e) => e.e(),
             ImutExpr::List(e) => e.e(),
             ImutExpr::Literal(e) => e.e(),
             ImutExpr::Local { end, .. } => *end,
@@ -761,9 +790,9 @@ pub struct EmitExpr1<'script> {
 }
 
 impl<'script> EmitExpr1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<EmitExpr<'script, Ctx>> {
         Ok(EmitExpr {
             start: self.start,
@@ -801,9 +830,9 @@ pub struct Invoke1<'script> {
 impl_expr1!(Invoke1);
 
 impl<'script> Invoke1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Invoke<'script, Ctx>> {
         let args: Result<ImutExprs<'script, Ctx>> = self
             .args
@@ -825,6 +854,30 @@ impl<'script> Invoke1<'script> {
             invocable,
             args,
         })
+    }
+
+    fn is_aggregate<'registry, Ctx: Context + Clone + 'static>(
+        &self,
+        helper: &mut Helper<'script, 'registry, Ctx>,
+    ) -> bool {
+        helper.aggr_reg.find(&self.module, &self.fun).is_ok()
+    }
+
+    fn to_aggregate<'registry, Ctx: Context + Clone + 'static>(
+        self,
+        helper: &mut Helper<'script, 'registry, Ctx>,
+    ) -> InvokeAggr1<'script> {
+        if helper.aggr_reg.find(&self.module, &self.fun).is_ok() {
+            InvokeAggr1 {
+                start: self.start,
+                end: self.end,
+                module: self.module,
+                fun: self.fun,
+                args: self.args,
+            }
+        } else {
+            unreachable!()
+        }
     }
 }
 
@@ -853,6 +906,114 @@ impl<'script, Ctx: Context + Clone + 'static> PartialEq for Invoke<'script, Ctx>
 impl<'script, Ctx: Context + Clone + 'static> fmt::Debug for Invoke<'script, Ctx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn {}::{}", self.module, self.fun)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct InvokeAggr1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub module: String,
+    pub fun: String,
+    pub args: ImutExprs1<'script>,
+}
+impl_expr1!(InvokeAggr1);
+
+impl<'script> InvokeAggr1<'script> {
+    fn up<'registry, Ctx: Context + Clone + 'static>(
+        self,
+        helper: &mut Helper<'script, 'registry, Ctx>,
+    ) -> Result<InvokeAggr> {
+        if helper.is_in_aggr {
+            // FIXME better error: Aggregate in aggregate isn't allowed
+            return Err(ErrorKind::Oops(self.extent().expand_lines(2)).into());
+        };
+        helper.is_in_aggr = true;
+        let args: Result<ImutExprs<'script, Ctx>> = self
+            .args
+            .clone()
+            .into_iter()
+            .map(|p| p.up(helper))
+            .collect();
+        let args = args?;
+        let invocable = helper
+            .aggr_reg
+            .find(&self.module, &self.fun)
+            .map_err(|e| e.into_err(&self, &self, Some(&helper.reg)))?
+            .clone();
+        let aggr_id = helper.aggregates.len();
+        helper.aggregates.push(InvokeAggrFn {
+            invocable,
+            args,
+            module: self.module.clone(),
+            fun: self.fun.clone(),
+        });
+        helper.is_in_aggr = false;
+
+        Ok(InvokeAggr {
+            start: self.start,
+            end: self.end,
+            module: self.module,
+            fun: self.fun,
+            aggr_id,
+        })
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct InvokeAggr {
+    pub start: Location,
+    pub end: Location,
+    pub module: String,
+    pub fun: String,
+    pub aggr_id: usize,
+}
+
+impl BaseExpr for InvokeAggr {
+    fn s(&self) -> Location {
+        self.start
+    }
+    fn e(&self) -> Location {
+        self.end
+    }
+}
+
+impl PartialEq for InvokeAggr {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start
+            && self.end == other.end
+            && self.module == other.module
+            && self.fun == other.fun
+            && self.aggr_id == other.aggr_id
+        //&& self.args == other.args FIXME why??!?
+    }
+}
+
+impl fmt::Debug for InvokeAggr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "fn(aggr) {}::{}", self.module, self.fun)
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct InvokeAggrFn<'script, Ctx: Context + Clone + 'static> {
+    #[serde(skip)]
+    pub invocable: TremorAggrFnWrapper,
+    pub module: String,
+    pub fun: String,
+    pub args: ImutExprs<'script, Ctx>,
+}
+
+impl<'script, Ctx: Context + Clone + 'static> fmt::Debug for InvokeAggrFn<'script, Ctx> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "fn(aggr) {}::{}", self.module, self.fun)
+    }
+}
+
+impl<'script, Ctx: Context + Clone + 'static> PartialEq for InvokeAggrFn<'script, Ctx> {
+    fn eq(&self, other: &Self) -> bool {
+        self.module == other.module && self.fun == other.fun && self.args == other.args
+        //&& self.args == other.args FIXME why??!?
     }
 }
 
@@ -892,7 +1053,10 @@ impl BaseExpr for TestExpr1 {
     }
 }
 impl TestExpr1 {
-    fn up<Ctx: Context + Clone + 'static>(self, _helper: &mut Helper<Ctx>) -> Result<TestExpr> {
+    fn up<'registry, Ctx: Context + Clone + 'static>(
+        self,
+        _helper: &mut Helper<Ctx>,
+    ) -> Result<TestExpr> {
         match Extractor::new(&self.id, &self.test) {
             Ok(ex) => Ok(TestExpr {
                 id: self.id,
@@ -922,9 +1086,9 @@ pub struct Match1<'script> {
 }
 
 impl<'script> Match1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Match<'script, Ctx>> {
         let patterns: Result<Predicates<'script, Ctx>> =
             self.patterns.into_iter().map(|p| p.up(helper)).collect();
@@ -964,9 +1128,9 @@ pub struct ImutMatch1<'script> {
 }
 
 impl<'script> ImutMatch1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ImutMatch<'script, Ctx>> {
         let patterns: Result<ImutPredicates<'script, Ctx>> =
             self.patterns.into_iter().map(|p| p.up(helper)).collect();
@@ -1024,9 +1188,9 @@ pub struct PredicateClause1<'script> {
 }
 
 impl<'script> PredicateClause1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<PredicateClause<'script, Ctx>> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
@@ -1062,9 +1226,9 @@ pub struct ImutPredicateClause1<'script> {
 }
 
 impl<'script> ImutPredicateClause1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ImutPredicateClause<'script, Ctx>> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
@@ -1120,9 +1284,9 @@ pub struct Patch1<'script> {
 }
 
 impl<'script> Patch1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Patch<'script, Ctx>> {
         let operations: Result<PatchOperations<'script, Ctx>> =
             self.operations.into_iter().map(|p| p.up(helper)).collect();
@@ -1179,9 +1343,9 @@ pub enum PatchOperation1<'script> {
 }
 
 impl<'script> PatchOperation1<'script> {
-    pub fn up<Ctx: Context + Clone + 'static>(
+    pub fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<PatchOperation<'script, Ctx>> {
         use PatchOperation1::*;
         Ok(match self {
@@ -1261,9 +1425,9 @@ pub struct Merge1<'script> {
     pub expr: ImutExpr1<'script>,
 }
 impl<'script> Merge1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Merge<'script, Ctx>> {
         //let patterns: Result<Predicates> = self.patterns.into_iter().map(|p| p.up(helper)).collect();
 
@@ -1294,9 +1458,9 @@ pub struct Comprehension1<'script> {
 }
 
 impl<'script> Comprehension1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Comprehension<'script, Ctx>> {
         // We compute the target before shadowing the key and value
 
@@ -1330,9 +1494,9 @@ pub struct ImutComprehension1<'script> {
 }
 
 impl<'script> ImutComprehension1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ImutComprehension<'script, Ctx>> {
         // We compute the target before shadowing the key and value
 
@@ -1390,9 +1554,9 @@ pub struct ComprehensionCase1<'script> {
 }
 
 impl<'script> ComprehensionCase1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ComprehensionCase<'script, Ctx>> {
         // regiter key and value as shadowed variables
         let key_idx = helper.register_shadow_var(&self.key_name);
@@ -1439,9 +1603,9 @@ pub struct ImutComprehensionCase1<'script> {
 }
 
 impl<'script> ImutComprehensionCase1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ImutComprehensionCase<'script, Ctx>> {
         // regiter key and value as shadowed variables
         let _key_idx = helper.register_shadow_var(&self.key_name);
@@ -1502,9 +1666,9 @@ pub enum Pattern1<'script> {
     Default,
 }
 impl<'script> Pattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Pattern<'script, Ctx>> {
         use Pattern1::*;
         Ok(match self {
@@ -1575,9 +1739,9 @@ pub enum PredicatePattern1<'script> {
 }
 
 impl<'script> PredicatePattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<PredicatePattern<'script, Ctx>> {
         use PredicatePattern1::*;
         Ok(match self {
@@ -1654,9 +1818,9 @@ pub struct RecordPattern1<'script> {
 }
 
 impl<'script> RecordPattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<RecordPattern<'script, Ctx>> {
         let fields: Result<PatternFields<'script, Ctx>> =
             self.fields.into_iter().map(|p| p.up(helper)).collect();
@@ -1684,9 +1848,9 @@ pub enum ArrayPredicatePattern1<'script> {
     //Array(ArrayPattern),
 }
 impl<'script> ArrayPredicatePattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ArrayPredicatePattern<'script, Ctx>> {
         use ArrayPredicatePattern1::*;
         Ok(match self {
@@ -1714,9 +1878,9 @@ pub struct ArrayPattern1<'script> {
 }
 
 impl<'script> ArrayPattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<ArrayPattern<'script, Ctx>> {
         let exprs: Result<Vec<ArrayPredicatePattern<'script, Ctx>>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
@@ -1743,9 +1907,9 @@ pub struct AssignPattern1<'script> {
 }
 
 impl<'script> AssignPattern1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<AssignPattern<'script, Ctx>> {
         Ok(AssignPattern {
             idx: helper.register_shadow_var(&self.id),
@@ -1769,9 +1933,9 @@ pub enum Path1<'script> {
 }
 
 impl<'script> Path1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Path<'script, Ctx>> {
         use Path1::*;
         Ok(match self {
@@ -1844,9 +2008,9 @@ pub enum Segment1<'script> {
 }
 
 impl<'script> Segment1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<Segment<'script, Ctx>> {
         use Segment1::*;
         Ok(match self {
@@ -1992,9 +2156,9 @@ pub struct LocalPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> LocalPath1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<LocalPath<'script, Ctx>> {
         let segments: Result<Segments<'script, Ctx>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
@@ -2052,9 +2216,9 @@ pub struct MetadataPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> MetadataPath1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<MetadataPath<'script, Ctx>> {
         let segments: Result<Segments<'script, Ctx>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
@@ -2087,9 +2251,9 @@ pub struct EventPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> EventPath1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<EventPath<'script, Ctx>> {
         let segments: Result<Segments<'script, Ctx>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
@@ -2164,9 +2328,9 @@ pub struct BinExpr1<'script> {
     pub rhs: ImutExpr1<'script>,
 }
 impl<'script> BinExpr1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<BinExpr<'script, Ctx>> {
         Ok(BinExpr {
             start: self.start,
@@ -2213,9 +2377,9 @@ pub struct UnaryExpr1<'script> {
 }
 
 impl<'script> UnaryExpr1<'script> {
-    fn up<Ctx: Context + Clone + 'static>(
+    fn up<'registry, Ctx: Context + Clone + 'static>(
         self,
-        helper: &mut Helper<Ctx>,
+        helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<UnaryExpr<'script, Ctx>> {
         Ok(UnaryExpr {
             start: self.start,
