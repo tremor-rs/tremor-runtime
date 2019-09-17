@@ -14,7 +14,7 @@
 
 use super::{
     merge_values, patch_value, resolve, set_local_shadow, test_guard, test_predicate_expr,
-    LocalStack, LocalValue, NULL,
+    ExecOpts, LocalStack, LocalValue, NULL,
 };
 use crate::ast::*;
 use crate::errors::*;
@@ -79,8 +79,9 @@ where
     #[inline]
     fn execute_effectors<T: BaseExpr>(
         &'script self,
-        result_needed: bool,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
@@ -93,36 +94,44 @@ where
         }
         // We know we have at least one element so [] access is safe!
         for effector in &effectors[..effectors.len() - 1] {
-            demit!(effector.run(false, context, event, meta, local, consts));
+            demit!(effector.run(
+                opts.without_result(),
+                context,
+                aggrs,
+                event,
+                meta,
+                local,
+                consts
+            ));
         }
         let effector = &effectors[effectors.len() - 1];
-        Ok(Cont::Cont(demit!(effector.run(
-            result_needed,
-            context,
-            event,
-            meta,
-            local,
-            consts
-        ))))
+        Ok(Cont::Cont(demit!(
+            effector.run(opts, context, aggrs, event, meta, local, consts)
+        )))
     }
 
     #[inline]
     fn match_expr(
         &'script self,
-        result_needed: bool,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         consts: &'run [Value<'event>],
         expr: &'script Match<Ctx>,
     ) -> Result<Cont<'run, 'event>> {
-        let target = stry!(expr.target.run(context, event, meta, local, consts));
+        let target = stry!(expr
+            .target
+            .run(opts, context, aggrs, event, meta, local, consts));
 
         for predicate in &expr.patterns {
             if stry!(test_predicate_expr(
                 self,
+                opts,
                 context,
+                aggrs,
                 event,
                 meta,
                 local,
@@ -132,8 +141,9 @@ where
                 &predicate.guard,
             )) {
                 return self.execute_effectors(
-                    result_needed,
+                    opts,
                     context,
+                    aggrs,
                     event,
                     meta,
                     local,
@@ -148,7 +158,9 @@ where
 
     fn patch_in_place(
         &'script self,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
@@ -157,20 +169,24 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
         // NOTE: Is this good? I don't like it.
-        let value = stry!(expr.target.run(context, event, meta, local, consts));
+        let value = stry!(expr
+            .target
+            .run(opts, context, aggrs, event, meta, local, consts));
         let v: &Value = value.borrow();
         #[allow(mutable_transmutes)]
         #[allow(clippy::transmute_ptr_to_ptr)]
         let v: &mut Value = unsafe { mem::transmute(v) };
         stry!(patch_value(
-            self, context, event, meta, local, consts, v, expr
+            self, opts, context, aggrs, event, meta, local, consts, v, expr
         ));
         Ok(Cow::Borrowed(v))
     }
 
     fn merge_in_place(
         &'script self,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
@@ -179,14 +195,18 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
         // NOTE: Is this good? I don't like it.
-        let value_cow = stry!(expr.target.run(context, event, meta, local, consts));
+        let value_cow = stry!(expr
+            .target
+            .run(opts, context, aggrs, event, meta, local, consts));
         let value: &Value = value_cow.borrow();
         #[allow(mutable_transmutes)]
         #[allow(clippy::transmute_ptr_to_ptr)]
         let value: &mut Value = unsafe { mem::transmute(value) };
 
         if value.is_object() {
-            let replacement = stry!(expr.expr.run(context, event, meta, local, consts));
+            let replacement = stry!(expr
+                .expr
+                .run(opts, context, aggrs, event, meta, local, consts));
 
             if replacement.is_object() {
                 stry!(merge_values(self, &expr.expr, value, &replacement));
@@ -201,8 +221,9 @@ where
 
     fn comprehension(
         &'script self,
-        result_needed: bool,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
@@ -213,11 +234,15 @@ where
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
-        let target_value = stry!(target.run(context, event, meta, local, consts));
+        let target_value = stry!(target.run(opts, context, aggrs, event, meta, local, consts));
 
         if let Some(target_map) = target_value.as_object() {
             // Record comprehension case
-            value_vec.reserve(if result_needed { target_map.len() } else { 0 });
+            value_vec.reserve(if opts.result_needed {
+                target_map.len()
+            } else {
+                0
+            });
             // NOTE: Since we we are going to create new data from this
             // object we are cloning it.
             // This is also required since we might mutate. If we restruct
@@ -228,20 +253,13 @@ where
                 stry!(set_local_shadow(self, local, expr.val_id, v));
                 for e in cases {
                     if stry!(test_guard(
-                        self, context, event, meta, local, consts, &e.guard
+                        self, opts, context, aggrs, event, meta, local, consts, &e.guard
                     )) {
                         let v = demit!(self.execute_effectors(
-                            result_needed,
-                            context,
-                            event,
-                            meta,
-                            local,
-                            consts,
-                            e,
-                            &e.exprs,
+                            opts, context, aggrs, event, meta, local, consts, e, &e.exprs,
                         ));
                         // NOTE: We are creating a new value so we have to clone;
-                        if result_needed {
+                        if opts.result_needed {
                             value_vec.push(v.into_owned());
                         }
                         continue 'comprehension_outer;
@@ -251,7 +269,11 @@ where
         } else if let Some(target_array) = target_value.as_array() {
             // Array comprehension case
 
-            value_vec.reserve(if result_needed { target_array.len() } else { 0 });
+            value_vec.reserve(if opts.result_needed {
+                target_array.len()
+            } else {
+                0
+            });
 
             // NOTE: Since we we are going to create new data from this
             // object we are cloning it.
@@ -265,20 +287,13 @@ where
 
                 for e in cases {
                     if stry!(test_guard(
-                        self, context, event, meta, local, consts, &e.guard
+                        self, opts, context, aggrs, event, meta, local, consts, &e.guard
                     )) {
                         let v = demit!(self.execute_effectors(
-                            result_needed,
-                            context,
-                            event,
-                            meta,
-                            local,
-                            consts,
-                            e,
-                            &e.exprs,
+                            opts, context, aggrs, event, meta, local, consts, e, &e.exprs,
                         ));
 
-                        if result_needed {
+                        if opts.result_needed {
                             value_vec.push(v.into_owned());
                             count += 1;
                         }
@@ -295,8 +310,9 @@ where
     #[allow(clippy::transmute_ptr_to_ptr)]
     fn assign(
         &'script self,
-        result_needed: bool,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
@@ -403,7 +419,9 @@ where
                         }
                     }
                     Segment::ElementSelector { expr, .. } => {
-                        let id = stry!(expr.eval_to_string(context, event, meta, local, consts));
+                        let id =
+                            stry!(expr
+                                .eval_to_string(opts, context, aggrs, event, meta, local, consts));
                         if let Value::Object(ref mut map) =
                             mem::transmute::<&Value, &mut Value>(current)
                         {
@@ -433,9 +451,9 @@ where
         unsafe {
             *mem::transmute::<&Value, &mut Value>(current) = value;
         }
-        if result_needed {
+        if opts.result_needed {
             //Ok(Cow::Borrowed(current))
-            resolve(self, context, event, meta, local, consts, path)
+            resolve(self, opts, context, aggrs, event, meta, local, consts, path)
         } else {
             Ok(Cow::Borrowed(&NULL))
         }
@@ -444,8 +462,9 @@ where
     #[inline(always)]
     pub fn run(
         &'script self,
-        result_needed: bool,
+        opts: ExecOpts,
         context: &'run Ctx,
+        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
@@ -459,7 +478,10 @@ where
                     ..
                 } if segments.is_empty() => Ok(Cont::EmitEvent(port.clone())),
                 expr => Ok(Cont::Emit(
-                    stry!(expr.expr.run(context, event, meta, local, consts)).into_owned(),
+                    stry!(expr
+                        .expr
+                        .run(opts, context, aggrs, event, meta, local, consts))
+                    .into_owned(),
                     expr.port.clone(),
                 )),
             },
@@ -481,51 +503,45 @@ where
                     return error_oops(self);
                 };
                 self.assign(
-                    result_needed,
-                    context,
-                    event,
-                    meta,
-                    local,
-                    consts,
-                    &path,
-                    value,
+                    opts, context, aggrs, event, meta, local, consts, &path, value,
                 )
                 .map(Cont::Cont)
             }
             Expr::Assign { expr, path, .. } => {
                 // NOTE Since we are assigning a new value we do cline here.
                 // This is intended behaviour
-                let value =
-                    demit!(expr.run(true, context, event, meta, local, consts)).into_owned();
-                self.assign(
-                    result_needed,
+                let value = demit!(expr.run(
+                    opts.with_result(),
                     context,
+                    aggrs,
                     event,
                     meta,
                     local,
-                    consts,
-                    &path,
-                    value,
+                    consts
+                ))
+                .into_owned();
+                self.assign(
+                    opts, context, aggrs, event, meta, local, consts, &path, value,
                 )
                 .map(Cont::Cont)
             }
             Expr::Match(ref expr) => {
-                self.match_expr(result_needed, context, event, meta, local, consts, expr)
+                self.match_expr(opts, context, aggrs, event, meta, local, consts, expr)
             }
             Expr::MergeInPlace(ref expr) => self
-                .merge_in_place(context, event, meta, local, consts, expr)
+                .merge_in_place(opts, context, aggrs, event, meta, local, consts, expr)
                 .map(Cont::Cont),
             Expr::PatchInPlace(ref expr) => self
-                .patch_in_place(context, event, meta, local, consts, expr)
+                .patch_in_place(opts, context, aggrs, event, meta, local, consts, expr)
                 .map(Cont::Cont),
             Expr::Comprehension(ref expr) => {
-                self.comprehension(result_needed, context, event, meta, local, consts, expr)
+                self.comprehension(opts, context, aggrs, event, meta, local, consts, expr)
             }
             Expr::Imut(expr) => {
                 // If we don't need the result of a imutable value then we
                 // don't need to evalute it.
-                if result_needed {
-                    expr.run(context, event, meta, local, consts)
+                if opts.result_needed {
+                    expr.run(opts, context, aggrs, event, meta, local, consts)
                         .map(Cont::Cont)
                 } else {
                     Ok(Cont::Cont(Cow::Borrowed(&NULL)))

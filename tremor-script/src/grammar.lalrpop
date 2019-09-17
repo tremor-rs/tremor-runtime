@@ -75,6 +75,7 @@ SimpleExpr: Expr1<'input> = {
 AlwaysImutExpr: ImutExpr1<'input> = {
     <pp:Patch> => ImutExpr1::Patch(Box::new(pp)),
     <pp:Merge> => ImutExpr1::Merge(Box::new(pp)),
+    <call:InvokeAggr> => ImutExpr1::InvokeAggr(call),
     <call:Invoke> => ImutExpr1::Invoke(call),
     <literal:Literal> => ImutExpr1::Literal(literal),
     <path:Path> => ImutExpr1::Path(path),
@@ -306,6 +307,11 @@ Selector: Segment1<'input> = {
 ////////////////////////////// Function invocations //////////////////////////////
 // Function invocations consist of a module, function name and an
 // argument list.
+
+/// Function invocation
+InvokeAggr: InvokeAggr1<'input> = {
+    <start:@L> <module:Ident> "::" <fun:Ident> "[" <arg:ComplexExprImut> "]" <end:@L> => InvokeAggr1 { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![arg], start, end },
+}
 
 /// Function invocation
 Invoke: Invoke1<'input> = {

@@ -36,7 +36,7 @@ mod tilde;
 extern crate rental;
 
 use crate::highlighter::{Highlighter, TermHighlighter};
-use crate::script::{Return, Script};
+use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
@@ -47,7 +47,7 @@ use std::iter::FromIterator;
 #[macro_use]
 extern crate serde_derive;
 
-pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
+use crate::registry::{AggrRegistry, Context, Registry, TremorFnWrapper};
 
 fn main() {
     let matches = App::new("tremor-script")
@@ -63,6 +63,7 @@ fn main() {
             Arg::with_name("event")
                 .short("e")
                 .takes_value(true)
+                .multiple(true)
                 .help("The event to load."),
         )
         .arg(
@@ -113,8 +114,9 @@ fn main() {
         .expect("");
 
     let reg: Registry<()> = registry::registry();
+    let aggr_reg: AggrRegistry = registry::aggr_registry();
 
-    match Script::parse(&raw, &reg) {
+    match Script::parse(&raw, &reg, &aggr_reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable
@@ -147,11 +149,19 @@ fn main() {
                 std::process::exit(0);
             }
 
-            let mut bytes = Vec::new();
-            let mut event = if let Some(event_file) = matches.value_of("event") {
-                let input = File::open(&event_file);
-                input.expect("bad input").read_to_end(&mut bytes).expect("");
-                simd_json::to_borrowed_value(&mut bytes).expect("Invalid event data")
+            let mut inputs = Vec::new();
+            let mut events = if let Some(event_files) = matches.values_of("event") {
+                let mut r = Vec::new();
+                for event_file in event_files {
+                    let mut bytes = Vec::new();
+                    let input = File::open(&event_file);
+                    input.expect("bad input").read_to_end(&mut bytes).expect("");
+                    inputs.push(bytes);
+                }
+                for i in inputs.iter_mut() {
+                    r.push(simd_json::to_borrowed_value(i).expect("Invalid event data"))
+                }
+                r
             } else if let Some(string_file) = matches.value_of("string") {
                 let input = File::open(&string_file);
                 let mut raw = String::new();
@@ -161,14 +171,20 @@ fn main() {
                     .expect("");
                 let raw = raw.trim_end().to_string();
 
-                simd_json::borrowed::Value::String(raw.into())
+                vec![simd_json::borrowed::Value::String(raw.into())]
             } else {
-                simd_json::borrowed::Value::Object(hashmap! {})
+                vec![simd_json::borrowed::Value::Object(hashmap! {})]
             };
 
             let mut global_map = Value::Object(hashmap! {});
             let _expr = Value::Null;
-            let expr = runnable.run(&(), &mut event, &mut global_map);
+            let mut event = events
+                .pop()
+                .expect("At least one event needs to be specified");
+            for event in &mut events {
+                runnable.run(&(), AggrType::Tick, event, &mut global_map);
+            }
+            let expr = runnable.run(&(), AggrType::Emit, &mut event, &mut global_map);
             match expr {
                 // Seperate out the speical case of emiting the inbound evet,
                 // this way we don't have to clone it on the way out and can

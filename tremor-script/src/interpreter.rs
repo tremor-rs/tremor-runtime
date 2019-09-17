@@ -83,6 +83,28 @@ impl<'value> Default for LocalValue<'value> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AggrType {
+    Tick,
+    Emit,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct ExecOpts {
+    pub result_needed: bool,
+    pub aggr: AggrType,
+}
+
+impl ExecOpts {
+    pub fn without_result(mut self) -> Self {
+        self.result_needed = false;
+        self
+    }
+    pub fn with_result(mut self) -> Self {
+        self.result_needed = true;
+        self
+    }
+}
+
 #[inline]
 fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     use Value::*;
@@ -200,7 +222,9 @@ pub fn exec_unary<'run, 'event: 'run>(
 #[inline]
 pub fn resolve<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -278,7 +302,7 @@ where
                 }
             }
             Segment::ElementSelector { expr, .. } => {
-                let key = stry!(expr.run(context, event, meta, local, consts));
+                let key = stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
 
                 match (current, key.borrow()) {
                     (Value::Object(o), Value::String(id)) => {
@@ -345,11 +369,13 @@ where
                     } else {
                         (0, a.len())
                     };
-                    let s = stry!(range_start.run(context, event, meta, local, consts));
+                    let s =
+                        stry!(range_start.run(opts, context, aggrs, event, meta, local, consts));
                     if let Some(range_start) = s.as_u64() {
                         let range_start = range_start as usize + start;
 
-                        let e = stry!(range_end.run(context, event, meta, local, consts));
+                        let e =
+                            stry!(range_end.run(opts, context, aggrs, event, meta, local, consts));
                         if let Some(range_end) = e.as_u64() {
                             let range_end = range_end as usize + end;
                             if range_end >= end {
@@ -443,7 +469,9 @@ where
 #[inline]
 fn patch_value<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -463,8 +491,11 @@ where
         if let Value::Object(ref mut obj) = value {
             match op {
                 PatchOperation::Insert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
-                    let new_value = stry!(expr.run(context, event, meta, local, consts));
+                    let new_key = stry!(
+                        ident.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let new_value =
+                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
                     if obj.contains_key(&new_key) {
                         return error_patch_key_exists(outer, expr, new_key.to_string());
                     } else {
@@ -472,8 +503,11 @@ where
                     }
                 }
                 PatchOperation::Update { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
-                    let new_value = stry!(expr.run(context, event, meta, local, consts));
+                    let new_key = stry!(
+                        ident.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let new_value =
+                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
                     if obj.contains_key(&new_key) {
                         obj.insert(new_key, new_value.into_owned());
                     } else {
@@ -481,17 +515,25 @@ where
                     }
                 }
                 PatchOperation::Upsert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
-                    let new_value = stry!(expr.run(context, event, meta, local, consts));
+                    let new_key = stry!(
+                        ident.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let new_value =
+                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
                     obj.insert(new_key, new_value.into_owned());
                 }
                 PatchOperation::Erase { ident } => {
-                    let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
+                    let new_key = stry!(
+                        ident.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
                     obj.remove(&new_key);
                 }
                 PatchOperation::Move { from, to } => {
-                    let from = stry!(from.eval_to_string(context, event, meta, local, consts));
-                    let to = stry!(to.eval_to_string(context, event, meta, local, consts));
+                    let from = stry!(
+                        from.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let to =
+                        stry!(to.eval_to_string(opts, context, aggrs, event, meta, local, consts));
 
                     if obj.contains_key(&to) {
                         return error_patch_key_exists(outer, expr, to.to_string());
@@ -501,8 +543,11 @@ where
                     }
                 }
                 PatchOperation::Copy { from, to } => {
-                    let from = stry!(from.eval_to_string(context, event, meta, local, consts));
-                    let to = stry!(to.eval_to_string(context, event, meta, local, consts));
+                    let from = stry!(
+                        from.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let to =
+                        stry!(to.eval_to_string(opts, context, aggrs, event, meta, local, consts));
 
                     if obj.contains_key(&to) {
                         return error_patch_key_exists(outer, expr, to.to_string());
@@ -513,8 +558,11 @@ where
                     }
                 }
                 PatchOperation::Merge { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(context, event, meta, local, consts));
-                    let merge_spec = stry!(expr.run(context, event, meta, local, consts));
+                    let new_key = stry!(
+                        ident.eval_to_string(opts, context, aggrs, event, meta, local, consts)
+                    );
+                    let merge_spec =
+                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
 
                     match obj.get_mut(&new_key) {
                         Some(value @ Value::Object(_)) => {
@@ -536,7 +584,8 @@ where
                     }
                 }
                 PatchOperation::TupleMerge { expr } => {
-                    let merge_spec = stry!(expr.run(context, event, meta, local, consts));
+                    let merge_spec =
+                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
 
                     stry!(merge_values(outer, expr, value, &merge_spec));
                 }
@@ -551,7 +600,9 @@ where
 #[inline]
 fn test_guard<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -565,7 +616,7 @@ where
     'event: 'run,
 {
     if let Some(guard) = guard {
-        let test = stry!(guard.run(context, event, meta, local, consts));
+        let test = stry!(guard.run(opts, context, aggrs, event, meta, local, consts));
         match test.borrow() {
             Value::Bool(b) => Ok(*b),
             other => error_guard_not_bool(outer, guard, other),
@@ -578,7 +629,9 @@ where
 #[inline]
 fn test_predicate_expr<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -596,31 +649,55 @@ where
     match pattern {
         Pattern::Record(ref rp) => {
             if stry!(match_rp_expr(
-                outer, false, context, event, meta, local, consts, &target, &rp
+                outer,
+                opts.without_result(),
+                context,
+                aggrs,
+                event,
+                meta,
+                local,
+                consts,
+                &target,
+                &rp
             ))
             .is_some()
             {
-                test_guard(outer, context, event, meta, local, consts, guard)
+                test_guard(
+                    outer, opts, context, aggrs, event, meta, local, consts, guard,
+                )
             } else {
                 Ok(false)
             }
         }
         Pattern::Array(ref ap) => {
             if stry!(match_ap_expr(
-                outer, false, context, event, meta, local, consts, &target, &ap
+                outer,
+                opts.without_result(),
+                context,
+                aggrs,
+                event,
+                meta,
+                local,
+                consts,
+                &target,
+                &ap
             ))
             .is_some()
             {
-                test_guard(outer, context, event, meta, local, consts, guard)
+                test_guard(
+                    outer, opts, context, aggrs, event, meta, local, consts, guard,
+                )
             } else {
                 Ok(false)
             }
         }
         Pattern::Expr(ref expr) => {
-            let v = stry!(expr.run(context, event, meta, local, consts));
+            let v = stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
             let vb: &Value = v.borrow();
             if val_eq(target, vb) {
-                test_guard(outer, context, event, meta, local, consts, guard)
+                test_guard(
+                    outer, opts, context, aggrs, event, meta, local, consts, guard,
+                )
             } else {
                 Ok(false)
             }
@@ -629,38 +706,62 @@ where
             match *a.pattern {
                 Pattern::Array(ref ap) => {
                     if let Some(v) = stry!(match_ap_expr(
-                        outer, true, context, event, meta, local, consts, &target, &ap,
+                        outer,
+                        opts.with_result(),
+                        context,
+                        aggrs,
+                        event,
+                        meta,
+                        local,
+                        consts,
+                        &target,
+                        &ap,
                     )) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, a.idx, v));
-                        test_guard(outer, context, event, meta, local, consts, guard)
+                        test_guard(
+                            outer, opts, context, aggrs, event, meta, local, consts, guard,
+                        )
                     } else {
                         Ok(false)
                     }
                 }
                 Pattern::Record(ref rp) => {
                     if let Some(v) = stry!(match_rp_expr(
-                        outer, true, context, event, meta, local, consts, &target, &rp,
+                        outer,
+                        opts.with_result(),
+                        context,
+                        aggrs,
+                        event,
+                        meta,
+                        local,
+                        consts,
+                        &target,
+                        &rp,
                     )) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, a.idx, v));
 
-                        test_guard(outer, context, event, meta, local, consts, guard)
+                        test_guard(
+                            outer, opts, context, aggrs, event, meta, local, consts, guard,
+                        )
                     } else {
                         Ok(false)
                     }
                 }
                 Pattern::Expr(ref expr) => {
-                    let v = stry!(expr.run(context, event, meta, local, consts));
+                    let v = stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
                     let vb: &Value = v.borrow();
                     if val_eq(target, vb) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, a.idx, v.into_owned()));
 
-                        test_guard(outer, context, event, meta, local, consts, guard)
+                        test_guard(
+                            outer, opts, context, aggrs, event, meta, local, consts, guard,
+                        )
                     } else {
                         Ok(false)
                     }
@@ -675,8 +776,9 @@ where
 #[inline]
 fn match_rp_expr<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
-    result_needed: bool,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -690,7 +792,11 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut acc = HashMap::with_capacity(if result_needed { rp.fields.len() } else { 0 });
+    let mut acc = HashMap::with_capacity(if opts.result_needed {
+        rp.fields.len()
+    } else {
+        0
+    });
     for pp in &rp.fields {
         let key: Cow<str> = pp.lhs().into();
 
@@ -706,8 +812,8 @@ where
                     }
                     _ => return Ok(None),
                 };
-                if let Ok(x) = test.extractor.extract(result_needed, &testee, context) {
-                    if result_needed {
+                if let Ok(x) = test.extractor.extract(opts.result_needed, &testee, context) {
+                    if opts.result_needed {
                         acc.insert(key, x);
                     }
                 } else {
@@ -725,7 +831,7 @@ where
                     }
                     _ => return Ok(None),
                 };
-                let rhs = stry!(rhs.run(context, event, meta, local, consts));
+                let rhs = stry!(rhs.run(opts, context, aggrs, event, meta, local, consts));
                 let vb: &Value = rhs.borrow();
                 let r = val_eq(testee, vb);
                 let m = if *not { !r } else { r };
@@ -739,7 +845,7 @@ where
             PredicatePattern::FieldPresent { .. } => match target.as_object() {
                 Some(ref o) => {
                     if let Some(v) = o.get(&key) {
-                        if result_needed {
+                        if opts.result_needed {
                             acc.insert(key, v.clone());
                         }
                         continue;
@@ -772,18 +878,10 @@ where
                 };
                 if testee.is_object() {
                     match stry!(match_rp_expr(
-                        outer,
-                        result_needed,
-                        context,
-                        event,
-                        meta,
-                        local,
-                        consts,
-                        testee,
-                        pattern,
+                        outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
                         Some(m) => {
-                            if result_needed {
+                            if opts.result_needed {
                                 acc.insert(key, m);
                             }
                             continue;
@@ -809,18 +907,10 @@ where
                 };
                 if testee.is_array() {
                     match stry!(match_ap_expr(
-                        outer,
-                        result_needed,
-                        context,
-                        event,
-                        meta,
-                        local,
-                        consts,
-                        testee,
-                        pattern,
+                        outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
                         Some(r) => {
-                            if result_needed {
+                            if opts.result_needed {
                                 acc.insert(key, r);
                             }
 
@@ -843,8 +933,9 @@ where
 #[inline]
 fn match_ap_expr<'run, 'event, 'script, Ctx, Expr>(
     outer: &'script Expr,
-    result_needed: bool,
+    opts: ExecOpts,
     context: &'run Ctx,
+    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
@@ -860,17 +951,17 @@ where
 {
     match target {
         Value::Array(ref a) => {
-            let mut acc = Vec::with_capacity(if result_needed { a.len() } else { 0 });
+            let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
             let mut idx = 0;
             for candidate in a {
                 'inner: for expr in &ap.exprs {
                     match expr {
                         ArrayPredicatePattern::Expr(e) => {
-                            let r = stry!(e.run(context, event, meta, local, consts));
+                            let r = stry!(e.run(opts, context, aggrs, event, meta, local, consts));
                             let vb: &Value = r.borrow();
 
                             // NOTE: We are creating a new value here so we have to clone
-                            if val_eq(candidate, vb) && result_needed {
+                            if val_eq(candidate, vb) && opts.result_needed {
                                 acc.push(Value::Array(vec![Value::Array(vec![
                                     Value::I64(idx),
                                     r.into_owned(),
@@ -879,9 +970,10 @@ where
                         }
                         ArrayPredicatePattern::Tilde(test) => {
                             if let Ok(r) =
-                                test.extractor.extract(result_needed, &candidate, context)
+                                test.extractor
+                                    .extract(opts.result_needed, &candidate, context)
                             {
-                                if result_needed {
+                                if opts.result_needed {
                                     acc.push(Value::Array(vec![Value::Array(vec![
                                         Value::I64(idx),
                                         r,
@@ -893,17 +985,10 @@ where
                         }
                         ArrayPredicatePattern::Record(rp) => {
                             if let Some(r) = stry!(match_rp_expr(
-                                outer,
-                                result_needed,
-                                context,
-                                event,
-                                meta,
-                                local,
-                                consts,
-                                candidate,
+                                outer, opts, context, aggrs, event, meta, local, consts, candidate,
                                 rp,
                             )) {
-                                if result_needed {
+                                if opts.result_needed {
                                     acc.push(Value::Array(vec![Value::Array(vec![
                                         Value::I64(idx),
                                         r,
@@ -915,17 +1000,10 @@ where
                         }
                         ArrayPredicatePattern::Array(ap) => {
                             if let Some(r) = stry!(match_ap_expr(
-                                outer,
-                                result_needed,
-                                context,
-                                event,
-                                meta,
-                                local,
-                                consts,
-                                candidate,
+                                outer, opts, context, aggrs, event, meta, local, consts, candidate,
                                 ap,
                             )) {
-                                if result_needed {
+                                if opts.result_needed {
                                     acc.push(Value::Array(vec![Value::Array(vec![
                                         Value::I64(idx),
                                         r,

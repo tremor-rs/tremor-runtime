@@ -82,7 +82,9 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                 #[cfg(feature = "ws-echo")]
                 ctx.text(&bin);
                 let mut ingest_ns = nanotime();
-                if let Ok(data) = handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.into_bytes()) {
+                if let Ok(data) =
+                    handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.into_bytes())
+                {
                     for d in data {
                         if let Err(e) = self.tx.send(WsOnrampMessage::Data(ingest_ns, d)) {
                             error!("Websocket onramp message error: {}", e)

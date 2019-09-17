@@ -98,7 +98,7 @@ fn onramp_loop(
             &mut preprocessors,
             &mut codec,
             &mut ingest_ns,
-            id,            
+            id,
             line?.as_bytes().to_vec(),
         );
         id += 1;
