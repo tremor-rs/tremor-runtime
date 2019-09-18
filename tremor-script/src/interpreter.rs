@@ -37,6 +37,7 @@ use crate::registry::Context;
 use crate::stry;
 use halfbrown::hashmap;
 use halfbrown::HashMap;
+use serde::Serialize;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
@@ -107,6 +108,9 @@ impl ExecOpts {
 
 #[inline]
 fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
+    // FIXME Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
+    // across builtin types if/when extending for 'lt' and 'gt' variants
+    //
     use Value::*;
     let error = std::f64::EPSILON;
     match (lhs, rhs) {
@@ -233,7 +237,7 @@ pub fn resolve<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {
@@ -481,7 +485,7 @@ fn patch_value<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<()>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {
@@ -611,7 +615,7 @@ fn test_guard<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {
@@ -642,7 +646,7 @@ fn test_predicate_expr<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {
@@ -788,7 +792,7 @@ fn match_rp_expr<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {
@@ -945,7 +949,7 @@ fn match_ap_expr<'run, 'event, 'script, Ctx, Expr>(
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context,
+    Ctx: Context + Serialize,
     'script: 'event,
     'event: 'run,
 {

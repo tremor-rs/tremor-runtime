@@ -22,11 +22,91 @@ use std::borrow::Cow;
 
 grammar<'input>;
 
-
 ////////////////////////////// Root statements //////////////////////////////
 // These statments for the root of the language.
 
 /// Root
+pub Query : Query1<'input> = {
+    <stmts:Stmts> "<end-of-stream>"? => Query1{stmts},
+}
+
+Stmts: Stmts1<'input> = {
+  <stmt:Stmt> ";" <list:Stmts> => {
+    let mut list = list;
+    list.insert(0,stmt);
+    list
+  },
+  <item:Stmt> ";"? => vec![item],
+}
+
+WindowKind: WindowKind = {
+  "sliding" => WindowKind::Sliding,
+  "tumbling" => WindowKind::Tumbling,
+}
+
+Stmt: Stmt1<'input> = {
+    <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
+    <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, kind, id: id.id.to_string(), params: None }),
+    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl { start, end, kind, id: id.id.to_string(), params }),
+    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <end:@L> => Stmt1::OperatorDecl(OperatorDecl { start, end, kind, id: id.id.to_string(), params: None }),
+    <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
+    <start:@L> "create" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params: None }),
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having: None})),
+   <start:@L> "select" <target:ExprImut> "from" <from:Ident> <win:WindowDefn> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having: None})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <win:WindowDefn> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <there:WhereClause> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: there, maybe_having: None})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <win:WindowDefn> <there:WhereClause> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: there, maybe_having: None})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <there:WhereClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: there, maybe_having})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <win:WindowDefn> <there:WhereClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: there, maybe_having}))
+}
+
+WindowDefn: WindowDefn1 = {
+  <start:@L> "[" <id:Ident> "]" <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() }
+}
+
+WhereClause: Option<ImutExpr1<'input>> = {
+    "where" <expr:ComplexExprImut> => Some(expr),
+}
+
+HavingClause: Option<ImutExpr1<'input>> = {
+    "having" <expr:ComplexExprImut> => Some(expr),
+}
+
+// GroupByClause: Option<GroupByExpr1<'input>> = {
+//    "group" "by"
+//}
+
+// GroupBy
+
+WithClause: Option<Exprs1<'input>> = {
+    "with" <exprs:WithExprs> "end" => Some(exprs),
+}
+
+WithExprs: Exprs1<'input> = {
+    <item:WithExpr> "," <list:WithExprs> => {
+       let mut list = list;
+       list.push(item);
+       list
+    },
+    <item:WithExpr> ","? => vec![item],
+}
+
+WithExpr: Expr1<'input> = {
+    <start:@L> <expr:Assignment> <end:@L> => expr, 
+}
+
+OperatorKind: OperatorKind = {
+    <start:@L> <module:Ident> "::" <oper:Ident> <end:@L> => OperatorKind { start, end, module:  module.id.to_string(), operation: oper.id.to_string() }
+}
+
+EmbeddedScript: Script1<'input> = {
+    "script" <exprs:Exprs> "end" => Script1{exprs},
+}
+
+///////////////////////////////////////
+
 pub Script : Script1<'input> = {
     <exprs:Exprs> "<end-of-stream>"? => Script1{exprs},
 }
@@ -35,8 +115,8 @@ pub Script : Script1<'input> = {
 Exprs: Exprs1<'input> = {
     <expr:MayBeConstExpr> ";" <list:Exprs> => {
        let mut list = list;
-        list.insert(0,expr);
-        list
+       list.insert(0,expr);
+       list
     },
     <item:MayBeConstExpr> ";"? => vec![item],
 }
@@ -622,7 +702,7 @@ Fields: Fields1<'input> = {
 
 #[inline]
 Ident: Ident<'input> = {
-    "<ident>" => Ident { id: <>.0 },
+    <start:@L> <name:"<ident>"> <end:@L> => Ident { id: name.0, start, end },
 }
 
 #[inline]
@@ -755,6 +835,22 @@ extern {
         "<ident>" => lexer::Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => lexer::Token::BadToken(<String>),
         "<end-of-stream>" => lexer::Token::EndOfStream,
+
+        "select" => lexer::Token::Select,
+        "from" => lexer::Token::From,
+        "into" => lexer::Token::Into,
+        "create" => lexer::Token::Create,
+        "tumbling" => lexer::Token::Tumbling,
+        "sliding" => lexer::Token::Sliding,
+        "window" => lexer::Token::Window,
+        "stream" => lexer::Token::Stream,
+        "operator" => lexer::Token::Operator,
+        "where" => lexer::Token::Where,
+        "with" => lexer::Token::With,
+        "script" => lexer::Token::Script,
+        "having" => lexer::Token::Having,
+        "group" => lexer::Token::Group,
+        "by" => lexer::Token::By,
     }
 }
 

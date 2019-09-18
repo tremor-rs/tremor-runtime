@@ -2,7 +2,9 @@ onramp:
   - id: udp
     type: udp
     preprocessors:
-      - lines
+      - decompress
+      - gelf-chunking
+      - decompress
     codec: json
     config:
       host: 127.0.0.1

@@ -14,7 +14,7 @@
 #![recursion_limit = "265"]
 #![forbid(warnings)]
 
-mod ast;
+pub mod ast;
 mod compat;
 mod datetime;
 pub mod errors;
@@ -23,13 +23,13 @@ pub mod grok;
 pub mod highlighter;
 pub mod influx;
 pub mod interpreter;
-mod lexer;
+pub mod lexer;
 #[allow(unused, dead_code)]
-mod parser;
+pub mod parser;
 #[allow(unused, dead_code)]
-mod pos;
+pub mod pos;
 pub mod registry;
-mod script;
+pub mod script;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
@@ -55,7 +55,7 @@ pub use crate::registry::{
     aggr_registry, registry, AggrRegistry, Context, Registry, TremorAggrFn, TremorAggrFnWrapper,
     TremorFn, TremorFnWrapper,
 };
-pub use crate::script::{Return, Script};
+pub use crate::script::{Return, Script, QueryRentalWrapper, StmtRentalWrapper };
 
 rental! {
     pub mod rentals {
@@ -123,6 +123,21 @@ impl PartialEq for LineValue {
 
 pub use rentals::Value as LineValue;
 
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub struct EventContext {
+    pub at: u64,
+}
+
+impl crate::registry::Context for EventContext {
+    fn ingest_ns(&self) -> u64 {
+        self.at
+    }
+
+    fn from_ingest_ns(ingest_ns: u64) -> Self {
+        EventContext { at: ingest_ns }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,9 +167,9 @@ mod tests {
 
             let actual = parser::grammar::ScriptParser::new()
                 .parse(filtered_tokens)
-                .expect("exeuction failed")
+                .expect("execution failed")
                 .up_script(&r, &ar)
-                .expect("exeuction failed");
+                .expect("execution failed");
             assert_matches!(
                 actual.0.exprs[0],
                 Expr::Imut(ImutExpr::Literal(Literal {
@@ -180,8 +195,7 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let aggr_reg: AggrRegistry = aggr_registry();
-            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
@@ -212,8 +226,7 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let aggr_reg: AggrRegistry = aggr_registry();
-            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
@@ -238,8 +251,7 @@ mod tests {
                 }
             }
             let reg: Registry<()> = registry::registry();
-            let aggr_reg: AggrRegistry = aggr_registry();
-            let runnable: Script<()> = Script::parse($src, &reg, &aggr_reg).expect("parse failed");
+            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
@@ -423,3 +435,5 @@ mod tests {
         );
     }
 }
+
+

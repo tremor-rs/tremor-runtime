@@ -1,3 +1,4 @@
+# Bad to the bone
 match "dont-care" of
   case "dont-care" when emit "error" => "ouch"
   default => "ouch"

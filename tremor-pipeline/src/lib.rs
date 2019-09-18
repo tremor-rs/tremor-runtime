@@ -32,37 +32,41 @@ use petgraph::dot::{Config, Dot};
 use petgraph::graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
+use serde::Serialize;
 use simd_json::json;
 use simd_json::{BorrowedValue, OwnedValue};
 use std::iter;
 use std::iter::Iterator;
+use std::sync::Arc;
 use std::sync::Mutex;
-use tremor_script::{LineValue, Registry, TremorFnWrapper};
+use tremor_script::{LineValue, Registry, TremorFnWrapper, EventContext};
 
 pub mod config;
 pub mod errors;
 #[macro_use]
 mod macros;
-mod op;
+pub mod op;
 
-pub use op::runtime::tremor::TremorContext;
 pub use op::{InitializableOperator, Operator};
 pub type MetaValue = simd_json::value::owned::Value;
 pub type MetaMap = simd_json::value::owned::Map;
 pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
-pub type NodeLookupFn = fn(node: &NodeConfig) -> Result<OperatorNode>;
+pub type NodeLookupFn<Ctx> = fn(
+    node: &NodeConfig<Ctx>,
+    stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+) -> Result<OperatorNode>;
 pub type NodeMap = HashMap<String, NodeIndex>;
 
 lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
-    pub static ref FN_REGISTRY: Mutex<Registry<TremorContext>> = {
+    pub static ref FN_REGISTRY: Mutex<Registry<EventContext>> = {
         use tremor_script::registry::FResult;
-        let mut registry: Registry<TremorContext> = tremor_script::registry();
+        let mut registry: Registry<EventContext> = tremor_script::registry();
         #[allow(unused_variables)]
-        fn ingest_ns<'event>(ctx: &TremorContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
-            Ok(BorrowedValue::I64(ctx.ingest_ns as i64))
+        fn ingest_ns<'event>(ctx: &EventContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
+            Ok(BorrowedValue::I64(ctx.at as i64))
         }
         registry
             .insert(TremorFnWrapper {
@@ -76,14 +80,15 @@ lazy_static! {
 }
 
 #[derive(Clone, Debug)]
-pub struct Pipeline {
+pub struct Pipeline
+{
     pub id: config::ID,
-    inputs: HashMap<String, NodeIndex>,
-    port_indexes: PortIndexMap,
-    outputs: Vec<NodeIndex>,
+    pub inputs: HashMap<String, NodeIndex>,
+    pub port_indexes: PortIndexMap,
+    pub outputs: Vec<NodeIndex>,
     pub config: config::Pipeline,
-    nodes: NodeMap,
-    graph: ConfigGraph,
+    pub nodes: NodeMap,
+    pub graph: ConfigGraph,
 }
 
 pub type PipelineVec = Vec<Pipeline>;
@@ -182,19 +187,20 @@ pub enum SignalKind {
 }
 
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
-pub struct NodeConfig {
-    id: String,
-    kind: NodeKind,
-    _type: String,
-    config: config::ConfigMap,
+pub struct NodeConfig<Ctx: tremor_script::Context + Serialize + Clone + 'static> {
+    pub id: String,
+    pub kind: NodeKind,
+    pub _type: String,
+    pub config: config::ConfigMap,
+    pub stmt: Option<Arc<tremor_script::StmtRentalWrapper<Ctx>>>,
 }
 
 #[derive(Debug)]
 pub struct OperatorNode {
-    id: String,
-    kind: NodeKind,
-    _type: String,
-    op: Box<dyn Operator>,
+    pub id: String,
+    pub kind: NodeKind,
+    pub _type: String,
+    pub op: Box<dyn Operator>,
 }
 
 impl Operator for OperatorNode {
@@ -222,15 +228,26 @@ impl Operator for OperatorNode {
 }
 
 // TODO We need an actual operator registry ...
-pub fn buildin_ops(node: &NodeConfig) -> Result<OperatorNode> {
+pub fn buildin_ops<Ctx: tremor_script::Context>(
+    node: &NodeConfig<Ctx>,
+    stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+) -> Result<OperatorNode>
+where
+    Ctx: tremor_script::Context + Clone + serde::Serialize + 'static,
+{
     // Resolve from registry
+
+    let _ = stmt;
+
     use op::debug::EventHistoryFactory;
     use op::generic::{BackpressureFactory, BatchFactory};
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     use op::runtime::TremorFactory;
+    //    use op::trickle::TrickleSelectFactory;
     let name_parts: Vec<&str> = node._type.split("::").collect();
     let factory = match name_parts.as_slice() {
+        // ["trickle", "select"] => TrickleSelectFactory::new_boxed(),
         ["passthrough"] => PassthroughFactory::new_boxed(),
         ["debug", "history"] => EventHistoryFactory::new_boxed(),
         ["runtime", "tremor"] => TremorFactory::new_boxed(),
@@ -250,9 +267,16 @@ pub fn buildin_ops(node: &NodeConfig) -> Result<OperatorNode> {
     })
 }
 
-impl NodeConfig {
-    fn to_op(&self, resolver: NodeLookupFn) -> Result<OperatorNode> {
-        resolver(&self)
+impl<Ctx> NodeConfig<Ctx>
+where
+    Ctx: tremor_script::Context + Serialize + 'static,
+{
+    pub fn to_op(
+        &self,
+        resolver: NodeLookupFn<Ctx>,
+        stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+    ) -> Result<OperatorNode> {
+        resolver(&self, stmt)
     }
 }
 
@@ -265,10 +289,11 @@ pub enum Edge {
 }
 
 type Weightless = ();
-pub type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
+pub type ConfigGraph = graph::DiGraph<NodeConfig<EventContext>, Weightless>;
 pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
 
-pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
+pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline>
+{
     let mut graph = ConfigGraph::new();
     let mut nodes = HashMap::new(); // <String, NodeIndex>
     let mut inputs = HashMap::new();
@@ -280,6 +305,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Input,
             _type: "passthrough".to_string(),
             config: None, // passthrough has no config
+            stmt: None,   // FIXME
         });
         nodes.insert(stream.clone(), id);
         inputs.insert(stream.clone(), id);
@@ -292,6 +318,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Operator,
             _type: node.node_type.clone(),
             config: node.config.clone(),
+            stmt: None, // FIXME
         });
         nodes.insert(node_id, id);
     }
@@ -302,6 +329,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Output,
             _type: "passthrough".to_string(),
             config: None, // passthrough has no config
+            stmt: None,   // FIXME
         });
         nodes.insert(stream.clone(), id);
         outputs.push(id);
@@ -313,6 +341,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         kind: NodeKind::Output,
         _type: "passthrough".to_string(),
         config: None, // passthrough has no config
+        stmt: None,   // FIXME
     });
     nodes.insert("metrics".to_string(), id);
     outputs.push(id);
@@ -356,7 +385,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
 }
 
 #[derive(Debug, Default, Clone)]
-struct NodeMetrics {
+pub struct NodeMetrics {
     inputs: HashMap<String, u64>,
     outputs: HashMap<String, u64>,
 }
@@ -404,17 +433,17 @@ pub struct ExecutableGraph {
     pub id: String,
     pub graph: Vec<OperatorNode>,
     pub inputs: HashMap<String, usize>,
-    stack: Vec<(usize, String, Event)>,
-    signalflow: Vec<usize>,
-    contraflow: Vec<usize>,
-    port_indexes: ExecPortIndexMap,
-    metrics: Vec<NodeMetrics>,
-    metrics_idx: usize,
-    last_metrics: u64,
-    metric_interval: Option<u64>,
+    pub stack: Vec<(usize, String, Event)>,
+    pub signalflow: Vec<usize>,
+    pub contraflow: Vec<usize>,
+    pub port_indexes: ExecPortIndexMap,
+    pub metrics: Vec<NodeMetrics>,
+    pub metrics_idx: usize,
+    pub last_metrics: u64,
+    pub metric_interval: Option<u64>,
 }
 
-type Returns = Vec<(String, Event)>;
+pub type Returns = Vec<(String, Event)>;
 impl ExecutableGraph {
     /// This is a performance critial function!
     pub fn enqueue(
@@ -590,7 +619,8 @@ impl ExecutableGraph {
     }
 }
 
-impl Pipeline {
+impl Pipeline
+{
     pub fn to_dot(&self) -> String {
         let mut res = "digraph{\n".to_string();
         let mut edges = String::new();
@@ -608,7 +638,8 @@ impl Pipeline {
         res
     }
 
-    pub fn to_executable_graph(&self, resolver: NodeLookupFn) -> Result<ExecutableGraph> {
+    // FIXME no explicit ref to EventContext for lookup ...
+    pub fn to_executable_graph(&self, resolver: NodeLookupFn<EventContext>) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();
         // Nodes that handle contraflow
@@ -617,7 +648,7 @@ impl Pipeline {
         let mut signalflow = Vec::new();
         for (i, nx) in self.graph.node_indices().enumerate() {
             i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(resolver)?;
+            let op = self.graph[nx].to_op(resolver, None)?;
             if op.handles_contraflow() {
                 contraflow.push(i);
             }
@@ -684,7 +715,7 @@ mod test {
     fn distsys_exec() {
         // FIXME check/fix and move to integration tests - this is out of place as a unit test
         let c = slurp("tests/configs/distsys.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let mut e = p
             .to_executable_graph(buildin_ops)
             .expect("failed to build executable graph");
@@ -731,7 +762,7 @@ mod test {
     #[test]
     fn simple_graph_exec() {
         let c = slurp("tests/configs/simple_graph.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let mut e = p
             .to_executable_graph(buildin_ops)
             .expect("failed to build executable graph");
@@ -754,7 +785,7 @@ mod test {
     #[test]
     fn complex_graph_exec() {
         let c = slurp("tests/configs/two_input_complex_graph.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         println!("{}", p.to_dot());
         let mut e = p
             .to_executable_graph(buildin_ops)
@@ -849,7 +880,7 @@ mod test {
     #[test]
     fn load_simple() {
         let c = slurp("tests/configs/pipe.simple.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let l = p.config.links.iter().next().expect("no links");
         assert_eq!(
             (&"in".to_string(), vec!["out".to_string()]),

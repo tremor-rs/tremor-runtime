@@ -150,6 +150,17 @@ impl Preprocessor for Influx {
 }
 
 #[derive(Clone)]
+struct Nulls {}
+impl Preprocessor for Nulls {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
+    }
+}
+
+#[derive(Clone)]
 struct Lines {}
 impl Preprocessor for Lines {
     fn as_any(&self) -> &dyn Any {

@@ -14,6 +14,7 @@
 
 use crate::ast::BaseExpr;
 use crate::tremor_fn;
+use chrono::{Timelike, Utc};
 use halfbrown::HashMap;
 use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
@@ -21,7 +22,7 @@ use std::default::Default;
 use std::fmt;
 use std::ops::Range;
 
-pub trait TremorAggrFn: Send {
+pub trait TremorAggrFn: Sync + Send {
     fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
     fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
     fn emit<'event>(&self) -> FResult<Value<'event>>;
@@ -50,6 +51,15 @@ pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
             })
         }
     }));
+
+    registry.insert(tremor_fn!(system::ingest_ns(_context) {
+        let now = Utc::now();
+        let seconds: u64 = now.timestamp() as u64;
+        let nanoseconds: u64 = u64::from(now.nanosecond());
+
+        Ok(Value::from((seconds * 1_000_000_000) + nanoseconds))
+    }));
+
     crate::std_lib::load(&mut registry);
     registry
 }
@@ -138,13 +148,23 @@ impl FunctionError {
     }
 }
 
-pub trait Context: Default + Clone + PartialEq + std::fmt::Debug {
+pub trait Context: Default + Clone + PartialEq + std::fmt::Debug + std::marker::Send {
     fn ingest_ns(&self) -> u64;
+    fn from_ingest_ns(ingest_ns: u64) -> Self;
 }
 
 impl Context for () {
     fn ingest_ns(&self) -> u64 {
-        0
+        let now = Utc::now();
+        let seconds: u64 = now.timestamp() as u64;
+        let nanoseconds: u64 = u64::from(now.nanosecond());
+
+        (seconds * 1_000_000_000) + nanoseconds
+    }
+
+    fn from_ingest_ns(ingest_ns: u64) -> () {
+        let _ = ingest_ns;
+        ()
     }
 }
 

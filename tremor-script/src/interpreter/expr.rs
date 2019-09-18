@@ -20,6 +20,7 @@ use crate::ast::*;
 use crate::errors::*;
 use crate::registry::Context;
 use crate::stry;
+use serde::Serialize;
 use simd_json::value::borrowed::{Map, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
@@ -70,7 +71,7 @@ macro_rules! demit {
     };
 }
 
-impl<'script, 'event, 'run, Ctx: Context + Clone> Expr<'script, Ctx>
+impl<'script, 'event, 'run, Ctx: Context + Serialize + Clone> Expr<'script, Ctx>
 where
     Ctx: Context + Clone,
     'script: 'event,

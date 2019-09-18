@@ -1,7 +1,3 @@
-/// Dummy functions that get replaced wiuth real ones as part
-/// of the runtime system.
-/// This is used to allow runing tremor-script on full
-/// scripts outside of the runtime.
 // Copyright 2018-2019, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::registry::{Context, Registry};
-// use crate::tremor_fn;
 
-pub fn load<Ctx: 'static + Context>(_registry: &mut Registry<Ctx>) {
-    //    registry.insert(tremor_fn! (system::ingest_ns(_context) {
-    //        Ok(Value::from(0))
-    //    }));
+use crate::pos::{Location, Range};
+
+pub trait BaseStmt: Clone {
+    fn s(&self) -> Location;
+    fn e(&self) -> Location;
+    fn extent(&self) -> Range {
+        Range(self.s(), self.e())
+    }
 }

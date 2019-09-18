@@ -17,6 +17,7 @@ pub mod generic;
 pub mod grouper;
 pub mod identity;
 pub mod runtime;
+pub mod trickle;
 
 use super::{Event, NodeConfig};
 use crate::errors::*;
@@ -48,6 +49,9 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 }
 
-pub trait InitializableOperator {
-    fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+pub trait InitializableOperator<Ctx>
+where
+    Ctx: tremor_script::Context + serde::Serialize + 'static,
+{
+    fn from_node(&self, node: &NodeConfig<Ctx>) -> Result<Box<dyn Operator>>;
 }

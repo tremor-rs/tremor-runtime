@@ -17,10 +17,13 @@ macro_rules! op {
     ($factory:ident ($node:ident) $constructor:block) => {
         #[derive(Default)]
         pub struct $factory {}
-        impl crate::op::InitializableOperator for $factory {
+        impl<Ctx> crate::op::InitializableOperator<Ctx> for $factory
+        where
+            Ctx: tremor_script::Context + serde::Serialize + Clone + 'static,
+        {
             fn from_node(
                 &self,
-                $node: &crate::NodeConfig,
+                $node: &crate::NodeConfig<Ctx>,
             ) -> crate::errors::Result<Box<dyn crate::op::Operator>> {
                 $constructor
             }
@@ -29,7 +32,10 @@ macro_rules! op {
             fn new() -> Self {
                 $factory {}
             }
-            pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator> {
+            pub fn new_boxed<Ctx>() -> Box<dyn crate::op::InitializableOperator<Ctx>>
+            where
+                Ctx: tremor_script::Context + serde::Serialize + 'static,
+            {
                 Box::new(Self::new())
             }
         }

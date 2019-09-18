@@ -3,4 +3,4 @@ let dillo = "dillo";
 emit [
     string::format("hello {} {}", $arma, dillo ),
     system::hostname()
-];
+] => "snot";

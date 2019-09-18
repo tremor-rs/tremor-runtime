@@ -48,7 +48,7 @@ impl Range {
     }
 }
 
-impl<'script, Ctx: Context + Clone> From<Expr<'script, Ctx>> for Range {
+impl<'script, Ctx: Context + Serialize + Clone> From<Expr<'script, Ctx>> for Range {
     fn from(expr: Expr<'script, Ctx>) -> Range {
         expr.extent()
     }

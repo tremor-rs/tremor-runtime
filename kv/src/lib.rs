@@ -48,7 +48,7 @@
 // | value_split_pattern    | not supported                                           | No        |
 // | whitespace             | we always run in 'lenient mode' as is the default of LS | No        |
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use simd_json::value::borrowed::{Map, Value};
 use std::fmt;
 
@@ -68,7 +68,7 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(PartialEq, Debug, Clone, Serialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Pattern {
     field_seperators: Vec<String>,
     key_seperators: Vec<String>,

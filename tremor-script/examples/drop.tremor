@@ -2,5 +2,5 @@
 ## Drop
 ##
 
-emit 20; # we return here
-emit 30;  # never gets executed
+drop 20; # we return here
+drop 30;  # never gets executed

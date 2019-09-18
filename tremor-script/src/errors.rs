@@ -17,7 +17,7 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 
-use crate::ast::{self, BaseExpr, Expr};
+use crate::ast::{self, BaseExpr, BaseStmt, Expr, Ident};
 use crate::errors;
 use crate::lexer;
 use crate::pos;
@@ -31,6 +31,7 @@ use grok;
 use lalrpop_util;
 use lalrpop_util::ParseError as LalrpopError;
 use regex;
+use serde::{Deserialize, Serialize};
 use serde_json;
 pub use simd_json::ValueType;
 use simd_json::{BorrowedValue as Value, ValueTrait};
@@ -126,6 +127,7 @@ impl ErrorKind {
     pub fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
+            QueryStreamNotDefined(outer, inner, _) => (Some(*outer), Some(*inner)),
             ArrayOutOfRange(outer, inner, _) => (Some(*outer), Some(*inner)),
             AssignIntoArray(outer, inner) => (Some(*outer), Some(*inner)),
             BadAccessInEvent(outer, inner, _, _) => (Some(*outer), Some(*inner)),
@@ -170,6 +172,8 @@ impl ErrorKind {
             AggrInAggr(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | PipelineError(_)
+            | CyclicGraphError(_)
             | Grok(_)
             | InvalidInfluxData(_)
             | Io(_)
@@ -284,6 +288,18 @@ error_chain! {
         Utf8Error(std::str::Utf8Error);
     }
     errors {
+        /*
+         * Query langauge pipeline conversion errors
+         */
+        PipelineError(g: String) {
+            description("Error detected in pipeline conversion")
+                display("Error detected in trickle: {}", g)
+        }
+
+        CyclicGraphError(g: String) {
+            description("Cycle detected in graph")
+                display("Cycle detected in graph: {}", g)
+        }
         /*
          * ParserError
          */
@@ -526,8 +542,35 @@ error_chain! {
                 display("Invalid Influx Line Protocol data: {}", s)
         }
 
+        /*
+         * Query stream declarations
+         */
+        QueryStreamNotDefined(stmt: Range, inner: Range, name: String) {
+            description("Stream is not defined")
+                display("Stream is not defined: {}", name)
+        }
     }
 }
+
+#[allow(dead_code)]
+pub fn query_stream_not_defined<T, S: BaseStmt, I: BaseStmt>(
+    stmt: &Box<S>,
+    inner: &I,
+    name: String,
+) -> Result<T> {
+    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name).into())
+}
+
+#[allow(dead_code)]
+pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+    stmt: &Box<O>,
+    inner: &I,
+    _got: &Value,
+) -> Result<T> {
+    // FIXME Should actually say expected/actualf or type ( error_type_conflict )
+    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), "snot at error type conflict".to_string()).into())
+}
+
 
 pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
@@ -629,7 +672,7 @@ pub fn error_assign_to_const<T, O: BaseExpr>(outer: &O, name: String) -> Result<
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
 }
-pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context + Serialize>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script, Ctx>,
@@ -645,7 +688,7 @@ pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Conte
     })
 }
 
-pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context + Serialize>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script, Ctx>,
