@@ -925,10 +925,25 @@ impl<'script> InvokeAggr1<'script> {
         helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> Result<InvokeAggr> {
         if helper.is_in_aggr {
-            // FIXME better error: Aggregate in aggregate isn't allowed
-            return Err(ErrorKind::Oops(self.extent().expand_lines(2)).into());
+            return Err(ErrorKind::AggrInAggr(self.extent(), self.extent().expand_lines(2)).into());
         };
         helper.is_in_aggr = true;
+        let invocable = helper
+            .aggr_reg
+            .find(&self.module, &self.fun)
+            .map_err(|e| e.into_err(&self, &self, Some(&helper.reg)))?
+            .clone();
+        if !invocable.valid_arity(self.args.len()) {
+            return Err(ErrorKind::BadArity(
+                self.extent(),
+                self.extent().expand_lines(2),
+                self.module.clone(),
+                self.fun.clone(),
+                invocable.arity(),
+                self.args.len(),
+            )
+            .into());
+        }
         let args: Result<ImutExprs<'script, Ctx>> = self
             .args
             .clone()
@@ -936,11 +951,6 @@ impl<'script> InvokeAggr1<'script> {
             .map(|p| p.up(helper))
             .collect();
         let args = args?;
-        let invocable = helper
-            .aggr_reg
-            .find(&self.module, &self.fun)
-            .map_err(|e| e.into_err(&self, &self, Some(&helper.reg)))?
-            .clone();
         let aggr_id = helper.aggregates.len();
         helper.aggregates.push(InvokeAggrFn {
             invocable,

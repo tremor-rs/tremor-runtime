@@ -152,7 +152,7 @@ mod tests {
             let actual = parser::grammar::ScriptParser::new()
                 .parse(filtered_tokens)
                 .expect("exeuction failed")
-                .up(&mut helper)
+                .script_up(&mut helper)
                 .expect("exeuction failed");
             assert_matches!(
                 actual.exprs[0],
