@@ -55,7 +55,7 @@ pub use crate::registry::{
     aggr_registry, registry, AggrRegistry, Context, Registry, TremorAggrFn, TremorAggrFnWrapper,
     TremorFn, TremorFnWrapper,
 };
-pub use crate::script::{Return, Script, QueryRentalWrapper, StmtRentalWrapper };
+pub use crate::script::{QueryRentalWrapper, Return, Script, StmtRentalWrapper};
 
 rental! {
     pub mod rentals {
@@ -435,5 +435,3 @@ mod tests {
         );
     }
 }
-
-

@@ -25,8 +25,8 @@ use crate::stry;
 use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;
-use std::sync::Arc;
 use std::marker::Send;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Return<'event> {
@@ -74,7 +74,7 @@ where
 #[derive(Debug)]
 pub struct QueryRentalWrapper<Ctx>
 where
-   Ctx: Context + Serialize + 'static,
+    Ctx: Context + Serialize + 'static,
 {
     pub query: Arc<rentals::Query<Ctx>>,
     pub source: String,
@@ -82,10 +82,10 @@ where
     pub locals: usize,
 }
 
-#[derive(Debug,PartialEq,PartialOrd,Eq,Hash)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub struct StmtRentalWrapper<Ctx>
 where
-   Ctx: Context + Serialize + 'static,
+    Ctx: Context + Serialize + 'static,
 {
     pub stmt: rentals::Stmt<Ctx>,
 }
@@ -123,32 +123,27 @@ rental! {
     }
 }
 
-unsafe 
-impl<Ctx> Send for rentals::Query<Ctx> 
+unsafe impl<Ctx> Send for rentals::Query<Ctx>
 where
-    Ctx: Context + Serialize +'static
+    Ctx: Context + Serialize + 'static,
 {
     // Nothing to do
 }
 
 impl<Ctx> PartialEq for rentals::Stmt<Ctx>
 where
-    Ctx: Context + Serialize +'static
+    Ctx: Context + Serialize + 'static,
 {
     fn eq(&self, other: &rentals::Stmt<Ctx>) -> bool {
         self.suffix() == other.suffix()
     }
 }
 
-impl<Ctx> Eq for rentals::Stmt<Ctx>
-where
-    Ctx: Context + Serialize +'static
-{
-}
+impl<Ctx> Eq for rentals::Stmt<Ctx> where Ctx: Context + Serialize + 'static {}
 
 impl<Ctx> PartialOrd for rentals::Stmt<Ctx>
 where
-    Ctx: Context + Serialize +'static
+    Ctx: Context + Serialize + 'static,
 {
     fn partial_cmp(&self, _other: &rentals::Stmt<Ctx>) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
@@ -157,13 +152,14 @@ where
 
 impl<Ctx> std::hash::Hash for rentals::Stmt<Ctx>
 where
-    Ctx: Context + Serialize +'static
+    Ctx: Context + Serialize + 'static,
 {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
         // self.suffix().stmt.hash(state);
         // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
         // .unwrap() :)
-    }}
+    }
+}
 
 impl<'run, 'event, 'script, Ctx> Script<Ctx>
 where
@@ -329,7 +325,11 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(script: &'script str, reg: &Registry<Ctx>, aggr_reg: &AggrRegistry) -> Result<Self> {        
+    pub fn parse(
+        script: &'script str,
+        reg: &Registry<Ctx>,
+        aggr_reg: &AggrRegistry,
+    ) -> Result<Self> {
         let mut source = script.to_string();
 
         let mut warnings = vec![];
@@ -375,8 +375,11 @@ where
     'event: 'run,
 {
     #[allow(dead_code)] // FIXME remove this shit
-    fn with_stmt<'elide>(query: &QueryRentalWrapper<Ctx>, encumbered_stmt: crate::ast::Stmt<'elide, Ctx>) -> Self {
-        StmtRentalWrapper { 
+    fn with_stmt<'elide>(
+        query: &QueryRentalWrapper<Ctx>,
+        encumbered_stmt: crate::ast::Stmt<'elide, Ctx>,
+    ) -> Self {
+        StmtRentalWrapper {
             stmt: rentals::Stmt::new(query.query.clone(), |_| {
                 // NOTE We are eliding the lifetime 'elide here which is the purpose
                 // of the rental and the rental wrapper, so we disabuse mem::trensmute
@@ -388,7 +391,7 @@ where
                 // are compatible by definition in their rentals::{Query,Struct} co-definitions
                 //
                 unsafe { std::mem::transmute(encumbered_stmt) }
-            })
+            }),
         }
     }
 }

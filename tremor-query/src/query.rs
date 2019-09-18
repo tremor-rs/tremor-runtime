@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use halfbrown::HashMap;
 use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
+use serde::Serialize;
 use tremor_script::ast::{self, *};
 use tremor_script::highlighter::{DumbHighlighter, Highlighter}; // , TermHighlighter, HighlighterError};
 use tremor_script::interpreter::{Cont, LocalStack};
@@ -22,8 +24,6 @@ use tremor_script::lexer::{self, TokenFuns};
 use tremor_script::parser::grammar;
 use tremor_script::pos::Range;
 use tremor_script::registry::{Context, Registry};
-use halfbrown::HashMap;
-use serde::Serialize;
 // use serde_json::json;
 // use chrono::{Timelike, Utc};
 use simd_json::borrowed::Value;
@@ -33,8 +33,8 @@ use tremor_pipeline::config::{self, InputPort, OutputPort};
 use tremor_pipeline::op;
 use tremor_pipeline::OperatorNode;
 use tremor_pipeline::{ConfigGraph, NodeConfig, NodeKind, Pipeline, PortIndexMap};
-use tremor_script::{EventContext, registry::AggrRegistry};
 use tremor_script::errors::*;
+use tremor_script::{registry::AggrRegistry, EventContext};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
     let v: Vec<&str> = port.split('/').collect();
@@ -227,7 +227,7 @@ where
 
         while let Some(stmt) = stmts.next() {
             match stmt {
-                Stmt::SelectStmt(s) => {
+                Stmt::SelectStmt { stmt: s, .. } => {
                     // dbg!((&s.from.id, &s.into.id));
                     let from = s.from.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
@@ -275,7 +275,7 @@ where
                         kind: NodeKind::Operator,
                         _type: "trickle::select".to_string(),
                         config: Some(serde_yaml::Value::Mapping(config)),
-                        stmt: None // FIXME
+                        stmt: None, // FIXME
                     });
                     nodes.insert(select_in.id.clone().into(), id);
                     outputs.push(id);
@@ -455,7 +455,7 @@ where
 
 pub fn supported_operators<Ctx>(
     node: &NodeConfig<Ctx>,
-    stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+    stmt: Option<tremor_script::StmtRentalWrapper<EventContext>>,
 ) -> std::result::Result<OperatorNode, tremor_pipeline::errors::Error>
 where
     Ctx: Context + Serialize + 'static,
@@ -474,10 +474,12 @@ where
             Box::new(TrickleSelect {
                 id: node.id.clone(),
                 stmt: stmt.expect("no surprises here unless there is"),
+                cnt: 0,
+                fake_window_size: 0,
             })
             // FIXME only needed during initial dev - then die die die i fire
-//            let op = PassthroughFactory::new_boxed();
-//            op.from_node(node)?
+            //            let op = PassthroughFactory::new_boxed();
+            //            op.from_node(node)?
             //                TrickleSelectFactory::new_boxed_w_stmt(node, stmt.expect("snot"))
         }
         ["passthrough"] => {

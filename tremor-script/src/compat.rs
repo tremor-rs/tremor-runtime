@@ -14,7 +14,7 @@
 
 use crate::errors::*;
 use crate::registry;
-use crate::registry::{Registry}; // AggrRegistry
+use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
 use simd_json::borrowed::{Map, Value};
 use std::ffi::CStr;

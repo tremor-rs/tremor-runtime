@@ -20,15 +20,15 @@ use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 pub trait TremorAggrFn: Sync + Send {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
-    fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
+    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     fn emit<'event>(&self) -> FResult<Value<'event>>;
     fn init(&mut self);
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
-    fn arity(&self) -> Range<usize>;
+    fn arity(&self) -> RangeInclusive<usize>;
     fn valid_arity(&self, n: usize) -> bool {
         self.arity().contains(&n)
     }
@@ -115,7 +115,7 @@ impl FunctionError {
         let inner = inner.extent();
         match self {
             BadArity { mfa, calling_a } => {
-                ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..mfa.a, calling_a).into()
+                ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..=mfa.a, calling_a).into()
             }
             RuntimeError { mfa, error } => {
                 ErrorKind::RuntimeError(outer, inner, mfa.m, mfa.f, mfa.a, error).into()
@@ -387,10 +387,10 @@ impl Clone for TremorAggrFnWrapper {
 }
 
 impl TremorAggrFnWrapper {
-    pub fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    pub fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.accumulate(args)
     }
-    pub fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.compensate(args)
     }
     pub fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -402,7 +402,7 @@ impl TremorAggrFnWrapper {
     pub fn valid_arity<'event>(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
-    pub fn arity<'event>(&self) -> Range<usize> {
+    pub fn arity<'event>(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
 }
