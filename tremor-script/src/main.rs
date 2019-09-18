@@ -35,6 +35,7 @@ mod tilde;
 #[macro_use]
 extern crate rental;
 
+use crate::errors::*;
 use crate::highlighter::{Highlighter, TermHighlighter};
 use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
@@ -49,7 +50,7 @@ extern crate serde_derive;
 
 use crate::registry::{AggrRegistry, Context, Registry, TremorFnWrapper};
 
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new("tremor-script")
         .version("0.5.0")
         .about("Tremor interpreter")
@@ -108,10 +109,7 @@ fn main() {
     let input = File::open(&script_file);
     let mut raw = String::new();
 
-    input
-        .expect("bad input")
-        .read_to_string(&mut raw)
-        .expect("");
+    input?.read_to_string(&mut raw)?;
 
     let reg: Registry<()> = registry::registry();
     let aggr_reg: AggrRegistry = registry::aggr_registry();
@@ -119,25 +117,22 @@ fn main() {
     match Script::parse(&raw, &reg, &aggr_reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
-            runnable
-                .format_warnings_with(&mut h)
-                .expect("failed to format error");
+            runnable.format_warnings_with(&mut h)?;
 
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
-                Script::<()>::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
+                Script::<()>::highlight_script_with(&raw, &mut h)?;
             }
             if matches.is_present("print-ast") {
                 let ast = serde_json::to_string_pretty(&runnable.script.suffix())
                     .expect("Failed to render AST");
                 println!();
                 let mut h = TermHighlighter::new();
-                Script::<()>::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
+                Script::<()>::highlight_script_with(&ast, &mut h)?;
             }
             if matches.is_present("print-ast-raw") {
-                let ast = serde_json::to_string_pretty(&runnable.script.suffix())
-                    .expect("Failed to render AST");
+                let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
                 println!();
                 println!("{}", ast);
             }
@@ -155,20 +150,17 @@ fn main() {
                 for event_file in event_files {
                     let mut bytes = Vec::new();
                     let input = File::open(&event_file);
-                    input.expect("bad input").read_to_end(&mut bytes).expect("");
+                    input?.read_to_end(&mut bytes)?;
                     inputs.push(bytes);
                 }
                 for i in inputs.iter_mut() {
-                    r.push(simd_json::to_borrowed_value(i).expect("Invalid event data"))
+                    r.push(simd_json::to_borrowed_value(i)?)
                 }
                 r
             } else if let Some(string_file) = matches.value_of("string") {
                 let input = File::open(&string_file);
                 let mut raw = String::new();
-                input
-                    .expect("bad input")
-                    .read_to_string(&mut raw)
-                    .expect("");
+                input?.read_to_string(&mut raw)?;
                 let raw = raw.trim_end().to_string();
 
                 vec![simd_json::borrowed::Value::String(raw.into())]
@@ -182,7 +174,7 @@ fn main() {
                 .pop()
                 .expect("At least one event needs to be specified");
             for event in &mut events {
-                runnable.run(&(), AggrType::Tick, event, &mut global_map);
+                runnable.run(&(), AggrType::Tick, event, &mut global_map)?;
             }
             let expr = runnable.run(&(), AggrType::Emit, &mut event, &mut global_map);
             match expr {
@@ -195,18 +187,16 @@ fn main() {
                     } else if matches.is_present("print-result-raw") {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&Return::Emit { value: event, port })
-                                .expect("")
+                            serde_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
                     } else {
                         let result = format!(
                             "{} ",
-                            serde_json::to_string_pretty(&Return::Emit { value: event, port })
-                                .expect("")
+                            serde_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens).expect("Failed to highliht error");
+                        h.highlight(lexed_tokens)?;
                     }
                 }
                 // Handle the other success returns
@@ -214,21 +204,18 @@ fn main() {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {
                     } else if matches.is_present("print-result-raw") {
-                        println!("{}", serde_json::to_string_pretty(&result).expect(""));
+                        println!("{}", serde_json::to_string_pretty(&result)?);
                     } else {
-                        let result =
-                            format!("{} ", serde_json::to_string_pretty(&result).expect(""));
+                        let result = format!("{} ", serde_json::to_string_pretty(&result)?);
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens).expect("Failed to highliht error");
+                        h.highlight(lexed_tokens)?;
                     }
                 }
                 // Hande and print runtime errors.
                 Err(e) => {
                     let mut h = TermHighlighter::new();
-                    runnable
-                        .format_error_with(&mut h, &e)
-                        .expect("failed to format error");
+                    runnable.format_error_with(&mut h, &e)?;
                     std::process::exit(1);
                 }
             }
@@ -242,4 +229,5 @@ fn main() {
             std::process::exit(1);
         }
     };
+    Ok(())
 }

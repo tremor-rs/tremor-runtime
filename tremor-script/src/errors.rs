@@ -167,14 +167,17 @@ impl ErrorKind {
             UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             UnterminatedHereDoc(outer, inner, _) => (Some(*outer), Some(*inner)),
             TailingHereDoc(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            AggrInAggr(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | Grok(_)
             | InvalidInfluxData(_)
             | Io(_)
+            | JSONError(_)
             | Msg(_)
             | ParseIntError(_)
             | ParserError(_)
+            | SerdeJSONError(_)
             | UnexpectedEndOfStream
             | Utf8Error(_) => (Some(Range::default()), None),
             ErrorKind::__Nonexhaustive { .. } => (Some(Range::default()), None),
@@ -273,10 +276,12 @@ where
 
 error_chain! {
     foreign_links {
-        Io(std::io::Error);
         Grok(grok::Error);
-        Utf8Error(std::str::Utf8Error);
+        Io(std::io::Error);
+        JSONError(simd_json::Error);
         ParseIntError(num::ParseIntError);
+        SerdeJSONError(serde_json::Error);
+        Utf8Error(std::str::Utf8Error);
     }
     errors {
         /*
@@ -312,9 +317,9 @@ error_chain! {
         /*
          * Functions
          */
-        BadArity(expr: Range, inner: Range, m: String, f: String, a: usize, calling_a: usize) {
+        BadArity(expr: Range, inner: Range, m: String, f: String, a: IRange<usize>, calling_a: usize) {
             description("Bad arity for function")
-                display("Bad arity for function {}::{}/{} but was called with {} arguments", m, f, a, calling_a)
+                display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
         MissingModule(expr: Range, inner: Range, m: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined module")
@@ -323,6 +328,10 @@ error_chain! {
         MissingFunction(expr: Range, inner: Range, m: String, f: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined function")
                 display("Call to undefined function {}::{}", m, f)
+        }
+        AggrInAggr(expr: Range, inner: Range) {
+            description("Aggregates can not be called inside of aggregates")
+                display("Aggregates can not be called inside of aggregates")
         }
         BadType(expr: Range, inner: Range, m: String, f: String, a: usize) {
             description("Bad type passed to function")
