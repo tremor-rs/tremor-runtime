@@ -22,8 +22,8 @@ use crate::tilde::Extractor;
 pub use base_expr::BaseExpr;
 pub use base_stmt::BaseStmt;
 use halfbrown::HashMap;
-use simd_json::value::{borrowed, ValueTrait};
 use serde::Serialize;
+use simd_json::value::{borrowed, ValueTrait};
 use simd_json::BorrowedValue as Value;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
@@ -108,26 +108,7 @@ impl<'script> Query1<'script> {
         for (_i, e) in self.stmts.into_iter().enumerate() {
             stmts.push(e.up(&mut helper)?);
         }
-
-/*
-
-	FIXME
-
-        Ok((
-            Script {
-                exprs,
-                consts,
-                aggregates: helper.aggregates,
-            },
-            helper.locals.len(),
-            helper.warnings,
-        ))
-*/
-
-        Ok((Query { stmts },
-            helper.locals.len(),
-            helper.warnings,
-        ))
+        Ok((Query { stmts }, helper.locals.len(), helper.warnings))
     }
 }
 
@@ -198,7 +179,7 @@ impl<'script> ScriptDecl1<'script> {
                 }
                 None => None,
             },
-	    // FIXME side-effect of integrating two separate lines of code - we should really fuse/merge/join warnings and consts .unwrap()
+            // FIXME side-effect of integrating two separate lines of code - we should really fuse/merge/join warnings and consts .unwrap()
             script: self.script.up_script(helper.reg, helper.aggr_reg)?.0,
         })
     }
@@ -221,8 +202,18 @@ impl<'script> Stmt1<'script> {
     ) -> Result<Stmt<'script, Ctx>> {
         match self {
             Stmt1::SelectStmt(stmt) => {
+                let mut aggregates = Vec::new();
+                let mut consts = HashMap::new();
+                helper.swap(&mut aggregates, &mut consts);
                 let stmt: MutSelect<'script, Ctx> = stmt.up(helper)?;
-                Ok(Stmt::SelectStmt(Box::new(stmt)))
+                helper.swap(&mut aggregates, &mut consts);
+                // FIXME: iou a const
+                let consts = Vec::new();
+                Ok(Stmt::SelectStmt {
+                    stmt: Box::new(stmt),
+                    aggregates,
+                    consts,
+                })
             }
             Stmt1::StreamDecl(stmt) => Ok(Stmt::StreamDecl(stmt)),
             Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt)),
@@ -245,7 +236,11 @@ pub enum Stmt<'script, Ctx: Context + Clone + Serialize + 'static> {
     StreamDecl(StreamDecl),
     OperatorDecl(OperatorDecl<'script>),
     ScriptDecl(ScriptDecl<'script, Ctx>),
-    SelectStmt(Box<MutSelect<'script, Ctx>>),
+    SelectStmt {
+        stmt: Box<MutSelect<'script, Ctx>>,
+        aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
+        consts: Vec<Value<'script>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -374,7 +369,6 @@ where
     shadowed_vars: Vec<String>,
     pub locals: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
-    pub aggr_ids: usize,
 }
 
 impl<'script, 'registry, Ctx> Helper<'script, 'registry, Ctx>
@@ -382,6 +376,15 @@ where
     Ctx: Context + Clone + Serialize + 'static,
     'script: 'registry,
 {
+    pub fn swap(
+        &mut self,
+        aggregates: &mut Vec<InvokeAggrFn<'script, Ctx>>,
+        consts: &mut HashMap<String, usize>,
+    ) {
+        use std::mem;
+        mem::swap(&mut self.aggregates, aggregates);
+        mem::swap(&mut self.consts, consts);
+    }
     pub fn new(reg: &'registry Registry<Ctx>, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
@@ -393,7 +396,6 @@ where
             consts: HashMap::new(),
             local_idx: 0,
             shadowed_vars: Vec::new(),
-            aggr_ids: 0,
         }
     }
 
@@ -1244,6 +1246,8 @@ impl<'script> InvokeAggr1<'script> {
         let args = args?;
         let aggr_id = helper.aggregates.len();
         helper.aggregates.push(InvokeAggrFn {
+            start: self.start,
+            end: self.end,
             invocable,
             args,
             module: self.module.clone(),
@@ -1298,14 +1302,19 @@ impl fmt::Debug for InvokeAggr {
 
 #[derive(Clone, Serialize)]
 pub struct InvokeAggrFn<'script, Ctx: Context + Clone + Serialize + 'static> {
+    pub start: Location,
+    pub end: Location,
     #[serde(skip)]
     pub invocable: TremorAggrFnWrapper,
     pub module: String,
     pub fun: String,
     pub args: ImutExprs<'script, Ctx>,
 }
+impl_expr!(InvokeAggrFn);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> fmt::Debug for InvokeAggrFn<'script, Ctx> {
+impl<'script, Ctx: Context + Clone + Serialize + 'static> fmt::Debug
+    for InvokeAggrFn<'script, Ctx>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn(aggr) {}::{}", self.module, self.fun)
     }

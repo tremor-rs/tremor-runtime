@@ -1,16 +1,16 @@
 use crate::registry::{AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 use simd_json::value::ValueTrait;
 use simd_json::BorrowedValue as Value;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 #[derive(Clone, Debug, Default)]
 struct Count(i64);
 impl TremorAggrFn for Count {
-    fn accumulate<'event>(&mut self, _args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
         Ok(())
     }
@@ -23,15 +23,15 @@ impl TremorAggrFn for Count {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        0..0
+    fn arity(&self) -> RangeInclusive<usize> {
+        0..=0
     }
 }
 
 #[derive(Clone, Debug, Default)]
 struct Sum(f64);
 impl TremorAggrFn for Sum {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.0 += v;
         } else {
@@ -39,7 +39,7 @@ impl TremorAggrFn for Sum {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.0 -= v;
         } else {
@@ -56,15 +56,15 @@ impl TremorAggrFn for Sum {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
 #[derive(Clone, Debug, Default)]
 struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
         if let Some(v) = args[0].cast_f64() {
             self.1 += v;
@@ -73,7 +73,7 @@ impl TremorAggrFn for Mean {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 -= 1;
         if let Some(v) = args[0].cast_f64() {
             self.1 -= v;
@@ -97,15 +97,15 @@ impl TremorAggrFn for Mean {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
 #[derive(Clone, Debug, Default)]
 struct Min(Option<f64>);
 impl TremorAggrFn for Min {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             if self.0.is_none() || Some(v) < self.0 {
                 self.0 = Some(v);
@@ -115,7 +115,7 @@ impl TremorAggrFn for Min {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // FIXME: how?
         Ok(())
     }
@@ -128,15 +128,15 @@ impl TremorAggrFn for Min {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
 #[derive(Clone, Debug, Default)]
 struct Max(Option<f64>);
 impl TremorAggrFn for Max {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             if self.0.is_none() || Some(v) > self.0 {
                 self.0 = Some(v);
@@ -146,7 +146,7 @@ impl TremorAggrFn for Max {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // FIXME: how?
         Ok(())
     }
@@ -159,8 +159,8 @@ impl TremorAggrFn for Max {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
@@ -173,7 +173,7 @@ struct Var {
 }
 
 impl TremorAggrFn for Var {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             if self.n == 0 {
                 self.k = v;
@@ -186,7 +186,7 @@ impl TremorAggrFn for Var {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.n -= 1;
             self.ex -= v - self.k;
@@ -213,8 +213,8 @@ impl TremorAggrFn for Var {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
@@ -222,10 +222,10 @@ impl TremorAggrFn for Var {
 struct Stdev(Var);
 
 impl TremorAggrFn for Stdev {
-    fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.accumulate(args)
     }
-    fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()> {
+    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.compensate(args)
     }
     fn emit<'event>(&self) -> FResult<Value<'event>> {
@@ -240,8 +240,8 @@ impl TremorAggrFn for Stdev {
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
-    fn arity(&self) -> Range<usize> {
-        1..1
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
     }
 }
 
@@ -303,9 +303,12 @@ mod test {
     fn min() -> Result<(), FunctionError> {
         let mut a = Min::default();
         a.init();
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[1.into()])?;
-        a.accumulate(&[3.into()])?;
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
+        a.accumulate(&[&one])?;
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 1.0);
         Ok(())
     }
@@ -313,9 +316,12 @@ mod test {
     fn max() -> Result<(), FunctionError> {
         let mut a = Max::default();
         a.init();
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[3.into()])?;
-        a.accumulate(&[1.into()])?;
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
+        a.accumulate(&[&one])?;
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 3.0);
         Ok(())
     }
@@ -324,9 +330,12 @@ mod test {
     fn sum() -> Result<(), FunctionError> {
         let mut a = Sum::default();
         a.init();
-        a.accumulate(&[1.into()])?;
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[3.into()])?;
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
+        a.accumulate(&[&one])?;
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 6.0);
         Ok(())
     }
@@ -335,9 +344,12 @@ mod test {
     fn mean() -> Result<(), FunctionError> {
         let mut a = Mean::default();
         a.init();
-        a.accumulate(&[1.into()])?;
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[3.into()])?;
+        let one = Value::from(1);
+        let two = Value::from(2);
+        let three = Value::from(3);
+        a.accumulate(&[&one])?;
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 2.0);
         Ok(())
     }
@@ -346,9 +358,12 @@ mod test {
     fn variance() -> Result<(), FunctionError> {
         let mut a = Var::default();
         a.init();
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[4.into()])?;
-        a.accumulate(&[19.into()])?;
+        let two = Value::from(2);
+        let four = Value::from(4);
+        let nineteen = Value::from(19);
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&four])?;
+        a.accumulate(&[&nineteen])?;
         assert!((a.emit()?.cast_f64().expect("screw it") - 259.0 / 3.0) < 0.001);
         Ok(())
     }
@@ -357,9 +372,12 @@ mod test {
     fn stdev() -> Result<(), FunctionError> {
         let mut a = Stdev::default();
         a.init();
-        a.accumulate(&[2.into()])?;
-        a.accumulate(&[4.into()])?;
-        a.accumulate(&[19.into()])?;
+        let two = Value::from(2);
+        let four = Value::from(4);
+        let nineteen = Value::from(19);
+        a.accumulate(&[&two])?;
+        a.accumulate(&[&four])?;
+        a.accumulate(&[&nineteen])?;
         assert!((a.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
         Ok(())
     }

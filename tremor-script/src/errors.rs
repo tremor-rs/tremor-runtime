@@ -36,7 +36,7 @@ use serde_json;
 pub use simd_json::ValueType;
 use simd_json::{BorrowedValue as Value, ValueTrait};
 use std::num;
-use std::ops::Range as IRange;
+use std::ops::{Range as IRange, RangeInclusive};
 
 #[macro_export]
 macro_rules! stry {
@@ -333,7 +333,7 @@ error_chain! {
         /*
          * Functions
          */
-        BadArity(expr: Range, inner: Range, m: String, f: String, a: IRange<usize>, calling_a: usize) {
+        BadArity(expr: Range, inner: Range, m: String, f: String, a: RangeInclusive<usize>, calling_a: usize) {
             description("Bad arity for function")
                 display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
@@ -568,9 +568,13 @@ pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     _got: &Value,
 ) -> Result<T> {
     // FIXME Should actually say expected/actualf or type ( error_type_conflict )
-    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), "snot at error type conflict".to_string()).into())
+    Err(ErrorKind::QueryStreamNotDefined(
+        stmt.extent(),
+        inner.extent(),
+        "snot at error type conflict".to_string(),
+    )
+    .into())
 }
-
 
 pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,

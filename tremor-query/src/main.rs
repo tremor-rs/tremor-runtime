@@ -203,17 +203,9 @@ fn main() {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {
                     } else if matches.is_present("print-result-raw") {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(event)
-                            .expect("")
-                        );
+                        println!("{}", serde_json::to_string_pretty(event).expect(""));
                     } else {
-                        let result = format!(
-                            "{} ",
-                            serde_json::to_string_pretty(event)
-                            .expect("")
-                        );
+                        let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
                         let mut h = TermHighlighter::new();
                         h.highlight(lexed_tokens).expect("Failed to highliht error");

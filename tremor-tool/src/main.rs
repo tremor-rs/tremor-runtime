@@ -30,7 +30,6 @@ extern crate tokio_threadpool;
 use clap::load_yaml;
 use dirs;
 use http::status::StatusCode;
-use tremor_script::EventContext as Context;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -39,6 +38,7 @@ use tremor_runtime::rest;
 use tremor_runtime::utils;
 use tremor_script::grok;
 use tremor_script::interpreter::AggrType;
+use tremor_script::EventContext as Context;
 
 use clap::ArgMatches;
 use std::io;

@@ -14,36 +14,24 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-use tremor_script::{self, interpreter::{ExecOpts, AggrType}}; // , ast::InvokeAggrFn};
+use std::borrow::Cow;
 use std::marker::Send;
-
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct EventContext {
-    at: u64,
-}
-impl tremor_script::registry::Context for EventContext {
-    fn ingest_ns(&self) -> u64 {
-        self.at
-    }
-
-    fn from_ingest_ns(ingest_ns: u64) -> Self {
-        EventContext { at: ingest_ns }
-    }
-}
+use tremor_script::{
+    self,
+    interpreter::{AggrType, ExecOpts},
+    registry::{Context, Registry},
+    EventContext,
+}; // , ast::InvokeAggrFn};
 
 #[derive(Debug)]
-pub struct TrickleSelect<Ctx>
-where
-    Ctx: tremor_script::Context + serde::Serialize + 'static,
-{
+pub struct TrickleSelect {
     pub id: String,
-    pub stmt: tremor_script::StmtRentalWrapper<Ctx>,
+    pub cnt: u64,
+    pub fake_window_size: u64,
+    pub stmt: tremor_script::StmtRentalWrapper<EventContext>,
 }
 
-unsafe impl<Ctx> Send for TrickleSelect<Ctx>
-where
-    Ctx: tremor_script::Context + serde::Serialize + 'static,
-{
+unsafe impl Send for TrickleSelect {
     // NOTE - This is required as we are operating on a runtime where
     // rentals are assisting with lifetime handling. As a part of implementing
     // that we have elected to use reference counting ( Rc ) to track occurances of
@@ -61,39 +49,85 @@ where
     // messaging is managed by thread-safe collections.
 }
 
-impl<Ctx> Operator for TrickleSelect<Ctx>
-where
-    Ctx: tremor_script::Context + serde::Serialize + 'static,
-{
+impl Operator for TrickleSelect {
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         use crate::MetaMap;
         use simd_json::borrowed::Value; //, FN_REGISTRY};
 
         // NOTE We are unwrapping our rental wrapped stmt
-        let stmt: &tremor_script::ast::Stmt<Ctx> = self.stmt.stmt.suffix();
-        let stmt = match stmt {
-            tremor_script::ast::Stmt::SelectStmt(stmt) => stmt,
-            _ => unreachable!(),
+        let stmt: &mut tremor_script::ast::Stmt<EventContext> =
+            unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
+        let opts = ExecOpts {
+            result_needed: true,
+            aggr: AggrType::Emit,
         };
-
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
+        let ctx = EventContext::from_ingest_ns(event.ingest_ns);
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-        let mut _event_meta: simd_json::borrowed::Value =
+        let event_meta: simd_json::borrowed::Value =
             simd_json::owned::Value::Object(event.meta).into();
+
         let l = tremor_script::interpreter::LocalStack::with_size(0);
         let x = vec![];
 
-        let ctx = Ctx::from_ingest_ns(event.ingest_ns);
+        let (stmt, aggrs, _consts) = match stmt {
+            tremor_script::ast::Stmt::SelectStmt {
+                stmt,
+                aggregates,
+                consts,
+            } => {
+                if self.cnt == 0 {
+                    for aggr in aggregates.iter_mut() {
+                        let invocable = &mut aggr.invocable;
+                        invocable.init();
+                    }
+                }
+                let no_aggrs = vec![];
+                for aggr in aggregates.iter_mut() {
+                    let l = tremor_script::interpreter::LocalStack::with_size(0);
+                    let invocable = &mut aggr.invocable;
+                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
+                    let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
+                    for arg in aggr.args.iter() {
+                        let result = arg.run(
+                            opts,
+                            &ctx,
+                            &no_aggrs,
+                            unwind_event,
+                            &event_meta,
+                            &l,
+                            &consts,
+                        )?;
+                        argv.push(result);
+                    }
+                    unsafe {
+                        for i in 0..argv.len() {
+                            argv1.push(argv.get_unchecked(i));
+                        }
+                    }
+                    invocable.accumulate(argv1.as_slice()).map_err(|e| {
+                        // FIXME nice error
+                        let r: Option<&Registry<EventContext>> = None;
+                        e.into_err(aggr, aggr, r)
+                    })?;
+                }
+                if self.cnt < self.fake_window_size {
+                    self.cnt += 1;
+                    return Ok(vec![]);
+                } else {
+                    self.cnt = 0;
+                };
+                (stmt, aggregates, consts)
+            }
+            _ => unreachable!(),
+        };
 
-	let opts = ExecOpts { result_needed: true, aggr: AggrType::Emit };
-        let aggrs = vec![];
         //
         // Before any select processing, we filter by where clause
         //
 
         if let Some(guard) = &stmt.maybe_where {
-
             let test = guard.run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
             let _ = match test.into_owned() {
                 Value::Bool(true) => (),
@@ -213,34 +247,71 @@ mod test {
 
     use std::sync::Arc;
 
-    fn test_select<'test>(
-        stmt: tremor_script::StmtRentalWrapper<EventContext>,
-    ) -> TrickleSelect<EventContext> {
+    fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper<EventContext>) -> TrickleSelect {
         TrickleSelect {
             id: "select".to_string(),
             stmt,
+            cnt: 0,
+            fake_window_size: 1,
         }
     }
 
     fn try_enqueue<'test>(
-        op: &'test mut TrickleSelect<EventContext>,
+        op: &'test mut TrickleSelect,
         event: Event,
-    ) -> Option<(String, Event)> {
-        match op.on_event("in", event) {
-            Ok(ref mut action) => action.pop(),
-            Err(_e) => {
-                None
-                // FIXME Query::<Ctx>::format_error_from_script(&self.source, &mut h, &arse);
-            }
-        }
+    ) -> Result<Option<(String, Event)>> {
+        let mut action = op.on_event("in", event)?;
+        Ok(action.pop())
+    }
+
+    fn parse_query(query: &str) -> Result<crate::op::trickle::trickle::TrickleSelect> {
+        let reg = tremor_script::registry();
+        let aggr_reg = tremor_script::aggr_registry();
+        let query = tremor_script::script::QueryRentalWrapper::parse(query, &reg, &aggr_reg)?;
+
+        let stmt_rental = tremor_script::script::rentals::Stmt::new(query.query.clone(), |q| {
+            q.suffix().stmts[0].clone()
+        });
+        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        Ok(test_select(stmt))
     }
 
     #[test]
-    fn select_nowin_nogrp_nowhr_nohav() {
+    fn test_sum() -> Result<()> {
+        let mut op = parse_query("select stats::sum(event.h2g2) from in into out;")?;
+        let event = test_event();
+        assert!(try_enqueue(&mut op, event)?.is_none());
+
+        let event = test_event();
+        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        assert_eq!("out", out);
+
+        let j: OwnedValue = event.value.rent(|j| j.clone().into());
+        assert_eq!(j, 84.0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_count() -> Result<()> {
+        let mut op = parse_query("select stats::count() from in into out;")?;
+        let event = test_event();
+        assert!(try_enqueue(&mut op, event)?.is_none());
+
+        let event = test_event();
+        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        assert_eq!("out", out);
+
+        let j: OwnedValue = event.value.rent(|j| j.clone().into());
+        assert_eq!(j, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
         let target = test_target();
         let stmt_ast = test_stmt(target);
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -262,27 +333,29 @@ mod test {
 
         let mut op = test_select(stmt);
         let event = test_event();
-
-        let (out, event) = try_enqueue(&mut op, event).expect("bad event");
+        assert!(try_enqueue(&mut op, event)?.is_none());
+        let event = test_event();
+        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
         //        let jj: OwnedValue = json!({"snot": "badger", "a": 1}).try_into().expect("");
-        assert_eq!(OwnedValue::I64(42), j)
+        assert_eq!(OwnedValue::I64(42), j);
+        Ok(())
     }
 
     #[test]
-    fn select_nowin_nogrp_whrt_nohav() {
+    fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
 
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(true),
         }));
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -303,28 +376,32 @@ mod test {
         let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
 
         let mut op = test_select(stmt);
-        let event = test_event();
 
-        let (out, event) = try_enqueue(&mut op, event).expect("bad event");
+        let event = test_event();
+        assert!(try_enqueue(&mut op, event)?.is_none());
+
+        let event = test_event();
+        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(OwnedValue::I64(42), j)
+        assert_eq!(OwnedValue::I64(42), j);
+        Ok(())
     }
 
     #[test]
-    fn select_nowin_nogrp_whrf_nohav() {
+    fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
 
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(false),
         }));
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
 
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
             script_box,
@@ -346,21 +423,22 @@ mod test {
         let mut op = test_select(stmt);
         let event = test_event();
 
-        let next = try_enqueue(&mut op, event);
+        let next = try_enqueue(&mut op, event)?;
         assert_eq!(None, next);
+        Ok(())
     }
 
     #[test]
-    fn select_nowin_nogrp_whrbad_nohav() {
+    fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::String("snot".into()),
         }));
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -383,29 +461,30 @@ mod test {
         let mut op = test_select(stmt);
         let event = test_event();
 
-        let next = try_enqueue(&mut op, event);
+        let next = try_enqueue(&mut op, event)?;
 
         // FIXME TODO - would be nicer to get error output in tests
         // syntax highlighted in capturable form for assertions
         assert_eq!(None, next);
+        Ok(())
     }
 
     #[test]
-    fn select_nowin_nogrp_whrt_havt() {
+    fn select_nowin_nogrp_whrt_havt() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(true),
         }));
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -426,30 +505,34 @@ mod test {
         let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
 
         let mut op = test_select(stmt);
-        let event = test_event();
 
-        let (out, event) = try_enqueue(&mut op, event).expect("bad event");
+        let event = test_event();
+        assert!(try_enqueue(&mut op, event)?.is_none());
+
+        let event = test_event();
+        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
         assert_eq!("out", out);
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(OwnedValue::I64(42), j)
+        assert_eq!(OwnedValue::I64(42), j);
+        Ok(())
     }
 
     #[test]
-    fn select_nowin_nogrp_whrt_havf() {
+    fn select_nowin_nogrp_whrt_havf() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(false),
         }));
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -472,30 +555,40 @@ mod test {
         let mut op = test_select(stmt);
         let event = test_event();
 
-        let next = try_enqueue(&mut op, event);
+        let next = try_enqueue(&mut op, event)?;
 
         assert_eq!(None, next);
+        Ok(())
     }
 
+    fn test_select_stmt<'snot>(
+        stmt: tremor_script::ast::MutSelect<'snot, EventContext>,
+    ) -> tremor_script::ast::Stmt<'snot, EventContext> {
+        ast::Stmt::SelectStmt {
+            stmt: Box::new(stmt),
+            aggregates: vec![],
+            consts: vec![],
+        }
+    }
     #[test]
-    fn select_nowin_nogrp_whrt_havbad() {
+    fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
         use halfbrown::hashmap;
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
             value: Value::Bool(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal( ast::Literal {
+        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             start: Location::default(),
             end: Location::default(),
-            value: Value::Object( hashmap!{
+            value: Value::Object(hashmap! {
                 "snot".into() => "badger".into(),
             }),
         }));
 
-        let stmt_ast = ast::Stmt::SelectStmt(Box::new(stmt_ast));
+        let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         let query_rental = Arc::new(tremor_script::script::rentals::Query::new(
@@ -518,10 +611,11 @@ mod test {
         let mut op = test_select(stmt);
         let event = test_event();
 
-        let next = try_enqueue(&mut op, event);
+        let next = try_enqueue(&mut op, event)?;
 
         // FIXME TODO - would be nicer to get error output in tests
         // syntax highlighted in capturable form for assertions
         assert_eq!(None, next);
+        Ok(())
     }
 }

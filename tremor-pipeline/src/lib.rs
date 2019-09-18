@@ -39,7 +39,7 @@ use std::iter;
 use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tremor_script::{LineValue, Registry, TremorFnWrapper, EventContext};
+use tremor_script::{EventContext, LineValue, Registry, TremorFnWrapper};
 
 pub mod config;
 pub mod errors;
@@ -80,8 +80,7 @@ lazy_static! {
 }
 
 #[derive(Clone, Debug)]
-pub struct Pipeline
-{
+pub struct Pipeline {
     pub id: config::ID,
     pub inputs: HashMap<String, NodeIndex>,
     pub port_indexes: PortIndexMap,
@@ -292,8 +291,7 @@ type Weightless = ();
 pub type ConfigGraph = graph::DiGraph<NodeConfig<EventContext>, Weightless>;
 pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
 
-pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline>
-{
+pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let mut graph = ConfigGraph::new();
     let mut nodes = HashMap::new(); // <String, NodeIndex>
     let mut inputs = HashMap::new();
@@ -619,8 +617,7 @@ impl ExecutableGraph {
     }
 }
 
-impl Pipeline
-{
+impl Pipeline {
     pub fn to_dot(&self) -> String {
         let mut res = "digraph{\n".to_string();
         let mut edges = String::new();
@@ -639,7 +636,10 @@ impl Pipeline
     }
 
     // FIXME no explicit ref to EventContext for lookup ...
-    pub fn to_executable_graph(&self, resolver: NodeLookupFn<EventContext>) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(
+        &self,
+        resolver: NodeLookupFn<EventContext>,
+    ) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();
         // Nodes that handle contraflow

@@ -18,7 +18,7 @@ use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use tremor_script::highlighter::DumbHighlighter;
-use tremor_script::{self, Return, Script, interpreter::AggrType, EventContext, Context};
+use tremor_script::{self, interpreter::AggrType, Context, EventContext, Return, Script};
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {
