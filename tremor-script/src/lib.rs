@@ -126,10 +126,11 @@ pub use rentals::Value as LineValue;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{Expr, ImutExpr, Literal};
     use crate::errors::*;
-    use ast::{Expr, Helper, ImutExpr, Literal};
+    use crate::interpreter::AggrType;
+    use crate::lexer::{TokenFuns, TokenSpan};
     use halfbrown::hashmap;
-    use lexer::{TokenFuns, TokenSpan};
     use simd_json::borrowed::{Map, Value};
     use simd_json::json;
 
@@ -148,14 +149,14 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let mut helper = Helper::new(&r, &ar);
+
             let actual = parser::grammar::ScriptParser::new()
                 .parse(filtered_tokens)
                 .expect("exeuction failed")
-                .script_up(&mut helper)
+                .up_script(&r, &ar)
                 .expect("exeuction failed");
             assert_matches!(
-                actual.exprs[0],
+                actual.0.exprs[0],
                 Expr::Imut(ImutExpr::Literal(Literal {
                     value: $expected, ..
                 }))
@@ -184,7 +185,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let value = runnable.run(&ctx, &mut event, &mut global_map);
+            let value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
             assert_eq!(
                 Ok(Return::Emit {
                     value: $expected,
@@ -216,7 +217,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let _value = runnable.run(&ctx, &mut event, &mut global_map);
+            let _value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
             assert_eq!(global_map, $expected);
         }};
     }
@@ -242,7 +243,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Map::new());
             let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let _value = runnable.run(&ctx, &mut event, &mut global_map);
+            let _value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
             assert_eq!(event, $expected);
         }};
     }

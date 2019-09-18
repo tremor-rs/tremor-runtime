@@ -21,7 +21,7 @@ use std::default::Default;
 use std::fmt;
 use std::ops::Range;
 
-pub trait TremorAggrFn {
+pub trait TremorAggrFn: Send {
     fn accumulate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
     fn compensate<'event>(&mut self, args: &[Value<'event>]) -> FResult<()>;
     fn emit<'event>(&self) -> FResult<Value<'event>>;
