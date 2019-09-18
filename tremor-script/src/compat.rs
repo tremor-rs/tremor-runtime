@@ -14,7 +14,7 @@
 
 use crate::errors::*;
 use crate::registry;
-use crate::registry::{AggrRegistry, Registry};
+use crate::registry::{Registry}; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
 use simd_json::borrowed::{Map, Value};
 use std::ffi::CStr;
@@ -23,8 +23,8 @@ use std::ptr;
 
 fn eval(src: &str) -> Result<String> {
     let reg: Registry<()> = registry::registry();
-    let aggr_reg: AggrRegistry = registry::aggr_registry();
-    let script = Script::parse(src, &reg, &aggr_reg)?;
+    // let aggr_reg: AggrRegistry = registry::aggr_registry();
+    let script = Script::parse(src, &reg)?;
 
     let mut event = Value::Object(Map::new());
     let mut meta = Value::Object(Map::new());

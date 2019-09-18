@@ -31,7 +31,6 @@ use std::str::Chars;
 use unicode_xid::UnicodeXID;
 
 pub use crate::pos::*;
-//use crate::str_suffix;
 
 pub trait ParserSource {
     fn src(&self) -> &str;
@@ -208,6 +207,24 @@ pub enum Token<'input> {
     RBracket,
 
     EndOfStream,
+
+    // Query
+    Select,
+    From,
+    Where,
+    With,
+    Order,
+    Group,
+    By,
+    Having,
+    Into,
+    Create,
+    Tumbling,
+    Sliding,
+    Window,
+    Stream,
+    Operator,
+    Script,
 }
 
 pub trait TokenFuns {
@@ -260,6 +277,22 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Event => true,
             Token::Present => true,
             Token::Absent => true,
+            Token::Stream => true,
+            Token::Select => true,
+            Token::From => true,
+            Token::Where => true,
+            Token::With => true,
+            Token::Order => true,
+            Token::Group => true,
+            Token::By => true,
+            Token::Having => true,
+            Token::Into => true,
+            Token::Create => true,
+            Token::Tumbling => true,
+            Token::Sliding => true,
+            Token::Window => true,
+            Token::Script => true,
+            Token::Operator => true,
             _ => false,
         }
     }
@@ -471,6 +504,23 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Sub => write!(f, "-"),
             Token::Mod => write!(f, "%"),
             Token::EndOfStream => write!(f, ""),
+            // Query
+            Token::Select => write!(f, "select"),
+            Token::From => write!(f, "from"),
+            Token::Where => write!(f, "where"),
+            Token::With => write!(f, "with"),
+            Token::Order => write!(f, "order"),
+            Token::Group => write!(f, "group"),
+            Token::By => write!(f, "by"),
+            Token::Having => write!(f, "having"),
+            Token::Into => write!(f, "into"),
+            Token::Create => write!(f, "create"),
+            Token::Tumbling => write!(f, "tumbling"),
+            Token::Sliding => write!(f, "sliding"),
+            Token::Window => write!(f, "window"),
+            Token::Stream => write!(f, "stream"),
+            Token::Operator => write!(f, "operator"),
+            Token::Script => write!(f, "script"),
         }
     }
 }
@@ -774,6 +824,22 @@ impl<'input> Lexer<'input> {
             "not" => Token::Not,
             "drop" => Token::Drop,
             "emit" => Token::Emit,
+            "select" => Token::Select,
+            "from" => Token::From,
+            "where" => Token::Where,
+            "with" => Token::With,
+            "order" => Token::Order,
+            "group" => Token::Group,
+            "by" => Token::By,
+            "having" => Token::Having,
+            "into" => Token::Into,
+            "create" => Token::Create,
+            "tumbling" => Token::Tumbling,
+            "sliding" => Token::Sliding,
+            "window" => Token::Window,
+            "stream" => Token::Stream,
+            "operator" => Token::Operator,
+            "script" => Token::Script,
             src => Token::Ident(src.into(), false),
         };
 

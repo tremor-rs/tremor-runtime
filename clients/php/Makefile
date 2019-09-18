@@ -21,7 +21,6 @@ vendor/bin/phpdoc: vendor
 
 vendor/bin/phpunit: vendor
 
-
 src/Wayfair/Tremor/Proto/Event.php: ../../tremor.proto
 	protoc --php_out=src/ ../../tremor.proto
 

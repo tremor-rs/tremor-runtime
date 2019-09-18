@@ -12,6 +12,7 @@ members = [
     "tremor-server",
     "tremor-tool",
     "tremor-script",
+    "tremor-query",
     "window",
     "tremor-pipeline",
     "tremor-api",
@@ -130,3 +131,4 @@ ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
+

@@ -30,7 +30,7 @@ extern crate tokio_threadpool;
 use clap::load_yaml;
 use dirs;
 use http::status::StatusCode;
-use tremor_pipeline::TremorContext as Context;
+use tremor_script::EventContext as Context;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -38,6 +38,7 @@ use tremor_runtime::functions as tr_fun;
 use tremor_runtime::rest;
 use tremor_runtime::utils;
 use tremor_script::grok;
+use tremor_script::interpreter::AggrType;
 
 use clap::ArgMatches;
 use std::io;
@@ -218,7 +219,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };
 
-    let context = Context { ingest_ns: 666 };
+    let context = Context { at: 666 };
     let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
     for (num, line) in input.lines().enumerate() {
         let l = line?;
@@ -235,7 +236,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let mut unwind_event: &mut simd_json::borrowed::Value =
                     unsafe { std::mem::transmute(json.suffix()) };
-                match s.run(&context, &mut unwind_event, &mut global_map) {
+                match s.run(&context, AggrType::Emit, &mut unwind_event, &mut global_map) {
                     Ok(_result) => {
                         println!(
                             "{}",

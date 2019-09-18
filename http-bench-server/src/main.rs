@@ -24,7 +24,7 @@ const MAX_SIZE: usize = 2_621_440; // max payload size is 256k
 struct State {
     counter: AtomicUsize,
     size: AtomicUsize,
-    work_delay: u64,
+    _work_delay: u64,
 }
 
 fn index(
@@ -66,7 +66,7 @@ fn main() -> std::io::Result<()> {
     let data = web::Data::new(State {
         counter: AtomicUsize::new(0),
         size: AtomicUsize::new(0),
-        work_delay: 0,
+        _work_delay: 0,
     });
     HttpServer::new(move || {
         App::new()

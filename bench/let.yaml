@@ -37,7 +37,7 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            let .merged = "true";
+            emit | let .merged = "true";
             .;
     links:
       in: [ runtime ]

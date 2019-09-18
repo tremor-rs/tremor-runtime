@@ -20,6 +20,7 @@ use crate::ast::*;
 use crate::errors::*;
 use crate::registry::{Context, Registry, TremorAggrFnWrapper};
 use crate::stry;
+use serde::Serialize;
 use simd_json::value::borrowed::{Map, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
@@ -27,7 +28,7 @@ use std::borrow::Cow;
 
 impl<'run, 'event, 'script, Ctx> ImutExpr<'script, Ctx>
 where
-    Ctx: Context + Clone + 'static,
+    Ctx: Context + Clone + Serialize + 'static,
     'script: 'event,
     'event: 'run,
 {
@@ -659,7 +660,10 @@ where
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
         expr: &'script Merge<Ctx>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        Ctx: serde::Serialize,
+    {
         // NOTE: We got to clone here since we're are going
         // to change the value
         let value = stry!(expr

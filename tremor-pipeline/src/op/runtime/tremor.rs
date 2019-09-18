@@ -18,16 +18,7 @@ use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use tremor_script::highlighter::DumbHighlighter;
-use tremor_script::{self, Return, Script};
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct TremorContext {
-    pub ingest_ns: u64,
-}
-impl tremor_script::Context for TremorContext {
-    fn ingest_ns(&self) -> u64 {
-        self.ingest_ns
-    }
-}
+use tremor_script::{self, Return, Script, interpreter::AggrType, EventContext, Context};
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {
@@ -63,15 +54,13 @@ struct Config {
 #[derive(Debug)]
 pub struct Tremor {
     config: Config,
-    runtime: Script<TremorContext>,
+    runtime: Script<EventContext>,
     id: String,
 }
 
 impl Operator for Tremor {
     fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
-        let context = TremorContext {
-            ingest_ns: event.ingest_ns,
-        };
+        let context = EventContext::from_ingest_ns(event.ingest_ns);
         #[allow(clippy::transmute_ptr_to_ptr)]
         #[allow(mutable_transmutes)]
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
@@ -81,6 +70,7 @@ impl Operator for Tremor {
         // event_meta => mneta
         let value = self.runtime.run(
             &context,
+            AggrType::Emit,
             &mut unwind_event, // event
             &mut event_meta,   // $
         );

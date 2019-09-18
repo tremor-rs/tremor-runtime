@@ -26,7 +26,7 @@ pub type PipelineVec = Vec<Pipeline>;
 pub struct InputPort {
     pub id: String,
     pub port: String,
-    had_port: bool,
+    pub had_port: bool,
 }
 
 impl<'de> Deserialize<'de> for InputPort {
@@ -72,7 +72,7 @@ impl Serialize for InputPort {
 pub struct OutputPort {
     pub id: String,
     pub port: String,
-    had_port: bool,
+    pub had_port: bool,
 }
 
 impl<'de> Deserialize<'de> for OutputPort {

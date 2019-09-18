@@ -1,0 +1,6 @@
+select event 
+from in 
+# where false
+# having true
+into out
+;
