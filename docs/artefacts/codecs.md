@@ -67,3 +67,7 @@ The following types are supported:
 * `s` for `sets`
 
 For **gauge** there is also the field `action` which might be `add` if the value was prefixed with a `+`, or `sub` if the value was prefixed with a `-`
+
+### yaml
+
+En- and decodes [YAML](https://yaml.org).
