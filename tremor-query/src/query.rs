@@ -22,6 +22,7 @@ use std::boxed::Box;
 use std::io::Write;
 use tremor_pipeline::config::{self, InputPort, OutputPort};
 use tremor_pipeline::op;
+use tremor_pipeline::op::trickle::select::WindowImpl;
 use tremor_pipeline::OperatorNode;
 use tremor_pipeline::{ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
 use tremor_script::ast::*;
@@ -109,6 +110,34 @@ where
 #[derive(Debug)]
 pub struct Query {
     pub query: tremor_script::QueryRentalWrapper,
+}
+
+fn window_decl_to_impl<'script>(d: &WindowDecl<'script, EventContext>) -> WindowImpl {
+    use tremor_pipeline::op::trickle::select::*;
+    /*
+    let opts = ExecOpts {
+        result_needed: true,
+        aggr: AggrType::Emit,
+    };
+    let mut local = LocalStack::with_size(0);
+    let context: EventContext::from_ingest_ns(0);
+
+    let params = d.params.expect("grrr").expr.run(
+        opts.with_result(),
+        context,
+        &vec![],
+        &Value::Null,
+        &Value::Null,
+        &mut local,
+        &vec![],
+    )?;
+    paramsp["inteval"]
+     */
+    TumblingWindowOnEventTime {
+        size: 15_000_000_000,
+        next_window: None,
+    }
+    .into()
 }
 
 impl<'run, 'event, 'script> Query
@@ -363,7 +392,7 @@ where
             stmt: None,
         });
         nodes.insert(_in.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None);
         pipe_ops.insert(id, op);
         inputs.insert(_in, id);
 
@@ -377,11 +406,13 @@ where
             stmt: None,
         });
         nodes.insert(out.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None);
         pipe_ops.insert(id, op);
         outputs.push(id);
 
         let mut port_indexes: PortIndexMap = HashMap::new();
+
+        let mut windows = HashMap::new();
 
         for stmt in &script.stmts {
             let stmt_rental =
@@ -430,7 +461,8 @@ where
                         stmt: None, // FIXME
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, Some(that));
+                    // FIXME
+                    let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone().into(), id);
                     outputs.push(id);
@@ -448,17 +480,17 @@ where
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone().into(), id);
-                        let op = node.to_op(supported_operators, Some(that));
+                        let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
                 }
                 Stmt::WindowDecl(w) => {
                     let name = w.id.clone().to_string();
-                    dbg!((name, &w));
+                    windows.insert(name, window_decl_to_impl(w));
                 }
-                NotYetImplemented => {
-                    dbg!(("not yet implemented", &NotYetImplemented));
+                not_yet_implemented => {
+                    dbg!(("not yet implemented", &not_yet_implemented));
                 }
             };
         }
@@ -472,7 +504,7 @@ where
             stmt: None,
         });
         nodes.insert("metrics".to_string(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None);
         pipe_ops.insert(id, op);
         outputs.push(id.into());
 
@@ -516,7 +548,7 @@ where
                 //            let op = pipe_ops[&nx].expect("should have been ok"); //
                 //                let op = pipe_ops.remove(&nx).expect("should have found an entry").expect("should have been some");
 
-                match (pipe_ops.remove(&nx)) {
+                match pipe_ops.remove(&nx) {
                     Some(Ok(op)) => {
                         i2pos.insert(nx, i);
                         if op.handles_contraflow() {
@@ -579,6 +611,7 @@ where
 pub fn supported_operators(
     node: &NodeConfig,
     stmt: Option<tremor_script::StmtRentalWrapper>,
+    windows: Option<HashMap<String, WindowImpl>>,
 ) -> std::result::Result<OperatorNode, tremor_pipeline::errors::Error> {
     // Resolve from registry
     //    use op::debug::EventHistoryFactory;
@@ -593,10 +626,21 @@ pub fn supported_operators(
         ["trickle", "select"] => {
             let stmt = stmt.expect("no surprises here unless there is");
             let dimensions = SelectDims::from_query(stmt.stmt.clone());
+            let window = if let Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
+                let windows = windows.unwrap();
+                dbg!(&windows);
+                s.window.clone().map(|n| {
+                    dbg!(&n);
+                    windows.get(&n.id).unwrap().clone()
+                })
+            } else {
+                panic!("This is a mess");
+            };
             Box::new(TrickleSelect {
                 id: node.id.clone(),
                 stmt,
                 dimensions,
+                window,
             })
             // FIXME only needed during initial dev - then die die die i fire
             //            let op = PassthroughFactory::new_boxed();

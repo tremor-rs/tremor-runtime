@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::ast::Warning;
+use crate::ctx::EventContext;
 use crate::errors::*;
 use crate::highlighter::{DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
@@ -72,18 +73,16 @@ where
 }
 
 #[derive(Debug)]
-pub struct QueryRentalWrapper
-{
-    pub query: Arc<rentals::Query<crate::EventContext>>,
+pub struct QueryRentalWrapper {
+    pub query: Arc<rentals::Query<EventContext>>,
     pub source: String,
     pub warnings: Vec<Warning>,
     pub locals: usize,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
-pub struct StmtRentalWrapper
-{
-    pub stmt: Arc<rentals::Stmt<crate::EventContext>>,
+pub struct StmtRentalWrapper {
+    pub stmt: Arc<rentals::Stmt<EventContext>>,
 }
 
 rental! {
@@ -322,7 +321,7 @@ where
 {
     pub fn parse(
         script: &'script str,
-        reg: &Registry<crate::EventContext>,
+        reg: &Registry<EventContext>,
         aggr_reg: &AggrRegistry,
     ) -> Result<Self> {
         let mut source = script.to_string();
@@ -371,7 +370,7 @@ where
     #[allow(dead_code)] // FIXME remove this shit
     fn with_stmt<'elide>(
         query: &QueryRentalWrapper,
-        encumbered_stmt: crate::ast::Stmt<'elide, crate::EventContext>,
+        encumbered_stmt: crate::ast::Stmt<'elide, EventContext>,
     ) -> Self {
         StmtRentalWrapper {
             stmt: Arc::new(rentals::Stmt::new(query.query.clone(), |_| {

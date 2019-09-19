@@ -307,6 +307,7 @@ pub struct MutSelect1<'script> {
     pub target: ImutExpr1<'script>,
     pub maybe_where: Option<ImutExpr1<'script>>,
     pub maybe_having: Option<ImutExpr1<'script>>,
+    pub window: Option<WindowDefn1>,
 }
 impl_expr1!(MutSelect1);
 impl_stmt1!(MutSelect1);
@@ -331,6 +332,7 @@ impl<'script> MutSelect1<'script> {
                 Some(clause) => Some(clause.up(helper)?),
                 None => None,
             },
+            window: self.window,
         })
     }
 }
@@ -344,6 +346,7 @@ pub struct MutSelect<'script, Ctx: Context + Clone + Serialize + 'static> {
     pub target: ImutExpr<'script, Ctx>,
     pub maybe_where: Option<ImutExpr<'script, Ctx>>,
     pub maybe_having: Option<ImutExpr<'script, Ctx>>,
+    pub window: Option<WindowDefn1>,
 }
 impl_expr!(MutSelect);
 impl_stmt!(MutSelect);

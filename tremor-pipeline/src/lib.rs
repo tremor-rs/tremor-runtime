@@ -29,6 +29,7 @@ extern crate rental;
 use crate::errors::*;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
+use op::trickle::select::WindowImpl;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph;
@@ -42,7 +43,6 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tremor_script::{EventContext, LineValue, Registry, TremorFnWrapper};
-
 pub mod config;
 pub mod errors;
 #[macro_use]
@@ -57,6 +57,7 @@ pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
 pub type NodeLookupFn = fn(
     node: &NodeConfig,
     stmt: Option<tremor_script::StmtRentalWrapper>,
+    windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
 pub type NodeMap = HashMap<String, NodeIndex>;
 
@@ -231,12 +232,10 @@ impl Operator for OperatorNode {
 // TODO We need an actual operator registry ...
 pub fn buildin_ops(
     node: &NodeConfig,
-    stmt: Option<tremor_script::StmtRentalWrapper>,
-) -> Result<OperatorNode>
-{
+    _stmt: Option<tremor_script::StmtRentalWrapper>,
+    _windows: Option<HashMap<String, WindowImpl>>,
+) -> Result<OperatorNode> {
     // Resolve from registry
-
-    let _ = stmt;
 
     use op::debug::EventHistoryFactory;
     use op::generic::{BackpressureFactory, BatchFactory};
@@ -266,14 +265,14 @@ pub fn buildin_ops(
     })
 }
 
-impl NodeConfig
-{
+impl NodeConfig {
     pub fn to_op(
         &self,
         resolver: NodeLookupFn,
         stmt: Option<tremor_script::StmtRentalWrapper>,
+        window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
-        resolver(&self, stmt)
+        resolver(&self, stmt, window)
     }
 }
 
@@ -634,10 +633,7 @@ impl Pipeline {
     }
 
     // FIXME no explicit ref to EventContext for lookup ...
-    pub fn to_executable_graph(
-        &self,
-        resolver: NodeLookupFn,
-    ) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(&self, resolver: NodeLookupFn) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();
         // Nodes that handle contraflow
@@ -646,7 +642,7 @@ impl Pipeline {
         let mut signalflow = Vec::new();
         for (i, nx) in self.graph.node_indices().enumerate() {
             i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(resolver, None)?;
+            let op = self.graph[nx].to_op(resolver, None, None)?;
             if op.handles_contraflow() {
                 contraflow.push(i);
             }

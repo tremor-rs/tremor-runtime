@@ -62,6 +62,7 @@ pub struct TrickleSelect {
     pub id: String,
     pub stmt: tremor_script::StmtRentalWrapper,
     pub dimensions: SelectDims<EventContext>,
+    pub window: Option<WindowImpl>,
 }
 
 pub trait WindowTrait: std::fmt::Debug + Clone {
@@ -93,6 +94,16 @@ impl<'query> WindowTrait for Window<'query> {
 pub enum WindowImpl {
     Tumbling(TumblingWindowOnEventTime),
     No(NoWindow),
+}
+
+impl std::default::Default for WindowImpl {
+    fn default() -> Self {
+        TumblingWindowOnEventTime {
+            size: 15_000_000_000,
+            next_window: None,
+        }
+        .into()
+    }
 }
 
 impl WindowTrait for WindowImpl {
@@ -155,8 +166,8 @@ impl WindowTrait for NoWindow {
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnEventTime {
-    next_window: Option<u64>,
-    size: u64,
+    pub next_window: Option<u64>,
+    pub size: u64,
 }
 
 impl WindowTrait for TumblingWindowOnEventTime {
@@ -164,7 +175,6 @@ impl WindowTrait for TumblingWindowOnEventTime {
         match self.next_window {
             None => {
                 self.next_window = Some(event.ingest_ns + self.size);
-                dbg!(&self);
                 WindowEvent {
                     open: true,
                     emit: false,
@@ -172,19 +182,15 @@ impl WindowTrait for TumblingWindowOnEventTime {
             }
             Some(next_window) if next_window <= event.ingest_ns => {
                 self.next_window = Some(event.ingest_ns + self.size);
-                dbg!(&self);
                 WindowEvent {
                     open: false,
                     emit: true,
                 }
             }
-            Some(_) => {
-                dbg!(&self);
-                WindowEvent {
-                    open: false,
-                    emit: false,
-                }
-            }
+            Some(_) => WindowEvent {
+                open: false,
+                emit: false,
+            },
         }
     }
 }
@@ -218,13 +224,16 @@ impl Operator for TrickleSelect {
                 // Before any select processing, we filter by where clause
                 //
                 let no_aggrs = vec![];
+                // FIXME: ?
+                let event_meta: simd_json::borrowed::Value =
+                    simd_json::owned::Value::Object(event.meta.clone()).into();
                 if let Some(guard) = &stmt.maybe_where {
                     let test = guard.run(
                         opts,
                         &ctx,
                         &no_aggrs,
                         unwind_event,
-                        &Value::Null,
+                        &event_meta,
                         &local_stack,
                         &consts,
                     )?;
@@ -242,33 +251,101 @@ impl Operator for TrickleSelect {
                 }
                 let dimension = String::new();
 
-                let dims: &mut HashMap<String, Window> =
-                    unsafe { std::mem::transmute(self.dimensions.suffix()) };
-
-                let w = dims.entry(dimension).or_insert_with(|| {
-                    Window::from_aggregates(
-                        aggregates.clone(),
-                        TumblingWindowOnEventTime {
-                            size: 15_000_000_000,
-                            next_window: None,
+                if let Some(window) = &self.window {
+                    let dims: &mut HashMap<String, Window> =
+                        unsafe { std::mem::transmute(self.dimensions.suffix()) };
+                    let w = dims.entry(dimension).or_insert_with(|| {
+                        Window::from_aggregates(aggregates.clone(), window.clone())
+                    });
+                    let window_event = w.on_event(&event);
+                    if window_event.open {
+                        for aggr in w.aggregates.iter_mut() {
+                            let invocable = &mut aggr.invocable;
+                            invocable.init();
                         }
-                        .into(),
-                    )
-                });
+                    }
 
-                let window_event = w.on_event(&event);
-                if window_event.open {
+                    let maybe_value = if window_event.emit {
+                        // After having has been applied to any emissions causal on this
+                        // event, we prepare the target expression synthetic event and
+                        // return it for downstream processing
+                        //
+                        // FIXME: This can be nicer, got to look at run for tremor script
+
+                        let value = stmt.target.run(
+                            opts,
+                            &ctx,
+                            &w.aggregates,
+                            unwind_event,
+                            &event_meta,
+                            &local_stack,
+                            &consts,
+                        )?;
+
+                        Some(value.into_owned())
+                    } else {
+                        None
+                    };
+
                     for aggr in w.aggregates.iter_mut() {
                         let invocable = &mut aggr.invocable;
-                        invocable.init();
+                        let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
+                        let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
+                        for arg in aggr.args.iter() {
+                            let result = arg.run(
+                                opts,
+                                &ctx,
+                                &no_aggrs,
+                                unwind_event,
+                                &event_meta,
+                                &local_stack,
+                                &consts,
+                            )?;
+                            argv.push(result);
+                        }
+                        unsafe {
+                            for i in 0..argv.len() {
+                                argv1.push(argv.get_unchecked(i));
+                            }
+                        }
+                        invocable.accumulate(argv1.as_slice()).map_err(|e| {
+                            use tremor_script::Registry;
+                            // FIXME nice error
+                            let r: Option<&Registry<EventContext>> = None;
+                            e.into_err(aggr, aggr, r)
+                        })?;
                     }
-                }
 
-                // FIXME: ?
-                let event_meta: simd_json::borrowed::Value =
-                    simd_json::owned::Value::Object(event.meta.clone()).into();
+                    if let Some(value) = maybe_value {
+                        *unwind_event = value;
+                        if let Some(guard) = &stmt.maybe_having {
+                            let test = guard.run(
+                                opts,
+                                &ctx,
+                                &w.aggregates,
+                                unwind_event,
+                                &Value::Null,
+                                &local_stack,
+                                &consts,
+                            )?;
+                            let _ = match test.into_owned() {
+                                Value::Bool(true) => (),
+                                Value::Bool(false) => {
+                                    return Ok(vec![]);
+                                }
+                                other => {
+                                    return tremor_script::errors::query_guard_not_bool(
+                                        &stmt, guard, &other,
+                                    )?;
+                                }
+                            };
+                        }
 
-                let maybe_value = if window_event.emit {
+                        Ok(vec![("out".to_string(), event)])
+                    } else {
+                        Ok(vec![])
+                    }
+                } else {
                     // After having has been applied to any emissions causal on this
                     // event, we prepare the target expression synthetic event and
                     // return it for downstream processing
@@ -278,57 +355,19 @@ impl Operator for TrickleSelect {
                     let value = stmt.target.run(
                         opts,
                         &ctx,
-                        &w.aggregates,
+                        &no_aggrs,
                         unwind_event,
                         &event_meta,
                         &local_stack,
                         &consts,
                     )?;
 
-                    Some(value.into_owned())
-                } else {
-                    None
-                };
-
-                for aggr in w.aggregates.iter_mut() {
-                    let invocable = &mut aggr.invocable;
-                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
-                    let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
-                    for arg in aggr.args.iter() {
-                        dbg!(&arg);
-                        dbg!(&unwind_event);
-                        let result = arg.run(
-                            opts,
-                            &ctx,
-                            &no_aggrs,
-                            unwind_event,
-                            &event_meta,
-                            &local_stack,
-                            &consts,
-                        )?;
-                        dbg!(&result);
-                        argv.push(result);
-                    }
-                    unsafe {
-                        for i in 0..argv.len() {
-                            argv1.push(argv.get_unchecked(i));
-                        }
-                    }
-                    invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                        use tremor_script::Registry;
-                        // FIXME nice error
-                        let r: Option<&Registry<EventContext>> = None;
-                        e.into_err(aggr, aggr, r)
-                    })?;
-                }
-
-                if let Some(value) = maybe_value {
-                    *unwind_event = value;
+                    *unwind_event = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
                         let test = guard.run(
                             opts,
                             &ctx,
-                            &w.aggregates,
+                            &no_aggrs,
                             unwind_event,
                             &Value::Null,
                             &local_stack,
@@ -348,8 +387,6 @@ impl Operator for TrickleSelect {
                     }
 
                     Ok(vec![("out".to_string(), event)])
-                } else {
-                    Ok(vec![])
                 }
             }
             _ => unreachable!(),
@@ -433,6 +470,7 @@ mod test {
             id: "select".to_string(),
             stmt,
             dimensions,
+            window: WindowImpl::default(),
         }
     }
 
