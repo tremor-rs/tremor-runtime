@@ -453,6 +453,10 @@ where
                         outputs.push(id);
                     };
                 }
+                Stmt::WindowDecl(w) => {
+                    let name = w.id.clone().to_string();
+                    dbg!((name, &w));
+                }
                 NotYetImplemented => {
                     dbg!(("not yet implemented", &NotYetImplemented));
                 }
