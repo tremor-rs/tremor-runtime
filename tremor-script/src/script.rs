@@ -201,7 +201,7 @@ where
             script,
             source,
             locals,
-            warnings: warnings,
+            warnings,
         })
     }
 

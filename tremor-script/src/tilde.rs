@@ -274,9 +274,9 @@ impl<'de> Deserialize<'de> for Extractor {
                 E: de::Error,
             {
                 match s {
-                    "Base64" => return Ok(Extractor::Base64),
-                    "Influx" => return Ok(Extractor::Influx),
-                    "Json" => return Ok(Extractor::Json),
+                    "Base64" =>  Ok(Extractor::Base64),
+                    "Influx" =>  Ok(Extractor::Influx),
+                    "Json" =>  Ok(Extractor::Json),
                     _ => Err(de::Error::invalid_value(de::Unexpected::Str(&s), &self)),
                 }
             }
@@ -291,22 +291,22 @@ impl<'de> Deserialize<'de> for Extractor {
                     Some((ref x, ref args)) if x.as_str() == "Glob" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
                         let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
-                        return Ok(Extractor::new("glob", &rule).expect("should have worked"));
+                        Ok(Extractor::new("glob", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Re" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
                         let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
-                        return Ok(Extractor::new("re", &rule).expect("should have worked"));
+                        Ok(Extractor::new("re", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Dissect" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
                         let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
-                        return Ok(Extractor::new("dissect", &rule).expect("should have worked"));
+                        Ok(Extractor::new("dissect", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Grok" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
                         let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
-                        return Ok(Extractor::new("grok", &rule).expect("should have worked"));
+                        Ok(Extractor::new("grok", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref _args)) if x.as_str() == "Kv" => {
                         // let field_seps = args.get("field_separators").expect("expected a rule").foreach().map(|x| x.to_string()).collect();
@@ -314,12 +314,12 @@ impl<'de> Deserialize<'de> for Extractor {
                         // let kv_seps = args.get("key_separators").expect("expected a rule").to_string();
                         // let kv_seps = kv_seps.trim_start_matches("\"").trim_end_matches("\"");
                         //dbg!(("kv", &field_seps, &kv_seps));
-                        return Ok(Extractor::new("kv", "").expect("should have worked"));
+                        Ok(Extractor::new("kv", "").expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Datetime" => {
                         let format = args.get("format").expect("expected a format").to_string();
                         let format = format.trim_start_matches("\"").trim_end_matches("\"");
-                        return Ok(Extractor::new("datetime", &format).expect("should have worked"));
+                        Ok(Extractor::new("datetime", &format).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Cidr" => {
                         let rules = args.get("rules").expect("expected a set of rules");
@@ -334,7 +334,7 @@ impl<'de> Deserialize<'de> for Extractor {
                         }
                         s = s.to_string().trim_end_matches(", ").to_string();
                         dbg!(("cidr", &s));
-                        return Ok(Extractor::new("cidr", &s).expect("should have worked"));
+                        Ok(Extractor::new("cidr", &s).expect("should have worked"))
                     }
                     Some((ref x, _)) => {
                         Err(de::Error::invalid_value(de::Unexpected::Str(&x), &self))
@@ -935,7 +935,7 @@ mod tests {
                        "tags".into() => Value::Object(hashmap!( "location".into() => "us-midwest".into())),
                     "fields".into() => Value::Object(hashmap!("temperature".into() => 82.0f64.into
                                                               ())),
-                       "timestamp".into() => Value::I64(1465839830100400200)
+                       "timestamp".into() => Value::I64(1_465_839_830_100_400_200)
                 )))
             ),
             _ => unreachable!(),
@@ -948,7 +948,7 @@ mod tests {
         match ex {
             Extractor::Datetime { .. } => assert_eq!(
                 ex.extract(true, &Value::from("2019-06-20 00:00:00"), &()),
-                Ok(Value::I64(1560988800000_000_000))
+                Ok(Value::I64(1_560_988_800_000_000_000))
             ),
             _ => unreachable!(),
         }

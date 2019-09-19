@@ -689,10 +689,10 @@ impl<'input> Lexer<'input> {
             }
         }
         if let Some(slice) = self.slice(start, e) {
-            return (e, slice);
+            (e, slice)
         } else {
             // Invalid start end case :(
-            return (e, "<ERROR>");
+            (e, "<ERROR>")
         }
     }
 
