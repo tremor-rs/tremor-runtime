@@ -163,25 +163,27 @@ impl WindowTrait for TumblingWindowOnEventTime {
         match self.next_window {
             None => {
                 self.next_window = Some(event.ingest_ns + self.size);
+                dbg!(&self);
                 WindowEvent {
                     open: true,
-
                     emit: false,
                 }
             }
             Some(next_window) if next_window <= event.ingest_ns => {
                 self.next_window = Some(event.ingest_ns + self.size);
+                dbg!(&self);
                 WindowEvent {
                     open: false,
-
                     emit: true,
                 }
             }
-            Some(_) => WindowEvent {
-                open: false,
-
-                emit: false,
-            },
+            Some(_) => {
+                dbg!(&self);
+                WindowEvent {
+                    open: false,
+                    emit: false,
+                }
+            }
         }
     }
 }
@@ -198,8 +200,7 @@ impl Operator for TrickleSelect {
         };
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
 
-        let l = tremor_script::interpreter::LocalStack::with_size(0);
-        let x = vec![];
+        let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt
         let stmt: &mut tremor_script::ast::Stmt<EventContext> =
@@ -217,8 +218,15 @@ impl Operator for TrickleSelect {
                 //
                 let no_aggrs = vec![];
                 if let Some(guard) = &stmt.maybe_where {
-                    let test =
-                        guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                    let test = guard.run(
+                        opts,
+                        &ctx,
+                        &no_aggrs,
+                        unwind_event,
+                        &Value::Null,
+                        &local_stack,
+                        &consts,
+                    )?;
                     let _ = match test.into_owned() {
                         Value::Bool(true) => (),
                         Value::Bool(false) => {
@@ -237,7 +245,14 @@ impl Operator for TrickleSelect {
                     unsafe { std::mem::transmute(self.dimensions.suffix()) };
 
                 let w = dims.entry(dimension).or_insert_with(|| {
-                    Window::from_aggregates(aggregates.clone(), NoWindow::default().into())
+                    Window::from_aggregates(
+                        aggregates.clone(),
+                        TumblingWindowOnEventTime {
+                            size: 15_000_000_000,
+                            next_window: None,
+                        }
+                        .into(),
+                    )
                 });
 
                 let window_event = w.on_event(&event);
@@ -248,37 +263,76 @@ impl Operator for TrickleSelect {
                     }
                 }
 
-                /*
-
-                */
                 // FIXME: ?
                 let event_meta: simd_json::borrowed::Value =
                     simd_json::owned::Value::Object(event.meta.clone()).into();
 
-                let res = if window_event.emit {
+                let maybe_value = if window_event.emit {
                     // After having has been applied to any emissions causal on this
                     // event, we prepare the target expression synthetic event and
                     // return it for downstream processing
                     //
                     // FIXME: This can be nicer, got to look at run for tremor script
-                    let aggrs = vec![];
-                    let value =
-                        stmt.target
-                            .run(opts, &ctx, &aggrs, unwind_event, &event_meta, &l, &x)?;
-                    *unwind_event = value.into_owned();
-                    // let o: simd_json::borrowed::Value = value.into_owned();
-                    // let o: simd_json::owned::Value = o.into();
-                    // let event = Event {
-                    //     is_batch: false,
-                    //     id: 1,
-                    //     ingest_ns: 1,
-                    //     meta: MetaMap::new(),
-                    //     value: tremor_script::LineValue::new(Box::new(vec![]), |_| o.into()),
-                    //     kind: None,
-                    // };
+
+                    let value = stmt.target.run(
+                        opts,
+                        &ctx,
+                        &w.aggregates,
+                        unwind_event,
+                        &event_meta,
+                        &local_stack,
+                        &consts,
+                    )?;
+
+                    Some(value.into_owned())
+                } else {
+                    None
+                };
+
+                for aggr in w.aggregates.iter_mut() {
+                    let invocable = &mut aggr.invocable;
+                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
+                    let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
+                    for arg in aggr.args.iter() {
+                        dbg!(&arg);
+                        dbg!(&unwind_event);
+                        let result = arg.run(
+                            opts,
+                            &ctx,
+                            &no_aggrs,
+                            unwind_event,
+                            &event_meta,
+                            &local_stack,
+                            &consts,
+                        )?;
+                        dbg!(&result);
+                        argv.push(result);
+                    }
+                    unsafe {
+                        for i in 0..argv.len() {
+                            argv1.push(argv.get_unchecked(i));
+                        }
+                    }
+                    invocable.accumulate(argv1.as_slice()).map_err(|e| {
+                        use tremor_script::Registry;
+                        // FIXME nice error
+                        let r: Option<&Registry<EventContext>> = None;
+                        e.into_err(aggr, aggr, r)
+                    })?;
+                }
+
+                if let Some(value) = maybe_value {
+                    *unwind_event = value;
                     if let Some(guard) = &stmt.maybe_having {
-                        let test =
-                            guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                        let test = guard.run(
+                            opts,
+                            &ctx,
+                            &w.aggregates,
+                            unwind_event,
+                            &Value::Null,
+                            &local_stack,
+                            &consts,
+                        )?;
                         let _ = match test.into_owned() {
                             Value::Bool(true) => (),
                             Value::Bool(false) => {
@@ -295,39 +349,7 @@ impl Operator for TrickleSelect {
                     Ok(vec![("out".to_string(), event)])
                 } else {
                     Ok(vec![])
-                };
-
-                for aggr in w.aggregates.iter_mut() {
-                    let l = tremor_script::interpreter::LocalStack::with_size(0);
-                    let invocable = &mut aggr.invocable;
-                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
-                    let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
-                    for arg in aggr.args.iter() {
-                        let result = arg.run(
-                            opts,
-                            &ctx,
-                            &no_aggrs,
-                            unwind_event,
-                            &event_meta,
-                            &l,
-                            &consts,
-                        )?;
-                        argv.push(result);
-                    }
-                    unsafe {
-                        for i in 0..argv.len() {
-                            argv1.push(argv.get_unchecked(i));
-                        }
-                    }
-                    invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                        use tremor_script::Registry;
-                        // FIXME nice error
-                        let r: Option<&Registry<EventContext>> = None;
-                        e.into_err(aggr, aggr, r)
-                    })?;
                 }
-
-                res
             }
             _ => unreachable!(),
         }
@@ -390,14 +412,14 @@ mod test {
     fn test_event(s: u64) -> Event {
         Event {
             is_batch: false,
-            id: s * 1_000_000_000,
-            ingest_ns: 1,
+            id: s,
+            ingest_ns: s * 1_000_000_000,
             meta: MetaMap::new(),
             value: sjv!(json!({
                "h2g2" : 42,
             })
             .try_into()
-            .expect("bad event")),
+            .expect("failed to create test event")),
             kind: None,
         }
     }
@@ -441,7 +463,7 @@ mod test {
         let mut op = parse_query("select stats::sum(event.h2g2) from in into out;")?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -454,7 +476,7 @@ mod test {
         let mut op = parse_query("select stats::count() from in into out;")?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -492,7 +514,7 @@ mod test {
         let mut op = test_select(stmt);
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -538,7 +560,7 @@ mod test {
 
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -670,7 +692,7 @@ mod test {
         assert!(try_enqueue(&mut op, event)?.is_none());
 
         let event = test_event(15);
-        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, event)?.expect("no event");
         assert_eq!("out", out);
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
         assert_eq!(OwnedValue::I64(42), j);
