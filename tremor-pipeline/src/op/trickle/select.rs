@@ -641,11 +641,8 @@ mod test {
 
         let mut op = test_select(stmt);
 
-        let next = try_enqueue(&mut op, test_event(0))?;
+        assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
-        // FIXME TODO - would be nicer to get error output in tests
-        // syntax highlighted in capturable form for assertions
-        assert_eq!(None, next);
         Ok(())
     }
 
