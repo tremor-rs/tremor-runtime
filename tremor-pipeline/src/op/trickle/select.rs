@@ -98,7 +98,7 @@ impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        use crate::MetaMap;
+
         use simd_json::borrowed::Value; //, FN_REGISTRY};
 
         // NOTE We are unwrapping our rental wrapped stmt
@@ -110,18 +110,39 @@ impl Operator for TrickleSelect {
         };
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
+        // FIXME: ?
         let _event_meta: simd_json::borrowed::Value =
-            simd_json::owned::Value::Object(event.meta).into();
+            simd_json::owned::Value::Object(event.meta.clone()).into();
 
         let l = tremor_script::interpreter::LocalStack::with_size(0);
         let x = vec![];
 
-        let (stmt, aggrs, _consts) = match stmt {
+
+
+        match stmt {
             tremor_script::ast::Stmt::SelectStmt {
                 stmt,
-                aggregates,
-                consts,
+                aggregates: _aggregates,
+                consts: _consts,
             } => {
+                //
+                // Before any select processing, we filter by where clause
+                //
+                let no_aggrs = vec![];
+                if let Some(guard) = &stmt.maybe_where {
+                    let test = guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                    let _ = match test.into_owned() {
+                        Value::Bool(true) => (),
+                        Value::Bool(false) => {
+                            return Ok(vec![]);
+                        }
+                        other => {
+                            return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                        }
+                    };
+                }
+                        let _dimension = String::new();
+
                 /*
                 if self.cnt == 0 {
                     for aggr in aggregates.iter_mut() {
@@ -165,60 +186,43 @@ impl Operator for TrickleSelect {
                     self.cnt = 0;
                 };
                 */
-                (stmt, aggregates, consts)
-            }
-            _ => unreachable!(),
-        };
-
-        //
-        // Before any select processing, we filter by where clause
-        //
-
-        if let Some(guard) = &stmt.maybe_where {
-            let test = guard.run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
-            let _ = match test.into_owned() {
-                Value::Bool(true) => (),
-                Value::Bool(false) => {
-                    return Ok(vec![]);
-                }
-                other => {
-                    return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
-                }
-            };
-        }
-
         // After having has been applied to any emissions causal on this
         // event, we prepare the target expression synthetic event and
         // return it for downstream processing
         //
+                // FIXME: This can be nicer, got to look at run for tremor script
+                let aggrs = vec![];
+                let value = stmt
+                    .target
+                    .run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
+                *unwind_event = value.into_owned();
+                // let o: simd_json::borrowed::Value = value.into_owned();
+                // let o: simd_json::owned::Value = o.into();
+                // let event = Event {
+                //     is_batch: false,
+                //     id: 1,
+                //     ingest_ns: 1,
+                //     meta: MetaMap::new(),
+                //     value: tremor_script::LineValue::new(Box::new(vec![]), |_| o.into()),
+                //     kind: None,
+                // };
+                if let Some(guard) = &stmt.maybe_having {
+                    let test = guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                    let _ = match test.into_owned() {
+                        Value::Bool(true) => (),
+                        Value::Bool(false) => {
+                            return Ok(vec![]);
+                        }
+                        other => {
+                            return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                        }
+                    };
+                }
 
-        if let Some(guard) = &stmt.maybe_having {
-            let test = guard.run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
-            let _ = match test.into_owned() {
-                Value::Bool(true) => (),
-                Value::Bool(false) => {
-                    return Ok(vec![]);
-                }
-                other => {
-                    return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
-                }
-            };
+                Ok(vec![("out".to_string(), event)])
+                    }
+            _ => unreachable!(),
         }
-
-        let value = stmt
-            .target
-            .run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
-        let o: simd_json::borrowed::Value = value.into_owned();
-        let o: simd_json::owned::Value = o.into();
-        let event = Event {
-            is_batch: false,
-            id: 1,
-            ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: tremor_script::LineValue::new(Box::new(vec![]), |_| o.into()),
-            kind: None,
-        };
-        Ok(vec![("out".to_string(), event)])
     }
 }
 
