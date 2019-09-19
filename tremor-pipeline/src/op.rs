@@ -49,9 +49,7 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 }
 
-pub trait InitializableOperator<Ctx>
-where
-    Ctx: tremor_script::Context + serde::Serialize + 'static,
+pub trait InitializableOperator
 {
-    fn from_node(&self, node: &NodeConfig<Ctx>) -> Result<Box<dyn Operator>>;
+    fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }

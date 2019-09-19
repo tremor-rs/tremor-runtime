@@ -123,7 +123,7 @@ impl PartialEq for LineValue {
 
 pub use rentals::Value as LineValue;
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize)]
 pub struct EventContext {
     pub at: u64,
 }
