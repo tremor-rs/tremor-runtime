@@ -14,22 +14,54 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
+use halfbrown::HashMap;
+use serde::Serialize;
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use tremor_script::{
     self,
+    ast::InvokeAggrFn,
     interpreter::{AggrType, ExecOpts},
-    registry::Context,
-    EventContext,
-}; // , ast::InvokeAggrFn};
+    script::rentals::Query,
+    Context, EventContext,
+};
 
-use halfbrown::HashMap;
+pub type Aggrs<'script> = Vec<InvokeAggrFn<'script, EventContext>>;
+
+rental! {
+    pub mod rentals {
+        use tremor_script::script::rentals::Query;
+        use std::sync::Arc;
+        use halfbrown::HashMap;
+        use serde::Serialize;
+        use super::*;
+
+        #[rental(covariant,debug)]
+        pub struct Dims<Ctx>
+        where
+            Ctx: Context + Serialize +'static {
+            query: Arc<Query<Ctx>>,
+            dimensions: HashMap<String, Window<'query>>,
+        }
+    }
+}
+
+impl<Ctx> rentals::Dims<Ctx>
+where
+    Ctx: Context + Serialize + 'static,
+{
+    pub fn from_query(query: Arc<Query<Ctx>>) -> Self {
+        Self::new(query, |_| HashMap::new())
+    }
+}
 
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
     pub cnt: u64,
     pub stmt: tremor_script::StmtRentalWrapper,
-    pub dimensions: HashMap<String, Window>,
+    pub dimensions: rentals::Dims<EventContext>,
 }
 
 pub trait WindowTrait: std::fmt::Debug + Clone {
@@ -37,42 +69,90 @@ pub trait WindowTrait: std::fmt::Debug + Clone {
 }
 
 #[derive(Debug, Clone)]
-pub enum Window {
-    Tumbling(TumblingWindowOnEventTime),
-    No(NoWindow),
+pub struct Window<'query> {
+    window_impl: WindowImpl,
+    aggregates: Aggrs<'query>,
 }
-impl WindowTrait for Window {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
-        match self {
-            Window::Tumbling(w) => w.on_event(event),
-            Window::No(w) => w.on_event(event),
+
+impl<'query> Window<'query> {
+    fn from_aggregates(aggregates: Aggrs<'query>, window_impl: WindowImpl) -> Window<'query> {
+        Window {
+            aggregates,
+            window_impl,
         }
     }
 }
 
-pub enum WindowEvent {
+impl<'query> WindowTrait for Window<'query> {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+        self.window_impl.on_event(event)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum WindowImpl {
+    Tumbling(TumblingWindowOnEventTime),
+    No(NoWindow),
+}
+
+impl WindowTrait for WindowImpl {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+        match self {
+            WindowImpl::Tumbling(w) => w.on_event(event),
+            WindowImpl::No(w) => w.on_event(event),
+        }
+    }
+}
+
+impl From<NoWindow> for WindowImpl {
+    fn from(w: NoWindow) -> Self {
+        WindowImpl::No(w)
+    }
+}
+
+impl From<TumblingWindowOnEventTime> for WindowImpl {
+    fn from(w: TumblingWindowOnEventTime) -> Self {
+        WindowImpl::Tumbling(w)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Accumulate {
+    Not,
+    Before,
+    After,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WindowEvent {
     /// New window is opened,
-    Open,
-    /// Accumulate the data
-    Accumulate,
+    pub open: bool,
     /// Close the window before this event and opeen the next one
-    Role,
+    pub emit: bool,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct NoWindow {
     open: bool,
 }
+
 impl WindowTrait for NoWindow {
     fn on_event(&mut self, _event: &Event) -> WindowEvent {
         if self.open {
-            WindowEvent::Role
+            WindowEvent {
+                open: false,
+                emit: true,
+            }
         } else {
             self.open = true;
-            WindowEvent::Open
+            WindowEvent {
+                open: true,
+                emit: true,
+            }
         }
     }
 }
+
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnEventTime {
     next_window: Option<u64>,
@@ -84,74 +164,141 @@ impl WindowTrait for TumblingWindowOnEventTime {
         match self.next_window {
             None => {
                 self.next_window = Some(event.ingest_ns + self.size);
-                WindowEvent::Open
+                WindowEvent {
+                    open: true,
+
+                    emit: false,
+                }
             }
-            Some(start_time) if start_time > event.ingest_ns => {
+            Some(next_window) if next_window <= event.ingest_ns => {
                 self.next_window = Some(event.ingest_ns + self.size);
-                WindowEvent::Role
+                WindowEvent {
+                    open: false,
+
+                    emit: true,
+                }
             }
-            Some(_) => WindowEvent::Accumulate,
+            Some(_) => WindowEvent {
+                open: false,
+
+                emit: false,
+            },
         }
     }
 }
+
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-
         use simd_json::borrowed::Value; //, FN_REGISTRY};
 
-        // NOTE We are unwrapping our rental wrapped stmt
-        let stmt: &mut tremor_script::ast::Stmt<EventContext> =
-            unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
         let opts = ExecOpts {
             result_needed: true,
             aggr: AggrType::Emit,
         };
-        let ctx = EventContext::from_ingest_ns(event.ingest_ns);
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-        // FIXME: ?
-        let _event_meta: simd_json::borrowed::Value =
-            simd_json::owned::Value::Object(event.meta.clone()).into();
 
         let l = tremor_script::interpreter::LocalStack::with_size(0);
         let x = vec![];
 
+        // NOTE We are unwrapping our rental wrapped stmt
+        let stmt: &mut tremor_script::ast::Stmt<EventContext> =
+            unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
 
-
+        let ctx = EventContext::from_ingest_ns(event.ingest_ns);
         match stmt {
             tremor_script::ast::Stmt::SelectStmt {
                 stmt,
-                aggregates: _aggregates,
-                consts: _consts,
+                aggregates,
+                consts,
             } => {
                 //
                 // Before any select processing, we filter by where clause
                 //
                 let no_aggrs = vec![];
                 if let Some(guard) = &stmt.maybe_where {
-                    let test = guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                    let test =
+                        guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
                     let _ = match test.into_owned() {
                         Value::Bool(true) => (),
                         Value::Bool(false) => {
                             return Ok(vec![]);
                         }
                         other => {
-                            return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                            return tremor_script::errors::query_guard_not_bool(
+                                &stmt, guard, &other,
+                            )?;
                         }
                     };
                 }
-                        let _dimension = String::new();
+                let dimension = String::new();
 
-                /*
-                if self.cnt == 0 {
-                    for aggr in aggregates.iter_mut() {
+                let dims: &mut HashMap<String, Window> =
+                    unsafe { std::mem::transmute(self.dimensions.suffix()) };
+
+                let w = dims.entry(dimension).or_insert_with(|| {
+                    Window::from_aggregates(aggregates.clone(), NoWindow::default().into())
+                });
+
+                let window_event = w.on_event(&event);
+                if window_event.open {
+                    for aggr in w.aggregates.iter_mut() {
                         let invocable = &mut aggr.invocable;
                         invocable.init();
                     }
                 }
-                let no_aggrs = vec![];
-                for aggr in aggregates.iter_mut() {
+
+                /*
+
+                */
+                // FIXME: ?
+                let event_meta: simd_json::borrowed::Value =
+                    simd_json::owned::Value::Object(event.meta.clone()).into();
+
+                let res = if window_event.emit {
+                    // After having has been applied to any emissions causal on this
+                    // event, we prepare the target expression synthetic event and
+                    // return it for downstream processing
+                    //
+                    // FIXME: This can be nicer, got to look at run for tremor script
+                    let aggrs = vec![];
+                    let value =
+                        stmt.target
+                            .run(opts, &ctx, &aggrs, unwind_event, &event_meta, &l, &x)?;
+                    *unwind_event = value.into_owned();
+                    // let o: simd_json::borrowed::Value = value.into_owned();
+                    // let o: simd_json::owned::Value = o.into();
+                    // let event = Event {
+                    //     is_batch: false,
+                    //     id: 1,
+                    //     ingest_ns: 1,
+                    //     meta: MetaMap::new(),
+                    //     value: tremor_script::LineValue::new(Box::new(vec![]), |_| o.into()),
+                    //     kind: None,
+                    // };
+                    if let Some(guard) = &stmt.maybe_having {
+                        let test =
+                            guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
+                        let _ = match test.into_owned() {
+                            Value::Bool(true) => (),
+                            Value::Bool(false) => {
+                                return Ok(vec![]);
+                            }
+                            other => {
+                                return tremor_script::errors::query_guard_not_bool(
+                                    &stmt, guard, &other,
+                                )?;
+                            }
+                        };
+                    }
+
+                    Ok(vec![("out".to_string(), event)])
+                } else {
+                    Ok(vec![])
+                };
+
+                for aggr in w.aggregates.iter_mut() {
                     let l = tremor_script::interpreter::LocalStack::with_size(0);
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
@@ -174,53 +321,15 @@ impl Operator for TrickleSelect {
                         }
                     }
                     invocable.accumulate(argv1.as_slice()).map_err(|e| {
+                        use tremor_script::Registry;
                         // FIXME nice error
                         let r: Option<&Registry<EventContext>> = None;
                         e.into_err(aggr, aggr, r)
                     })?;
                 }
-                if self.cnt < self.fake_window_size {
-                    self.cnt += 1;
-                    return Ok(vec![]);
-                } else {
-                    self.cnt = 0;
-                };
-                */
-        // After having has been applied to any emissions causal on this
-        // event, we prepare the target expression synthetic event and
-        // return it for downstream processing
-        //
-                // FIXME: This can be nicer, got to look at run for tremor script
-                let aggrs = vec![];
-                let value = stmt
-                    .target
-                    .run(opts, &ctx, &aggrs, unwind_event, &Value::Null, &l, &x)?;
-                *unwind_event = value.into_owned();
-                // let o: simd_json::borrowed::Value = value.into_owned();
-                // let o: simd_json::owned::Value = o.into();
-                // let event = Event {
-                //     is_batch: false,
-                //     id: 1,
-                //     ingest_ns: 1,
-                //     meta: MetaMap::new(),
-                //     value: tremor_script::LineValue::new(Box::new(vec![]), |_| o.into()),
-                //     kind: None,
-                // };
-                if let Some(guard) = &stmt.maybe_having {
-                    let test = guard.run(opts, &ctx, &no_aggrs, unwind_event, &Value::Null, &l, &x)?;
-                    let _ = match test.into_owned() {
-                        Value::Bool(true) => (),
-                        Value::Bool(false) => {
-                            return Ok(vec![]);
-                        }
-                        other => {
-                            return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
-                        }
-                    };
-                }
 
-                Ok(vec![("out".to_string(), event)])
-                    }
+                res
+            }
             _ => unreachable!(),
         }
     }
@@ -296,6 +405,7 @@ mod test {
         }
     }
 
+    use rentals::Dims;
     use std::sync::Arc;
 
     fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper) -> TrickleSelect {
@@ -303,7 +413,7 @@ mod test {
             id: "select".to_string(),
             stmt,
             cnt: 0,
-            dimensions: HashMap::new(),
+            dimensions: Dims::from_query(stmt.stmt.query),
         }
     }
 

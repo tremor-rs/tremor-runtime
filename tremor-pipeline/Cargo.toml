@@ -20,6 +20,7 @@ lru = "0.1"
 serde_json = "1"
 halfbrown = "0.1"
 log = "0.4"
+rental = "0.5"
 
 [dev-dependencies]
 criterion = "0.3.0"
