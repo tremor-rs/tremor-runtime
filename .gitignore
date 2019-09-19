@@ -29,3 +29,4 @@ tremor-script/priv
 **/*.gcno
 *.swp
 .*.swp
+target.vsc

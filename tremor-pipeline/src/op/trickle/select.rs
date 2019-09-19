@@ -15,7 +15,6 @@
 use crate::errors::*;
 use crate::{Event, Operator};
 use std::borrow::Cow;
-use std::marker::Send;
 use tremor_script::{
     self,
     interpreter::{AggrType, ExecOpts},
@@ -31,23 +30,6 @@ pub struct TrickleSelect {
     pub stmt: tremor_script::StmtRentalWrapper,
 }
 
-unsafe impl Send for TrickleSelect {
-    // NOTE - This is required as we are operating on a runtime where
-    // rentals are assisting with lifetime handling. As a part of implementing
-    // that we have elected to use reference counting ( Rc ) to track occurances of
-    // statements originating from a single wrapped rented query instance
-    //
-    // Additionally, despite only ever being mutated during creation of a runtime
-    // pipeline. As pipelines themselves are mult-threaded by their very nature supporting
-    // queues for distribution, we are none-the-less required to assert that our
-    // operators are thread-safe ( by implementing Send here ) and this in turn impacts
-    // our rentals, which do not directly support threading
-    //
-    // In summary, we are left with no option but to implement send o a per
-    // operator basis. This is also safe, because we guarantee in our engine that
-    // we will only ever run an operator in the context of a single thread and all
-    // messaging is managed by thread-safe collections.
-}
 
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
