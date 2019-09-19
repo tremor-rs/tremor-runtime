@@ -116,9 +116,12 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(script: &'script str, reg: &Registry<EventContext>) -> Result<Self> {
-        let aggs = AggrRegistry::default();
-        let query = tremor_script::QueryRentalWrapper::parse(script, reg, &aggs)?;
+    pub fn parse(
+        script: &'script str,
+        reg: &Registry<EventContext>,
+        aggr_reg: &AggrRegistry,
+    ) -> Result<Self> {
+        let query = tremor_script::QueryRentalWrapper::parse(script, reg, aggr_reg)?;
         Ok(Query { query })
     }
 
@@ -386,7 +389,9 @@ where
                     std::mem::transmute(stmt.clone())
                 });
 
-            let that = tremor_script::StmtRentalWrapper { stmt: std::sync::Arc::new(stmt_rental) };
+            let that = tremor_script::StmtRentalWrapper {
+                stmt: std::sync::Arc::new(stmt_rental),
+            };
 
             match stmt {
                 Stmt::SelectStmt { stmt: s, .. } => {
@@ -503,10 +508,9 @@ where
             let mut signalflow = Vec::new();
             let mut i = 0;
             for nx in pipe_graph.node_indices() {
-
                 //            let op = pipe_graph[nx].to_op(supported_operators, None).expect("not good");
                 //            let op = pipe_ops[&nx].expect("should have been ok"); //
-//                let op = pipe_ops.remove(&nx).expect("should have found an entry").expect("should have been some");
+                //                let op = pipe_ops.remove(&nx).expect("should have found an entry").expect("should have been some");
 
                 match (pipe_ops.remove(&nx)) {
                     Some(Ok(op)) => {
@@ -522,7 +526,6 @@ where
                     }
                     _ => {
                         dbg!("That is not good");
-                    
                     }
                 }
                 //let op = op.expect("did not expect that");
@@ -579,16 +582,17 @@ pub fn supported_operators(
     //    use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     //    use op::runtime::TremorFactory;
-    use op::trickle::select::TrickleSelect;
+    use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
     let op = match name_parts.as_slice() {
         ["trickle", "select"] => {
+            let stmt = stmt.expect("no surprises here unless there is");
+            let dimensions = SelectDims::from_query(stmt.stmt.clone());
             Box::new(TrickleSelect {
                 id: node.id.clone(),
-                stmt: stmt.expect("no surprises here unless there is"),
-                cnt: 0,
-                dimensions: HashMap::new(),
+                stmt,
+                dimensions,
             })
             // FIXME only needed during initial dev - then die die die i fire
             //            let op = PassthroughFactory::new_boxed();

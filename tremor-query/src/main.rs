@@ -108,7 +108,9 @@ fn main() -> Result<()> {
 
     let reg: Registry<EventContext> = registry::registry();
 
-    match Query::parse(&raw, &reg) {
+    let aggr_reg = registry::aggr_registry();
+
+    match Query::parse(&raw, &reg, &aggr_reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable
@@ -204,7 +206,8 @@ fn main() -> Result<()> {
                         let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens).expect("Failed to highlight error");
+                        h.highlight(lexed_tokens)
+                            .expect("Failed to highlight error");
                     }
                 }
             }
