@@ -46,8 +46,9 @@ rental! {
         }
     }
 }
+pub use rentals::Dims as SelectDims;
 
-impl<Ctx> rentals::Dims<Ctx>
+impl<Ctx> SelectDims<Ctx>
 where
     Ctx: Context + Serialize + 'static,
 {
@@ -60,7 +61,7 @@ where
 pub struct TrickleSelect {
     pub id: String,
     pub stmt: tremor_script::StmtRentalWrapper,
-    pub dimensions: rentals::Dims<EventContext>,
+    pub dimensions: SelectDims<EventContext>,
 }
 
 pub trait WindowTrait: std::fmt::Debug + Clone {
@@ -424,11 +425,10 @@ mod test {
         }
     }
 
-    use rentals::Dims;
     use std::sync::Arc;
 
     fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper) -> TrickleSelect {
-        let dimensions = Dims::from_query(stmt.stmt.clone());
+        let dimensions = SelectDims::from_query(stmt.stmt.clone());
         TrickleSelect {
             id: "select".to_string(),
             stmt,

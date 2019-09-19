@@ -5,6 +5,7 @@ create tumbling window `15secs`
 end;
 
 select {
+    "count": stats::count(),
     "min": stats::min(event.value),
     "max": stats::max(event.value),
     "mean": stats::mean(event.value),
