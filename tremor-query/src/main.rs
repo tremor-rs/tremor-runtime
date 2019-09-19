@@ -54,6 +54,12 @@ fn main() -> Result<()> {
                 .help("A string to load."),
         )
         .arg(
+            Arg::with_name("output")
+                .long("output")
+                .takes_value(true)
+                .help("Output to select from."),
+        )
+        .arg(
             Arg::with_name("highlight-source")
                 .short("s")
                 .takes_value(false)
@@ -100,6 +106,8 @@ fn main() -> Result<()> {
     let script_file = matches.value_of("SCRIPT").expect("No script file provided");
     let input = File::open(&script_file);
     let mut raw = String::new();
+
+    let selected_output = matches.value_of("output");
 
     input
         .expect("bad input")
@@ -198,20 +206,22 @@ fn main() -> Result<()> {
                     );
                     i += 1;
                     std::thread::sleep_ms(1000);
-                    dbg!(i);
 
-                    for ref got in &continuation {
-                        let event = got.1.value.suffix();
+                    for (output, event) in continuation.drain(..) {
+                        let event = event.value.suffix();
                         if matches.is_present("quiet") {
                         } else if matches.is_present("print-result-raw") {
                             println!("{}", serde_json::to_string_pretty(event).expect(""));
                         } else {
-                            let result =
-                                format!("{} ", serde_json::to_string_pretty(event).expect(""));
-                            let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
-                            let mut h = TermHighlighter::new();
-                            h.highlight(lexed_tokens)
-                                .expect("Failed to highlight error");
+                            if selected_output.is_none() || selected_output == Some(&output) {
+                                println!("{}>>", output);
+                                let result =
+                                    format!("{} ", serde_json::to_string_pretty(event).expect(""));
+                                let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                                let mut h = TermHighlighter::new();
+                                h.highlight(lexed_tokens)
+                                    .expect("Failed to highlight error");
+                            }
                         }
                     }
                 }

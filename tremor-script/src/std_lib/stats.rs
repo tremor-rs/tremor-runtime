@@ -83,7 +83,6 @@ impl TremorAggrFn for Mean {
         Ok(())
     }
     fn emit<'event>(&self) -> FResult<Value<'event>> {
-        dbg!(self);
         if self.0 == 0 {
             Ok(Value::Null)
         } else {
