@@ -23,7 +23,7 @@ use tremor_script::{
     self,
     ast::InvokeAggrFn,
     interpreter::{AggrType, ExecOpts},
-    script::rentals::Query,
+    script::rentals::Stmt,
     Context, EventContext,
 };
 
@@ -41,7 +41,7 @@ rental! {
         pub struct Dims<Ctx>
         where
             Ctx: Context + Serialize +'static {
-            query: Arc<Query<Ctx>>,
+            query: Arc<Stmt<Ctx>>,
             dimensions: HashMap<String, Window<'query>>,
         }
     }
@@ -51,15 +51,14 @@ impl<Ctx> rentals::Dims<Ctx>
 where
     Ctx: Context + Serialize + 'static,
 {
-    pub fn from_query(query: Arc<Query<Ctx>>) -> Self {
-        Self::new(query, |_| HashMap::new())
+    pub fn from_query(stmt: Arc<Stmt<Ctx>>) -> Self {
+        Self::new(stmt, |_| HashMap::new())
     }
 }
 
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
-    pub cnt: u64,
     pub stmt: tremor_script::StmtRentalWrapper,
     pub dimensions: rentals::Dims<EventContext>,
 }
@@ -359,7 +358,7 @@ mod test {
     fn test_stmt<'test>(
         target: ast::ImutExpr<'test, EventContext>,
     ) -> ast::MutSelect<'test, EventContext> {
-        let stmt = tremor_script::ast::MutSelect {
+        tremor_script::ast::MutSelect {
             start: Location::default(),
             end: Location::default(),
             from: ast::Ident {
@@ -379,9 +378,7 @@ mod test {
                 value: Value::Bool(true),
             })),
             maybe_having: None,
-        };
-
-        stmt
+        }
     }
 
     fn test_query<'test>(stmt: ast::Stmt<'test, EventContext>) -> ast::Query<'test, EventContext> {
@@ -390,10 +387,10 @@ mod test {
         }
     }
 
-    fn test_event() -> Event {
+    fn test_event(s: u64) -> Event {
         Event {
             is_batch: false,
-            id: 1,
+            id: s * 1_000_000_000,
             ingest_ns: 1,
             meta: MetaMap::new(),
             value: sjv!(json!({
@@ -409,11 +406,11 @@ mod test {
     use std::sync::Arc;
 
     fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper) -> TrickleSelect {
+        let dimensions = Dims::from_query(stmt.stmt.clone());
         TrickleSelect {
             id: "select".to_string(),
             stmt,
-            cnt: 0,
-            dimensions: Dims::from_query(stmt.stmt.query),
+            dimensions,
         }
     }
 
@@ -433,18 +430,18 @@ mod test {
         let stmt_rental = tremor_script::script::rentals::Stmt::new(query.query.clone(), |q| {
             q.suffix().stmts[0].clone()
         });
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
         Ok(test_select(stmt))
     }
 
     #[test]
     fn test_sum() -> Result<()> {
         let mut op = parse_query("select stats::sum(event.h2g2) from in into out;")?;
-        let event = test_event();
-        assert!(try_enqueue(&mut op, event)?.is_none());
-
-        let event = test_event();
-        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        assert!(try_enqueue(&mut op, test_event(0))?.is_none());
+        assert!(try_enqueue(&mut op, test_event(1))?.is_none());
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -455,11 +452,9 @@ mod test {
     #[test]
     fn test_count() -> Result<()> {
         let mut op = parse_query("select stats::count() from in into out;")?;
-        let event = test_event();
-        assert!(try_enqueue(&mut op, event)?.is_none());
-
-        let event = test_event();
-        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        assert!(try_enqueue(&mut op, test_event(0))?.is_none());
+        assert!(try_enqueue(&mut op, test_event(1))?.is_none());
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -490,13 +485,14 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
-        let event = test_event();
-        assert!(try_enqueue(&mut op, event)?.is_none());
-        let event = test_event();
-        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        assert!(try_enqueue(&mut op, test_event(0))?.is_none());
+        assert!(try_enqueue(&mut op, test_event(1))?.is_none());
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -534,15 +530,15 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
 
-        let event = test_event();
-        assert!(try_enqueue(&mut op, event)?.is_none());
+        assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
-        let event = test_event();
-        let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("bad event");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -579,12 +575,12 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
-        let event = test_event();
-
-        let next = try_enqueue(&mut op, event)?;
+        let next = try_enqueue(&mut op, test_event(0))?;
         assert_eq!(None, next);
         Ok(())
     }
@@ -617,12 +613,13 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
-        let event = test_event();
 
-        let next = try_enqueue(&mut op, event)?;
+        let next = try_enqueue(&mut op, test_event(0))?;
 
         // FIXME TODO - would be nicer to get error output in tests
         // syntax highlighted in capturable form for assertions
@@ -663,14 +660,16 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
 
-        let event = test_event();
+        let event = test_event(0);
         assert!(try_enqueue(&mut op, event)?.is_none());
 
-        let event = test_event();
+        let event = test_event(15);
         let (out, event) = try_enqueue(&mut op, event)?.expect("bad event");
         assert_eq!("out", out);
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
@@ -711,10 +710,12 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
-        let event = test_event();
+        let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;
 
@@ -767,10 +768,12 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
+        let stmt = tremor_script::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
 
         let mut op = test_select(stmt);
-        let event = test_event();
+        let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;
 
