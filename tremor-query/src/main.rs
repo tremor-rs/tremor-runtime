@@ -175,7 +175,7 @@ fn main() -> Result<()> {
                 let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
                 // FIXME todo exercise graph with event / MRP
-                dbg!(&execable);
+//                dbg!(&execable);
                 let mut continuation: tremor_pipeline::Returns = vec![];
                 let value = LineValue::new(Box::new(bytes), |data| {
                     simd_json::to_borrowed_value(data).expect("woogah")
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
                     &mut continuation,
                 );
 
-                dbg!(&continuation);
+//                dbg!(&continuation);
 
                 for ref got in &continuation {
                     let event = got.1.value.suffix();

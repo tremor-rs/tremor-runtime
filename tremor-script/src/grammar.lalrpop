@@ -196,7 +196,7 @@ CmpExprImut: ImutExpr1<'input> = {
     AddExprImut => <>,
 }
 
-/// Additioan based math (+, -)
+/// Addition based math (+, -)
 AddExprImut: ImutExpr1<'input> = {
     BinOp<BinAdd, AddExprImut, MulExprImut> => <>,
     MulExprImut => <>,
