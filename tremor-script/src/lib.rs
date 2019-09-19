@@ -16,6 +16,7 @@
 
 pub mod ast;
 mod compat;
+mod ctx;
 mod datetime;
 pub mod errors;
 pub mod grok;
@@ -34,6 +35,7 @@ mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
+pub use ctx::EventContext;
 
 #[cfg(test)]
 #[macro_use]
@@ -122,21 +124,6 @@ impl PartialEq for LineValue {
 }
 
 pub use rentals::Value as LineValue;
-
-#[derive(Debug, Default, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize)]
-pub struct EventContext {
-    pub at: u64,
-}
-
-impl crate::registry::Context for EventContext {
-    fn ingest_ns(&self) -> u64 {
-        self.at
-    }
-
-    fn from_ingest_ns(ingest_ns: u64) -> Self {
-        EventContext { at: ingest_ns }
-    }
-}
 
 #[cfg(test)]
 mod tests {

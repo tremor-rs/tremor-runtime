@@ -175,39 +175,44 @@ fn main() -> Result<()> {
                 let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
                 // FIXME todo exercise graph with event / MRP
-//                dbg!(&execable);
+                //                dbg!(&execable);
                 let mut continuation: tremor_pipeline::Returns = vec![];
                 let value = LineValue::new(Box::new(bytes), |data| {
                     simd_json::to_borrowed_value(data).expect("woogah")
                 });
 
-                let _ = execable.enqueue(
-                    "in",
-                    tremor_pipeline::Event {
-                        id: 1,
-                        ingest_ns: 1,
-                        is_batch: false,
-                        kind: None,
-                        meta: tremor_pipeline::MetaMap::new(),
-                        value,
-                    },
-                    &mut continuation,
-                );
+                let mut i = 0;
+                loop {
+                    continuation.clear();
+                    let _ = execable.enqueue(
+                        "in",
+                        tremor_pipeline::Event {
+                            id: i,
+                            ingest_ns: i * 1_000_000_000,
+                            is_batch: false,
+                            kind: None,
+                            meta: tremor_pipeline::MetaMap::new(),
+                            value: value.clone(),
+                        },
+                        &mut continuation,
+                    );
+                    i += 1;
+                    std::thread::sleep_ms(1000);
+                    dbg!(i);
 
-//                dbg!(&continuation);
-
-                for ref got in &continuation {
-                    let event = got.1.value.suffix();
-                    println!("Interpreter ran ok");
-                    if matches.is_present("quiet") {
-                    } else if matches.is_present("print-result-raw") {
-                        println!("{}", serde_json::to_string_pretty(event).expect(""));
-                    } else {
-                        let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
-                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
-                        let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens)
-                            .expect("Failed to highlight error");
+                    for ref got in &continuation {
+                        let event = got.1.value.suffix();
+                        if matches.is_present("quiet") {
+                        } else if matches.is_present("print-result-raw") {
+                            println!("{}", serde_json::to_string_pretty(event).expect(""));
+                        } else {
+                            let result =
+                                format!("{} ", serde_json::to_string_pretty(event).expect(""));
+                            let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                            let mut h = TermHighlighter::new();
+                            h.highlight(lexed_tokens)
+                                .expect("Failed to highlight error");
+                        }
                     }
                 }
             }

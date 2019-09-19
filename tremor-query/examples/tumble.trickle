@@ -12,5 +12,5 @@ select {
     "stdev": stats::stdev(event.value),
     "var": stats::var(event.value),
 }
-from in[`15_secs`]
+from in[`15secs`]
 into out;
