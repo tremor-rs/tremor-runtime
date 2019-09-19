@@ -15,6 +15,7 @@
 use super::Codec;
 use crate::errors::*;
 use serde_yaml;
+use simd_json;
 use tremor_script::LineValue;
 
 #[derive(Clone)]
@@ -22,9 +23,12 @@ pub struct YAML {}
 
 impl Codec for YAML {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(data), |data| serde_yaml::from_slice(data))
-            .map(Some)
-            .map_err(|e| e.0.into())
+        LineValue::try_new(Box::new(data), |data| {
+            serde_yaml::from_slice::<simd_json::OwnedValue>(data)
+                .map(simd_json::BorrowedValue::from)
+        })
+        .map(Some)
+        .map_err(|e| e.0.into())
     }
     fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_vec(&data)?)
