@@ -264,7 +264,7 @@ mod test {
         Ok(action.pop())
     }
 
-    fn parse_query(query: &str) -> Result<crate::op::trickle::trickle::TrickleSelect> {
+    fn parse_query(query: &str) -> Result<crate::op::trickle::select::TrickleSelect> {
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
         let query = tremor_script::script::QueryRentalWrapper::parse(query, &reg, &aggr_reg)?;
