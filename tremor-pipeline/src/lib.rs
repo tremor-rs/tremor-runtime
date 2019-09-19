@@ -52,9 +52,9 @@ pub type MetaValue = simd_json::value::owned::Value;
 pub type MetaMap = simd_json::value::owned::Map;
 pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
-pub type NodeLookupFn<Ctx> = fn(
-    node: &NodeConfig<Ctx>,
-    stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+pub type NodeLookupFn = fn(
+    node: &NodeConfig,
+    stmt: Option<tremor_script::StmtRentalWrapper>,
 ) -> Result<OperatorNode>;
 pub type NodeMap = HashMap<String, NodeIndex>;
 
@@ -186,12 +186,12 @@ pub enum SignalKind {
 }
 
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
-pub struct NodeConfig<Ctx: tremor_script::Context + Serialize + Clone + 'static> {
+pub struct NodeConfig {
     pub id: String,
     pub kind: NodeKind,
     pub _type: String,
     pub config: config::ConfigMap,
-    pub stmt: Option<Arc<tremor_script::StmtRentalWrapper<Ctx>>>,
+    pub stmt: Option<Arc<tremor_script::StmtRentalWrapper>>,
 }
 
 #[derive(Debug)]
@@ -227,12 +227,10 @@ impl Operator for OperatorNode {
 }
 
 // TODO We need an actual operator registry ...
-pub fn buildin_ops<Ctx: tremor_script::Context>(
-    node: &NodeConfig<Ctx>,
-    stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+pub fn buildin_ops(
+    node: &NodeConfig,
+    stmt: Option<tremor_script::StmtRentalWrapper>,
 ) -> Result<OperatorNode>
-where
-    Ctx: tremor_script::Context + Clone + serde::Serialize + 'static,
 {
     // Resolve from registry
 
@@ -266,14 +264,12 @@ where
     })
 }
 
-impl<Ctx> NodeConfig<Ctx>
-where
-    Ctx: tremor_script::Context + Serialize + 'static,
+impl NodeConfig
 {
     pub fn to_op(
         &self,
-        resolver: NodeLookupFn<Ctx>,
-        stmt: Option<tremor_script::StmtRentalWrapper<Ctx>>,
+        resolver: NodeLookupFn,
+        stmt: Option<tremor_script::StmtRentalWrapper>,
     ) -> Result<OperatorNode> {
         resolver(&self, stmt)
     }
@@ -288,7 +284,7 @@ pub enum Edge {
 }
 
 type Weightless = ();
-pub type ConfigGraph = graph::DiGraph<NodeConfig<EventContext>, Weightless>;
+pub type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
 pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
 
 pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
@@ -638,7 +634,7 @@ impl Pipeline {
     // FIXME no explicit ref to EventContext for lookup ...
     pub fn to_executable_graph(
         &self,
-        resolver: NodeLookupFn<EventContext>,
+        resolver: NodeLookupFn,
     ) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();

@@ -28,7 +28,7 @@ pub struct TrickleSelect {
     pub id: String,
     pub cnt: u64,
     pub fake_window_size: u64,
-    pub stmt: tremor_script::StmtRentalWrapper<EventContext>,
+    pub stmt: tremor_script::StmtRentalWrapper,
 }
 
 unsafe impl Send for TrickleSelect {
@@ -247,7 +247,7 @@ mod test {
 
     use std::sync::Arc;
 
-    fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper<EventContext>) -> TrickleSelect {
+    fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper) -> TrickleSelect {
         TrickleSelect {
             id: "select".to_string(),
             stmt,
@@ -272,7 +272,7 @@ mod test {
         let stmt_rental = tremor_script::script::rentals::Stmt::new(query.query.clone(), |q| {
             q.suffix().stmts[0].clone()
         });
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
         Ok(test_select(stmt))
     }
 
@@ -329,7 +329,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
         let event = test_event();
@@ -373,7 +373,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
 
@@ -418,7 +418,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
         let event = test_event();
@@ -456,7 +456,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
         let event = test_event();
@@ -502,7 +502,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
 
@@ -550,7 +550,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
         let event = test_event();
@@ -606,7 +606,7 @@ mod test {
         let stmt_rental =
             tremor_script::script::rentals::Stmt::new(query.query.clone(), |_| stmt_ast);
 
-        let stmt = tremor_script::StmtRentalWrapper { stmt: stmt_rental };
+        let stmt = tremor_script::StmtRentalWrapper { stmt: Arc::new(stmt_rental) };
 
         let mut op = test_select(stmt);
         let event = test_event();

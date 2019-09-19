@@ -72,22 +72,18 @@ where
 }
 
 #[derive(Debug)]
-pub struct QueryRentalWrapper<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
+pub struct QueryRentalWrapper
 {
-    pub query: Arc<rentals::Query<Ctx>>,
+    pub query: Arc<rentals::Query<crate::EventContext>>,
     pub source: String,
     pub warnings: Vec<Warning>,
     pub locals: usize,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
-pub struct StmtRentalWrapper<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
+pub struct StmtRentalWrapper
 {
-    pub stmt: rentals::Stmt<Ctx>,
+    pub stmt: Arc<rentals::Stmt<crate::EventContext>>,
 }
 
 rental! {
@@ -319,15 +315,14 @@ where
     }
 }
 
-impl<'run, 'event, 'script, Ctx> QueryRentalWrapper<Ctx>
+impl<'run, 'event, 'script> QueryRentalWrapper
 where
-    Ctx: Context + Serialize + 'static,
     'script: 'event,
     'event: 'run,
 {
     pub fn parse(
         script: &'script str,
-        reg: &Registry<Ctx>,
+        reg: &Registry<crate::EventContext>,
         aggr_reg: &AggrRegistry,
     ) -> Result<Self> {
         let mut source = script.to_string();
@@ -368,19 +363,18 @@ where
     }
 }
 
-impl<'run, 'event, 'script, Ctx> StmtRentalWrapper<Ctx>
+impl<'run, 'event, 'script> StmtRentalWrapper
 where
-    Ctx: Context + Serialize + 'static,
     'script: 'event,
     'event: 'run,
 {
     #[allow(dead_code)] // FIXME remove this shit
     fn with_stmt<'elide>(
-        query: &QueryRentalWrapper<Ctx>,
-        encumbered_stmt: crate::ast::Stmt<'elide, Ctx>,
+        query: &QueryRentalWrapper,
+        encumbered_stmt: crate::ast::Stmt<'elide, crate::EventContext>,
     ) -> Self {
         StmtRentalWrapper {
-            stmt: rentals::Stmt::new(query.query.clone(), |_| {
+            stmt: Arc::new(rentals::Stmt::new(query.query.clone(), |_| {
                 // NOTE We are eliding the lifetime 'elide here which is the purpose
                 // of the rental and the rental wrapper, so we disabuse mem::trensmute
                 // to avoid lifetime elision/mapping warnings from the rust compiler which
@@ -391,7 +385,7 @@ where
                 // are compatible by definition in their rentals::{Query,Struct} co-definitions
                 //
                 unsafe { std::mem::transmute(encumbered_stmt) }
-            }),
+            })),
         }
     }
 }

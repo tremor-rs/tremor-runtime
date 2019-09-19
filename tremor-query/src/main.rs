@@ -18,7 +18,9 @@ mod query;
 
 use crate::query::Query; // {Query, Return};
 use clap::{App, Arg};
-use halfbrown::hashmap;
+// use halfbrown::hashmap;
+use crate::errors::*;
+pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
 use simd_json::borrowed::Value;
 use std::fs::File;
 use std::io::Read;
@@ -26,12 +28,7 @@ use std::iter::FromIterator;
 use tremor_script::highlighter::{Highlighter, TermHighlighter};
 use tremor_script::*;
 
-#[macro_use]
-extern crate serde_derive;
-
-pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
-
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new("tremor-query")
         .version("0.6.0")
         .about("Tremor interpreter")
@@ -77,12 +74,12 @@ fn main() {
                 .takes_value(false)
                 .help("Prints the trickle script as a Pipeline configuration."),
         )
-        .arg(
-            Arg::with_name("print-pipeline-dot")
-                .short("d")
-                .takes_value(false)
-                .help("Prints the trickle script as a GraphViz dot file."),
-        )
+        // .arg(
+        //     Arg::with_name("print-pipeline-dot")
+        //         .short("d")
+        //         .takes_value(false)
+        //         .help("Prints the trickle script as a GraphViz dot file."),
+        // )
         .arg(
             Arg::with_name("print-result-raw")
                 .short("x")
@@ -106,7 +103,7 @@ fn main() {
         .read_to_string(&mut raw)
         .expect("");
 
-    let reg: Registry<()> = registry::registry();
+    let reg: Registry<EventContext> = registry::registry();
 
     match Query::parse(&raw, &reg) {
         Ok(runnable) => {
@@ -118,14 +115,14 @@ fn main() {
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
-                Query::<()>::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
+                Query::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
             }
             if matches.is_present("print-ast") {
                 let ast = serde_json::to_string_pretty(&runnable.query.query.suffix())
                     .expect("Failed to render AST");
                 println!();
                 let mut h = TermHighlighter::new();
-                Query::<()>::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
+                Query::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
             }
             if matches.is_present("print-ast-raw") {
                 let ast = serde_json::to_string_pretty(&runnable.query.query.suffix())
@@ -159,22 +156,18 @@ fn main() {
                 bytes = b"{}".to_vec();
             };
 
-            let mut global_map = Value::Object(hashmap! {});
-            let ctx = ();
+            // let mut global_map = Value::Object(hashmap! {});
+            // let ctx = ();
             let _expr = Value::Null;
             if matches.is_present("print-pipeline-dot") {
-                let expr = runnable.to_pipe(&ctx, &mut global_map);
-                println!("{}", &expr.expect("").0.to_dot());
+                // FIXME will never fire as this ( dev-only, transient ) facility has been removed
+                //                let expr = runnable.to_pipe(&ctx, &mut global_map);
+                //                println!("{}", &expr.expect("").0.to_dot());
             } else if matches.is_present("print-pipeline-config") {
-                let expr = runnable.to_pipe(&ctx, &mut global_map);
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&expr.expect("").1).expect("")
-                );
+                let expr = runnable.to_config()?; // (&ctx, &mut global_map)?;
+                println!("{}", serde_json::to_string_pretty(&expr).expect(""));
             } else {
-                let mut execable = runnable
-                    .to_exec(&ctx, &mut global_map)
-                    .expect("dont fucking care");
+                let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
                 // FIXME todo exercise graph with event / MRP
                 dbg!(&execable);
@@ -183,7 +176,7 @@ fn main() {
                     simd_json::to_borrowed_value(data).expect("woogah")
                 });
 
-                execable.enqueue(
+                let _ = execable.enqueue(
                     "in",
                     tremor_pipeline::Event {
                         id: 1,
@@ -208,11 +201,13 @@ fn main() {
                         let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
                         let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens).expect("Failed to highliht error");
+                        h.highlight(lexed_tokens).expect("Failed to highlight error");
                     }
                 }
             }
         }
         Err(_e) => panic!("didn't work"), // FIXME
-    }
+    };
+
+    Ok(())
 }
