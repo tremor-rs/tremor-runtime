@@ -273,8 +273,8 @@ where
                         outputs.push(id);
                     };
                 }
-                NotYetImplemented => {
-                    dbg!(("not yet implemented", &NotYetImplemented));
+                not_yet_implemented => {
+                    dbg!(("not yet implemented", &not_yet_implemented));
                 }
             };
         }
