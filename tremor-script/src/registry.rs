@@ -162,7 +162,7 @@ impl Context for () {
         (seconds * 1_000_000_000) + nanoseconds
     }
 
-    fn from_ingest_ns(_ingest_ns: u64)  {}
+    fn from_ingest_ns(_ingest_ns: u64) {}
 }
 
 #[derive(Clone)]

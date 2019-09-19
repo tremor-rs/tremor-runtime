@@ -588,7 +588,7 @@ pub fn supported_operators(
                 id: node.id.clone(),
                 stmt: stmt.expect("no surprises here unless there is"),
                 cnt: 0,
-                fake_window_size: 0,
+                dimensions: HashMap::new(),
             })
             // FIXME only needed during initial dev - then die die die i fire
             //            let op = PassthroughFactory::new_boxed();

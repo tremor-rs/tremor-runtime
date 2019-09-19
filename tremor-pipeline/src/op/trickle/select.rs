@@ -14,32 +14,45 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-use std::borrow::Cow;
+
 use tremor_script::{
     self,
     interpreter::{AggrType, ExecOpts},
-    registry::{Context, Registry},
+    registry::Context,
     EventContext,
 }; // , ast::InvokeAggrFn};
-use simd_json::OwnedValue as Value;
+
+use halfbrown::HashMap;
 
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
     pub cnt: u64,
     pub stmt: tremor_script::StmtRentalWrapper,
-    pub dimensions: HashMap<Value, Box<dyn Window>>
+    pub dimensions: HashMap<String, Window>,
 }
 
-
-
-trait Window {
+pub trait WindowTrait: std::fmt::Debug + Clone {
     fn on_event(&mut self, event: &Event) -> WindowEvent;
 }
 
-enum WindowEvent {
+#[derive(Debug, Clone)]
+pub enum Window {
+    Tumbling(TumblingWindowOnEventTime),
+    No(NoWindow),
+}
+impl WindowTrait for Window {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+        match self {
+            Window::Tumbling(w) => w.on_event(event),
+            Window::No(w) => w.on_event(event),
+        }
+    }
+}
+
+pub enum WindowEvent {
     /// New window is opened,
-    Open, 
+    Open,
     /// Accumulate the data
     Accumulate,
     /// Close the window before this event and opeen the next one
@@ -47,9 +60,11 @@ enum WindowEvent {
 }
 
 #[derive(Default, Debug, Clone)]
-struct NoWindow {open: bool}
-impl Window for NoWindow {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
+pub struct NoWindow {
+    open: bool,
+}
+impl WindowTrait for NoWindow {
+    fn on_event(&mut self, _event: &Event) -> WindowEvent {
         if self.open {
             WindowEvent::Role
         } else {
@@ -59,14 +74,13 @@ impl Window for NoWindow {
     }
 }
 #[derive(Default, Debug, Clone)]
-struct TumblingWindowOnEventTime {
-    start_time: Option<u64>,
-    size: u64
+pub struct TumblingWindowOnEventTime {
+    next_window: Option<u64>,
+    size: u64,
 }
 
-impl Window for TumblingWindowOnEventTime {
+impl WindowTrait for TumblingWindowOnEventTime {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
-
         match self.next_window {
             None => {
                 self.next_window = Some(event.ingest_ns + self.size);
@@ -76,11 +90,9 @@ impl Window for TumblingWindowOnEventTime {
                 self.next_window = Some(event.ingest_ns + self.size);
                 WindowEvent::Role
             }
-            Some(_) => WindowEvent::Accumulate
+            Some(_) => WindowEvent::Accumulate,
         }
-        
     }
-
 }
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
@@ -98,7 +110,7 @@ impl Operator for TrickleSelect {
         };
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-        let event_meta: simd_json::borrowed::Value =
+        let _event_meta: simd_json::borrowed::Value =
             simd_json::owned::Value::Object(event.meta).into();
 
         let l = tremor_script::interpreter::LocalStack::with_size(0);
@@ -110,6 +122,7 @@ impl Operator for TrickleSelect {
                 aggregates,
                 consts,
             } => {
+                /*
                 if self.cnt == 0 {
                     for aggr in aggregates.iter_mut() {
                         let invocable = &mut aggr.invocable;
@@ -151,6 +164,7 @@ impl Operator for TrickleSelect {
                 } else {
                     self.cnt = 0;
                 };
+                */
                 (stmt, aggregates, consts)
             }
             _ => unreachable!(),
@@ -285,7 +299,7 @@ mod test {
             id: "select".to_string(),
             stmt,
             cnt: 0,
-            fake_window_size: 1,
+            dimensions: HashMap::new(),
         }
     }
 

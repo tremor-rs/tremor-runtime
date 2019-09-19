@@ -274,9 +274,9 @@ impl<'de> Deserialize<'de> for Extractor {
                 E: de::Error,
             {
                 match s {
-                    "Base64" =>  Ok(Extractor::Base64),
-                    "Influx" =>  Ok(Extractor::Influx),
-                    "Json" =>  Ok(Extractor::Json),
+                    "Base64" => Ok(Extractor::Base64),
+                    "Influx" => Ok(Extractor::Influx),
+                    "Json" => Ok(Extractor::Json),
                     _ => Err(de::Error::invalid_value(de::Unexpected::Str(&s), &self)),
                 }
             }
