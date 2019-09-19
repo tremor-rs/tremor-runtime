@@ -21,16 +21,67 @@ use tremor_script::{
     registry::{Context, Registry},
     EventContext,
 }; // , ast::InvokeAggrFn};
+use simd_json::OwnedValue as Value;
 
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
     pub cnt: u64,
-    pub fake_window_size: u64,
     pub stmt: tremor_script::StmtRentalWrapper,
+    pub dimensions: HashMap<Value, Box<dyn Window>>
 }
 
 
+
+trait Window {
+    fn on_event(&mut self, event: &Event) -> WindowEvent;
+}
+
+enum WindowEvent {
+    /// New window is opened,
+    Open, 
+    /// Accumulate the data
+    Accumulate,
+    /// Close the window before this event and opeen the next one
+    Role,
+}
+
+#[derive(Default, Debug, Clone)]
+struct NoWindow {open: bool}
+impl Window for NoWindow {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+        if self.open {
+            WindowEvent::Role
+        } else {
+            self.open = true;
+            WindowEvent::Open
+        }
+    }
+}
+#[derive(Default, Debug, Clone)]
+struct TumblingWindowOnEventTime {
+    start_time: Option<u64>,
+    size: u64
+}
+
+impl Window for TumblingWindowOnEventTime {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+
+        match self.next_window {
+            None => {
+                self.next_window = Some(event.ingest_ns + self.size);
+                WindowEvent::Open
+            }
+            Some(start_time) if start_time > event.ingest_ns => {
+                self.next_window = Some(event.ingest_ns + self.size);
+                WindowEvent::Role
+            }
+            Some(_) => WindowEvent::Accumulate
+        }
+        
+    }
+
+}
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]

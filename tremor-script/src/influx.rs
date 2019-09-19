@@ -311,7 +311,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -328,7 +328,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -347,7 +347,7 @@ mod tests {
                 "bug_concentration": 98.0,
 
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -363,7 +363,7 @@ mod tests {
             "fields": {
                 "temperature": 82
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Some(r), parsed);
@@ -378,7 +378,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -393,7 +393,7 @@ mod tests {
             "fields": {
                 "temperature": 82
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -410,7 +410,7 @@ mod tests {
             "fields": {
                 "temperature": "too warm"
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -432,7 +432,7 @@ mod tests {
             "fields": {
                 "too_hot": true
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         for s in sarr {
@@ -456,7 +456,7 @@ mod tests {
             "fields": {
                 "too_hot": false
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         for s in sarr {
@@ -475,7 +475,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -492,7 +492,7 @@ mod tests {
             "fields": {
                 "temp=rature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -508,7 +508,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -525,7 +525,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -541,7 +541,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -558,7 +558,7 @@ mod tests {
             "fields": {
                 "temperature": "too\"hot\""
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))

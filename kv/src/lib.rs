@@ -98,19 +98,17 @@ impl Pattern {
                 } else {
                     return Err(Error::InvalidPattern(i));
                 }
-            } else {
-                if let Some(i1) = pattern[i..].find("%{key}") {
-                    if i1 != 0 {
-                        field_seperators.push(pattern[i..i + i1].to_string());
-                    }
-                    i += i1;
-                } else if !pattern[i..].is_empty() {
-                    field_seperators.push(pattern[i..].to_string());
-
-                    break;
-                } else {
-                    break;
+            } else if let Some(i1) = pattern[i..].find("%{key}") {
+                if i1 != 0 {
+                    field_seperators.push(pattern[i..i + i1].to_string());
                 }
+                i += i1;
+            } else if !pattern[i..].is_empty() {
+                field_seperators.push(pattern[i..].to_string());
+
+                break;
+            } else {
+                break;
             }
         }
         if field_seperators.is_empty() {
