@@ -132,7 +132,7 @@ fn onramp_loop(
                     Err(e) => {
                         if e.kind() == ErrorKind::WouldBlock {
                             // TODO remove later
-                            println!("Got would block (accept)");
+                            //println!("Got would block (accept)");
                             break;
                         } else {
                             error!("Failed to onboard new tcp client connection: {}", e);
@@ -142,44 +142,46 @@ fn onramp_loop(
                 },
                 token => {
                     loop {
-                        // TODO eliminate unwrap here
-                        match connections.get_mut(&token).unwrap().read(&mut buf) {
-                            Ok(0) => {
-                                // TODO add client info
-                                debug!("Connection closed by client");
-                                connections.remove(&token);
-                                break;
-                            }
-                            Ok(n) => {
-                                // TODO remove later
-                                println!("Read {} bytes", n);
-                                println!("{}", String::from_utf8_lossy(&buf));
-
-                                send_event(
-                                    &pipelines,
-                                    &mut preprocessors,
-                                    &mut codec,
-                                    id,
-                                    buf[0..n].to_vec(),
-                                );
-                                id += 1;
-                            }
-                            Err(e) => match e.kind() {
-                                ErrorKind::WouldBlock => {
-                                    // TODO remove later
-                                    println!("Got would block (stream read)");
+                        match connections.get_mut(&token) {
+                            Some(stream) => match stream.read(&mut buf) {
+                                Ok(0) => {
+                                    // TODO add client info
+                                    debug!("Connection closed by client");
+                                    connections.remove(&token);
                                     break;
                                 }
-                                ErrorKind::Interrupted => {
+                                Ok(n) => {
                                     // TODO remove later
-                                    println!("Got interrupt (stream read)");
-                                    continue;
+                                    //println!("Read {} bytes", n);
+                                    //println!("{}", String::from_utf8_lossy(&buf));
+
+                                    send_event(
+                                        &pipelines,
+                                        &mut preprocessors,
+                                        &mut codec,
+                                        id,
+                                        buf[0..n].to_vec(),
+                                    );
+                                    id += 1;
                                 }
-                                _ => {
-                                    error!("Failed to read data from tcp client connection: {}", e);
-                                    //return Err(e.into());
-                                }
+                                Err(e) => match e.kind() {
+                                    ErrorKind::WouldBlock => {
+                                        // TODO remove later
+                                        //println!("Got would block (stream read)");
+                                        break;
+                                    }
+                                    ErrorKind::Interrupted => {
+                                        // TODO remove later
+                                        //println!("Got interrupt (stream read)");
+                                        continue;
+                                    }
+                                    _ => {
+                                        error!("Failed to read data from tcp client connection: {}", e);
+                                        //return Err(e.into());
+                                    }
+                                },
                             },
+                            None => error!("Failed to retrieve tcp client connection for token: {}", token.0)
                         }
                     }
                 }
