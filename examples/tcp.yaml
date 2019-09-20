@@ -1,9 +1,7 @@
 onramp:
   - id: tcp
-    type: tcp
-    preprocessors:
-      - decompress
-      - gelf-chunking-tcp
+    # TODO make this tcp later
+    type: tcp2
     codec: json
     config:
       host: "localhost"
