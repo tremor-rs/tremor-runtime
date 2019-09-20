@@ -55,7 +55,7 @@ Stmt: Stmt1<'input> = {
 
 
 WindowClause: Option<WindowDefn1> = {
-    ("[" <WindowDefn> "]")? => <>
+    (<WindowDefn>)? => <>
 }
 WindowDefn: WindowDefn1  = {
   <start:@L> "[" <id:Ident> "]" <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() }
