@@ -121,7 +121,7 @@ pub struct Query<'script, Ctx: Context + Clone + Serialize + 'static> {
 pub enum Stmt1<'script> {
     WindowDecl(WindowDecl1<'script>),
     StreamDecl(StreamDecl),
-    OperatorDecl(OperatorDecl<'script>),
+    OperatorDecl(OperatorDecl1<'script>),
     ScriptDecl(ScriptDecl1<'script>),
     SelectStmt(Box<MutSelect1<'script>>),
 }
@@ -142,12 +142,45 @@ pub struct OperatorKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OperatorDecl1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub kind: OperatorKind,
+    pub id: String,
+    pub params: Option<WithExprs1<'script>>,
+}
+
+impl<'script> OperatorDecl1<'script> {
+    #[allow(dead_code)]
+    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+        self,
+        helper: &mut Helper<'script, 'registry, Ctx>,
+    ) -> Result<OperatorDecl<'script>> {
+        Ok(OperatorDecl {
+            start: self.start,
+            end: self.end,
+            id: self.id,
+            kind: self.kind,
+            params: match self.params {
+                Some(p) => {
+                    let mut pup = HashMap::new();
+                    for (name, value) in p.into_iter() {
+                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
+                    }
+                    Some(pup)
+                }
+                None => None,
+            },
+        })
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDecl<'script> {
     pub start: Location,
     pub end: Location,
     pub kind: OperatorKind,
     pub id: String,
-    pub params: Option<Exprs1<'script>>,
+    pub params: Option<HashMap<String, Value<'script>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -155,7 +188,7 @@ pub struct ScriptDecl1<'script> {
     pub start: Location,
     pub end: Location,
     pub id: String,
-    pub params: Option<Exprs1<'script>>,
+    pub params: Option<WithExprs1<'script>>,
     pub script: Script1<'script>,
 }
 
@@ -171,9 +204,9 @@ impl<'script> ScriptDecl1<'script> {
             id: self.id,
             params: match self.params {
                 Some(p) => {
-                    let mut pup = vec![];
-                    for (_i, e) in p.into_iter().enumerate() {
-                        pup.push(e.up(helper)?);
+                    let mut pup = HashMap::new();
+                    for (name, value) in p.into_iter() {
+                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
                 }
@@ -190,7 +223,7 @@ pub struct ScriptDecl<'script, Ctx: Context + Clone + Serialize + 'static> {
     pub start: Location,
     pub end: Location,
     pub id: String,
-    pub params: Option<Exprs<'script, Ctx>>,
+    pub params: Option<HashMap<String, Value<'script>>>,
     pub script: Script<'script, Ctx>,
 }
 
@@ -216,13 +249,13 @@ impl<'script> Stmt1<'script> {
                 })
             }
             Stmt1::StreamDecl(stmt) => Ok(Stmt::StreamDecl(stmt)),
-            Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt)),
+            Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
             Stmt1::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script, Ctx> = stmt.up(helper)?;
                 Ok(Stmt::ScriptDecl(stmt))
             }
             Stmt1::WindowDecl(stmt) => {
-                let stmt: WindowDecl<'script, Ctx> = stmt.up(helper)?;
+                let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::WindowDecl(stmt))
             } // _ => unreachable!("should not be possible given structure")
         }
@@ -232,7 +265,7 @@ impl<'script> Stmt1<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(dead_code)]
 pub enum Stmt<'script, Ctx: Context + Clone + Serialize + 'static> {
-    WindowDecl(WindowDecl<'script, Ctx>),
+    WindowDecl(WindowDecl<'script>),
     StreamDecl(StreamDecl),
     OperatorDecl(OperatorDecl<'script>),
     ScriptDecl(ScriptDecl<'script, Ctx>),
@@ -255,14 +288,14 @@ pub struct WindowDecl1<'script> {
     pub end: Location,
     pub id: String,
     pub kind: WindowKind,
-    pub params: Option<Exprs1<'script>>,
+    pub params: Option<WithExprs1<'script>>,
 }
 
 impl<'script> WindowDecl1<'script> {
     pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
         self,
         helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<WindowDecl<'script, Ctx>> {
+    ) -> Result<WindowDecl<'script>> {
         Ok(WindowDecl {
             start: self.start,
             end: self.end,
@@ -270,9 +303,9 @@ impl<'script> WindowDecl1<'script> {
             kind: self.kind,
             params: match self.params {
                 Some(p) => {
-                    let mut pup = vec![];
-                    for (_i, e) in p.into_iter().enumerate() {
-                        pup.push(e.up(helper)?);
+                    let mut pup = HashMap::new();
+                    for (name, value) in p.into_iter() {
+                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
                 }
@@ -283,12 +316,12 @@ impl<'script> WindowDecl1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDecl<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct WindowDecl<'script> {
     pub start: Location,
     pub end: Location,
     pub id: String,
     pub kind: WindowKind,
-    pub params: Option<Exprs<'script, Ctx>>,
+    pub params: Option<HashMap<String, Value<'script>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2735,6 +2768,7 @@ pub type ImutComprehensionCases<'script, Ctx> = Vec<ImutComprehensionCase<'scrip
 pub type ImutComprehensionCases1<'script> = Vec<ImutComprehensionCase1<'script>>;
 pub type ArrayPredicatePatterns<'script, Ctx> = Vec<ArrayPredicatePattern<'script, Ctx>>;
 pub type ArrayPredicatePatterns1<'script> = Vec<ArrayPredicatePattern1<'script>>;
+pub type WithExprs1<'script> = Vec<(Ident<'script>, ImutExpr1<'script>)>;
 
 fn replace_last_shadow_use<'script, Ctx: Context + Clone + Serialize + 'static>(
     replace_idx: usize,
