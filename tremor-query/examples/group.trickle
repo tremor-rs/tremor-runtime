@@ -1,0 +1,19 @@
+create tumbling window `5secs`
+ with
+   #IOU constant functions
+   #interval = datetime::with_seconds(5),
+   interval = 5000000000
+end;
+
+select {
+    "count": stats::count(),
+    "min": stats::min(event.value),
+    "max": stats::max(event.value),
+    "mean": stats::mean(event.value),
+    "stdev": stats::stdev(event.value),
+    "var": stats::var(event.value),
+    "group": event.`group`
+}
+from in[`5secs`]
+group by set(event.`group`)
+into out;
