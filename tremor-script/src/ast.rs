@@ -340,7 +340,8 @@ pub struct MutSelect1<'script> {
     pub target: ImutExpr1<'script>,
     pub maybe_where: Option<ImutExpr1<'script>>,
     pub maybe_having: Option<ImutExpr1<'script>>,
-    pub window: Option<WindowDefn1>,
+    pub maybe_group_by: Option<ImutExpr1<'script>>,
+    pub maybe_window: Option<WindowDefn1>,
 }
 impl_expr1!(MutSelect1);
 impl_stmt1!(MutSelect1);
@@ -357,15 +358,10 @@ impl<'script> MutSelect1<'script> {
             from: self.from,
             into: self.into,
             target: self.target.up(helper)?,
-            maybe_where: match self.maybe_where {
-                Some(clause) => Some(clause.up(helper)?),
-                None => None,
-            },
-            maybe_having: match self.maybe_having {
-                Some(clause) => Some(clause.up(helper)?),
-                None => None,
-            },
-            window: self.window,
+            maybe_where: self.maybe_where.map(|h| h.up(helper)).transpose()?,
+            maybe_having: self.maybe_having.map(|h| h.up(helper)).transpose()?,
+            maybe_group_by: self.maybe_group_by.map(|h| h.up(helper)).transpose()?,
+            maybe_window: self.maybe_window,
         })
     }
 }
@@ -379,7 +375,8 @@ pub struct MutSelect<'script, Ctx: Context + Clone + Serialize + 'static> {
     pub target: ImutExpr<'script, Ctx>,
     pub maybe_where: Option<ImutExpr<'script, Ctx>>,
     pub maybe_having: Option<ImutExpr<'script, Ctx>>,
-    pub window: Option<WindowDefn1>,
+    pub maybe_group_by: Option<ImutExpr<'script, Ctx>>,
+    pub maybe_window: Option<WindowDefn1>,
 }
 impl_expr!(MutSelect);
 impl_stmt!(MutSelect);

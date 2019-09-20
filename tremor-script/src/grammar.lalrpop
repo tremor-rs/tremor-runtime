@@ -46,53 +46,37 @@ WindowKind: WindowKind = {
 
 Stmt: Stmt1<'input> = {
     <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
-    <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, kind, id: id.id.to_string(), params: None }),
     <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
-    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params: None }),
     <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
-    <start:@L> "create" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params: None }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
-
-    // SELECT
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having: None, window: None})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <window:WindowDefn> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having: None, window})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having, window: None})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <window:WindowDefn> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: None, maybe_having, window})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having: None, window: None})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <window:WindowDefn> <there:WhereClause> "into" <into:Ident> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where: there, maybe_having: None, window})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, window: None})),
-
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <window:WindowDefn> <maybe_where:WhereClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, window}))
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_window:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, maybe_window, maybe_group_by}))
 }
 
 
-WindowDefn: Option<WindowDefn1> = {
-  <start:@L> "[" <id:Ident> "]" <end:@L> => Some(WindowDefn1 { start, end, id: id.id.to_string() })
+
+WindowClause: Option<WindowDefn1> = {
+    ("[" <WindowDefn> "]")? => <>
+}
+WindowDefn: WindowDefn1  = {
+  <start:@L> "[" <id:Ident> "]" <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() }
 }
 
 WhereClause: Option<ImutExpr1<'input>> = {
-    "where" <expr:ComplexExprImut> => Some(expr),
+    ("where" <ComplexExprImut>)? => <>,
 }
 
 HavingClause: Option<ImutExpr1<'input>> = {
-    "having" <expr:ComplexExprImut> => Some(expr),
+    ("having" <ComplexExprImut>)? => <>,
 }
 
-// GroupByClause: Option<GroupByExpr1<'input>> = {
-//    "group" "by"
-//}
+GroupByClause: Option<ImutExpr1<'input>> = {
+    ("group" "by" "set" "("<ExprImut>")")? => <>
+}
 
 // GroupBy
 
-
                                                                                                                                                         WithClause: Option<WithExprs1<'input>> = {
-    "with" <exprs:WithExprs> "end" => Some(exprs),
+    ("with" <WithExprs> "end")? => <>,
 }
 
 WithExprs: WithExprs1<'input> = {
@@ -862,6 +846,7 @@ extern {
         "having" => lexer::Token::Having,
         "group" => lexer::Token::Group,
         "by" => lexer::Token::By,
+        "set" => lexer::Token::Set,
     }
 }
 

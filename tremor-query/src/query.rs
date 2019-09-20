@@ -640,11 +640,11 @@ pub fn supported_operators(
     let op = match name_parts.as_slice() {
         ["trickle", "select"] => {
             let stmt = stmt.expect("no surprises here unless there is");
-            let dimensions = SelectDims::from_query(stmt.stmt.clone());
+            let groups = SelectDims::from_query(stmt.stmt.clone());
             let window = if let Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
                 let windows = windows.unwrap();
                 dbg!(&windows);
-                s.window.clone().map(|n| {
+                s.maybe_window.clone().map(|n| {
                     dbg!(&n);
                     windows.get(&n.id).unwrap().clone()
                 })
@@ -654,7 +654,7 @@ pub fn supported_operators(
             Box::new(TrickleSelect {
                 id: node.id.clone(),
                 stmt,
-                dimensions,
+                groups,
                 window,
             })
             // FIXME only needed during initial dev - then die die die i fire
