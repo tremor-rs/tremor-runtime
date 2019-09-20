@@ -1,0 +1,8 @@
+create generic::backpressure operator bp
+with
+    timeout = 10000,
+    steps = [ 1, 50, 100, 250, 750 ], 
+end;
+
+select event from in into bp;
+select event from bp into out;

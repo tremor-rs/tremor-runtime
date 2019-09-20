@@ -1,0 +1,8 @@
+create debug::history operator snoop
+with
+    op = "snoop",
+    name = "passthrough"  
+end;
+
+select event from in into snoop;
+select event from snoop into out;

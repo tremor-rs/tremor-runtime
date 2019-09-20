@@ -1,0 +1,12 @@
+create grouper::bucket operator kfc;
+
+create script categorize
+script
+  let $rate = 1;
+  let $category = "test";
+  event
+end;
+
+select event from in into categorize;
+select event from categorize into kfc;
+select event from kfc into out;
