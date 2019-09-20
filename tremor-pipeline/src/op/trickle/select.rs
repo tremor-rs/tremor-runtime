@@ -16,16 +16,19 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use serde::Serialize;
+use simd_json::borrowed::Value;
+use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::sync::Arc;
-
+//use simd_json::value::ValueTrait;
+//use tremor_script::ast::ImutExpr;
 use tremor_script::{
     self,
     ast::InvokeAggrFn,
     interpreter::{AggrType, ExecOpts},
     script::rentals::Stmt,
     Context, EventContext,
-};
+}; //, FN_REGISTRY};
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script, EventContext>>;
 
@@ -195,16 +198,22 @@ impl WindowTrait for TumblingWindowOnEventTime {
     }
 }
 
+const NO_AGGRS: [InvokeAggrFn<'static, EventContext>; 0] = [];
+
+impl TrickleSelect {
+    fn opts() -> ExecOpts {
+        ExecOpts {
+            result_needed: true,
+            aggr: AggrType::Emit,
+        }
+    }
+}
+
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        use simd_json::borrowed::Value; //, FN_REGISTRY};
-
-        let opts = ExecOpts {
-            result_needed: true,
-            aggr: AggrType::Emit,
-        };
+        let opts = Self::opts();
         let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
 
         let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
@@ -223,7 +232,6 @@ impl Operator for TrickleSelect {
                 //
                 // Before any select processing, we filter by where clause
                 //
-                let no_aggrs = vec![];
                 // FIXME: ?
                 let event_meta: simd_json::borrowed::Value =
                     simd_json::owned::Value::Object(event.meta.clone()).into();
@@ -231,13 +239,13 @@ impl Operator for TrickleSelect {
                     let test = guard.run(
                         opts,
                         &ctx,
-                        &no_aggrs,
+                        &NO_AGGRS,
                         unwind_event,
                         &event_meta,
                         &local_stack,
                         &consts,
                     )?;
-                    let _ = match test.into_owned() {
+                    match test.borrow() {
                         Value::Bool(true) => (),
                         Value::Bool(false) => {
                             return Ok(vec![]);
@@ -295,7 +303,7 @@ impl Operator for TrickleSelect {
                             let result = arg.run(
                                 opts,
                                 &ctx,
-                                &no_aggrs,
+                                &NO_AGGRS,
                                 unwind_event,
                                 &event_meta,
                                 &local_stack,
@@ -355,7 +363,7 @@ impl Operator for TrickleSelect {
                     let value = stmt.target.run(
                         opts,
                         &ctx,
-                        &no_aggrs,
+                        &NO_AGGRS,
                         unwind_event,
                         &event_meta,
                         &local_stack,
@@ -367,7 +375,7 @@ impl Operator for TrickleSelect {
                         let test = guard.run(
                             opts,
                             &ctx,
-                            &no_aggrs,
+                            &NO_AGGRS,
                             unwind_event,
                             &Value::Null,
                             &local_stack,

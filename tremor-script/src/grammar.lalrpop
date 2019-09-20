@@ -47,8 +47,8 @@ WindowKind: WindowKind = {
 Stmt: Stmt1<'input> = {
     <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
     <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, kind, id: id.id.to_string(), params: None }),
-    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl { start, end, kind, id: id.id.to_string(), params }),
-    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <end:@L> => Stmt1::OperatorDecl(OperatorDecl { start, end, kind, id: id.id.to_string(), params: None }),
+    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
+    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params: None }),
     <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params: None }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
@@ -90,11 +90,12 @@ HavingClause: Option<ImutExpr1<'input>> = {
 
 // GroupBy
 
-WithClause: Option<Exprs1<'input>> = {
+
+                                                                                                                                                        WithClause: Option<WithExprs1<'input>> = {
     "with" <exprs:WithExprs> "end" => Some(exprs),
 }
 
-WithExprs: Exprs1<'input> = {
+WithExprs: WithExprs1<'input> = {
     <item:WithExpr> "," <list:WithExprs> => {
        let mut list = list;
        list.push(item);
@@ -103,8 +104,8 @@ WithExprs: Exprs1<'input> = {
     <item:WithExpr> ","? => vec![item],
 }
 
-WithExpr: Expr1<'input> = {
-    <start:@L> <expr:Assignment> <end:@L> => expr, 
+WithExpr: (Ident<'input>, ImutExpr1<'input>) = {
+    <start:@L> <name:Ident> "=" <expr:ExprImut> => (name, expr)
 }
 
 OperatorKind: OperatorKind = {
