@@ -257,7 +257,7 @@ impl<'script> Stmt1<'script> {
             Stmt1::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::WindowDecl(stmt))
-            } // _ => unreachable!("should not be possible given structure")
+            }
         }
     }
 }
@@ -544,6 +544,8 @@ impl<'script> Script1<'script> {
                 Expr::Imut(ImutExpr::Path(Path::Event(EventPath { segments, .. })))
                     if segments.is_empty() =>
                 {
+                    // We need this because we can't @ out the imut expr and access
+                    // segments at the same time ... damn you rust
                     if let Expr::Imut(i) = e {
                         let expr = EmitExpr {
                             start: i.s(),
@@ -697,8 +699,7 @@ fn reduce2<'script, Ctx: Context + Clone + Serialize + 'static>(
 ) -> Result<Value<'script>> {
     match expr {
         ImutExpr::Literal(Literal { value: v, .. }) => Ok(v),
-        //ImutExpr::Unary(Literal { value: v, .. }) => Ok(v),
-        _ => unreachable!(),
+        other => Err(ErrorKind::NotConstant(other.extent(), other.extent().expand_lines(2)).into()),
     }
 }
 
@@ -1196,6 +1197,9 @@ impl<'script> Invoke1<'script> {
         self,
         helper: &mut Helper<'script, 'registry, Ctx>,
     ) -> InvokeAggr1<'script> {
+        // The only path InbokeAggr can be reached is when it
+        // first was checked as a function -> aggr function
+        // so at this point we know it exists
         if helper.aggr_reg.find(&self.module, &self.fun).is_ok() {
             InvokeAggr1 {
                 start: self.start,
