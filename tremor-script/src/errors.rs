@@ -170,6 +170,7 @@ impl ErrorKind {
             UnterminatedHereDoc(outer, inner, _) => (Some(*outer), Some(*inner)),
             TailingHereDoc(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             AggrInAggr(outer, inner) => (Some(*outer), Some(*inner)),
+            NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | PipelineError(_)
@@ -321,6 +322,10 @@ error_chain! {
         EmptyScript {
             description("No expressions were found in the script")
                 display("No expressions were found in the script")
+        }
+        NotConstant(expr: Range, inner: Range) {
+            description("The expression isn't constant and can't be evaluated at compile time")
+                display("The expression isn't constant and can't be evaluated at compile time")
         }
         TypeConflict(expr: Range, inner: Range, got: ValueType, expected: Vec<ValueType>) {
             description("Conflicting types")

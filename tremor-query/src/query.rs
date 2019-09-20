@@ -18,6 +18,7 @@ use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use serde::Serialize;
 use simd_json::borrowed::Value;
+use simd_json::value::ValueTrait;
 use std::boxed::Box;
 use std::io::Write;
 use tremor_pipeline::config::{self, InputPort, OutputPort};
@@ -112,7 +113,7 @@ pub struct Query {
     pub query: tremor_script::QueryRentalWrapper,
 }
 
-fn window_decl_to_impl<'script>(d: &WindowDecl<'script, EventContext>) -> WindowImpl {
+fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     use tremor_pipeline::op::trickle::select::*;
     /*
     let opts = ExecOpts {
@@ -133,11 +134,25 @@ fn window_decl_to_impl<'script>(d: &WindowDecl<'script, EventContext>) -> Window
     )?;
     paramsp["inteval"]
      */
-    TumblingWindowOnEventTime {
-        size: 15_000_000_000,
-        next_window: None,
+
+    match &d.kind {
+        WindowKind::Sliding => unreachable!(),
+        WindowKind::Tumbling => {
+            if let Some(interval) = d
+                .params
+                .as_ref()
+                .and_then(|p| p.get("interval").and_then(|i| i.as_u64()))
+            {
+                Ok(TumblingWindowOnEventTime {
+                    size: interval,
+                    next_window: None,
+                }
+                .into())
+            } else {
+                Err(".unwrap()".into())
+            }
+        }
     }
-    .into()
 }
 
 impl<'run, 'event, 'script> Query
@@ -487,7 +502,7 @@ where
                 }
                 Stmt::WindowDecl(w) => {
                     let name = w.id.clone().to_string();
-                    windows.insert(name, window_decl_to_impl(w));
+                    windows.insert(name, window_decl_to_impl(w)?);
                 }
                 not_yet_implemented => {
                     dbg!(("not yet implemented", &not_yet_implemented));
