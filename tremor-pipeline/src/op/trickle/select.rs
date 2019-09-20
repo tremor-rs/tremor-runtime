@@ -257,12 +257,25 @@ impl Operator for TrickleSelect {
                         }
                     };
                 }
-                let dimension = String::new();
 
                 if let Some(window) = &self.window {
-                    let dims: &mut HashMap<String, Window> =
+                    let group = if let Some(group_by) = &stmt.maybe_group_by {
+                        let group = group_by.run(
+                            opts,
+                            &ctx,
+                            &NO_AGGRS,
+                            unwind_event,
+                            &event_meta,
+                            &local_stack,
+                            &consts,
+                        )?;
+                        group.to_string()
+                    } else {
+                        String::new()
+                    };
+                    let groups: &mut HashMap<String, Window> =
                         unsafe { std::mem::transmute(self.groups.suffix()) };
-                    let w = dims.entry(dimension).or_insert_with(|| {
+                    let w = groups.entry(group).or_insert_with(|| {
                         Window::from_aggregates(aggregates.clone(), window.clone())
                     });
                     let window_event = w.on_event(&event);
