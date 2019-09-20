@@ -4,13 +4,16 @@ onramp:
     type: tcp2
     codec: json
     config:
-      host: "localhost"
+      # TODO support strings here
+      #host: "localhost"
+      host: 127.0.0.1
       port: 9000
       ttl: 64
 
 offramp:
   - id: console
     type: stdout
+    codec: yaml
     config:
       prefix: "TCP "
 

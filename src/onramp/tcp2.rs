@@ -14,19 +14,23 @@
 
 use crate::dflt;
 use crate::onramp::prelude::*;
+use mio::net::{TcpListener, TcpStream};
+use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde_yaml::Value;
-use std::io::Read;
-use std::net;
+use std::collections::HashMap;
+use std::io::{ErrorKind, Read};
 use std::thread;
+use std::time::Duration;
+
+// TODO can share same token as udp onramp?
+const ONRAMP: Token = Token(0);
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    /// The port to listen on.
     pub port: u32,
     pub host: String,
-    #[serde(default = "dflt::d_false")]
-    pub is_non_blocking: bool,
     #[serde(default = "dflt::d_ttl")]
+    // TODO implement. also add a delimiter option?
     pub ttl: u32,
 }
 
@@ -48,6 +52,13 @@ impl OnrampImpl for Tcp {
     }
 }
 
+// TODO better way to manage this
+fn next(current: &mut Token) -> Token {
+    let next = current.0;
+    current.0 += 1;
+    Token(next)
+}
+
 fn onramp_loop(
     rx: Receiver<OnrampMsg>,
     config: Config,
@@ -60,18 +71,23 @@ fn onramp_loop(
     // Imposed Limit of a TCP payload
     let mut buf = [0; 65535];
 
-    info!("[TCP Onramp] listening on {}:{}", config.host, config.port);
-    let endpoint = net::TcpListener::bind(format!("{}:{}", config.host, config.port))?;
-    endpoint
-        .set_nonblocking(config.is_non_blocking)
-        .expect("cannot set non-blocking");
-    // if config.ttl > 0 {
-    //    endpoint.set_ttl(config.ttl).expect("cannot set ttl");
-    // }
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
 
+    info!("[TCP Onramp] listening on {}:{}", config.host, config.port);
+    let poll = Poll::new()?;
+
+    // Start listening for incoming connections
+    // TODO verify that socket is non-blocking here. also set ttl?
+    let server_addr = format!("{}:{}", config.host, config.port).parse()?;
+    let listener = TcpListener::bind(&server_addr)?;
+    poll.register(&listener, ONRAMP, Ready::readable(), PollOpt::edge())?;
+
+    // Unique token for each incoming connection.
+    let mut unique_token = Token(ONRAMP.0 + 1);
+    let mut connections: HashMap<Token, TcpStream> = HashMap::new();
+
+    let mut events = Events::with_capacity(1024);
     loop {
         while pipelines.is_empty() {
             match rx.recv()? {
@@ -97,25 +113,78 @@ fn onramp_loop(
             }
         }
 
-        for stream in endpoint.incoming() {
-            match stream {
-                Ok(mut stream) => match stream.read(&mut buf) {
-                    Ok(len) => {
-                        if len == 0 {
-                            continue;
-                        }
-                        send_event(
-                            &pipelines,
-                            &mut preprocessors,
-                            &mut codec,
-                            id,
-                            buf[0..len].to_vec(),
-                        );
-                        id += 1;
+        // TODO right value for duration?
+        poll.poll(&mut events, Some(Duration::from_millis(100)))?;
+        for event in events.iter() {
+            match event.token() {
+                ONRAMP => match listener.accept() {
+                    Ok((stream, client_addr)) => {
+                        debug!("Accepted connection from: {}", client_addr);
+
+                        // TODO another way to handle tokens?
+                        let token = next(&mut unique_token);
+
+                        // register the new socket w/ poll
+                        poll.register(&stream, token, Ready::readable(), PollOpt::edge())?;
+
+                        connections.insert(token, stream);
                     }
-                    Err(e) => error!("Failed to read data from tcp client connection: {}", e),
+                    Err(e) => {
+                        if e.kind() == ErrorKind::WouldBlock {
+                            // TODO remove later
+                            println!("Got would block (accept)");
+                            break;
+                        } else {
+                            error!("Failed to onboard new tcp client connection: {}", e);
+                            //return Err(e.into());
+                        }
+                    }
                 },
-                Err(e) => error!("Failed to onboard new tcp client connection: {}", e),
+                token => {
+                    loop {
+                        // TODO eliminate unwrap here
+                        match connections.get_mut(&token).unwrap().read(&mut buf) {
+                            Ok(0) => {
+                                // TODO add client info
+                                debug!("Connection closed by client");
+                                connections.remove(&token);
+                                break;
+                            }
+                            Ok(n) => {
+                                // TODO remove later
+                                println!("Read {} bytes", n);
+                                println!("{}", String::from_utf8_lossy(&buf));
+
+                                send_event(
+                                    &pipelines,
+                                    &mut preprocessors,
+                                    &mut codec,
+                                    id,
+                                    buf[0..n].to_vec(),
+                                );
+                                id += 1;
+                            }
+                            Err(e) => match e.kind() {
+                                ErrorKind::WouldBlock => {
+                                    // TODO remove later
+                                    println!("Got would block (stream read)");
+                                    break;
+                                }
+                                ErrorKind::Interrupted => {
+                                    // TODO remove later
+                                    println!("Got interrupt (stream read)");
+                                    continue;
+                                }
+                                _ => {
+                                    error!("Failed to read data from tcp client connection: {}", e);
+                                    //return Err(e.into());
+                                }
+                            },
+                        }
+                    }
+                }
+                // TODO look into this
+                //_ => unreachable!(),
             }
         }
     }
