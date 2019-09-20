@@ -1,3 +1,4 @@
+# to be run with metrics_dev_5.txt.xz
 create tumbling window `1secs`
  with
    #IOU constant functions
@@ -5,19 +6,27 @@ create tumbling window `1secs`
    interval = 1000000000
 end;
 
-create tumbling window `1secs`
+create tumbling window `10secs`
  with
    #IOU constant functions
    #interval = datetime::with_seconds(5),
-   interval = 1000000000
+   interval = 10000000000
 end;
 
 select
   {
-    "count": stats::count(),
-    "group": event.tags.app
+    "group": event.tags.app,
+#    "event": event,
+    "sum": stats::sum(event.fields.value),
+    "mean": stats::mean(event.fields.value),
+    "var": stats::var(event.fields.value),
+    "min": stats::min(event.fields.value),
+    "max": stats::max(event.fields.value),
+    "stdev": stats::stdev(event.fields.value),
+    "count": stats::count()
   }
 from in[`1secs`]
-where record::contains(event.tags, "app")
+where record::contains(event.tags, "app") and record::contains(event.fields, "value")
 group by set(event.tags.app)
+##group by set(event.tags.app, event.fields.*)
 into out;

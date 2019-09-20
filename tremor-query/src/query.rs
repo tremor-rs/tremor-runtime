@@ -628,12 +628,7 @@ pub fn supported_operators(
     stmt: Option<tremor_script::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> std::result::Result<OperatorNode, tremor_pipeline::errors::Error> {
-    // Resolve from registry
-    //    use op::debug::EventHistoryFactory;
-    //    use op::generic::{BackpressureFactory, BatchFactory};
-    //    use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
-    //    use op::runtime::TremorFactory;
     use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
@@ -643,7 +638,6 @@ pub fn supported_operators(
             let groups = SelectDims::from_query(stmt.stmt.clone());
             let window = if let Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
                 let windows = windows.unwrap();
-                dbg!(&windows);
                 s.maybe_window
                     .clone()
                     .map(|n| windows.get(&n.id).unwrap().clone())
