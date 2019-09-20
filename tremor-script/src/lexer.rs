@@ -225,6 +225,7 @@ pub enum Token<'input> {
     Stream,
     Operator,
     Script,
+    Set,
 }
 
 pub trait TokenFuns {
@@ -521,6 +522,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Stream => write!(f, "stream"),
             Token::Operator => write!(f, "operator"),
             Token::Script => write!(f, "script"),
+            Token::Set => write!(f, "set"),
         }
     }
 }
@@ -840,6 +842,7 @@ impl<'input> Lexer<'input> {
             "stream" => Token::Stream,
             "operator" => Token::Operator,
             "script" => Token::Script,
+            "set" => Token::Set,
             src => Token::Ident(src.into(), false),
         };
 
@@ -1548,6 +1551,7 @@ mod tests {
         lex_ok! { " drop ", " ~~~~~~ " => Token::Drop, };
         lex_ok! { " emit ", " ~~~~~~ " => Token::Emit, };
         lex_ok! { " event ", " ~~~~~~ " => Token::Event, };
+        lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
     }
 
     #[test]

@@ -45,7 +45,7 @@ rental! {
         where
             Ctx: Context + Serialize +'static {
             query: Arc<Stmt<Ctx>>,
-            dimensions: HashMap<String, Window<'query>>,
+            groups: HashMap<String, Window<'query>>,
         }
     }
 }
@@ -64,7 +64,7 @@ where
 pub struct TrickleSelect {
     pub id: String,
     pub stmt: tremor_script::StmtRentalWrapper,
-    pub dimensions: SelectDims<EventContext>,
+    pub groups: SelectDims<EventContext>,
     pub window: Option<WindowImpl>,
 }
 
@@ -261,7 +261,7 @@ impl Operator for TrickleSelect {
 
                 if let Some(window) = &self.window {
                     let dims: &mut HashMap<String, Window> =
-                        unsafe { std::mem::transmute(self.dimensions.suffix()) };
+                        unsafe { std::mem::transmute(self.groups.suffix()) };
                     let w = dims.entry(dimension).or_insert_with(|| {
                         Window::from_aggregates(aggregates.clone(), window.clone())
                     });
@@ -445,6 +445,8 @@ mod test {
                 end: Location::default(),
                 value: Value::Bool(true),
             })),
+            maybe_window: None,
+            maybe_group_by: None,
             maybe_having: None,
         }
     }
@@ -473,12 +475,12 @@ mod test {
     use std::sync::Arc;
 
     fn test_select<'test>(stmt: tremor_script::StmtRentalWrapper) -> TrickleSelect {
-        let dimensions = SelectDims::from_query(stmt.stmt.clone());
+        let groups = SelectDims::from_query(stmt.stmt.clone());
         TrickleSelect {
             id: "select".to_string(),
             stmt,
-            dimensions,
-            window: WindowImpl::default(),
+            groups,
+            window: Some(WindowImpl::default()),
         }
     }
 
