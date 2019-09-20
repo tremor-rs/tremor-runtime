@@ -1,0 +1,8 @@
+create generic::batch operator batch
+with
+    timeout = 1,
+    count = 2, 
+end;
+
+select event from in into batch;
+select event from batch into out;
