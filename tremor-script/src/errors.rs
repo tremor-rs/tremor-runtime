@@ -203,9 +203,18 @@ impl ErrorKind {
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute == outer.1.absolute => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
+            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
+            UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
+            UnrecognizedToken(_, _, key, options) => {
+                match best_hint(&key, &options, 3) {
+                    Some((_d, o)) => Some(format!("Did you mean to use {}?", o)),
+                    _ => None
+                }
+            }
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())
             }
+
             BadAccessInLocal(_, _, key, options) => {
                 let mut options = options.clone();
                 options.push("event".to_owned());
@@ -240,8 +249,6 @@ impl ErrorKind {
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
             MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
             MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
-            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
-            UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
             _ => None,

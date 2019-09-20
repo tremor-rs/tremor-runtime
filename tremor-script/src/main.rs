@@ -14,6 +14,7 @@
 #![recursion_limit = "265"]
 
 mod ast;
+mod ctx;
 mod datetime;
 mod errors;
 pub mod grok;
@@ -32,7 +33,6 @@ mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
-mod ctx;
 #[macro_use]
 extern crate rental;
 
@@ -43,7 +43,8 @@ use clap::{App, Arg};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use std::fs::File;
-use std::io::Read;
+use std::io::prelude::*;
+use std::io::{BufReader, Read};
 use std::iter::FromIterator;
 
 #[macro_use]
@@ -104,6 +105,11 @@ fn main() -> Result<()> {
                 .takes_value(false)
                 .help("Do not print the result."),
         )
+        .arg(
+            Arg::with_name("replay-influx")
+                .takes_value(false)
+                .help("Replays a file containing influx line protocol."),
+        )
         .get_matches();
 
     let script_file = matches.value_of("SCRIPT").expect("No script file provided");
@@ -145,12 +151,27 @@ fn main() -> Result<()> {
             }
 
             let mut inputs = Vec::new();
-            let mut events = if let Some(event_files) = matches.values_of("event") {
+            let mut events = if let Some(influx_file) = matches.value_of("replay-influx") {
+                let mut r = Vec::new();
+                let input = File::open(&influx_file)?;
+                let buff_input = BufReader::new(input);
+                let lines: std::io::Result<Vec<Vec<u8>>> = buff_input
+                    .lines()
+                    .map(|s| s.map(String::into_bytes))
+                    .collect();
+                inputs = lines?;
+                for i in inputs.iter() {
+                    if let Some(i) = influx::parse(std::str::from_utf8(i)?, 0)? {
+                        r.push(i);
+                    }
+                }
+                r
+            } else if let Some(event_files) = matches.values_of("event") {
                 let mut r = Vec::new();
                 for event_file in event_files {
                     let mut bytes = Vec::new();
-                    let input = File::open(&event_file);
-                    input?.read_to_end(&mut bytes)?;
+                    let mut input = File::open(&event_file)?;
+                    input.read_to_end(&mut bytes)?;
                     inputs.push(bytes);
                 }
                 for i in inputs.iter_mut() {
@@ -158,9 +179,9 @@ fn main() -> Result<()> {
                 }
                 r
             } else if let Some(string_file) = matches.value_of("string") {
-                let input = File::open(&string_file);
+                let mut input = File::open(&string_file)?;
                 let mut raw = String::new();
-                input?.read_to_string(&mut raw)?;
+                input.read_to_string(&mut raw)?;
                 let raw = raw.trim_end().to_string();
 
                 vec![simd_json::borrowed::Value::String(raw.into())]

@@ -26,8 +26,10 @@ use crate::errors::*;
 pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
+use simd_json::value::ValueTrait;
 use std::fs::File;
-use std::io::Read;
+use std::io::prelude::*;
+use std::io::BufReader;
 use std::iter::FromIterator;
 use tremor_script::highlighter::{Highlighter, TermHighlighter};
 use tremor_script::*;
@@ -54,6 +56,12 @@ fn main() -> Result<()> {
                 .long("string")
                 .takes_value(true)
                 .help("A string to load."),
+        )
+        .arg(
+            Arg::with_name("replay-influx")
+                .long("replay-influx")
+                .takes_value(true)
+                .help("Replays a file containing influx line protocol."),
         )
         .arg(
             Arg::with_name("output")
@@ -162,7 +170,22 @@ fn main() -> Result<()> {
     }
 
     let mut inputs = Vec::new();
-    let mut events = if let Some(event_files) = matches.values_of("event") {
+    let events = if let Some(influx_file) = matches.value_of("replay-influx") {
+        let mut r = Vec::new();
+        let input = File::open(&influx_file)?;
+        let buff_input = BufReader::new(input);
+        let lines: std::io::Result<Vec<Vec<u8>>> = buff_input
+            .lines()
+            .map(|s| s.map(String::into_bytes))
+            .collect();
+        inputs = lines?;
+        for i in inputs.iter() {
+            if let Some(i) = influx::parse(std::str::from_utf8(i)?, 0)? {
+                r.push(i);
+            }
+        }
+        r
+    } else if let Some(event_files) = matches.values_of("event") {
         let mut r = Vec::new();
         for event_file in event_files {
             let mut bytes = Vec::new();
@@ -202,18 +225,33 @@ fn main() -> Result<()> {
         //                dbg!(&execable);
         let mut continuation: tremor_pipeline::Returns = vec![];
 
-        let mut i = 0;
+        let mut id = 0;
+        let mut last = 0;
         loop {
             for event in &events {
                 let value = LineValue::new(Box::new(vec![]), |data| unsafe {
                     std::mem::transmute(event.clone())
                 });
                 continuation.clear();
+                let ingest_ns = if matches.value_of("replay-influx").is_some() {
+                    let this = event
+                        .get("timestamp")
+                        .and_then(Value::as_u64)
+                        .unwrap_or_else(|| id * 1_000_000_000);
+                    if this < last {
+                        last += 1;
+                    } else {
+                        last = this;
+                    }
+                    last
+                } else {
+                    id * 1_000_000_000
+                };
                 let _ = execable.enqueue(
                     "in",
                     tremor_pipeline::Event {
-                        id: i,
-                        ingest_ns: i * 1_000_000_000,
+                        id,
+                        ingest_ns,
                         is_batch: false,
                         kind: None,
                         meta: tremor_pipeline::MetaMap::new(),
@@ -239,8 +277,12 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            i += 1;
-            std::thread::sleep_ms(1000);
+            id += 1;
+            if matches.value_of("replay-influx").is_none() {
+                std::thread::sleep_ms(1000);
+            } else {
+                break;
+            }
         }
     };
 

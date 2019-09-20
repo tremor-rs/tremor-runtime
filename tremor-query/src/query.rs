@@ -644,10 +644,9 @@ pub fn supported_operators(
             let window = if let Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
                 let windows = windows.unwrap();
                 dbg!(&windows);
-                s.maybe_window.clone().map(|n| {
-                    dbg!(&n);
-                    windows.get(&n.id).unwrap().clone()
-                })
+                s.maybe_window
+                    .clone()
+                    .map(|n| windows.get(&n.id).unwrap().clone())
             } else {
                 panic!("This is a mess");
             };
