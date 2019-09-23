@@ -293,6 +293,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Sliding => true,
             Token::Window => true,
             Token::Script => true,
+            Token::Set => true,
             Token::Operator => true,
             _ => false,
         }
