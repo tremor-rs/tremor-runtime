@@ -28,12 +28,13 @@ impl<'script> Query1<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Query<'script>, usize, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
-        let mut stmts = vec![];
-        let _len = self.stmts.len();
-        for (_i, e) in self.stmts.into_iter().enumerate() {
-            stmts.push(e.up(&mut helper)?);
-        }
-        Ok((Query { stmts }, helper.locals.len(), helper.warnings))
+        Ok((
+            Query {
+                stmts: self.stmts.up(&mut helper)?,
+            },
+            helper.locals.len(),
+            helper.warnings,
+        ))
     }
 }
 
@@ -51,9 +52,9 @@ pub enum Stmt1<'script> {
     SelectStmt(Box<MutSelect1<'script>>),
 }
 
-impl<'script> Stmt1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Stmt<'script>> {
+impl<'script> Upable<'script> for Stmt1<'script> {
+    type Target = Stmt<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             Stmt1::SelectStmt(stmt) => {
                 let mut aggregates = Vec::new();
@@ -114,12 +115,9 @@ pub struct OperatorDecl1<'script> {
     pub params: Option<WithExprs1<'script>>,
 }
 
-impl<'script> OperatorDecl1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<OperatorDecl<'script>> {
+impl<'script> Upable<'script> for OperatorDecl1<'script> {
+    type Target = OperatorDecl<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(OperatorDecl {
             start: self.start,
             end: self.end,
@@ -274,9 +272,9 @@ impl<'script> MutSelect1<'script> {
             from: self.from,
             into: self.into,
             target: self.target.up(helper)?,
-            maybe_where: self.maybe_where.map(|h| h.up(helper)).transpose()?,
-            maybe_having: self.maybe_having.map(|h| h.up(helper)).transpose()?,
-            maybe_group_by: self.maybe_group_by.map(|h| h.up(helper)).transpose()?,
+            maybe_where: self.maybe_where.up(helper)?,
+            maybe_having: self.maybe_having.up(helper)?,
+            maybe_group_by: self.maybe_group_by.up(helper)?,
             maybe_window: self.maybe_window,
         })
     }
@@ -318,7 +316,6 @@ pub enum GroupBy1<'script> {
 
 impl<'script> Upable<'script> for GroupBy1<'script> {
     type Target = GroupBy<'script>;
-    #[allow(dead_code)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             GroupBy1::Expr { start, end, expr } => GroupBy::Expr {
@@ -331,14 +328,10 @@ impl<'script> Upable<'script> for GroupBy1<'script> {
                 end,
                 expr: expr.up(helper)?,
             },
-            GroupBy1::Set {
+            GroupBy1::Set { start, end, items } => GroupBy::Set {
                 start,
                 end,
-                items: _items,
-            } => GroupBy::Set {
-                start,
-                end,
-                items: vec![],
+                items: items.up(helper)?,
             },
         })
     }
