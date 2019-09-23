@@ -49,7 +49,6 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 }
 
-pub trait InitializableOperator
-{
+pub trait InitializableOperator {
     fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }

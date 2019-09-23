@@ -29,7 +29,7 @@ use halfbrown::{hashmap, HashMap};
 use crate::datetime;
 use crate::grok::*;
 use crate::influx;
-use crate::registry::Context;
+use crate::EventContext;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
     utils::IpCidrCombiner,
@@ -47,6 +47,7 @@ use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
+
 // use std::marker::PhantomData;
 
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
@@ -476,16 +477,15 @@ impl Extractor {
         Ok(e)
     }
 
-    pub fn extract<'event, 'run, 'script, Ctx>(
+    pub fn extract<'event, 'run, 'script>(
         &'script self,
         result_needed: bool,
         v: &'run Value<'event>,
-        ctx: &'run Ctx,
+        ctx: &'run EventContext,
     ) -> Result<Value<'event>, ExtractorError>
     where
         'script: 'event,
         'event: 'run,
-        Ctx: Context,
     {
         match v {
             Value::String(ref s) => match self {
@@ -727,7 +727,11 @@ mod tests {
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("foobar".to_string().into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("foobar".to_string().into()),
+                        &EventContext { at: 0 }
+                    ),
                     Ok(Value::Object(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
                     ))
@@ -742,7 +746,11 @@ mod tests {
         match ex {
             Extractor::Kv { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("a:b c:d".to_string().into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("a:b c:d".to_string().into()),
+                        &EventContext { at: 0 }
+                    ),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
@@ -762,7 +770,7 @@ mod tests {
                     ex.extract(
                         true,
                         &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into()),
-                        &()
+                        &EventContext { at: 0 }
                     ),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
@@ -780,7 +788,11 @@ mod tests {
         match ex {
             Extractor::Glob { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("INFO".to_string().into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("INFO".to_string().into()),
+                        &EventContext { at: 0 }
+                    ),
                     Ok(Value::Bool(true))
                 );
             }
@@ -794,7 +806,11 @@ mod tests {
         match ex {
             Extractor::Base64 => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()),
+                        &EventContext { at: 0 }
+                    ),
                     Ok("🚀sneaky rocket!".into())
                 );
             }
@@ -808,7 +824,11 @@ mod tests {
         match ex {
             Extractor::Dissect { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("John".to_string().into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("John".to_string().into()),
+                        &EventContext { at: 0 }
+                    ),
                     Ok(Value::Object(hashmap! {
                         "name".into() => Value::from("John")
                     }))
@@ -827,7 +847,7 @@ mod tests {
             Extractor::Grok { .. } => {
                 let output = ex.extract(true, &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                ), &());
+                ), &EventContext{at: 0});
 
                 assert_eq!(
                     output,
@@ -855,7 +875,7 @@ mod tests {
         match ex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &()),
+                    ex.extract(true, &Value::from("192.168.1.0"), &EventContext { at: 0 }),
                     Ok(Value::Object(hashmap! (
                         "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                         "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
@@ -864,7 +884,11 @@ mod tests {
                     )))
                 );
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0/24"), &()),
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0/24"),
+                        &EventContext { at: 0 }
+                    ),
                     Ok(Value::Object(hashmap! (
                                         "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                                         "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 0.into()])
@@ -874,7 +898,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &()),
+                    ex.extract(true, &Value::from("192.168.1.0"), &EventContext { at: 0 }),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                                 "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
@@ -885,7 +909,7 @@ mod tests {
                     ex.extract(
                         true,
                         &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
-                        &()
+                        &EventContext { at: 0 }
                     ),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
@@ -900,7 +924,7 @@ mod tests {
         match rex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    rex.extract(true, &Value::from("10.22.0.254"), &()),
+                    rex.extract(true, &Value::from("10.22.0.254"), &EventContext { at: 0 }),
                     Ok(Value::Object(hashmap! (
                             "prefix".into() => Value::from(vec![Value::I64(10), 22.into(), 0.into(), 254.into()]),
                             "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()]),
@@ -908,7 +932,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    rex.extract(true, &Value::from("99.98.97.96"), &()),
+                    rex.extract(true, &Value::from("99.98.97.96"), &EventContext { at: 0 }),
                     Err(ExtractorError {
                         msg: "IP does not belong to any CIDR specified".into()
                     })
@@ -928,7 +952,7 @@ mod tests {
                     &Value::from(
                         "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
                     ),
-                    &()
+                    &EventContext { at: 0 }
                 ),
                 Ok(Value::Object(hashmap! (
                        "measurement".into() => "wea ther".into(),
@@ -947,7 +971,11 @@ mod tests {
         let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
         match ex {
             Extractor::Datetime { .. } => assert_eq!(
-                ex.extract(true, &Value::from("2019-06-20 00:00:00"), &()),
+                ex.extract(
+                    true,
+                    &Value::from("2019-06-20 00:00:00"),
+                    &EventContext { at: 0 }
+                ),
                 Ok(Value::I64(1_560_988_800_000_000_000))
             ),
             _ => unreachable!(),

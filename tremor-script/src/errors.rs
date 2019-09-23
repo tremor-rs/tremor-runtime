@@ -22,7 +22,6 @@ use crate::errors;
 use crate::lexer;
 use crate::pos;
 use crate::pos::{Location, Range};
-use crate::registry::Context;
 use base64;
 use dissect;
 use error_chain::error_chain;
@@ -688,10 +687,10 @@ pub fn error_assign_to_const<T, O: BaseExpr>(outer: &O, name: String) -> Result<
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
 }
-pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context + Serialize>(
+pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script, Ctx>,
+    path: &ast::Path<'script>,
     r: IRange<usize>,
 ) -> Result<T> {
     let expr: Range = outer.extent();
@@ -704,10 +703,10 @@ pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Conte
     })
 }
 
-pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context + Serialize>(
+pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script, Ctx>,
+    path: &ast::Path<'script>,
     key: String,
     options: Vec<String>,
 ) -> Result<T> {

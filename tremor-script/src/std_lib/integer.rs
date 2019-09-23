@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (integer::parse(_context, _input: String) {
         _input.parse::<i64>().map_err(to_runtime_error).map(Value::from)
     }));

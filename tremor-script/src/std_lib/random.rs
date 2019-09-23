@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper};
+use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFnWrapper};
 use crate::tremor_fn;
+use crate::EventContext;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use simd_json::BorrowedValue as Value;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     // The random number generator used for these functions is ThreadRng, which
     // is initialized once per thread (and also periodically seeded by the system).
     //
@@ -30,10 +31,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     // the range. we will be sampling a lot during a typical use case, so swap it
     // for a distribution based sampling (if we can cache the distribution):
     // https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.gen_range
-    fn integer<'event, Ctx: Context + 'static>(
-        _context: &Ctx,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>> {
+    fn integer<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
         let this_mfa = || mfa("random", "integer", args.len());
         let mut rng = rand::thread_rng();
         match args.len() {
@@ -78,10 +76,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
     }
     // TODO try to consolidate this with the integer implementation -- mostly a copy-pasta
     // of that right now, with types changed
-    fn float<'event, Ctx: Context + 'static>(
-        _context: &Ctx,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>> {
+    fn float<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
         let this_mfa = || mfa("random", "float", args.len());
         let mut rng = rand::thread_rng();
         match args.len() {

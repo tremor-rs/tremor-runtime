@@ -16,7 +16,6 @@
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
 use crate::ast::{BaseExpr, Expr};
-use crate::registry::Context;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::fmt;
@@ -48,8 +47,8 @@ impl Range {
     }
 }
 
-impl<'script, Ctx: Context + Serialize + Clone> From<Expr<'script, Ctx>> for Range {
-    fn from(expr: Expr<'script, Ctx>) -> Range {
+impl<'script> From<Expr<'script>> for Range {
+    fn from(expr: Expr<'script>) -> Range {
         expr.extent()
     }
 }

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 use serde_json;
 use simd_json::to_owned_value;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (json::decode(_context, _input: String) {
             // We need to clone here since we do not want to destroy the

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::BaseExpr;
-use crate::tremor_fn;
+use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
 use halfbrown::HashMap;
 use hostname::get_hostname;
@@ -34,11 +34,11 @@ pub trait TremorAggrFn: Sync + Send {
     }
 }
 
-pub type TremorFn<Ctx> = for<'event> fn(&Ctx, &[&Value<'event>]) -> FResult<Value<'event>>;
+pub type TremorFn = for<'event> fn(&EventContext, &[&Value<'event>]) -> FResult<Value<'event>>;
 pub type FResult<T> = std::result::Result<T, FunctionError>;
 
 #[allow(unused_variables)]
-pub fn registry<Ctx: 'static + Context>() -> Registry<Ctx> {
+pub fn registry() -> Registry {
     let mut registry = Registry::default();
 
     registry.insert(tremor_fn!(system::hostname(_context) {
@@ -103,11 +103,11 @@ pub enum FunctionError {
 }
 
 impl FunctionError {
-    pub fn into_err<Ctx: Context, O: BaseExpr, I: BaseExpr>(
+    pub fn into_err<O: BaseExpr, I: BaseExpr>(
         self,
         outer: &O,
         inner: &I,
-        registry: Option<&Registry<Ctx>>,
+        registry: Option<&Registry>,
     ) -> crate::errors::Error {
         use crate::errors::{best_hint, ErrorKind};
         use FunctionError::*;
@@ -148,51 +148,38 @@ impl FunctionError {
     }
 }
 
-pub trait Context: Default + Clone + PartialEq + std::fmt::Debug + std::marker::Send {
-    fn ingest_ns(&self) -> u64;
-    fn from_ingest_ns(ingest_ns: u64) -> Self;
-}
-
-impl Context for () {
-    fn ingest_ns(&self) -> u64 {
-        let now = Utc::now();
-        let seconds: u64 = now.timestamp() as u64;
-        let nanoseconds: u64 = u64::from(now.nanosecond());
-
-        (seconds * 1_000_000_000) + nanoseconds
-    }
-
-    fn from_ingest_ns(_ingest_ns: u64) {}
-}
-
 #[derive(Clone)]
-pub struct TremorFnWrapper<Ctx: Context> {
+pub struct TremorFnWrapper {
     pub module: String,
     pub name: String,
-    pub fun: TremorFn<Ctx>,
+    pub fun: TremorFn,
     pub argc: usize,
 }
 
-impl<Ctx: Context + 'static> TremorFnWrapper<Ctx> {
-    pub fn invoke<'event>(&self, context: &Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>> {
+impl TremorFnWrapper {
+    pub fn invoke<'event>(
+        &self,
+        context: &EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>> {
         (self.fun)(context, args)
     }
 }
 
-impl<Ctx: Context + 'static> fmt::Debug for TremorFnWrapper<Ctx> {
+impl fmt::Debug for TremorFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}::{}", self.module, self.name)
     }
 }
-impl<Ctx: Context + 'static> PartialEq for TremorFnWrapper<Ctx> {
-    fn eq(&self, other: &TremorFnWrapper<Ctx>) -> bool {
+impl PartialEq for TremorFnWrapper {
+    fn eq(&self, other: &TremorFnWrapper) -> bool {
         self.module == other.module && self.name == other.name
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Registry<Ctx: Context + 'static> {
-    functions: HashMap<String, HashMap<String, TremorFnWrapper<Ctx>>>,
+pub struct Registry {
+    functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
 }
 
 #[macro_export]
@@ -210,7 +197,7 @@ macro_rules! tremor_fn {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
+            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
 
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
@@ -252,7 +239,7 @@ macro_rules! tremor_fn {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
+            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
                 }
@@ -293,7 +280,7 @@ macro_rules! tremor_fn {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
-            fn $name<'event, 'c, Ctx: $crate::Context + 'static>($context: &'c Ctx, args: &[&Value<'event>]) -> FResult<Value<'event>>{
+            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
                 fn this_mfa() -> MFA {
                     mfa(stringify!($module), stringify!($name), ARGC)
                 }
@@ -321,7 +308,7 @@ macro_rules! tremor_fn {
     };
 }
 
-impl<Ctx: Context + 'static> Default for Registry<Ctx> {
+impl Default for Registry {
     fn default() -> Self {
         Registry {
             functions: HashMap::new(),
@@ -329,8 +316,8 @@ impl<Ctx: Context + 'static> Default for Registry<Ctx> {
     }
 }
 
-impl<Ctx: Context + 'static> Registry<Ctx> {
-    pub fn find(&self, module: &str, function: &str) -> FResult<TremorFn<Ctx>> {
+impl Registry {
+    pub fn find(&self, module: &str, function: &str) -> FResult<TremorFn> {
         if let Some(functions) = self.functions.get(module) {
             if let Some(rf) = functions.get(function) {
                 // TODO: We couldn't return the function wrapper but we can return
@@ -350,7 +337,7 @@ impl<Ctx: Context + 'static> Registry<Ctx> {
         }
     }
 
-    pub fn insert(&mut self, function: TremorFnWrapper<Ctx>) -> &mut Registry<Ctx> {
+    pub fn insert(&mut self, function: TremorFnWrapper) -> &mut Registry {
         match self.functions.get_mut(&function.module) {
             Some(module) => {
                 module.insert(function.name.clone(), function);
@@ -470,7 +457,7 @@ impl AggrRegistry {
 #[cfg(test)]
 pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
     let f = registry().find(m, f).expect("could not find function");
-    move |args: &[&Value]| -> FResult<Value> { f(&(), &args) }
+    move |args: &[&Value]| -> FResult<Value> { f(&EventContext { at: 0 }, &args) }
 }
 
 #[cfg(test)]
@@ -494,7 +481,7 @@ mod tests {
         let one = Value::from(1);
         let two = Value::from(2);
 
-        assert!(f.invoke(&(), &[&one, &two]).is_err());
+        assert!(f.invoke(&EventContext { at: 0 }, &[&one, &two]).is_err());
     }
 
     #[test]
@@ -504,7 +491,7 @@ mod tests {
         });
 
         let one = Value::from("1");
-        assert!(f.invoke(&(), &[&one]).is_err());
+        assert!(f.invoke(&EventContext { at: 0 }, &[&one]).is_err());
     }
 
     #[test]
@@ -519,7 +506,10 @@ mod tests {
 
         let two = Value::from(2);
         let three = Value::from(3);
-        assert_eq!(Ok(Value::from(5)), f.invoke(&(), &[&two, &three]));
+        assert_eq!(
+            Ok(Value::from(5)),
+            f.invoke(&EventContext { at: 0 }, &[&two, &three])
+        );
     }
 
     #[test]
@@ -531,7 +521,10 @@ mod tests {
         let two = Value::from(2);
         let three = Value::from(3);
 
-        assert_eq!(Ok(Value::from(6)), f.invoke(&(), &[&one, &two, &three]));
+        assert_eq!(
+            Ok(Value::from(6)),
+            f.invoke(&EventContext { at: 0 }, &[&one, &two, &three])
+        );
     }
 
     #[test]

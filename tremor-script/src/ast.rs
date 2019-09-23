@@ -14,23 +14,31 @@
 
 pub mod base_expr;
 pub mod base_stmt;
+mod query;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
-use crate::registry::{AggrRegistry, Context, Registry, TremorAggrFnWrapper, TremorFn};
+use crate::registry::{AggrRegistry, Registry, TremorAggrFnWrapper, TremorFn};
 use crate::tilde::Extractor;
 pub use base_expr::BaseExpr;
 pub use base_stmt::BaseStmt;
 use halfbrown::HashMap;
+pub use query::*;
 use serde::Serialize;
 use simd_json::value::{borrowed, ValueTrait};
 use simd_json::BorrowedValue as Value;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 
+pub(crate) trait Upable<'script> {
+    type Target;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
+}
+
+#[macro_export]
 macro_rules! impl_expr {
     ($name:ident) => {
-        impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for $name<'script, Ctx> {
+        impl<'script> BaseExpr for $name<'script> {
             fn s(&self) -> Location {
                 self.start
             }
@@ -42,6 +50,7 @@ macro_rules! impl_expr {
     };
 }
 
+#[macro_export]
 macro_rules! impl_expr1 {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
@@ -56,9 +65,10 @@ macro_rules! impl_expr1 {
     };
 }
 
+#[macro_export]
 macro_rules! impl_stmt {
     ($name:ident) => {
-        impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseStmt for $name<'script, Ctx> {
+        impl<'script> BaseStmt for $name<'script> {
             fn s(&self) -> Location {
                 self.start
             }
@@ -70,6 +80,7 @@ macro_rules! impl_stmt {
     };
 }
 
+#[macro_export]
 macro_rules! impl_stmt1 {
     ($name:ident) => {
         impl<'script> BaseStmt for $name<'script> {
@@ -89,298 +100,6 @@ pub struct Script1<'script> {
     pub exprs: Exprs1<'script>,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-#[allow(dead_code)]
-pub struct Query1<'script> {
-    pub stmts: Stmts1<'script>,
-}
-
-impl<'script> Query1<'script> {
-    #[allow(dead_code)]
-    pub fn up_script<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        reg: &'registry Registry<Ctx>,
-        aggr_reg: &'registry AggrRegistry,
-    ) -> Result<(Query<'script, Ctx>, usize, Vec<Warning>)> {
-        let mut helper = Helper::new(reg, aggr_reg);
-        let mut stmts = vec![];
-        let _len = self.stmts.len();
-        for (_i, e) in self.stmts.into_iter().enumerate() {
-            stmts.push(e.up(&mut helper)?);
-        }
-        Ok((Query { stmts }, helper.locals.len(), helper.warnings))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Query<'script, Ctx: Context + Clone + Serialize + 'static> {
-    pub stmts: Stmts<'script, Ctx>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Stmt1<'script> {
-    WindowDecl(WindowDecl1<'script>),
-    StreamDecl(StreamDecl),
-    OperatorDecl(OperatorDecl1<'script>),
-    ScriptDecl(ScriptDecl1<'script>),
-    SelectStmt(Box<MutSelect1<'script>>),
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct StreamDecl {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorKind {
-    pub start: Location,
-    pub end: Location,
-    pub module: String,
-    pub operation: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorDecl1<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub kind: OperatorKind,
-    pub id: String,
-    pub params: Option<WithExprs1<'script>>,
-}
-
-impl<'script> OperatorDecl1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<OperatorDecl<'script>> {
-        Ok(OperatorDecl {
-            start: self.start,
-            end: self.end,
-            id: self.id,
-            kind: self.kind,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
-        })
-    }
-}
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorDecl<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub kind: OperatorKind,
-    pub id: String,
-    pub params: Option<HashMap<String, Value<'script>>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ScriptDecl1<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub params: Option<WithExprs1<'script>>,
-    pub script: Script1<'script>,
-}
-
-impl<'script> ScriptDecl1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ScriptDecl<'script, Ctx>> {
-        Ok(ScriptDecl {
-            start: self.start,
-            end: self.end,
-            id: self.id,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
-            // FIXME side-effect of integrating two separate lines of code - we should really fuse/merge/join warnings and consts .unwrap()
-            script: self.script.up_script(helper.reg, helper.aggr_reg)?.0,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ScriptDecl<'script, Ctx: Context + Clone + Serialize + 'static> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub params: Option<HashMap<String, Value<'script>>>,
-    pub script: Script<'script, Ctx>,
-}
-
-impl<'script> Stmt1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Stmt<'script, Ctx>> {
-        match self {
-            Stmt1::SelectStmt(stmt) => {
-                let mut aggregates = Vec::new();
-                let mut consts = HashMap::new();
-                helper.swap(&mut aggregates, &mut consts);
-                let stmt: MutSelect<'script, Ctx> = stmt.up(helper)?;
-                helper.swap(&mut aggregates, &mut consts);
-                // FIXME: iou a const
-                let consts = Vec::new();
-                Ok(Stmt::SelectStmt {
-                    stmt: Box::new(stmt),
-                    aggregates,
-                    consts,
-                })
-            }
-            Stmt1::StreamDecl(stmt) => Ok(Stmt::StreamDecl(stmt)),
-            Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
-            Stmt1::ScriptDecl(stmt) => {
-                let stmt: ScriptDecl<'script, Ctx> = stmt.up(helper)?;
-                Ok(Stmt::ScriptDecl(stmt))
-            }
-            Stmt1::WindowDecl(stmt) => {
-                let stmt: WindowDecl<'script> = stmt.up(helper)?;
-                Ok(Stmt::WindowDecl(stmt))
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[allow(dead_code)]
-pub enum Stmt<'script, Ctx: Context + Clone + Serialize + 'static> {
-    WindowDecl(WindowDecl<'script>),
-    StreamDecl(StreamDecl),
-    OperatorDecl(OperatorDecl<'script>),
-    ScriptDecl(ScriptDecl<'script, Ctx>),
-    SelectStmt {
-        stmt: Box<MutSelect<'script, Ctx>>,
-        aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
-        consts: Vec<Value<'script>>,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum WindowKind {
-    Tumbling,
-    Sliding,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDecl1<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub kind: WindowKind,
-    pub params: Option<WithExprs1<'script>>,
-}
-
-impl<'script> WindowDecl1<'script> {
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<WindowDecl<'script>> {
-        Ok(WindowDecl {
-            start: self.start,
-            end: self.end,
-            id: self.id,
-            kind: self.kind,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDecl<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub kind: WindowKind,
-    pub params: Option<HashMap<String, Value<'script>>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDefn1 {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct MutSelect1<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub from: Ident<'script>,
-    pub into: Ident<'script>,
-    pub target: ImutExpr1<'script>,
-    pub maybe_where: Option<ImutExpr1<'script>>,
-    pub maybe_having: Option<ImutExpr1<'script>>,
-    pub maybe_group_by: Option<ImutExpr1<'script>>,
-    pub maybe_window: Option<WindowDefn1>,
-}
-impl_expr1!(MutSelect1);
-impl_stmt1!(MutSelect1);
-
-impl<'script> MutSelect1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<MutSelect<'script, Ctx>> {
-        Ok(MutSelect {
-            start: self.start,
-            end: self.end,
-            from: self.from,
-            into: self.into,
-            target: self.target.up(helper)?,
-            maybe_where: self.maybe_where.map(|h| h.up(helper)).transpose()?,
-            maybe_having: self.maybe_having.map(|h| h.up(helper)).transpose()?,
-            maybe_group_by: self.maybe_group_by.map(|h| h.up(helper)).transpose()?,
-            maybe_window: self.maybe_window,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct MutSelect<'script, Ctx: Context + Clone + Serialize + 'static> {
-    pub start: Location,
-    pub end: Location,
-    pub from: Ident<'script>,
-    pub into: Ident<'script>,
-    pub target: ImutExpr<'script, Ctx>,
-    pub maybe_where: Option<ImutExpr<'script, Ctx>>,
-    pub maybe_having: Option<ImutExpr<'script, Ctx>>,
-    pub maybe_group_by: Option<ImutExpr<'script, Ctx>>,
-    pub maybe_window: Option<WindowDefn1>,
-}
-impl_expr!(MutSelect);
-impl_stmt!(MutSelect);
-
 #[derive(Serialize, Debug)]
 pub struct Warning {
     pub outer: Range,
@@ -388,15 +107,14 @@ pub struct Warning {
     pub msg: String,
 }
 
-pub struct Helper<'script, 'registry, Ctx>
+pub struct Helper<'script, 'registry>
 where
-    Ctx: Context + Clone + Serialize + 'static,
     'script: 'registry,
 {
-    reg: &'registry Registry<Ctx>,
+    reg: &'registry Registry,
     aggr_reg: &'registry AggrRegistry,
     is_in_aggr: bool,
-    aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
+    aggregates: Vec<InvokeAggrFn<'script>>,
     warnings: Vec<Warning>,
     local_idx: usize,
     shadowed_vars: Vec<String>,
@@ -404,21 +122,20 @@ where
     pub consts: HashMap<String, usize>,
 }
 
-impl<'script, 'registry, Ctx> Helper<'script, 'registry, Ctx>
+impl<'script, 'registry> Helper<'script, 'registry>
 where
-    Ctx: Context + Clone + Serialize + 'static,
     'script: 'registry,
 {
     pub fn swap(
         &mut self,
-        aggregates: &mut Vec<InvokeAggrFn<'script, Ctx>>,
+        aggregates: &mut Vec<InvokeAggrFn<'script>>,
         consts: &mut HashMap<String, usize>,
     ) {
         use std::mem;
         mem::swap(&mut self.aggregates, aggregates);
         mem::swap(&mut self.consts, consts);
     }
-    pub fn new(reg: &'registry Registry<Ctx>, aggr_reg: &'registry AggrRegistry) -> Self {
+    pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
             aggr_reg,
@@ -489,11 +206,11 @@ where
 }
 
 impl<'script> Script1<'script> {
-    pub fn up_script<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    pub fn up_script<'registry>(
         self,
-        reg: &'registry Registry<Ctx>,
+        reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
-    ) -> Result<(Script<'script, Ctx>, usize, Vec<Warning>)> {
+    ) -> Result<(Script<'script>, usize, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
         let mut consts: Vec<Value> = vec![];
         let mut exprs = vec![];
@@ -576,10 +293,10 @@ impl<'script> Script1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Script<'script, Ctx: Context + Clone + Serialize + 'static> {
-    pub exprs: Exprs<'script, Ctx>,
+pub struct Script<'script> {
+    pub exprs: Exprs<'script>,
     pub consts: Vec<Value<'script>>,
-    pub aggregates: Vec<InvokeAggrFn<'script, Ctx>>,
+    pub aggregates: Vec<InvokeAggrFn<'script>>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -600,10 +317,7 @@ pub struct Field1<'script> {
 }
 
 impl<'script> Field1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Field<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Field<'script>> {
         Ok(Field {
             start: self.start,
             end: self.end,
@@ -614,11 +328,11 @@ impl<'script> Field1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Field<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Field<'script> {
     pub start: Location,
     pub end: Location,
     pub name: Cow<'script, str>,
-    pub value: ImutExpr<'script, Ctx>,
+    pub value: ImutExpr<'script>,
 }
 impl_expr!(Field);
 
@@ -631,11 +345,8 @@ pub struct Record1<'script> {
 impl_expr1!(Record1);
 
 impl<'script> Record1<'script> {
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Record<'script, Ctx>> {
-        let fields: Result<Fields<'script, Ctx>> =
+    pub fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Record<'script>> {
+        let fields: Result<Fields<'script>> =
             self.fields.into_iter().map(|p| p.up(helper)).collect();
         Ok(Record {
             start: self.start,
@@ -645,10 +356,10 @@ impl<'script> Record1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Record<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Record<'script> {
     pub start: Location,
     pub end: Location,
-    pub fields: Fields<'script, Ctx>,
+    pub fields: Fields<'script>,
 }
 impl_expr!(Record);
 
@@ -661,11 +372,8 @@ pub struct List1<'script> {
 impl_expr1!(List1);
 
 impl<'script> List1<'script> {
-    pub fn up<'registry, Ctx: Context + Serialize + Clone + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<List<'script, Ctx>> {
-        let exprs: Result<ImutExprs<'script, Ctx>> =
+    pub fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<List<'script>> {
+        let exprs: Result<ImutExprs<'script>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
         Ok(List {
             start: self.start,
@@ -676,10 +384,10 @@ impl<'script> List1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct List<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct List<'script> {
     pub start: Location,
     pub end: Location,
-    pub exprs: ImutExprs<'script, Ctx>,
+    pub exprs: ImutExprs<'script>,
 }
 impl_expr!(List);
 
@@ -691,9 +399,7 @@ pub struct Literal<'script> {
 }
 impl_expr1!(Literal);
 
-fn reduce2<'script, Ctx: Context + Clone + Serialize + 'static>(
-    expr: ImutExpr<'script, Ctx>,
-) -> Result<Value<'script>> {
+fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
     match expr {
         ImutExpr::Literal(Literal { value: v, .. }) => Ok(v),
         other => Err(ErrorKind::NotConstant(other.extent(), other.extent().expand_lines(2)).into()),
@@ -720,10 +426,7 @@ pub enum Expr1<'script> {
 }
 
 impl<'script> Expr1<'script> {
-    fn up<'registry, Ctx: Context + Serialize + Clone + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Expr<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Expr<'script>> {
         Ok(match self {
             Expr1::Const { start, end, .. } => {
                 return Err(ErrorKind::InvalidConst(
@@ -799,10 +502,7 @@ pub enum ImutExpr1<'script> {
 }
 
 impl<'script> ImutExpr1<'script> {
-    fn up<'registry, Ctx: Context + Serialize + Clone + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ImutExpr<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<ImutExpr<'script>> {
         Ok(match self {
             ImutExpr1::Binary(b) => match b.up(helper)? {
                 b1 @ BinExpr {
@@ -937,11 +637,8 @@ impl<'script> ImutExpr1<'script> {
     }
 }
 
-fn path_eq<'script, Ctx: Context + Clone + Serialize + 'static>(
-    path: &Path<'script, Ctx>,
-    expr: &ImutExpr<'script, Ctx>,
-) -> bool {
-    let path_expr: ImutExpr<Ctx> = ImutExpr::Path(path.clone());
+fn path_eq<'script>(path: &Path<'script>, expr: &ImutExpr<'script>) -> bool {
+    let path_expr: ImutExpr = ImutExpr::Path(path.clone());
 
     let target_expr = match expr.clone() {
         ImutExpr::Local {
@@ -963,51 +660,49 @@ fn path_eq<'script, Ctx: Context + Clone + Serialize + 'static>(
     path_expr == target_expr
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Expr<'script, Ctx: Context + Clone + Serialize + 'static> {
-    Match(Box<Match<'script, Ctx>>),
-    PatchInPlace(Box<Patch<'script, Ctx>>),
-    MergeInPlace(Box<Merge<'script, Ctx>>),
+pub enum Expr<'script> {
+    Match(Box<Match<'script>>),
+    PatchInPlace(Box<Patch<'script>>),
+    MergeInPlace(Box<Merge<'script>>),
     Assign {
         start: Location,
         end: Location,
-        path: Path<'script, Ctx>,
-        expr: Box<Expr<'script, Ctx>>,
+        path: Path<'script>,
+        expr: Box<Expr<'script>>,
     },
     // Moves
     AssignMoveLocal {
         start: Location,
         end: Location,
-        path: Path<'script, Ctx>,
+        path: Path<'script>,
         idx: usize,
     },
-    Comprehension(Box<Comprehension<'script, Ctx>>),
+    Comprehension(Box<Comprehension<'script>>),
     Drop {
         start: Location,
         end: Location,
     },
-    Emit(EmitExpr<'script, Ctx>),
-    Imut(ImutExpr<'script, Ctx>),
+    Emit(EmitExpr<'script>),
+    Imut(ImutExpr<'script>),
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> From<ImutExpr<'script, Ctx>>
-    for Expr<'script, Ctx>
-{
-    fn from(imut: ImutExpr<'script, Ctx>) -> Expr<'script, Ctx> {
+impl<'script> From<ImutExpr<'script>> for Expr<'script> {
+    fn from(imut: ImutExpr<'script>) -> Expr<'script> {
         Expr::Imut(imut)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ImutExpr<'script, Ctx: Context + Clone + Serialize + 'static> {
-    Record(Record<'script, Ctx>),
-    List(List<'script, Ctx>),
-    Binary(Box<BinExpr<'script, Ctx>>),
-    Unary(Box<UnaryExpr<'script, Ctx>>),
-    Patch(Box<Patch<'script, Ctx>>),
-    Match(Box<ImutMatch<'script, Ctx>>),
-    Comprehension(Box<ImutComprehension<'script, Ctx>>),
-    Merge(Box<Merge<'script, Ctx>>),
-    Path(Path<'script, Ctx>),
+pub enum ImutExpr<'script> {
+    Record(Record<'script>),
+    List(List<'script>),
+    Binary(Box<BinExpr<'script>>),
+    Unary(Box<UnaryExpr<'script>>),
+    Patch(Box<Patch<'script>>),
+    Match(Box<ImutMatch<'script>>),
+    Comprehension(Box<ImutComprehension<'script>>),
+    Merge(Box<Merge<'script>>),
+    Path(Path<'script>),
     Local {
         id: Cow<'script, str>,
         idx: usize,
@@ -1017,25 +712,25 @@ pub enum ImutExpr<'script, Ctx: Context + Clone + Serialize + 'static> {
     },
     Literal(Literal<'script>),
     Present {
-        path: Path<'script, Ctx>,
+        path: Path<'script>,
         start: Location,
         end: Location,
     },
-    Invoke1(Invoke<'script, Ctx>),
-    Invoke2(Invoke<'script, Ctx>),
-    Invoke3(Invoke<'script, Ctx>),
-    Invoke(Invoke<'script, Ctx>),
+    Invoke1(Invoke<'script>),
+    Invoke2(Invoke<'script>),
+    Invoke3(Invoke<'script>),
+    Invoke(Invoke<'script>),
     InvokeAggr(InvokeAggr),
 }
 
-fn is_lit<'script, Ctx: Context + Clone + Serialize + 'static>(e: &ImutExpr<'script, Ctx>) -> bool {
+fn is_lit<'script>(e: &ImutExpr<'script>) -> bool {
     match e {
         ImutExpr::Literal(_) => true,
         _ => false,
     }
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for ImutExpr<'script, Ctx> {
+impl<'script> BaseExpr for ImutExpr<'script> {
     fn s(&self) -> Location {
         match self {
             ImutExpr::Binary(e) => e.s(),
@@ -1079,7 +774,7 @@ impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for ImutExpr<
         }
     }
 }
-impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for Expr<'script, Ctx> {
+impl<'script> BaseExpr for Expr<'script> {
     fn s(&self) -> Location {
         match self {
             Expr::Assign { start, .. } => *start,
@@ -1117,10 +812,7 @@ pub struct EmitExpr1<'script> {
 }
 
 impl<'script> EmitExpr1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<EmitExpr<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<EmitExpr<'script>> {
         Ok(EmitExpr {
             start: self.start,
             end: self.end,
@@ -1130,10 +822,10 @@ impl<'script> EmitExpr1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct EmitExpr<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct EmitExpr<'script> {
     pub start: Location,
     pub end: Location,
-    pub expr: ImutExpr<'script, Ctx>,
+    pub expr: ImutExpr<'script>,
     pub port: Option<String>,
 }
 impl_expr!(EmitExpr);
@@ -1157,11 +849,8 @@ pub struct Invoke1<'script> {
 impl_expr1!(Invoke1);
 
 impl<'script> Invoke1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Invoke<'script, Ctx>> {
-        let args: Result<ImutExprs<'script, Ctx>> = self
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Invoke<'script>> {
+        let args: Result<ImutExprs<'script>> = self
             .args
             .clone()
             .into_iter()
@@ -1183,16 +872,13 @@ impl<'script> Invoke1<'script> {
         })
     }
 
-    fn is_aggregate<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        &self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> bool {
+    fn is_aggregate<'registry>(&self, helper: &mut Helper<'script, 'registry>) -> bool {
         helper.aggr_reg.find(&self.module, &self.fun).is_ok()
     }
 
-    fn to_aggregate<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn to_aggregate<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> InvokeAggr1<'script> {
         // The only path InbokeAggr can be reached is when it
         // first was checked as a function -> aggr function
@@ -1212,18 +898,18 @@ impl<'script> Invoke1<'script> {
 }
 
 #[derive(Clone, Serialize)]
-pub struct Invoke<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Invoke<'script> {
     pub start: Location,
     pub end: Location,
     pub module: String,
     pub fun: String,
     #[serde(skip)]
-    pub invocable: TremorFn<Ctx>,
-    pub args: ImutExprs<'script, Ctx>,
+    pub invocable: TremorFn,
+    pub args: ImutExprs<'script>,
 }
 impl_expr!(Invoke);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for Invoke<'script, Ctx> {
+impl<'script> PartialEq for Invoke<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.start == other.start
             && self.end == other.end
@@ -1233,7 +919,7 @@ impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for Invoke<'
     }
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> fmt::Debug for Invoke<'script, Ctx> {
+impl<'script> fmt::Debug for Invoke<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn {}::{}", self.module, self.fun)
     }
@@ -1250,10 +936,7 @@ pub struct InvokeAggr1<'script> {
 impl_expr1!(InvokeAggr1);
 
 impl<'script> InvokeAggr1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<InvokeAggr> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<InvokeAggr> {
         if helper.is_in_aggr {
             return Err(ErrorKind::AggrInAggr(self.extent(), self.extent().expand_lines(2)).into());
         };
@@ -1274,7 +957,7 @@ impl<'script> InvokeAggr1<'script> {
             )
             .into());
         }
-        let args: Result<ImutExprs<'script, Ctx>> = self
+        let args: Result<ImutExprs<'script>> = self
             .args
             .clone()
             .into_iter()
@@ -1338,26 +1021,24 @@ impl fmt::Debug for InvokeAggr {
 }
 
 #[derive(Clone, Serialize)]
-pub struct InvokeAggrFn<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct InvokeAggrFn<'script> {
     pub start: Location,
     pub end: Location,
     #[serde(skip)]
     pub invocable: TremorAggrFnWrapper,
     pub module: String,
     pub fun: String,
-    pub args: ImutExprs<'script, Ctx>,
+    pub args: ImutExprs<'script>,
 }
 impl_expr!(InvokeAggrFn);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> fmt::Debug
-    for InvokeAggrFn<'script, Ctx>
-{
+impl<'script> fmt::Debug for InvokeAggrFn<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn(aggr) {}::{}", self.module, self.fun)
     }
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for InvokeAggrFn<'script, Ctx> {
+impl<'script> PartialEq for InvokeAggrFn<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.fun == other.fun && self.args == other.args
         //&& self.args == other.args FIXME why??!?
@@ -1400,10 +1081,7 @@ impl BaseExpr for TestExpr1 {
     }
 }
 impl TestExpr1 {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        _helper: &mut Helper<Ctx>,
-    ) -> Result<TestExpr> {
+    fn up<'registry>(self, _helper: &mut Helper) -> Result<TestExpr> {
         match Extractor::new(&self.id, &self.test) {
             Ok(ex) => Ok(TestExpr {
                 id: self.id,
@@ -1433,11 +1111,8 @@ pub struct Match1<'script> {
 }
 
 impl<'script> Match1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Match<'script, Ctx>> {
-        let patterns: Result<Predicates<'script, Ctx>> =
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Match<'script>> {
+        let patterns: Result<Predicates<'script>> =
             self.patterns.into_iter().map(|p| p.up(helper)).collect();
         let patterns = patterns?;
 
@@ -1475,11 +1150,8 @@ pub struct ImutMatch1<'script> {
 }
 
 impl<'script> ImutMatch1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ImutMatch<'script, Ctx>> {
-        let patterns: Result<ImutPredicates<'script, Ctx>> =
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<ImutMatch<'script>> {
+        let patterns: Result<ImutPredicates<'script>> =
             self.patterns.into_iter().map(|p| p.up(helper)).collect();
         let patterns = patterns?;
 
@@ -1508,20 +1180,20 @@ impl<'script> ImutMatch1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Match<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Match<'script> {
     pub start: Location,
     pub end: Location,
-    pub target: ImutExpr<'script, Ctx>,
-    pub patterns: Predicates<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub patterns: Predicates<'script>,
 }
 impl_expr!(Match);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutMatch<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ImutMatch<'script> {
     pub start: Location,
     pub end: Location,
-    pub target: ImutExpr<'script, Ctx>,
-    pub patterns: ImutPredicates<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub patterns: ImutPredicates<'script>,
 }
 impl_expr!(ImutMatch);
 
@@ -1535,14 +1207,13 @@ pub struct PredicateClause1<'script> {
 }
 
 impl<'script> PredicateClause1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<PredicateClause<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<PredicateClause<'script>> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs: Result<Exprs<'script, Ctx>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
+        let exprs: Result<Exprs<'script>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
         let guard = if let Some(guard) = self.guard {
             Some(guard.up(helper)?)
         } else {
@@ -1573,13 +1244,13 @@ pub struct ImutPredicateClause1<'script> {
 }
 
 impl<'script> ImutPredicateClause1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ImutPredicateClause<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ImutPredicateClause<'script>> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs: Result<ImutExprs<'script, Ctx>> =
+        let exprs: Result<ImutExprs<'script>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
         let guard = if let Some(guard) = self.guard {
             Some(guard.up(helper)?)
@@ -1603,22 +1274,22 @@ impl<'script> ImutPredicateClause1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PredicateClause<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct PredicateClause<'script> {
     pub start: Location,
     pub end: Location,
-    pub pattern: Pattern<'script, Ctx>,
-    pub guard: Option<ImutExpr<'script, Ctx>>,
-    pub exprs: Exprs<'script, Ctx>,
+    pub pattern: Pattern<'script>,
+    pub guard: Option<ImutExpr<'script>>,
+    pub exprs: Exprs<'script>,
 }
 impl_expr!(PredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutPredicateClause<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ImutPredicateClause<'script> {
     pub start: Location,
     pub end: Location,
-    pub pattern: Pattern<'script, Ctx>,
-    pub guard: Option<ImutExpr<'script, Ctx>>,
-    pub exprs: ImutExprs<'script, Ctx>,
+    pub pattern: Pattern<'script>,
+    pub guard: Option<ImutExpr<'script>>,
+    pub exprs: ImutExprs<'script>,
 }
 impl_expr!(ImutPredicateClause);
 
@@ -1631,11 +1302,8 @@ pub struct Patch1<'script> {
 }
 
 impl<'script> Patch1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Patch<'script, Ctx>> {
-        let operations: Result<PatchOperations<'script, Ctx>> =
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Patch<'script>> {
+        let operations: Result<PatchOperations<'script>> =
             self.operations.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Patch {
@@ -1647,11 +1315,11 @@ impl<'script> Patch1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Patch<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Patch<'script> {
     pub start: Location,
     pub end: Location,
-    pub target: ImutExpr<'script, Ctx>,
-    pub operations: PatchOperations<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub operations: PatchOperations<'script>,
 }
 impl_expr!(Patch);
 
@@ -1690,10 +1358,10 @@ pub enum PatchOperation1<'script> {
 }
 
 impl<'script> PatchOperation1<'script> {
-    pub fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    pub fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<PatchOperation<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<PatchOperation<'script>> {
         use PatchOperation1::*;
         Ok(match self {
             Insert { ident, expr } => PatchOperation::Insert {
@@ -1731,36 +1399,36 @@ impl<'script> PatchOperation1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum PatchOperation<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub enum PatchOperation<'script> {
     Insert {
-        ident: ImutExpr<'script, Ctx>,
-        expr: ImutExpr<'script, Ctx>,
+        ident: ImutExpr<'script>,
+        expr: ImutExpr<'script>,
     },
     Upsert {
-        ident: ImutExpr<'script, Ctx>,
-        expr: ImutExpr<'script, Ctx>,
+        ident: ImutExpr<'script>,
+        expr: ImutExpr<'script>,
     },
     Update {
-        ident: ImutExpr<'script, Ctx>,
-        expr: ImutExpr<'script, Ctx>,
+        ident: ImutExpr<'script>,
+        expr: ImutExpr<'script>,
     },
     Erase {
-        ident: ImutExpr<'script, Ctx>,
+        ident: ImutExpr<'script>,
     },
     Copy {
-        from: ImutExpr<'script, Ctx>,
-        to: ImutExpr<'script, Ctx>,
+        from: ImutExpr<'script>,
+        to: ImutExpr<'script>,
     },
     Move {
-        from: ImutExpr<'script, Ctx>,
-        to: ImutExpr<'script, Ctx>,
+        from: ImutExpr<'script>,
+        to: ImutExpr<'script>,
     },
     Merge {
-        ident: ImutExpr<'script, Ctx>,
-        expr: ImutExpr<'script, Ctx>,
+        ident: ImutExpr<'script>,
+        expr: ImutExpr<'script>,
     },
     TupleMerge {
-        expr: ImutExpr<'script, Ctx>,
+        expr: ImutExpr<'script>,
     },
 }
 
@@ -1772,10 +1440,7 @@ pub struct Merge1<'script> {
     pub expr: ImutExpr1<'script>,
 }
 impl<'script> Merge1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Merge<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Merge<'script>> {
         //let patterns: Result<Predicates> = self.patterns.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Merge {
@@ -1788,11 +1453,11 @@ impl<'script> Merge1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Merge<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Merge<'script> {
     pub start: Location,
     pub end: Location,
-    pub target: ImutExpr<'script, Ctx>,
-    pub expr: ImutExpr<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub expr: ImutExpr<'script>,
 }
 impl_expr!(Merge);
 
@@ -1805,10 +1470,10 @@ pub struct Comprehension1<'script> {
 }
 
 impl<'script> Comprehension1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Comprehension<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<Comprehension<'script>> {
         // We compute the target before shadowing the key and value
 
         let target = self.target.up(helper)?;
@@ -1818,7 +1483,7 @@ impl<'script> Comprehension1<'script> {
         // will be.
         let (key_id, val_id) = helper.reserve_2_shadow();
 
-        let cases: Result<ComprehensionCases<'script, Ctx>> =
+        let cases: Result<ComprehensionCases<'script>> =
             self.cases.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(Comprehension {
@@ -1841,10 +1506,10 @@ pub struct ImutComprehension1<'script> {
 }
 
 impl<'script> ImutComprehension1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ImutComprehension<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ImutComprehension<'script>> {
         // We compute the target before shadowing the key and value
 
         let target = self.target.up(helper)?;
@@ -1854,7 +1519,7 @@ impl<'script> ImutComprehension1<'script> {
         // will be.
         let (key_id, val_id) = helper.reserve_2_shadow();
 
-        let cases: Result<ImutComprehensionCases<'script, Ctx>> =
+        let cases: Result<ImutComprehensionCases<'script>> =
             self.cases.into_iter().map(|p| p.up(helper)).collect();
 
         Ok(ImutComprehension {
@@ -1869,24 +1534,24 @@ impl<'script> ImutComprehension1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Comprehension<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct Comprehension<'script> {
     pub start: Location,
     pub end: Location,
     pub key_id: usize,
     pub val_id: usize,
-    pub target: ImutExpr<'script, Ctx>,
-    pub cases: ComprehensionCases<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub cases: ComprehensionCases<'script>,
 }
 impl_expr!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutComprehension<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ImutComprehension<'script> {
     pub start: Location,
     pub end: Location,
     pub key_id: usize,
     pub val_id: usize,
-    pub target: ImutExpr<'script, Ctx>,
-    pub cases: ImutComprehensionCases<'script, Ctx>,
+    pub target: ImutExpr<'script>,
+    pub cases: ImutComprehensionCases<'script>,
 }
 impl_expr!(ImutComprehension);
 
@@ -1901,10 +1566,10 @@ pub struct ComprehensionCase1<'script> {
 }
 
 impl<'script> ComprehensionCase1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ComprehensionCase<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ComprehensionCase<'script>> {
         // regiter key and value as shadowed variables
         let key_idx = helper.register_shadow_var(&self.key_name);
         let val_idx = helper.register_shadow_var(&self.value_name);
@@ -1914,8 +1579,7 @@ impl<'script> ComprehensionCase1<'script> {
         } else {
             None
         };
-        let exprs: Result<Exprs<'script, Ctx>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
+        let exprs: Result<Exprs<'script>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
         let mut exprs = exprs?;
 
         if let Some(expr) = exprs.pop() {
@@ -1950,10 +1614,10 @@ pub struct ImutComprehensionCase1<'script> {
 }
 
 impl<'script> ImutComprehensionCase1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ImutComprehensionCase<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ImutComprehensionCase<'script>> {
         // regiter key and value as shadowed variables
         let _key_idx = helper.register_shadow_var(&self.key_name);
         let _val_idx = helper.register_shadow_var(&self.value_name);
@@ -1963,7 +1627,7 @@ impl<'script> ImutComprehensionCase1<'script> {
         } else {
             None
         };
-        let exprs: Result<ImutExprs<'script, Ctx>> =
+        let exprs: Result<ImutExprs<'script>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
         let exprs = exprs?;
 
@@ -1982,24 +1646,24 @@ impl<'script> ImutComprehensionCase1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ComprehensionCase<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ComprehensionCase<'script> {
     pub start: Location,
     pub end: Location,
     pub key_name: Cow<'script, str>,
     pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExpr<'script, Ctx>>,
-    pub exprs: Exprs<'script, Ctx>,
+    pub guard: Option<ImutExpr<'script>>,
+    pub exprs: Exprs<'script>,
 }
 impl_expr!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutComprehensionCase<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ImutComprehensionCase<'script> {
     pub start: Location,
     pub end: Location,
     pub key_name: Cow<'script, str>,
     pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExpr<'script, Ctx>>,
-    pub exprs: ImutExprs<'script, Ctx>,
+    pub guard: Option<ImutExpr<'script>>,
+    pub exprs: ImutExprs<'script>,
 }
 impl_expr!(ImutComprehensionCase);
 
@@ -2013,10 +1677,7 @@ pub enum Pattern1<'script> {
     Default,
 }
 impl<'script> Pattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Pattern<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Pattern<'script>> {
         use Pattern1::*;
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
@@ -2030,15 +1691,15 @@ impl<'script> Pattern1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Pattern<'script, Ctx: Context + Clone + Serialize + 'static> {
-    //Predicate(PredicatePattern<'script, Ctx>),
-    Record(RecordPattern<'script, Ctx>),
-    Array(ArrayPattern<'script, Ctx>),
-    Expr(ImutExpr<'script, Ctx>),
-    Assign(AssignPattern<'script, Ctx>),
+pub enum Pattern<'script> {
+    //Predicate(PredicatePattern<'script>),
+    Record(RecordPattern<'script>),
+    Array(ArrayPattern<'script>),
+    Expr(ImutExpr<'script>),
+    Assign(AssignPattern<'script>),
     Default,
 }
-impl<'script, Ctx: Context + Clone + Serialize + 'static> Pattern<'script, Ctx> {
+impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
         if let Pattern::Default = self {
             true
@@ -2086,10 +1747,10 @@ pub enum PredicatePattern1<'script> {
 }
 
 impl<'script> PredicatePattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<PredicatePattern<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<PredicatePattern<'script>> {
         use PredicatePattern1::*;
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
@@ -2117,7 +1778,7 @@ impl<'script> PredicatePattern1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum PredicatePattern<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub enum PredicatePattern<'script> {
     TildeEq {
         assign: Cow<'script, str>,
         lhs: Cow<'script, str>,
@@ -2125,16 +1786,16 @@ pub enum PredicatePattern<'script, Ctx: Context + Clone + Serialize + 'static> {
     },
     Eq {
         lhs: Cow<'script, str>,
-        rhs: ImutExpr<'script, Ctx>,
+        rhs: ImutExpr<'script>,
         not: bool,
     },
     RecordPatternEq {
         lhs: Cow<'script, str>,
-        pattern: RecordPattern<'script, Ctx>,
+        pattern: RecordPattern<'script>,
     },
     ArrayPatternEq {
         lhs: Cow<'script, str>,
-        pattern: ArrayPattern<'script, Ctx>,
+        pattern: ArrayPattern<'script>,
     },
     FieldPresent {
         lhs: Cow<'script, str>,
@@ -2144,7 +1805,7 @@ pub enum PredicatePattern<'script, Ctx: Context + Clone + Serialize + 'static> {
     },
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PredicatePattern<'script, Ctx> {
+impl<'script> PredicatePattern<'script> {
     pub fn lhs(&self) -> &str {
         use PredicatePattern::*;
         match self {
@@ -2165,11 +1826,11 @@ pub struct RecordPattern1<'script> {
 }
 
 impl<'script> RecordPattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<RecordPattern<'script, Ctx>> {
-        let fields: Result<PatternFields<'script, Ctx>> =
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<RecordPattern<'script>> {
+        let fields: Result<PatternFields<'script>> =
             self.fields.into_iter().map(|p| p.up(helper)).collect();
         Ok(RecordPattern {
             start: self.start,
@@ -2180,10 +1841,10 @@ impl<'script> RecordPattern1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RecordPattern<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct RecordPattern<'script> {
     pub start: Location,
     pub end: Location,
-    pub fields: PatternFields<'script, Ctx>,
+    pub fields: PatternFields<'script>,
 }
 impl_expr!(RecordPattern);
 
@@ -2195,10 +1856,10 @@ pub enum ArrayPredicatePattern1<'script> {
     //Array(ArrayPattern),
 }
 impl<'script> ArrayPredicatePattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ArrayPredicatePattern<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ArrayPredicatePattern<'script>> {
         use ArrayPredicatePattern1::*;
         Ok(match self {
             Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
@@ -2210,11 +1871,11 @@ impl<'script> ArrayPredicatePattern1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ArrayPredicatePattern<'script, Ctx: Context + Clone + Serialize + 'static> {
-    Expr(ImutExpr<'script, Ctx>),
+pub enum ArrayPredicatePattern<'script> {
+    Expr(ImutExpr<'script>),
     Tilde(TestExpr),
-    Record(RecordPattern<'script, Ctx>),
-    Array(ArrayPattern<'script, Ctx>),
+    Record(RecordPattern<'script>),
+    Array(ArrayPattern<'script>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2225,11 +1886,11 @@ pub struct ArrayPattern1<'script> {
 }
 
 impl<'script> ArrayPattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<ArrayPattern<'script, Ctx>> {
-        let exprs: Result<Vec<ArrayPredicatePattern<'script, Ctx>>> =
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ArrayPattern<'script>> {
+        let exprs: Result<Vec<ArrayPredicatePattern<'script>>> =
             self.exprs.into_iter().map(|p| p.up(helper)).collect();
         Ok(ArrayPattern {
             start: self.start,
@@ -2239,10 +1900,10 @@ impl<'script> ArrayPattern1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ArrayPattern<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct ArrayPattern<'script> {
     pub start: Location,
     pub end: Location,
-    pub exprs: ArrayPredicatePatterns<'script, Ctx>,
+    pub exprs: ArrayPredicatePatterns<'script>,
 }
 
 impl_expr!(ArrayPattern);
@@ -2254,10 +1915,10 @@ pub struct AssignPattern1<'script> {
 }
 
 impl<'script> AssignPattern1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<AssignPattern<'script, Ctx>> {
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<AssignPattern<'script>> {
         Ok(AssignPattern {
             idx: helper.register_shadow_var(&self.id),
             id: self.id,
@@ -2266,10 +1927,10 @@ impl<'script> AssignPattern1<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct AssignPattern<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct AssignPattern<'script> {
     pub id: Cow<'script, str>,
     pub idx: usize,
-    pub pattern: Box<Pattern<'script, Ctx>>,
+    pub pattern: Box<Pattern<'script>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2280,10 +1941,7 @@ pub enum Path1<'script> {
 }
 
 impl<'script> Path1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Path<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Path<'script>> {
         use Path1::*;
         Ok(match self {
             Local(p) => {
@@ -2301,15 +1959,15 @@ impl<'script> Path1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Path<'script, Ctx: Context + Clone + Serialize + 'static> {
-    Const(LocalPath<'script, Ctx>),
-    Local(LocalPath<'script, Ctx>),
-    Event(EventPath<'script, Ctx>),
-    Meta(MetadataPath<'script, Ctx>),
+pub enum Path<'script> {
+    Const(LocalPath<'script>),
+    Local(LocalPath<'script>),
+    Event(EventPath<'script>),
+    Meta(MetadataPath<'script>),
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> Path<'script, Ctx> {
-    pub fn segments(&self) -> &[Segment<Ctx>] {
+impl<'script> Path<'script> {
+    pub fn segments(&self) -> &[Segment] {
         match self {
             Path::Const(path) => &path.segments,
             Path::Local(path) => &path.segments,
@@ -2318,7 +1976,7 @@ impl<'script, Ctx: Context + Clone + Serialize + 'static> Path<'script, Ctx> {
         }
     }
 }
-impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for Path<'script, Ctx> {
+impl<'script> BaseExpr for Path<'script> {
     fn s(&self) -> Location {
         match self {
             Path::Const(e) => e.s(),
@@ -2355,17 +2013,14 @@ pub enum Segment1<'script> {
 }
 
 impl<'script> Segment1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<Segment<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Segment<'script>> {
         use Segment1::*;
         Ok(match self {
             ElementSelector { expr, start, end } => {
                 let expr = expr.up(helper)?;
                 let r: Range = expr.extent();
                 match expr {
-                    ImutExpr::Literal(l) => match reduce2::<Ctx>(ImutExpr::Literal(l))? {
+                    ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l))? {
                         Value::String(id) => Segment::IdSelector {
                             id: id.clone(),
                             start,
@@ -2426,7 +2081,7 @@ impl<'script> From<ImutExpr1<'script>> for Expr1<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub enum Segment<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub enum Segment<'script> {
     IdSelector {
         id: Cow<'script, str>,
         start: Location,
@@ -2438,21 +2093,21 @@ pub enum Segment<'script, Ctx: Context + Clone + Serialize + 'static> {
         end: Location,
     },
     ElementSelector {
-        expr: ImutExpr<'script, Ctx>,
+        expr: ImutExpr<'script>,
         start: Location,
         end: Location,
     },
     RangeSelector {
         start_lower: Location,
-        range_start: Box<ImutExpr<'script, Ctx>>,
+        range_start: Box<ImutExpr<'script>>,
         end_lower: Location,
         start_upper: Location,
-        range_end: Box<ImutExpr<'script, Ctx>>,
+        range_end: Box<ImutExpr<'script>>,
         end_upper: Location,
     },
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for Segment<'script, Ctx> {
+impl<'script> PartialEq for Segment<'script> {
     fn eq(&self, other: &Self) -> bool {
         use Segment::*;
         match (self, other) {
@@ -2478,7 +2133,7 @@ impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for Segment<
     }
 }
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> BaseExpr for Segment<'script, Ctx> {
+impl<'script> BaseExpr for Segment<'script> {
     fn s(&self) -> Location {
         match self {
             Segment::IdSelector { start, .. } => *start,
@@ -2503,11 +2158,8 @@ pub struct LocalPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> LocalPath1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<LocalPath<'script, Ctx>> {
-        let segments: Result<Segments<'script, Ctx>> =
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<LocalPath<'script>> {
+        let segments: Result<Segments<'script>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
         let mut segments = segments?.into_iter();
         if let Some(Segment::IdSelector { id, .. }) = segments.next() {
@@ -2540,17 +2192,17 @@ impl<'script> LocalPath1<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct LocalPath<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct LocalPath<'script> {
     pub id: Cow<'script, str>,
     pub idx: usize,
     pub is_const: bool,
     pub start: Location,
     pub end: Location,
-    pub segments: Segments<'script, Ctx>,
+    pub segments: Segments<'script>,
 }
 impl_expr!(LocalPath);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for LocalPath<'script, Ctx> {
+impl<'script> PartialEq for LocalPath<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.idx == other.idx && self.is_const == other.is_const && self.segments == other.segments
     }
@@ -2563,11 +2215,11 @@ pub struct MetadataPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> MetadataPath1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
+    fn up<'registry>(
         self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<MetadataPath<'script, Ctx>> {
-        let segments: Result<Segments<'script, Ctx>> =
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<MetadataPath<'script>> {
+        let segments: Result<Segments<'script>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
         Ok(MetadataPath {
             start: self.start,
@@ -2578,14 +2230,14 @@ impl<'script> MetadataPath1<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MetadataPath<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct MetadataPath<'script> {
     pub start: Location,
     pub end: Location,
-    pub segments: Segments<'script, Ctx>,
+    pub segments: Segments<'script>,
 }
 impl_expr!(MetadataPath);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for MetadataPath<'script, Ctx> {
+impl<'script> PartialEq for MetadataPath<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.segments == other.segments
     }
@@ -2598,11 +2250,8 @@ pub struct EventPath1<'script> {
     pub segments: Segments1<'script>,
 }
 impl<'script> EventPath1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<EventPath<'script, Ctx>> {
-        let segments: Result<Segments<'script, Ctx>> =
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<EventPath<'script>> {
+        let segments: Result<Segments<'script>> =
             self.segments.into_iter().map(|p| p.up(helper)).collect();
         Ok(EventPath {
             start: self.start,
@@ -2613,14 +2262,14 @@ impl<'script> EventPath1<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EventPath<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct EventPath<'script> {
     pub start: Location,
     pub end: Location,
-    pub segments: Segments<'script, Ctx>,
+    pub segments: Segments<'script>,
 }
 impl_expr!(EventPath);
 
-impl<'script, Ctx: Context + Clone + Serialize + 'static> PartialEq for EventPath<'script, Ctx> {
+impl<'script> PartialEq for EventPath<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.segments == other.segments
     }
@@ -2676,10 +2325,7 @@ pub struct BinExpr1<'script> {
     // query_stream_not_defined(stmt: &Box<S>, inner: &I, name: String)
 }
 impl<'script> BinExpr1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<BinExpr<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<BinExpr<'script>> {
         Ok(BinExpr {
             start: self.start,
             end: self.end,
@@ -2691,12 +2337,12 @@ impl<'script> BinExpr1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct BinExpr<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct BinExpr<'script> {
     pub start: Location,
     pub end: Location,
     pub kind: BinOpKind,
-    pub lhs: ImutExpr<'script, Ctx>,
-    pub rhs: ImutExpr<'script, Ctx>,
+    pub lhs: ImutExpr<'script>,
+    pub rhs: ImutExpr<'script>,
 }
 impl_expr!(BinExpr);
 
@@ -2725,10 +2371,7 @@ pub struct UnaryExpr1<'script> {
 }
 
 impl<'script> UnaryExpr1<'script> {
-    fn up<'registry, Ctx: Context + Clone + Serialize + 'static>(
-        self,
-        helper: &mut Helper<'script, 'registry, Ctx>,
-    ) -> Result<UnaryExpr<'script, Ctx>> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<UnaryExpr<'script>> {
         Ok(UnaryExpr {
             start: self.start,
             end: self.end,
@@ -2739,42 +2382,39 @@ impl<'script> UnaryExpr1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct UnaryExpr<'script, Ctx: Context + Clone + Serialize + 'static> {
+pub struct UnaryExpr<'script> {
     pub start: Location,
     pub end: Location,
     pub kind: UnaryOpKind,
-    pub expr: ImutExpr<'script, Ctx>,
+    pub expr: ImutExpr<'script>,
 }
 impl_expr!(UnaryExpr);
 
-pub type Exprs<'script, Ctx> = Vec<Expr<'script, Ctx>>;
+pub type Exprs<'script> = Vec<Expr<'script>>;
 pub type Exprs1<'script> = Vec<Expr1<'script>>;
-pub type ImutExprs<'script, Ctx> = Vec<ImutExpr<'script, Ctx>>;
+pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub type ImutExprs1<'script> = Vec<ImutExpr1<'script>>;
-pub type Fields<'script, Ctx> = Vec<Field<'script, Ctx>>;
+pub type Fields<'script> = Vec<Field<'script>>;
 pub type Fields1<'script> = Vec<Field1<'script>>;
-pub type Segments<'script, Ctx> = Vec<Segment<'script, Ctx>>;
+pub type Segments<'script> = Vec<Segment<'script>>;
 pub type Segments1<'script> = Vec<Segment1<'script>>;
-pub type PatternFields<'script, Ctx> = Vec<PredicatePattern<'script, Ctx>>;
+pub type PatternFields<'script> = Vec<PredicatePattern<'script>>;
 pub type PatternFields1<'script> = Vec<PredicatePattern1<'script>>;
-pub type Predicates<'script, Ctx> = Vec<PredicateClause<'script, Ctx>>;
+pub type Predicates<'script> = Vec<PredicateClause<'script>>;
 pub type Predicates1<'script> = Vec<PredicateClause1<'script>>;
-pub type ImutPredicates<'script, Ctx> = Vec<ImutPredicateClause<'script, Ctx>>;
+pub type ImutPredicates<'script> = Vec<ImutPredicateClause<'script>>;
 pub type ImutPredicates1<'script> = Vec<ImutPredicateClause1<'script>>;
-pub type PatchOperations<'script, Ctx> = Vec<PatchOperation<'script, Ctx>>;
+pub type PatchOperations<'script> = Vec<PatchOperation<'script>>;
 pub type PatchOperations1<'script> = Vec<PatchOperation1<'script>>;
-pub type ComprehensionCases<'script, Ctx> = Vec<ComprehensionCase<'script, Ctx>>;
+pub type ComprehensionCases<'script> = Vec<ComprehensionCase<'script>>;
 pub type ComprehensionCases1<'script> = Vec<ComprehensionCase1<'script>>;
-pub type ImutComprehensionCases<'script, Ctx> = Vec<ImutComprehensionCase<'script, Ctx>>;
+pub type ImutComprehensionCases<'script> = Vec<ImutComprehensionCase<'script>>;
 pub type ImutComprehensionCases1<'script> = Vec<ImutComprehensionCase1<'script>>;
-pub type ArrayPredicatePatterns<'script, Ctx> = Vec<ArrayPredicatePattern<'script, Ctx>>;
+pub type ArrayPredicatePatterns<'script> = Vec<ArrayPredicatePattern<'script>>;
 pub type ArrayPredicatePatterns1<'script> = Vec<ArrayPredicatePattern1<'script>>;
 pub type WithExprs1<'script> = Vec<(Ident<'script>, ImutExpr1<'script>)>;
 
-fn replace_last_shadow_use<'script, Ctx: Context + Clone + Serialize + 'static>(
-    replace_idx: usize,
-    expr: Expr<'script, Ctx>,
-) -> Expr<'script, Ctx> {
+fn replace_last_shadow_use<'script>(replace_idx: usize, expr: Expr<'script>) -> Expr<'script> {
     match expr {
         Expr::Assign {
             path,
@@ -2799,7 +2439,7 @@ fn replace_last_shadow_use<'script, Ctx: Context + Clone + Serialize + 'static>(
             },
         },
         Expr::Match(m) => {
-            let mut m: Match<'script, Ctx> = *m;
+            let mut m: Match<'script> = *m;
             let mut patterns = vec![];
             // In each pattern we can replace the use in the last assign
 
@@ -2818,5 +2458,5 @@ fn replace_last_shadow_use<'script, Ctx: Context + Clone + Serialize + 'static>(
     }
 }
 
-pub type Stmts<'script, Ctx> = Vec<Stmt<'script, Ctx>>;
+pub type Stmts<'script> = Vec<Stmt<'script>>;
 pub type Stmts1<'script> = Vec<Stmt1<'script>>;

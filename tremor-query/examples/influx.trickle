@@ -31,4 +31,5 @@ from in[`10secs`]
 where record::contains(event.fields, "value") and record::contains(event.tags, "app")
 group by set([event.measurement, event.tags.app])
 ##group by set(event.tags, event.fields.*)
+##group by set(event.tags, cube(record::to_array(event.tags)), each(record::keysi(event.fields)))
 into out;

@@ -64,9 +64,9 @@ pub type NodeMap = HashMap<String, NodeIndex>;
 lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
-    pub static ref FN_REGISTRY: Mutex<Registry<EventContext>> = {
+    pub static ref FN_REGISTRY: Mutex<Registry> = {
         use tremor_script::registry::FResult;
-        let mut registry: Registry<EventContext> = tremor_script::registry();
+        let mut registry: Registry = tremor_script::registry();
         #[allow(unused_variables)]
         fn ingest_ns<'event>(ctx: &EventContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
             Ok(BorrowedValue::I64(ctx.at as i64))

@@ -11,14 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 use jumphash;
 use simd_json::BorrowedValue as Value;
 use std::io;
 use std::io::Write;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry.insert(
         tremor_fn! (chash::jump(_context, _key: String, _slot_count: I64) {
             // This is 'tremor\0\0'  and '\0\0tremor' as integers

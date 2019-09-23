@@ -32,8 +32,7 @@ use tremor_script::highlighter::{DumbHighlighter, Highlighter};
 use tremor_script::interpreter::Cont;
 use tremor_script::lexer::{self};
 use tremor_script::pos::Range;
-use tremor_script::registry::Registry;
-use tremor_script::{registry::AggrRegistry, EventContext};
+use tremor_script::registry::{AggrRegistry, Registry};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
     let v: Vec<&str> = port.split('/').collect();
@@ -160,11 +159,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(
-        script: &'script str,
-        reg: &Registry<EventContext>,
-        aggr_reg: &AggrRegistry,
-    ) -> Result<Self> {
+    pub fn parse(script: &'script str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let query = tremor_script::QueryRentalWrapper::parse(script, reg, aggr_reg)?;
         Ok(Query { query })
     }

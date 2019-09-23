@@ -15,7 +15,6 @@
 use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
-use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -24,38 +23,33 @@ use std::sync::Arc;
 //use tremor_script::ast::ImutExpr;
 use tremor_script::{
     self,
-    ast::InvokeAggrFn,
+    ast::{GroupBy, InvokeAggrFn},
     interpreter::{AggrType, ExecOpts},
     script::rentals::Stmt,
-    Context, EventContext,
+    EventContext,
 }; //, FN_REGISTRY};
 
-pub type Aggrs<'script> = Vec<InvokeAggrFn<'script, EventContext>>;
+pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
 
 rental! {
     pub mod rentals {
         use tremor_script::script::rentals::Query;
         use std::sync::Arc;
         use halfbrown::HashMap;
-        use serde::Serialize;
         use super::*;
 
         #[rental(covariant,debug)]
-        pub struct Dims<Ctx>
-        where
-            Ctx: Context + Serialize +'static {
-            query: Arc<Stmt<Ctx>>,
+        pub struct Dims
+         {
+            query: Arc<Stmt>,
             groups: HashMap<String, Window<'query>>,
         }
     }
 }
 pub use rentals::Dims as SelectDims;
 
-impl<Ctx> SelectDims<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
-{
-    pub fn from_query(stmt: Arc<Stmt<Ctx>>) -> Self {
+impl SelectDims {
+    pub fn from_query(stmt: Arc<Stmt>) -> Self {
         Self::new(stmt, |_| HashMap::new())
     }
 }
@@ -64,7 +58,7 @@ where
 pub struct TrickleSelect {
     pub id: String,
     pub stmt: tremor_script::StmtRentalWrapper,
-    pub groups: SelectDims<EventContext>,
+    pub groups: SelectDims,
     pub window: Option<WindowImpl>,
 }
 
@@ -198,7 +192,7 @@ impl WindowTrait for TumblingWindowOnEventTime {
     }
 }
 
-const NO_AGGRS: [InvokeAggrFn<'static, EventContext>; 0] = [];
+const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl TrickleSelect {
     fn opts() -> ExecOpts {
@@ -219,7 +213,7 @@ impl Operator for TrickleSelect {
         let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt
-        let stmt: &mut tremor_script::ast::Stmt<EventContext> =
+        let stmt: &mut tremor_script::ast::Stmt =
             unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
 
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
@@ -260,16 +254,20 @@ impl Operator for TrickleSelect {
 
                 if let Some(window) = &self.window {
                     let group = if let Some(group_by) = &stmt.maybe_group_by {
-                        let group = group_by.run(
-                            opts,
-                            &ctx,
-                            &NO_AGGRS,
-                            unwind_event,
-                            &event_meta,
-                            &local_stack,
-                            &consts,
-                        )?;
-                        group.to_string()
+                        match group_by {
+                            GroupBy::Expr { expr, .. } => expr
+                                .run(
+                                    opts,
+                                    &ctx,
+                                    &NO_AGGRS,
+                                    unwind_event,
+                                    &event_meta,
+                                    &local_stack,
+                                    &consts,
+                                )?
+                                .to_string(),
+                            _ => String::new(),
+                        }
                     } else {
                         String::new()
                     };
@@ -332,7 +330,7 @@ impl Operator for TrickleSelect {
                         invocable.accumulate(argv1.as_slice()).map_err(|e| {
                             use tremor_script::Registry;
                             // FIXME nice error
-                            let r: Option<&Registry<EventContext>> = None;
+                            let r: Option<&Registry> = None;
                             e.into_err(aggr, aggr, r)
                         })?;
                     }
@@ -426,19 +424,16 @@ mod test {
     use tremor_script::ast;
     use tremor_script::pos::Location;
 
-    fn test_target<'test>() -> ast::ImutExpr<'test, EventContext> {
-        let target: ast::ImutExpr<'test, EventContext> =
-            ast::ImutExpr::<EventContext>::Literal(ast::Literal {
-                start: Location::default(),
-                end: Location::default(),
-                value: Value::I64(42),
-            });
+    fn test_target<'test>() -> ast::ImutExpr<'test> {
+        let target: ast::ImutExpr<'test> = ast::ImutExpr::Literal(ast::Literal {
+            start: Location::default(),
+            end: Location::default(),
+            value: Value::I64(42),
+        });
         target
     }
 
-    fn test_stmt<'test>(
-        target: ast::ImutExpr<'test, EventContext>,
-    ) -> ast::MutSelect<'test, EventContext> {
+    fn test_stmt<'test>(target: ast::ImutExpr<'test>) -> ast::MutSelect<'test> {
         tremor_script::ast::MutSelect {
             start: Location::default(),
             end: Location::default(),
@@ -464,7 +459,7 @@ mod test {
         }
     }
 
-    fn test_query<'test>(stmt: ast::Stmt<'test, EventContext>) -> ast::Query<'test, EventContext> {
+    fn test_query<'test>(stmt: ast::Stmt<'test>) -> ast::Query<'test> {
         ast::Query {
             stmts: vec![stmt.clone()],
         }
@@ -804,8 +799,8 @@ mod test {
     }
 
     fn test_select_stmt<'snot>(
-        stmt: tremor_script::ast::MutSelect<'snot, EventContext>,
-    ) -> tremor_script::ast::Stmt<'snot, EventContext> {
+        stmt: tremor_script::ast::MutSelect<'snot>,
+    ) -> tremor_script::ast::Stmt<'snot> {
         ast::Stmt::SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],

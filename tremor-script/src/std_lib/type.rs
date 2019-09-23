@@ -14,7 +14,7 @@
 
 //cuse crate::errors::*;
 
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 use simd_json::{ValueTrait, ValueType};
 
@@ -31,7 +31,7 @@ macro_rules! map_function {
         }
     }
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(map_function!(is_null))
         .insert(map_function!(is_bool))
