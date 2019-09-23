@@ -15,18 +15,20 @@ end;
 
 select
   {
-    "group": event.tags.app,
-#    "event": event,
-    "sum": stats::sum(event.fields.value),
-    "mean": stats::mean(event.fields.value),
-    "var": stats::var(event.fields.value),
-    "min": stats::min(event.fields.value),
-    "max": stats::max(event.fields.value),
-    "stdev": stats::stdev(event.fields.value),
-    "count": stats::count()
+    "measurement": event.measurement,
+    "tags": patch event.tags of insert "window" => "10s" end,
+    "fields": {
+      "sum": stats::sum(event.fields.value),
+      "mean": stats::mean(event.fields.value),
+      "var": stats::var(event.fields.value),
+      "min": stats::min(event.fields.value),
+      "max": stats::max(event.fields.value),
+      "stdev": stats::stdev(event.fields.value),
+      "count": stats::count()
+    }
   }
-from in[`1secs`]
-where record::contains(event.tags, "app") and record::contains(event.fields, "value")
-group by set(event.tags.app)
-##group by set(event.tags.app, event.fields.*)
+from in[`10secs`]
+where record::contains(event.fields, "value") and record::contains(event.tags, "app")
+group by set([event.measurement, event.tags.app])
+##group by set(event.tags, event.fields.*)
 into out;
