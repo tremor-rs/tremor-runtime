@@ -1,0 +1,35 @@
+# to be run with metrics_dev_5.txt.xz
+create tumbling window `1secs`
+ with
+   #IOU constant functions
+   #interval = datetime::with_seconds(5),
+   interval = 1000000000
+end;
+
+create tumbling window `10secs`
+ with
+   #IOU constant functions
+   #interval = datetime::with_seconds(5),
+   interval = 10000000000
+end;
+
+select
+  {
+    "measurement": event.measurement,
+    "tags": patch event.tags of insert "window" => "10s" end,
+    "fields": {
+      "sum": stats::sum(event.fields[$`group`[2]]),
+      "mean": stats::mean(event.fields[$`group`[2]]),
+      "var": stats::var(event.fields[$`group`[2]]),
+      "min": stats::min(event.fields[$`group`[2]]),
+      "max": stats::max(event.fields[$`group`[2]]),
+      "stdev": stats::stdev(event.fields[$`group`[2]]),
+      "count": stats::count()
+    }
+  }
+from in[`10secs`]
+where record::contains(event.fields, "value") and record::contains(event.tags, "app")
+group by set(event.measurement, event.tags, each(record::keys(event.fields)))
+##group by set(event.tags, event.fields.*)
+##group by set(event.tags, cube(record::to_array(event.tags)), each(record::keysi(event.fields)))
+into out;
