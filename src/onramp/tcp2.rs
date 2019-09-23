@@ -27,6 +27,7 @@ const ONRAMP: Token = Token(0);
 pub struct Config {
     pub port: u32,
     pub host: String,
+    // TODO add config for message delimiter and max length
 }
 
 pub struct Tcp {
@@ -56,7 +57,7 @@ fn onramp_loop(
     let mut codec = codec::lookup(&codec)?;
     let mut preprocessors = make_preprocessors(&preprocessors)?;
 
-    // Imposed Limit of a TCP payload
+    // TODO expose this as max length of message, and track read buffers per connection
     let mut buffer = [0; 65535];
 
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
@@ -131,6 +132,7 @@ fn onramp_loop(
                     if let Some(stream) = connections.get_mut(&token) {
                         let mut buffer_end_index = 0;
                         loop {
+                            // TODO implement resume from partial reads (until a delimiter is hit)
                             match stream.read(&mut buffer[buffer_end_index..]) {
                                 Ok(0) => {
                                     debug!("Connection closed by client: {}", stream.peer_addr()?);
@@ -139,7 +141,7 @@ fn onramp_loop(
                                 }
                                 Ok(n) => buffer_end_index += n,
                                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful read
-                                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue, // will try to resume read
                                 Err(e) => {
                                     error!("Failed to read data from tcp client connection: {}", e);
                                     break;
@@ -151,7 +153,7 @@ fn onramp_loop(
                             trace!(
                                 "Read {} bytes: {}",
                                 buffer_end_index,
-                                String::from_utf8_lossy(&buffer[0..buffer_end_index])
+                                String::from_utf8_lossy(&buffer[0..256])
                             );
                             send_event(
                                 &pipelines,
@@ -188,6 +190,6 @@ impl Onramp for Tcp {
         Ok(tx)
     }
     fn default_codec(&self) -> &str {
-        "string"
+        "json"
     }
 }
