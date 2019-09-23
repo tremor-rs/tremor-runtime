@@ -13,8 +13,10 @@
 // limitations under the License.
 
 pub mod base_expr;
+
 pub mod base_stmt;
 mod query;
+mod upable;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
@@ -29,11 +31,7 @@ use simd_json::value::{borrowed, ValueTrait};
 use simd_json::BorrowedValue as Value;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
-
-pub(crate) trait Upable<'script> {
-    type Target;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
-}
+use upable::Upable;
 
 #[macro_export]
 macro_rules! impl_expr {
@@ -316,8 +314,9 @@ pub struct Field1<'script> {
     pub value: ImutExpr1<'script>,
 }
 
-impl<'script> Field1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Field<'script>> {
+impl<'script> Upable<'script> for Field1<'script> {
+    type Target = Field<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Field {
             start: self.start,
             end: self.end,
@@ -344,14 +343,13 @@ pub struct Record1<'script> {
 }
 impl_expr1!(Record1);
 
-impl<'script> Record1<'script> {
-    pub fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Record<'script>> {
-        let fields: Result<Fields<'script>> =
-            self.fields.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for Record1<'script> {
+    type Target = Record<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
             start: self.start,
             end: self.end,
-            fields: fields?,
+            fields: self.fields.up(helper)?,
         })
     }
 }
@@ -371,14 +369,13 @@ pub struct List1<'script> {
 }
 impl_expr1!(List1);
 
-impl<'script> List1<'script> {
-    pub fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<List<'script>> {
-        let exprs: Result<ImutExprs<'script>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for List1<'script> {
+    type Target = List<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(List {
             start: self.start,
             end: self.end,
-            exprs: exprs?,
+            exprs: self.exprs.up(helper)?,
         })
     }
 }
@@ -425,8 +422,9 @@ pub enum Expr1<'script> {
     Imut(ImutExpr1<'script>), //Test(TestExpr1)
 }
 
-impl<'script> Expr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Expr<'script>> {
+impl<'script> Upable<'script> for Expr1<'script> {
+    type Target = Expr<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             Expr1::Const { start, end, .. } => {
                 return Err(ErrorKind::InvalidConst(
@@ -501,8 +499,9 @@ pub enum ImutExpr1<'script> {
     },
 }
 
-impl<'script> ImutExpr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<ImutExpr<'script>> {
+impl<'script> Upable<'script> for ImutExpr1<'script> {
+    type Target = ImutExpr<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ImutExpr1::Binary(b) => match b.up(helper)? {
                 b1 @ BinExpr {
@@ -811,8 +810,9 @@ pub struct EmitExpr1<'script> {
     pub port: Option<String>,
 }
 
-impl<'script> EmitExpr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<EmitExpr<'script>> {
+impl<'script> Upable<'script> for EmitExpr1<'script> {
+    type Target = EmitExpr<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(EmitExpr {
             start: self.start,
             end: self.end,
@@ -848,19 +848,15 @@ pub struct Invoke1<'script> {
 }
 impl_expr1!(Invoke1);
 
-impl<'script> Invoke1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Invoke<'script>> {
-        let args: Result<ImutExprs<'script>> = self
-            .args
-            .clone()
-            .into_iter()
-            .map(|p| p.up(helper))
-            .collect();
-        let args = args?;
+impl<'script> Upable<'script> for Invoke1<'script> {
+    type Target = Invoke<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let invocable = helper
             .reg
             .find(&self.module, &self.fun)
             .map_err(|e| e.into_err(&self, &self, Some(&helper.reg)))?;
+
+        let args = self.args.up(helper)?;
 
         Ok(Invoke {
             start: self.start,
@@ -871,7 +867,9 @@ impl<'script> Invoke1<'script> {
             args,
         })
     }
+}
 
+impl<'script> Invoke1<'script> {
     fn is_aggregate<'registry>(&self, helper: &mut Helper<'script, 'registry>) -> bool {
         helper.aggr_reg.find(&self.module, &self.fun).is_ok()
     }
@@ -935,8 +933,9 @@ pub struct InvokeAggr1<'script> {
 }
 impl_expr1!(InvokeAggr1);
 
-impl<'script> InvokeAggr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<InvokeAggr> {
+impl<'script> Upable<'script> for InvokeAggr1<'script> {
+    type Target = InvokeAggr;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if helper.is_in_aggr {
             return Err(ErrorKind::AggrInAggr(self.extent(), self.extent().expand_lines(2)).into());
         };
@@ -957,14 +956,9 @@ impl<'script> InvokeAggr1<'script> {
             )
             .into());
         }
-        let args: Result<ImutExprs<'script>> = self
-            .args
-            .clone()
-            .into_iter()
-            .map(|p| p.up(helper))
-            .collect();
-        let args = args?;
         let aggr_id = helper.aggregates.len();
+        let args = self.args.up(helper)?;
+
         helper.aggregates.push(InvokeAggrFn {
             start: self.start,
             end: self.end,
@@ -1080,8 +1074,10 @@ impl BaseExpr for TestExpr1 {
         self.end
     }
 }
-impl TestExpr1 {
-    fn up<'registry>(self, _helper: &mut Helper) -> Result<TestExpr> {
+
+impl<'script> Upable<'script> for TestExpr1 {
+    type Target = TestExpr;
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match Extractor::new(&self.id, &self.test) {
             Ok(ex) => Ok(TestExpr {
                 id: self.id,
@@ -1110,11 +1106,10 @@ pub struct Match1<'script> {
     pub patterns: Predicates1<'script>,
 }
 
-impl<'script> Match1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Match<'script>> {
-        let patterns: Result<Predicates<'script>> =
-            self.patterns.into_iter().map(|p| p.up(helper)).collect();
-        let patterns = patterns?;
+impl<'script> Upable<'script> for Match1<'script> {
+    type Target = Match<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let patterns = self.patterns.up(helper)?;
 
         let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
         match defaults {
@@ -1149,12 +1144,10 @@ pub struct ImutMatch1<'script> {
     pub patterns: ImutPredicates1<'script>,
 }
 
-impl<'script> ImutMatch1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<ImutMatch<'script>> {
-        let patterns: Result<ImutPredicates<'script>> =
-            self.patterns.into_iter().map(|p| p.up(helper)).collect();
-        let patterns = patterns?;
-
+impl<'script> Upable<'script> for ImutMatch1<'script> {
+    type Target = ImutMatch<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let patterns = self.patterns.up(helper)?;
         let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
         match defaults {
             0 => helper.warnings.push(Warning{
@@ -1206,20 +1199,13 @@ pub struct PredicateClause1<'script> {
     pub exprs: Exprs1<'script>,
 }
 
-impl<'script> PredicateClause1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<PredicateClause<'script>> {
+impl<'script> Upable<'script> for PredicateClause1<'script> {
+    type Target = PredicateClause<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs: Result<Exprs<'script>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
-        let guard = if let Some(guard) = self.guard {
-            Some(guard.up(helper)?)
-        } else {
-            None
-        };
-        let exprs = exprs?;
+        let exprs = self.exprs.up(helper)?;
+        let guard = self.guard.up(helper)?;
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
         if pattern.is_assign() {
@@ -1243,21 +1229,13 @@ pub struct ImutPredicateClause1<'script> {
     pub exprs: ImutExprs1<'script>,
 }
 
-impl<'script> ImutPredicateClause1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ImutPredicateClause<'script>> {
+impl<'script> Upable<'script> for ImutPredicateClause1<'script> {
+    type Target = ImutPredicateClause<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs: Result<ImutExprs<'script>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
-        let guard = if let Some(guard) = self.guard {
-            Some(guard.up(helper)?)
-        } else {
-            None
-        };
-        let exprs = exprs?;
+        let exprs = self.exprs.up(helper)?;
+        let guard = self.guard.up(helper)?;
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
         if pattern.is_assign() {
@@ -1301,16 +1279,16 @@ pub struct Patch1<'script> {
     pub operations: PatchOperations1<'script>,
 }
 
-impl<'script> Patch1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Patch<'script>> {
-        let operations: Result<PatchOperations<'script>> =
-            self.operations.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for Patch1<'script> {
+    type Target = Patch<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let operations = self.operations.up(helper)?;
 
         Ok(Patch {
             start: self.start,
             end: self.end,
             target: self.target.up(helper)?,
-            operations: operations?,
+            operations,
         })
     }
 }
@@ -1357,11 +1335,9 @@ pub enum PatchOperation1<'script> {
     },
 }
 
-impl<'script> PatchOperation1<'script> {
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<PatchOperation<'script>> {
+impl<'script> Upable<'script> for PatchOperation1<'script> {
+    type Target = PatchOperation<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use PatchOperation1::*;
         Ok(match self {
             Insert { ident, expr } => PatchOperation::Insert {
@@ -1439,10 +1415,10 @@ pub struct Merge1<'script> {
     pub target: ImutExpr1<'script>,
     pub expr: ImutExpr1<'script>,
 }
-impl<'script> Merge1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Merge<'script>> {
-        //let patterns: Result<Predicates> = self.patterns.into_iter().map(|p| p.up(helper)).collect();
 
+impl<'script> Upable<'script> for Merge1<'script> {
+    type Target = Merge<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Merge {
             start: self.start,
             end: self.end,
@@ -1469,11 +1445,9 @@ pub struct Comprehension1<'script> {
     pub cases: ComprehensionCases1<'script>,
 }
 
-impl<'script> Comprehension1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<Comprehension<'script>> {
+impl<'script> Upable<'script> for Comprehension1<'script> {
+    type Target = Comprehension<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We compute the target before shadowing the key and value
 
         let target = self.target.up(helper)?;
@@ -1483,14 +1457,13 @@ impl<'script> Comprehension1<'script> {
         // will be.
         let (key_id, val_id) = helper.reserve_2_shadow();
 
-        let cases: Result<ComprehensionCases<'script>> =
-            self.cases.into_iter().map(|p| p.up(helper)).collect();
+        let cases = self.cases.up(helper)?;
 
         Ok(Comprehension {
             start: self.start,
             end: self.end,
             target,
-            cases: cases?,
+            cases,
             key_id,
             val_id,
         })
@@ -1505,11 +1478,9 @@ pub struct ImutComprehension1<'script> {
     pub cases: ImutComprehensionCases1<'script>,
 }
 
-impl<'script> ImutComprehension1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ImutComprehension<'script>> {
+impl<'script> Upable<'script> for ImutComprehension1<'script> {
+    type Target = ImutComprehension<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We compute the target before shadowing the key and value
 
         let target = self.target.up(helper)?;
@@ -1519,14 +1490,13 @@ impl<'script> ImutComprehension1<'script> {
         // will be.
         let (key_id, val_id) = helper.reserve_2_shadow();
 
-        let cases: Result<ImutComprehensionCases<'script>> =
-            self.cases.into_iter().map(|p| p.up(helper)).collect();
+        let cases = self.cases.up(helper)?;
 
         Ok(ImutComprehension {
             start: self.start,
             end: self.end,
             target,
-            cases: cases?,
+            cases,
             key_id,
             val_id,
         })
@@ -1565,22 +1535,15 @@ pub struct ComprehensionCase1<'script> {
     pub exprs: Exprs1<'script>,
 }
 
-impl<'script> ComprehensionCase1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ComprehensionCase<'script>> {
+impl<'script> Upable<'script> for ComprehensionCase1<'script> {
+    type Target = ComprehensionCase<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // regiter key and value as shadowed variables
         let key_idx = helper.register_shadow_var(&self.key_name);
         let val_idx = helper.register_shadow_var(&self.value_name);
 
-        let guard = if let Some(guard) = self.guard {
-            Some(guard.up(helper)?)
-        } else {
-            None
-        };
-        let exprs: Result<Exprs<'script>> = self.exprs.into_iter().map(|p| p.up(helper)).collect();
-        let mut exprs = exprs?;
+        let guard = self.guard.up(helper)?;
+        let mut exprs = self.exprs.up(helper)?;
 
         if let Some(expr) = exprs.pop() {
             exprs.push(replace_last_shadow_use(
@@ -1613,23 +1576,15 @@ pub struct ImutComprehensionCase1<'script> {
     pub exprs: ImutExprs1<'script>,
 }
 
-impl<'script> ImutComprehensionCase1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ImutComprehensionCase<'script>> {
+impl<'script> Upable<'script> for ImutComprehensionCase1<'script> {
+    type Target = ImutComprehensionCase<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // regiter key and value as shadowed variables
         let _key_idx = helper.register_shadow_var(&self.key_name);
         let _val_idx = helper.register_shadow_var(&self.value_name);
 
-        let guard = if let Some(guard) = self.guard {
-            Some(guard.up(helper)?)
-        } else {
-            None
-        };
-        let exprs: Result<ImutExprs<'script>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
-        let exprs = exprs?;
+        let guard = self.guard.up(helper)?;
+        let exprs = self.exprs.up(helper)?;
 
         // unregister them again
         helper.end_shadow_var();
@@ -1676,8 +1631,10 @@ pub enum Pattern1<'script> {
     Assign(AssignPattern1<'script>),
     Default,
 }
-impl<'script> Pattern1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Pattern<'script>> {
+
+impl<'script> Upable<'script> for Pattern1<'script> {
+    type Target = Pattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use Pattern1::*;
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
@@ -1746,11 +1703,9 @@ pub enum PredicatePattern1<'script> {
     },
 }
 
-impl<'script> PredicatePattern1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<PredicatePattern<'script>> {
+impl<'script> Upable<'script> for PredicatePattern1<'script> {
+    type Target = PredicatePattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use PredicatePattern1::*;
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
@@ -1825,17 +1780,14 @@ pub struct RecordPattern1<'script> {
     pub fields: PatternFields1<'script>,
 }
 
-impl<'script> RecordPattern1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<RecordPattern<'script>> {
-        let fields: Result<PatternFields<'script>> =
-            self.fields.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for RecordPattern1<'script> {
+    type Target = RecordPattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let fields = self.fields.up(helper)?;
         Ok(RecordPattern {
             start: self.start,
             end: self.end,
-            fields: fields?,
+            fields,
         })
     }
 }
@@ -1855,11 +1807,9 @@ pub enum ArrayPredicatePattern1<'script> {
     Record(RecordPattern1<'script>),
     //Array(ArrayPattern),
 }
-impl<'script> ArrayPredicatePattern1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ArrayPredicatePattern<'script>> {
+impl<'script> Upable<'script> for ArrayPredicatePattern1<'script> {
+    type Target = ArrayPredicatePattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use ArrayPredicatePattern1::*;
         Ok(match self {
             Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
@@ -1885,17 +1835,14 @@ pub struct ArrayPattern1<'script> {
     pub exprs: ArrayPredicatePatterns1<'script>,
 }
 
-impl<'script> ArrayPattern1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ArrayPattern<'script>> {
-        let exprs: Result<Vec<ArrayPredicatePattern<'script>>> =
-            self.exprs.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for ArrayPattern1<'script> {
+    type Target = ArrayPattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let exprs = self.exprs.up(helper)?;
         Ok(ArrayPattern {
             start: self.start,
             end: self.end,
-            exprs: exprs?,
+            exprs,
         })
     }
 }
@@ -1914,11 +1861,9 @@ pub struct AssignPattern1<'script> {
     pub pattern: Box<Pattern1<'script>>,
 }
 
-impl<'script> AssignPattern1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<AssignPattern<'script>> {
+impl<'script> Upable<'script> for AssignPattern1<'script> {
+    type Target = AssignPattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(AssignPattern {
             idx: helper.register_shadow_var(&self.id),
             id: self.id,
@@ -1940,8 +1885,9 @@ pub enum Path1<'script> {
     Meta(MetadataPath1<'script>),
 }
 
-impl<'script> Path1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Path<'script>> {
+impl<'script> Upable<'script> for Path1<'script> {
+    type Target = Path<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use Path1::*;
         Ok(match self {
             Local(p) => {
@@ -2012,8 +1958,9 @@ pub enum Segment1<'script> {
     },
 }
 
-impl<'script> Segment1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Segment<'script>> {
+impl<'script> Upable<'script> for Segment1<'script> {
+    type Target = Segment<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use Segment1::*;
         Ok(match self {
             ElementSelector { expr, start, end } => {
@@ -2061,6 +2008,9 @@ impl<'script> Segment1<'script> {
             },
         })
     }
+}
+
+impl<'script> Segment1<'script> {
     pub fn from_id(id: Ident<'script>, start: Location, end: Location) -> Self {
         Segment1::ElementSelector {
             start,
@@ -2157,11 +2107,12 @@ pub struct LocalPath1<'script> {
     pub end: Location,
     pub segments: Segments1<'script>,
 }
-impl<'script> LocalPath1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<LocalPath<'script>> {
-        let segments: Result<Segments<'script>> =
-            self.segments.into_iter().map(|p| p.up(helper)).collect();
-        let mut segments = segments?.into_iter();
+
+impl<'script> Upable<'script> for LocalPath1<'script> {
+    type Target = LocalPath<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let segments = self.segments.up(helper)?;
+        let mut segments = segments.into_iter();
         if let Some(Segment::IdSelector { id, .. }) = segments.next() {
             let segments = segments.collect();
             if let Some(idx) = helper.is_const(&id) {
@@ -2214,17 +2165,14 @@ pub struct MetadataPath1<'script> {
     pub end: Location,
     pub segments: Segments1<'script>,
 }
-impl<'script> MetadataPath1<'script> {
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<MetadataPath<'script>> {
-        let segments: Result<Segments<'script>> =
-            self.segments.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for MetadataPath1<'script> {
+    type Target = MetadataPath<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let segments = self.segments.up(helper)?;
         Ok(MetadataPath {
             start: self.start,
             end: self.end,
-            segments: segments?,
+            segments,
         })
     }
 }
@@ -2249,14 +2197,14 @@ pub struct EventPath1<'script> {
     pub end: Location,
     pub segments: Segments1<'script>,
 }
-impl<'script> EventPath1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<EventPath<'script>> {
-        let segments: Result<Segments<'script>> =
-            self.segments.into_iter().map(|p| p.up(helper)).collect();
+impl<'script> Upable<'script> for EventPath1<'script> {
+    type Target = EventPath<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let segments = self.segments.up(helper)?;
         Ok(EventPath {
             start: self.start,
             end: self.end,
-            segments: segments?,
+            segments,
         })
     }
 }
@@ -2324,8 +2272,10 @@ pub struct BinExpr1<'script> {
     pub rhs: ImutExpr1<'script>,
     // query_stream_not_defined(stmt: &Box<S>, inner: &I, name: String)
 }
-impl<'script> BinExpr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<BinExpr<'script>> {
+
+impl<'script> Upable<'script> for BinExpr1<'script> {
+    type Target = BinExpr<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(BinExpr {
             start: self.start,
             end: self.end,
@@ -2370,8 +2320,9 @@ pub struct UnaryExpr1<'script> {
     pub expr: ImutExpr1<'script>,
 }
 
-impl<'script> UnaryExpr1<'script> {
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<UnaryExpr<'script>> {
+impl<'script> Upable<'script> for UnaryExpr1<'script> {
+    type Target = UnaryExpr<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(UnaryExpr {
             start: self.start,
             end: self.end,
