@@ -1051,3 +1051,86 @@ where
         error_oops(outer)
     }
 }
+
+//FIXME Do we really want this here?
+impl<'script> GroupBy<'script> {
+    pub fn generate_groups<'run, 'event>(
+        &'script self,
+        ctx: &'run EventContext,
+        event: &'run Value<'event>,
+        meta: &'run Value<'event>,
+        groups: &'run mut Vec<Vec<Value<'event>>>,
+    ) -> Result<()>
+    where
+        'script: 'event,
+        'event: 'run,
+    {
+        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+        let opts = ExecOpts {
+            result_needed: true,
+            aggr: AggrType::Emit,
+        };
+        // FIXME
+        let consts = vec![];
+        let local_stack = LocalStack::with_size(0);
+        match self {
+            GroupBy::Expr { expr, .. } => {
+                let v = expr
+                    .run(opts, &ctx, &NO_AGGRS, event, meta, &local_stack, &consts)?
+                    .into_owned();
+                if groups.is_empty() {
+                    groups.push(vec![v]);
+                } else {
+                    groups.iter_mut().for_each(|g| g.push(v.clone()));
+                };
+                Ok(())
+            }
+
+            GroupBy::Set { items, .. } => {
+                for item in items {
+                    item.generate_groups(ctx, event, meta, groups)?
+                }
+
+                // set(event.measurement, each(record::keys(event.fields)))
+                // GroupBy::Set(items: [GroupBy::Expr(..), GroupBy::Each(GroupBy::Expr(..))])
+                // [[7]]
+                // [[7, "a"], [7, "b"]]
+
+                // GroupBy::Set(items: [GroupBy::Each(GroupBy::Expr(..)), GroupBy::Expr(..)])
+                // [["a"], ["b"]]
+                // [["a", 7], ["b", 7]]
+
+                // GroupBy::Set(items: [GroupBy::Each(GroupBy::Expr(..)), GroupBy::Each(GroupBy::Expr(..))])
+                // [["a"], ["b"]]
+                // [["a", 7], ["b", 7], ["a", 8], ["b", 8]]
+                Ok(())
+            }
+            GroupBy::Each { expr, .. } => {
+                let v = expr
+                    .run(opts, &ctx, &NO_AGGRS, event, meta, &local_stack, &consts)?
+                    .into_owned();
+                if let Some(each) = v.as_array() {
+                    if groups.is_empty() {
+                        for e in each {
+                            groups.push(vec![e.clone()]);
+                        }
+                    } else {
+                        let mut new_groups = Vec::with_capacity(each.len() * groups.len());
+                        for g in groups.drain(..) {
+                            for e in each {
+                                let mut g = g.clone();
+                                g.push(e.clone());
+                                new_groups.push(g);
+                            }
+                        }
+                        std::mem::swap(groups, &mut new_groups);
+                    }
+                } else {
+                    panic!("TYPE ERROR HERE, NEED RECORD")
+                }
+
+                Ok(())
+            }
+        }
+    }
+}

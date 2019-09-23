@@ -23,9 +23,9 @@ use std::sync::Arc;
 //use tremor_script::ast::ImutExpr;
 use tremor_script::{
     self,
-    ast::{GroupBy, InvokeAggrFn},
+    ast::{InvokeAggrFn, Stmt},
     interpreter::{AggrType, ExecOpts},
-    script::rentals::Stmt,
+    script::rentals::Stmt as StmtRental,
     EventContext,
 }; //, FN_REGISTRY};
 
@@ -39,9 +39,8 @@ rental! {
         use super::*;
 
         #[rental(covariant,debug)]
-        pub struct Dims
-         {
-            query: Arc<Stmt>,
+        pub struct Dims {
+            query: Arc<StmtRental>,
             groups: HashMap<String, Window<'query>>,
         }
     }
@@ -49,7 +48,7 @@ rental! {
 pub use rentals::Dims as SelectDims;
 
 impl SelectDims {
-    pub fn from_query(stmt: Arc<Stmt>) -> Self {
+    pub fn from_query(stmt: Arc<StmtRental>) -> Self {
         Self::new(stmt, |_| HashMap::new())
     }
 }
@@ -208,185 +207,142 @@ impl Operator for TrickleSelect {
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let opts = Self::opts();
-        let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-
+        // FIXME .unwrap()
         let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt
-        let stmt: &mut tremor_script::ast::Stmt =
-            unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
+        let stmt: &mut Stmt = unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
 
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
-        match stmt {
-            tremor_script::ast::Stmt::SelectStmt {
+        let (stmt, aggregates, consts) = match stmt {
+            Stmt::SelectStmt {
                 stmt,
                 aggregates,
                 consts,
-            } => {
-                //
-                // Before any select processing, we filter by where clause
-                //
-                // FIXME: ?
+            } => (stmt, aggregates, consts),
+            _ => unreachable!(),
+        };
+
+        //
+        // Before any select processing, we filter by where clause
+        //
+        // FIXME: ?
+        if let Some(guard) = &stmt.maybe_where {
+            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
+            let event_meta: simd_json::borrowed::Value =
+                simd_json::owned::Value::Object(event.meta.clone()).into();
+            let test = guard.run(
+                opts,
+                &ctx,
+                &NO_AGGRS,
+                unwind_event,
+                &event_meta,
+                &local_stack,
+                &consts,
+            )?;
+            match test.borrow() {
+                Value::Bool(true) => (),
+                Value::Bool(false) => {
+                    return Ok(vec![]);
+                }
+                other => {
+                    return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                }
+            };
+        }
+
+        let mut events = vec![];
+        if let Some(window) = &self.window {
+            let mut group_values = vec![];
+            {
+                let unwind_event: &mut Value<'_> =
+                    unsafe { std::mem::transmute(event.value.suffix()) };
                 let event_meta: simd_json::borrowed::Value =
                     simd_json::owned::Value::Object(event.meta.clone()).into();
-                if let Some(guard) = &stmt.maybe_where {
-                    let test = guard.run(
+                if let Some(group_by) = &stmt.maybe_group_by {
+                    group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
+                };
+            }
+            for group in group_values {
+                let group = Value::Array(group);
+                let event = event.clone();
+                let unwind_event: &mut Value<'_> =
+                    unsafe { std::mem::transmute(event.value.suffix()) };
+                let mut meta = event.meta.clone();
+                meta.insert("group".to_string(), group.clone().into());
+                let event_meta: simd_json::borrowed::Value =
+                    simd_json::owned::Value::Object(meta).into();
+
+                let groups: &mut HashMap<String, Window> =
+                    unsafe { std::mem::transmute(self.groups.suffix()) };
+                let w = groups
+                    .entry(group.to_string())
+                    .or_insert_with(|| Window::from_aggregates(aggregates.clone(), window.clone()));
+                let window_event = w.on_event(&event);
+                if window_event.open {
+                    for aggr in w.aggregates.iter_mut() {
+                        let invocable = &mut aggr.invocable;
+                        invocable.init();
+                    }
+                }
+
+                let maybe_value = if window_event.emit {
+                    // After having has been applied to any emissions causal on this
+                    // event, we prepare the target expression synthetic event and
+                    // return it for downstream processing
+                    //
+
+                    let value = stmt.target.run(
                         opts,
                         &ctx,
-                        &NO_AGGRS,
+                        &w.aggregates,
                         unwind_event,
                         &event_meta,
                         &local_stack,
                         &consts,
                     )?;
-                    match test.borrow() {
-                        Value::Bool(true) => (),
-                        Value::Bool(false) => {
-                            return Ok(vec![]);
-                        }
-                        other => {
-                            return tremor_script::errors::query_guard_not_bool(
-                                &stmt, guard, &other,
-                            )?;
-                        }
-                    };
-                }
 
-                if let Some(window) = &self.window {
-                    let group = if let Some(group_by) = &stmt.maybe_group_by {
-                        match group_by {
-                            GroupBy::Expr { expr, .. } => expr
-                                .run(
-                                    opts,
-                                    &ctx,
-                                    &NO_AGGRS,
-                                    unwind_event,
-                                    &event_meta,
-                                    &local_stack,
-                                    &consts,
-                                )?
-                                .to_string(),
-                            _ => String::new(),
-                        }
-                    } else {
-                        String::new()
-                    };
-                    let groups: &mut HashMap<String, Window> =
-                        unsafe { std::mem::transmute(self.groups.suffix()) };
-                    let w = groups.entry(group).or_insert_with(|| {
-                        Window::from_aggregates(aggregates.clone(), window.clone())
-                    });
-                    let window_event = w.on_event(&event);
-                    if window_event.open {
-                        for aggr in w.aggregates.iter_mut() {
-                            let invocable = &mut aggr.invocable;
-                            invocable.init();
-                        }
-                    }
+                    Some(value.into_owned())
+                } else {
+                    None
+                };
 
-                    let maybe_value = if window_event.emit {
-                        // After having has been applied to any emissions causal on this
-                        // event, we prepare the target expression synthetic event and
-                        // return it for downstream processing
-                        //
-                        // FIXME: This can be nicer, got to look at run for tremor script
-
-                        let value = stmt.target.run(
+                for aggr in w.aggregates.iter_mut() {
+                    let invocable = &mut aggr.invocable;
+                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
+                    let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
+                    for arg in aggr.args.iter() {
+                        let result = arg.run(
                             opts,
                             &ctx,
-                            &w.aggregates,
+                            &NO_AGGRS,
                             unwind_event,
                             &event_meta,
                             &local_stack,
                             &consts,
                         )?;
-
-                        Some(value.into_owned())
-                    } else {
-                        None
-                    };
-
-                    for aggr in w.aggregates.iter_mut() {
-                        let invocable = &mut aggr.invocable;
-                        let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
-                        let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
-                        for arg in aggr.args.iter() {
-                            let result = arg.run(
-                                opts,
-                                &ctx,
-                                &NO_AGGRS,
-                                unwind_event,
-                                &event_meta,
-                                &local_stack,
-                                &consts,
-                            )?;
-                            argv.push(result);
-                        }
-                        unsafe {
-                            for i in 0..argv.len() {
-                                argv1.push(argv.get_unchecked(i));
-                            }
-                        }
-                        invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                            use tremor_script::Registry;
-                            // FIXME nice error
-                            let r: Option<&Registry> = None;
-                            e.into_err(aggr, aggr, r)
-                        })?;
+                        argv.push(result);
                     }
-
-                    if let Some(value) = maybe_value {
-                        *unwind_event = value;
-                        if let Some(guard) = &stmt.maybe_having {
-                            let test = guard.run(
-                                opts,
-                                &ctx,
-                                &w.aggregates,
-                                unwind_event,
-                                &Value::Null,
-                                &local_stack,
-                                &consts,
-                            )?;
-                            let _ = match test.into_owned() {
-                                Value::Bool(true) => (),
-                                Value::Bool(false) => {
-                                    return Ok(vec![]);
-                                }
-                                other => {
-                                    return tremor_script::errors::query_guard_not_bool(
-                                        &stmt, guard, &other,
-                                    )?;
-                                }
-                            };
+                    unsafe {
+                        for i in 0..argv.len() {
+                            argv1.push(argv.get_unchecked(i));
                         }
-
-                        Ok(vec![("out".to_string(), event)])
-                    } else {
-                        Ok(vec![])
                     }
-                } else {
-                    // After having has been applied to any emissions causal on this
-                    // event, we prepare the target expression synthetic event and
-                    // return it for downstream processing
-                    //
-                    // FIXME: This can be nicer, got to look at run for tremor script
+                    invocable.accumulate(argv1.as_slice()).map_err(|e| {
+                        use tremor_script::Registry;
+                        // FIXME nice error
+                        let r: Option<&Registry> = None;
+                        e.into_err(aggr, aggr, r)
+                    })?;
+                }
 
-                    let value = stmt.target.run(
-                        opts,
-                        &ctx,
-                        &NO_AGGRS,
-                        unwind_event,
-                        &event_meta,
-                        &local_stack,
-                        &consts,
-                    )?;
-
-                    *unwind_event = value.into_owned();
+                if let Some(value) = maybe_value {
+                    *unwind_event = value;
                     if let Some(guard) = &stmt.maybe_having {
                         let test = guard.run(
                             opts,
                             &ctx,
-                            &NO_AGGRS,
+                            &w.aggregates,
                             unwind_event,
                             &Value::Null,
                             &local_stack,
@@ -404,12 +360,54 @@ impl Operator for TrickleSelect {
                             }
                         };
                     }
-
-                    Ok(vec![("out".to_string(), event)])
+                    events.push(("out".to_string(), event));
                 }
             }
-            _ => unreachable!(),
+        } else {
+            // After having has been applied to any emissions causal on this
+            // event, we prepare the target expression synthetic event and
+            // return it for downstream processing
+            //
+            // FIXME: This can be nicer, got to look at run for tremor script
+
+            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
+            let event_meta: simd_json::borrowed::Value =
+                simd_json::owned::Value::Object(event.meta.clone()).into();
+
+            let value = stmt.target.run(
+                opts,
+                &ctx,
+                &NO_AGGRS,
+                unwind_event,
+                &event_meta,
+                &local_stack,
+                &consts,
+            )?;
+
+            *unwind_event = value.into_owned();
+            if let Some(guard) = &stmt.maybe_having {
+                let test = guard.run(
+                    opts,
+                    &ctx,
+                    &NO_AGGRS,
+                    unwind_event,
+                    &Value::Null,
+                    &local_stack,
+                    &consts,
+                )?;
+                let _ = match test.into_owned() {
+                    Value::Bool(true) => (),
+                    Value::Bool(false) => {
+                        return Ok(vec![]);
+                    }
+                    other => {
+                        return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                    }
+                };
+            }
+            events.push(("out".to_string(), event));
         }
+        Ok(events)
     }
 }
 

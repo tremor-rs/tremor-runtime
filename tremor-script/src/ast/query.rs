@@ -328,11 +328,11 @@ impl<'script> Upable<'script> for GroupBy1<'script> {
                 end,
                 expr: expr.up(helper)?,
             },
-            GroupBy1::Set { start, end, items } => GroupBy::Set {
-                start,
-                end,
-                items: items.up(helper)?,
-            },
+            GroupBy1::Set { start, end, items } => {
+                let mut items = items.up(helper)?;
+                items.reverse();
+                GroupBy::Set { start, end, items }
+            }
         })
     }
 }
