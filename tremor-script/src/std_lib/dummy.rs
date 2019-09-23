@@ -15,10 +15,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 // use crate::tremor_fn;
 
-pub fn load<Ctx: 'static + Context>(_registry: &mut Registry<Ctx>) {
+pub fn load(_registry: &mut Registry) {
     //    registry.insert(tremor_fn! (system::ingest_ns(_context) {
     //        Ok(Value::from(0))
     //    }));

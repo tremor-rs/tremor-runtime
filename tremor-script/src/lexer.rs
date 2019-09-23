@@ -226,6 +226,7 @@ pub enum Token<'input> {
     Operator,
     Script,
     Set,
+    Each,
 }
 
 pub trait TokenFuns {
@@ -294,6 +295,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Window => true,
             Token::Script => true,
             Token::Set => true,
+            Token::Each => true,
             Token::Operator => true,
             _ => false,
         }
@@ -524,6 +526,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Operator => write!(f, "operator"),
             Token::Script => write!(f, "script"),
             Token::Set => write!(f, "set"),
+            Token::Each => write!(f, "each"),
         }
     }
 }
@@ -844,6 +847,7 @@ impl<'input> Lexer<'input> {
             "operator" => Token::Operator,
             "script" => Token::Script,
             "set" => Token::Set,
+            "each" => Token::Each,
             src => Token::Ident(src.into(), false),
         };
 
@@ -1553,6 +1557,7 @@ mod tests {
         lex_ok! { " emit ", " ~~~~~~ " => Token::Emit, };
         lex_ok! { " event ", " ~~~~~~ " => Token::Event, };
         lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
+        lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
     }
 
     #[test]

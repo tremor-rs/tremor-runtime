@@ -18,7 +18,7 @@ use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use tremor_script::highlighter::DumbHighlighter;
-use tremor_script::{self, interpreter::AggrType, Context, EventContext, Return, Script};
+use tremor_script::{self, interpreter::AggrType, EventContext, Return, Script};
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {
@@ -33,7 +33,7 @@ op!(TremorFactory(node) {
                 })),
             Err(e) => {
                 let mut h = DumbHighlighter::new();
-                if let Err(e) = tremor_script::Script::<()>::format_error_from_script(&config.script, &mut h, &e) {
+                if let Err(e) = tremor_script::Script::format_error_from_script(&config.script, &mut h, &e) {
                     error!("{}", e.to_string());
                 } else {
                     error!("{}", h.to_string());
@@ -54,7 +54,7 @@ struct Config {
 #[derive(Debug)]
 pub struct Tremor {
     config: Config,
-    runtime: Script<EventContext>,
+    runtime: Script,
     id: String,
 }
 

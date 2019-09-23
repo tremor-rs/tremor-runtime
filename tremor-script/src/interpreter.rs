@@ -33,11 +33,10 @@ mod imut_expr;
 
 use crate::ast::*;
 use crate::errors::*;
-use crate::registry::Context;
 use crate::stry;
+use crate::EventContext;
 use halfbrown::hashmap;
 use halfbrown::HashMap;
-use serde::Serialize;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
@@ -224,20 +223,20 @@ pub fn exec_unary<'run, 'event: 'run>(
 }
 
 #[inline]
-pub fn resolve<'run, 'event, 'script, Ctx, Expr>(
+pub fn resolve<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
-    path: &'script Path<Ctx>,
+    path: &'script Path,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {
@@ -394,11 +393,11 @@ where
                                 continue;
                             }
                         } else {
-                            let re: &ImutExpr<Ctx> = range_end.borrow();
+                            let re: &ImutExpr = range_end.borrow();
                             return error_type_conflict(outer, re, e.kind(), ValueType::I64);
                         }
                     } else {
-                        let rs: &ImutExpr<Ctx> = range_start.borrow();
+                        let rs: &ImutExpr = range_start.borrow();
                         return error_type_conflict(outer, rs.borrow(), s.kind(), ValueType::I64);
                     }
                 } else {
@@ -471,21 +470,21 @@ where
 }
 
 #[inline]
-fn patch_value<'run, 'event, 'script, Ctx, Expr>(
+fn patch_value<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
     value: &'run mut Value<'event>,
-    expr: &'script Patch<Ctx>,
+    expr: &'script Patch,
 ) -> Result<()>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {
@@ -602,20 +601,20 @@ where
 }
 
 #[inline]
-fn test_guard<'run, 'event, 'script, Ctx, Expr>(
+fn test_guard<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
-    guard: &'script Option<ImutExpr<'script, Ctx>>,
+    guard: &'script Option<ImutExpr<'script>>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {
@@ -631,22 +630,22 @@ where
 }
 
 #[inline]
-fn test_predicate_expr<'run, 'event, 'script, Ctx, Expr>(
+fn test_predicate_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
     target: &'run Value<'event>,
-    pattern: &'script Pattern<'script, Ctx>,
-    guard: &'run Option<ImutExpr<'script, Ctx>>,
+    pattern: &'script Pattern<'script>,
+    guard: &'run Option<ImutExpr<'script>>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {
@@ -778,21 +777,21 @@ where
 }
 
 #[inline]
-fn match_rp_expr<'run, 'event, 'script, Ctx, Expr>(
+fn match_rp_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
     target: &'run Value<'event>,
-    rp: &'script RecordPattern<Ctx>,
+    rp: &'script RecordPattern,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {
@@ -935,21 +934,21 @@ where
 }
 
 #[inline]
-fn match_ap_expr<'run, 'event, 'script, Ctx, Expr>(
+fn match_ap_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
-    context: &'run Ctx,
-    aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+    context: &'run EventContext,
+    aggrs: &'run [InvokeAggrFn<'script>],
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     consts: &'run [Value<'event>],
     target: &'run Value<'event>,
-    ap: &'script ArrayPattern<Ctx>,
+    ap: &'script ArrayPattern,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-    Ctx: Context + Serialize,
+
     'script: 'event,
     'event: 'run,
 {

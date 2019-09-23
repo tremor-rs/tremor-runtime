@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 use simd_json::value::borrowed::Map;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (record::len(_context, _input: Object) {
             Ok(Value::from(_input.len() as i64))

@@ -49,14 +49,13 @@ Stmt: Stmt1<'input> = {
     <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_window:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, maybe_window, maybe_group_by}))
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_window:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, maybe_window, maybe_group_by})),
 }
-
-
 
 WindowClause: Option<WindowDefn1> = {
-    (<WindowDefn>)? => <>
+    (<WindowDefn>)? => <>,
 }
+
 WindowDefn: WindowDefn1  = {
   <start:@L> "[" <id:Ident> "]" <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() }
 }
@@ -69,11 +68,25 @@ HavingClause: Option<ImutExpr1<'input>> = {
     ("having" <ComplexExprImut>)? => <>,
 }
 
-GroupByClause: Option<ImutExpr1<'input>> = {
-    ("group" "by" "set" "("<ExprImut>")")? => <>
+GroupByClause: Option<GroupBy1<'input>> = {
+    ("group" "by" <GroupDef>)? => <>
 }
 
-// GroupBy
+
+GroupDef: GroupBy1<'input> = {
+    <start:@L> <expr:ExprImut> <end:@L> => GroupBy1::Expr{start, expr, end},
+    <start:@L> "set" "("<items:GroupDefs>")" <end:@L> => GroupBy1::Set{start, items, end},
+    <start:@L> "each" "("<expr:ExprImut>")" <end:@L> => GroupBy1::Each{start, expr, end},
+}
+
+GroupDefs: Vec<GroupBy1<'input>> = {
+    <item:GroupDef> "," <list:GroupDefs> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    <item:GroupDef> ","? => vec![item],
+}
 
                                                                                                                                                         WithClause: Option<WithExprs1<'input>> = {
     ("with" <WithExprs> "end")? => <>,
@@ -846,7 +859,9 @@ extern {
         "having" => lexer::Token::Having,
         "group" => lexer::Token::Group,
         "by" => lexer::Token::By,
+
         "set" => lexer::Token::Set,
+        "each" => lexer::Token::Each,
     }
 }
 

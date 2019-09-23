@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{mfa, Context, FResult, FunctionError, Registry, TremorFnWrapper};
+use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFnWrapper};
 use crate::tremor_fn;
+use crate::EventContext;
 use simd_json::BorrowedValue as Value;
 
 macro_rules! map_function {
@@ -28,11 +29,8 @@ macro_rules! map_function {
         })
     }
 }
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
-    fn format<'event, Ctx: Context + 'static>(
-        _context: &Ctx,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>> {
+pub fn load(registry: &mut Registry) {
+    fn format<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
         let this_mfa = || mfa("string", "format", args.len());
 
         match args.len() {

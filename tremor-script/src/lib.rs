@@ -54,8 +54,8 @@ pub use simd_json::value::borrowed::Value;
 use simd_json::OwnedValue;
 
 pub use crate::registry::{
-    aggr_registry, registry, AggrRegistry, Context, Registry, TremorAggrFn, TremorAggrFnWrapper,
-    TremorFn, TremorFnWrapper,
+    aggr_registry, registry, AggrRegistry, Registry, TremorAggrFn, TremorAggrFnWrapper, TremorFn,
+    TremorFnWrapper,
 };
 pub use crate::script::{QueryRentalWrapper, Return, Script, StmtRentalWrapper};
 
@@ -139,7 +139,7 @@ mod tests {
     macro_rules! parse_lit {
         ($src:expr, $expected:pat) => {{
             let _vals: Value = json!({}).into();
-            let r: Registry<()> = registry();
+            let r: Registry = registry();
             let ar: AggrRegistry = aggr_registry();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
@@ -169,7 +169,7 @@ mod tests {
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
-            let _r: Registry<()> = registry();
+            let _r: Registry = registry();
             let src = format!("{} ", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer(&src).collect();
             let lexed_tokens = lexed_tokens.expect("");
@@ -181,12 +181,16 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry = registry::registry();
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
+            let value = runnable.run(
+                &EventContext { at: 0 },
+                AggrType::Emit,
+                &mut event,
+                &mut global_map,
+            );
             assert_eq!(
                 Ok(Return::Emit {
                     value: $expected,
@@ -200,7 +204,7 @@ mod tests {
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
-            let _r: Registry<()> = registry();
+            let _r: Registry = registry();
             //let src = format!("{}", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
@@ -212,12 +216,16 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry = registry::registry();
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let _value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
+            let _value = runnable.run(
+                &EventContext { at: 0 },
+                AggrType::Emit,
+                &mut event,
+                &mut global_map,
+            );
             assert_eq!(global_map, $expected);
         }};
     }
@@ -225,7 +233,7 @@ mod tests {
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
             let _vals: Value = json!({}).into();
-            let _r: Registry<()> = registry();
+            let _r: Registry = registry();
             //let src = format!("{}", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
@@ -237,12 +245,16 @@ mod tests {
                     filtered_tokens.push(Ok(t));
                 }
             }
-            let reg: Registry<()> = registry::registry();
-            let runnable: Script<()> = Script::parse($src, &reg).expect("parse failed");
+            let reg: Registry = registry::registry();
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = simd_json::borrowed::Value::Object(Map::new());
-            let ctx = ();
             let mut global_map = Value::Object(hashmap! {});
-            let _value = runnable.run(&ctx, AggrType::Emit, &mut event, &mut global_map);
+            let _value = runnable.run(
+                &EventContext { at: 0 },
+                AggrType::Emit,
+                &mut event,
+                &mut global_map,
+            );
             assert_eq!(event, $expected);
         }};
     }

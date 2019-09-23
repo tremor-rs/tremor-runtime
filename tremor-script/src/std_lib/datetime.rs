@@ -14,11 +14,11 @@
 //
 
 use crate::datetime::*;
-use crate::registry::{Context, Registry};
+use crate::registry::Registry;
 use crate::tremor_fn;
 use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(
         tremor_fn! (datetime::parse(_context, _input : String,  _input_fmt: String) {
@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     pub fn hms_returns_the_corresponding_components() {
-        let input = 1559655782_123_456_789u64;
+        let input = 1_559_655_782_123_456_789u64;
         let output = _hour(input);
         assert_eq!(output, 13);
         assert_eq!(_minute(input), 43);
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     pub fn to_next_millisecond_rounds_it() {
-        let input = 1559655782_123_456_789u64;
+        let input = 1_559_655_782_123_456_789u64;
         let output = _to_nearest_millisecond(input);
         assert_eq!(output, 1559655782_123_000_000u64);
         assert_eq!(_to_nearest_millisecond(123_789_654u64), 124_000_000);
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     pub fn to_nearest_microsecond_rounds_it() {
         assert_eq!(
-            _to_nearest_microsecond(1559655782_123_456_789u64),
+            _to_nearest_microsecond(1_559_655_782_123_456_789u64),
             1559655782_123_457_000
         );
         assert_eq!(_to_nearest_microsecond(123_456_123u64), 123_456_000);
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     pub fn to_next_second_rounds_it() {
-        let input = 1559655782_123_456_789u64;
+        let input = 1_559_655_782_123_456_789u64;
         let output = _to_nearest_second(input);
         assert_eq!(output, 1559655782_000_000_000);
     }
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     pub fn test_human_format() {
-        assert_eq!(_from_human_format("3 days"), Some(259200_000_000_000));
+        assert_eq!(_from_human_format("3 days"), Some(259_200_000_000_000));
         assert_eq!(_from_human_format("59 seconds"), Some(59_000_000_000));
         assert_eq!(
             _from_human_format("21 days 3 minutes 5 seconds"),
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     pub fn iso8601_format() {
-        let input = 1559655782_123_456_789u64;
+        let input = 1_559_655_782_123_456_789u64;
         let output = _iso8601(input);
         assert_eq!(output, "2019-06-04T13:43:02.123456789+00:00".to_string());
     }
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     pub fn test_format() {
         assert_eq!(
-            _format(1559655782_123_567_892u64, "%Y-%m-%d"),
+            _format(1_559_655_782_123_567_892u64, "%Y-%m-%d"),
             "2019-06-04".to_owned()
         );
         assert_eq!(_format(123_567_892u64, "%Y-%m-%d"), "1970-01-01".to_owned());
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     pub fn without_subseconds() {
-        let input = 1559655782_123_456_789u64;
+        let input = 1_559_655_782_123_456_789u64;
         assert_eq!(_without_subseconds(input), 1559655782u64);
     }
 

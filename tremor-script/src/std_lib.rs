@@ -27,9 +27,9 @@ mod stats;
 mod string;
 mod r#type;
 
-use crate::registry::{AggrRegistry, Context, Registry};
+use crate::registry::{AggrRegistry, Registry};
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     array::load(registry);
     chash::load(registry);
     datetime::load(registry);

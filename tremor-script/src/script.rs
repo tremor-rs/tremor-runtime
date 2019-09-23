@@ -21,7 +21,7 @@ use crate::interpreter::{Cont, ExecOpts, LocalStack};
 use crate::lexer::{self, TokenFuns};
 use crate::parser::grammar;
 use crate::pos::Range;
-use crate::registry::{AggrRegistry, Context, Registry};
+use crate::registry::{AggrRegistry, Registry};
 use crate::stry;
 use serde::Serialize;
 use simd_json::borrowed::Value;
@@ -61,12 +61,11 @@ where
 }
 
 #[derive(Debug)] // FIXME rename ScriptRentalWrapper
-pub struct Script<Ctx>
+pub struct Script
 where
-    Ctx: Context + Serialize + 'static,
 {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
-    pub script: rentals::Script<Ctx>,
+    pub script: rentals::Script,
     pub source: String,
     pub warnings: Vec<Warning>,
     pub locals: usize,
@@ -74,7 +73,7 @@ where
 
 #[derive(Debug)]
 pub struct QueryRentalWrapper {
-    pub query: Arc<rentals::Query<EventContext>>,
+    pub query: Arc<rentals::Query>,
     pub source: String,
     pub warnings: Vec<Warning>,
     pub locals: usize,
@@ -82,73 +81,56 @@ pub struct QueryRentalWrapper {
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub struct StmtRentalWrapper {
-    pub stmt: Arc<rentals::Stmt<EventContext>>,
+    pub stmt: Arc<rentals::Stmt>,
 }
 
 rental! {
     pub mod rentals {
         use crate::ast;
-        use crate::Context;
         use std::borrow::Cow;
         use serde::Serialize;
         use std::sync::Arc;
         use std::marker::Send;
 
         #[rental_mut(covariant,debug)]
-        pub struct Script<Ctx: Context + Clone + Serialize + 'static> {
+        pub struct Script{
             script: Box<String>,
-            parsed: ast::Script<'script, Ctx>
+            parsed: ast::Script<'script>
         }
 
         #[rental_mut(covariant,debug)]
-        pub struct Query<Ctx>
-            where
-                Ctx: Context + Serialize +'static {
+        pub struct Query {
             script: Box<String>,
-            query: ast::Query<'script, Ctx>,
+            query: ast::Query<'script>,
         }
 
         #[rental(covariant,debug)]
-        pub struct Stmt<Ctx>
-            where
-                Ctx: Context + Serialize +'static {
-            query: Arc<Query<Ctx>>,
-            stmt: ast::Stmt<'query, Ctx>,
+        pub struct Stmt {
+            query: Arc<Query>,
+            stmt: ast::Stmt<'query>,
         }
     }
 }
 
-unsafe impl<Ctx> Send for rentals::Query<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
-{
+unsafe impl Send for rentals::Query where {
     // Nothing to do
 }
 
-impl<Ctx> PartialEq for rentals::Stmt<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
-{
-    fn eq(&self, other: &rentals::Stmt<Ctx>) -> bool {
+impl PartialEq for rentals::Stmt where {
+    fn eq(&self, other: &rentals::Stmt) -> bool {
         self.suffix() == other.suffix()
     }
 }
 
-impl<Ctx> Eq for rentals::Stmt<Ctx> where Ctx: Context + Serialize + 'static {}
+impl Eq for rentals::Stmt {}
 
-impl<Ctx> PartialOrd for rentals::Stmt<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
-{
-    fn partial_cmp(&self, _other: &rentals::Stmt<Ctx>) -> Option<std::cmp::Ordering> {
+impl PartialOrd for rentals::Stmt where {
+    fn partial_cmp(&self, _other: &rentals::Stmt) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
     }
 }
 
-impl<Ctx> std::hash::Hash for rentals::Stmt<Ctx>
-where
-    Ctx: Context + Serialize + 'static,
-{
+impl std::hash::Hash for rentals::Stmt where {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
         // self.suffix().stmt.hash(state);
         // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
@@ -156,15 +138,14 @@ where
     }
 }
 
-impl<'run, 'event, 'script, Ctx> Script<Ctx>
+impl<'run, 'event, 'script> Script
 where
-    Ctx: Context + Serialize + 'static,
     'script: 'event,
     'event: 'run,
 {
     pub fn parse(
         script: &'script str,
-        reg: &Registry<Ctx>,
+        reg: &Registry,
         // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
     ) -> Result<Self> {
         let mut source = script.to_string();
@@ -251,7 +232,7 @@ where
 
     pub fn run(
         &'script self,
-        context: &'run Ctx,
+        context: &'run EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
@@ -319,11 +300,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(
-        script: &'script str,
-        reg: &Registry<EventContext>,
-        aggr_reg: &AggrRegistry,
-    ) -> Result<Self> {
+    pub fn parse(script: &'script str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut source = script.to_string();
 
         let mut warnings = vec![];
@@ -370,7 +347,7 @@ where
     #[allow(dead_code)] // FIXME remove this shit
     fn with_stmt<'elide>(
         query: &QueryRentalWrapper,
-        encumbered_stmt: crate::ast::Stmt<'elide, EventContext>,
+        encumbered_stmt: crate::ast::Stmt<'elide>,
     ) -> Self {
         StmtRentalWrapper {
             stmt: Arc::new(rentals::Stmt::new(query.query.clone(), |_| {

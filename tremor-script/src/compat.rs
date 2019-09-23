@@ -13,22 +13,27 @@
 // limitations under the License.
 
 use crate::errors::*;
-use crate::registry;
 use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
+use crate::{registry, EventContext};
 use simd_json::borrowed::{Map, Value};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;
 
 fn eval(src: &str) -> Result<String> {
-    let reg: Registry<()> = registry::registry();
+    let reg: Registry = registry::registry();
     // let aggr_reg: AggrRegistry = registry::aggr_registry();
     let script = Script::parse(src, &reg)?;
 
     let mut event = Value::Object(Map::new());
     let mut meta = Value::Object(Map::new());
-    let value = script.run(&(), AggrType::Emit, &mut event, &mut meta)?;
+    let value = script.run(
+        &EventContext { at: 0 },
+        AggrType::Emit,
+        &mut event,
+        &mut meta,
+    )?;
     Ok(match value {
         Return::Drop => String::from(r#"{"drop": null}"#),
         Return::Emit { value, .. } => format!(r#"{{"emit": {}}}"#, value.to_string()),

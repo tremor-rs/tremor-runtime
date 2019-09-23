@@ -18,17 +18,16 @@ use super::{
 };
 use crate::ast::*;
 use crate::errors::*;
-use crate::registry::{Context, Registry, TremorAggrFnWrapper};
+use crate::registry::{Registry, TremorAggrFnWrapper};
 use crate::stry;
-use serde::Serialize;
+use crate::EventContext;
 use simd_json::value::borrowed::{Map, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 
-impl<'run, 'event, 'script, Ctx> ImutExpr<'script, Ctx>
+impl<'run, 'event, 'script> ImutExpr<'script>
 where
-    Ctx: Context + Clone + Serialize + 'static,
     'script: 'event,
     'event: 'run,
 {
@@ -36,8 +35,8 @@ where
     pub fn eval_to_string(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
@@ -53,8 +52,8 @@ where
     pub fn run(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
@@ -119,7 +118,7 @@ where
             } => match local.values.get(*idx) {
                 Some(Some(l)) => Ok(Cow::Borrowed(&l.v)),
                 Some(None) => {
-                    let path: Path<Ctx> = Path::Local(LocalPath {
+                    let path: Path = Path::Local(LocalPath {
                         id: id.clone(),
                         is_const: false,
                         idx: *idx,
@@ -159,13 +158,13 @@ where
     fn comprehension(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script ImutComprehension<Ctx>,
+        expr: &'script ImutComprehension,
     ) -> Result<Cow<'run, Value<'event>>> {
         //use std::borrow::Cow;
         let mut value_vec = vec![];
@@ -237,14 +236,14 @@ where
     fn execute_effectors<T: BaseExpr>(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
         inner: &'script T,
-        effectors: &'script [ImutExpr<'script, Ctx>],
+        effectors: &'script [ImutExpr<'script>],
     ) -> Result<Cow<'run, Value<'event>>> {
         if effectors.is_empty() {
             return error_missing_effector(self, inner);
@@ -257,13 +256,13 @@ where
     fn match_expr(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script ImutMatch<Ctx>,
+        expr: &'script ImutMatch,
     ) -> Result<Cow<'run, Value<'event>>> {
         let target = stry!(expr
             .target
@@ -302,13 +301,13 @@ where
     fn binary(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script BinExpr<'script, Ctx>,
+        expr: &'script BinExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let lhs = stry!(expr
             .lhs
@@ -326,13 +325,13 @@ where
     fn unary(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script UnaryExpr<'script, Ctx>,
+        expr: &'script UnaryExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let rhs = stry!(expr
             .expr
@@ -346,13 +345,13 @@ where
     fn present(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        path: &'script Path<Ctx>,
+        path: &'script Path,
     ) -> Result<Cow<'run, Value<'event>>> {
         let mut subrange: Option<(usize, usize)> = None;
         let mut current: &Value = match path {
@@ -488,13 +487,13 @@ where
     fn invoke1(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Invoke<Ctx>,
+        expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v = stry!(expr
@@ -504,7 +503,7 @@ where
             (expr.invocable)(context, &[v.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
-                    let r: Option<&Registry<Ctx>> = None;
+                    let r: Option<&Registry> = None;
                     e.into_err(self, self, r)
                 })
         }
@@ -513,13 +512,13 @@ where
     fn invoke2(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Invoke<Ctx>,
+        expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v1 = stry!(expr
@@ -533,7 +532,7 @@ where
             (expr.invocable)(context, &[v1.borrow(), v2.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
-                    let r: Option<&Registry<Ctx>> = None;
+                    let r: Option<&Registry> = None;
                     e.into_err(self, self, r)
                 })
         }
@@ -542,13 +541,13 @@ where
     fn invoke3(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Invoke<Ctx>,
+        expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v1 = stry!(expr
@@ -566,7 +565,7 @@ where
             (expr.invocable)(context, &[v1.borrow(), v2.borrow(), v3.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
-                    let r: Option<&Registry<Ctx>> = None;
+                    let r: Option<&Registry> = None;
                     e.into_err(self, self, r)
                 })
         }
@@ -575,13 +574,13 @@ where
     fn invoke(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Invoke<Ctx>,
+        expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         let mut argv: Vec<Cow<'run, Value<'event>>> = Vec::with_capacity(expr.args.len());
         let mut argv1: Vec<&Value> = Vec::with_capacity(expr.args.len());
@@ -597,7 +596,7 @@ where
         (expr.invocable)(context, &argv1)
             .map(Cow::Owned)
             .map_err(|e| {
-                let r: Option<&Registry<Ctx>> = None;
+                let r: Option<&Registry> = None;
                 e.into_err(self, self, r)
             })
     }
@@ -605,7 +604,7 @@ where
     fn emit_aggr(
         &'script self,
         opts: ExecOpts,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        aggrs: &'run [InvokeAggrFn<'script>],
         expr: &'script InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
@@ -619,7 +618,7 @@ where
             let invocable: &mut TremorAggrFnWrapper =
                 mem::transmute(&aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {
-                let r: Option<&Registry<Ctx>> = None;
+                let r: Option<&Registry> = None;
                 e.into_err(self, self, r)
             })?;
             invocable.init();
@@ -630,13 +629,13 @@ where
     fn patch(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Patch<Ctx>,
+        expr: &'script Patch,
     ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We clone this since we patch it - this should be not mutated but cloned
 
@@ -653,17 +652,14 @@ where
     fn merge(
         &'script self,
         opts: ExecOpts,
-        context: &'run Ctx,
-        aggrs: &'run [InvokeAggrFn<'script, Ctx>],
+        context: &'run EventContext,
+        aggrs: &'run [InvokeAggrFn<'script>],
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         consts: &'run [Value<'event>],
-        expr: &'script Merge<Ctx>,
-    ) -> Result<Cow<'run, Value<'event>>>
-    where
-        Ctx: serde::Serialize,
-    {
+        expr: &'script Merge,
+    ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We got to clone here since we're are going
         // to change the value
         let value = stry!(expr

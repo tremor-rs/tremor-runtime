@@ -23,7 +23,7 @@ use crate::query::Query; // {Query, Return};
 use clap::{App, Arg};
 // use halfbrown::hashmap;
 use crate::errors::*;
-pub use crate::registry::{registry, Context, Registry, TremorFn, TremorFnWrapper};
+pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
         .read_to_string(&mut raw)
         .expect("");
 
-    let reg: Registry<EventContext> = registry::registry();
+    let reg: Registry = registry::registry();
 
     let aggr_reg = registry::aggr_registry();
 
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
         Ok(runnable) => runnable,
         Err(e) => {
             let mut h = TermHighlighter::new();
-            if let Err(e) = Script::<()>::format_error_from_script(&raw, &mut h, &e) {
+            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
                 dbg!(e);
             };
             std::process::exit(1);

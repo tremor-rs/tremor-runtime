@@ -17,8 +17,7 @@ macro_rules! op {
     ($factory:ident ($node:ident) $constructor:block) => {
         #[derive(Default)]
         pub struct $factory {}
-        impl crate::op::InitializableOperator for $factory
-        {
+        impl crate::op::InitializableOperator for $factory {
             fn from_node(
                 &self,
                 $node: &crate::NodeConfig,
@@ -30,8 +29,7 @@ macro_rules! op {
             fn new() -> Self {
                 $factory {}
             }
-            pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator>
-            {
+            pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator> {
                 Box::new(Self::new())
             }
         }

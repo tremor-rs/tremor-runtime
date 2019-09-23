@@ -40,6 +40,7 @@ use crate::errors::*;
 use crate::highlighter::{Highlighter, TermHighlighter};
 use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
+pub use ctx::EventContext;
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use std::fs::File;
@@ -50,7 +51,7 @@ use std::iter::FromIterator;
 #[macro_use]
 extern crate serde_derive;
 
-use crate::registry::{Context, Registry, TremorFnWrapper};
+use crate::registry::{Registry, TremorFnWrapper};
 
 fn main() -> Result<()> {
     let matches = App::new("tremor-script")
@@ -118,7 +119,7 @@ fn main() -> Result<()> {
 
     input?.read_to_string(&mut raw)?;
 
-    let reg: Registry<()> = registry::registry();
+    let reg: Registry = registry::registry();
 
     match Script::parse(&raw, &reg) {
         Ok(runnable) => {
@@ -128,14 +129,14 @@ fn main() -> Result<()> {
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
-                Script::<()>::highlight_script_with(&raw, &mut h)?;
+                Script::highlight_script_with(&raw, &mut h)?;
             }
             if matches.is_present("print-ast") {
                 let ast = serde_json::to_string_pretty(&runnable.script.suffix())
                     .expect("Failed to render AST");
                 println!();
                 let mut h = TermHighlighter::new();
-                Script::<()>::highlight_script_with(&ast, &mut h)?;
+                Script::highlight_script_with(&ast, &mut h)?;
             }
             if matches.is_present("print-ast-raw") {
                 let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
@@ -195,9 +196,19 @@ fn main() -> Result<()> {
                 .pop()
                 .expect("At least one event needs to be specified");
             for event in &mut events {
-                runnable.run(&(), AggrType::Tick, event, &mut global_map)?;
+                runnable.run(
+                    &EventContext { at: 0 },
+                    AggrType::Tick,
+                    event,
+                    &mut global_map,
+                )?;
             }
-            let expr = runnable.run(&(), AggrType::Emit, &mut event, &mut global_map);
+            let expr = runnable.run(
+                &EventContext { at: 0 },
+                AggrType::Emit,
+                &mut event,
+                &mut global_map,
+            );
             match expr {
                 // Seperate out the speical case of emiting the inbound evet,
                 // this way we don't have to clone it on the way out and can
@@ -244,7 +255,7 @@ fn main() -> Result<()> {
         // Handle and print compile time errors.
         Err(e) => {
             let mut h = TermHighlighter::new();
-            if let Err(e) = Script::<()>::format_error_from_script(&raw, &mut h, &e) {
+            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
                 dbg!(e);
             };
             std::process::exit(1);
