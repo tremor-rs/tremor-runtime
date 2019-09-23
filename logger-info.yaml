@@ -10,7 +10,7 @@ appenders:
   stdout:
     kind: console
 
-# Write only warnings to stdout
+# Write info and above to stdout
 root:
   level: info
   appenders:

@@ -59,6 +59,7 @@ impl Clone for Box<dyn Preprocessor> {
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         "lines" => Ok(Box::new(Lines {})),
+        "lines-null" => Ok(Box::new(LinesNull {})),
         // "influx" => Ok(Box::new(Influx::default())),
         "base64" => Ok(Box::new(Base64 {})),
         "gzip" => Ok(Box::new(Gzip {})),
@@ -154,6 +155,18 @@ impl Preprocessor for Lines {
     }
     fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
+    }
+}
+
+#[derive(Clone)]
+// TODO remove this once lines preprocessor allows setting custom delimiter
+struct LinesNull {}
+impl Preprocessor for LinesNull {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
 }
 

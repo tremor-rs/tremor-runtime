@@ -7,7 +7,7 @@ onramp:
       - decompress
     codec: json
     config:
-      host: 'localhost'
+      host: 127.0.0.1
       port: 12202
 
 offramp:
@@ -43,7 +43,6 @@ pipeline:
             match event of
               # if timestamp is not set by clients:
               # http://docs.graylog.org/en/latest/pages/gelf.html#gelf-payload-specification
-              # TODO ignore _id field as per spec
               case %{absent timestamp} =>
                 let event.timestamp = system::ingest_ns() / 1000000000
               default =>
