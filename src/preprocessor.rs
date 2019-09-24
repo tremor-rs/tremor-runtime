@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod gelf;
+mod lines;
 
 use crate::codec::{self, Codec};
 use crate::errors::*;
@@ -33,7 +34,7 @@ fn downcast<T: Preprocessor + 'static>(this: &dyn Preprocessor) -> Option<&T> {
 // so that they can be applied in rest request handlers
 impl Clone for Box<dyn Preprocessor> {
     fn clone(&self) -> Self {
-        if let Some(x) = downcast::<Lines>(&**self) {
+        if let Some(x) = downcast::<lines::Lines>(&**self) {
             return Box::new(x.clone());
         };
         if let Some(x) = downcast::<Influx>(&**self) {
@@ -58,8 +59,9 @@ impl Clone for Box<dyn Preprocessor> {
 #[deny(clippy::ptr_arg)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
-        "lines" => Ok(Box::new(Lines {})),
-        "lines-null" => Ok(Box::new(LinesNull {})),
+        // TODO once preprocessors allow configuration, remove multiple entries for lines here
+        "lines" => Ok(Box::new(lines::Lines::new('\n'))),
+        "lines-null" => Ok(Box::new(lines::Lines::new('\0'))),
         // "influx" => Ok(Box::new(Influx::default())),
         "base64" => Ok(Box::new(Base64 {})),
         "gzip" => Ok(Box::new(Gzip {})),
@@ -144,29 +146,6 @@ impl Preprocessor for Influx {
                 }
             }
         }
-    }
-}
-
-#[derive(Clone)]
-struct Lines {}
-impl Preprocessor for Lines {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
-    }
-}
-
-#[derive(Clone)]
-// TODO remove this once lines preprocessor allows setting custom delimiter
-struct LinesNull {}
-impl Preprocessor for LinesNull {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
 }
 
