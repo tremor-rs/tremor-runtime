@@ -329,6 +329,7 @@ Path: Path1<'input> = {
     MetaPath => <>,
     EventPath => <>,
     LocalPath => <>,
+    GroupPath => <>
 }
 
 /// A metadata path
@@ -343,6 +344,16 @@ MetaPath: Path1<'input> = {
         Path1::Meta(MetadataPath1 { segments: vec![segment], start, end })
     },
     <start:@L> "$" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start, end }),
+}
+
+/// A metadata path
+GroupPath: Path1<'input> = {
+    <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
+        let mut segments = segments;
+        segments.insert(0, Segment1::from_str("group", start, mid));
+        Path1::Meta(MetadataPath1 { segments, start, end })
+    },
+    <start:@L> "group" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![Segment1::from_str("group", start, end)], start, end }),
 }
 
 /// Local path
@@ -381,7 +392,7 @@ PathSegments: Segments1<'input> = {
 
 /// Singular part of a path
 PathSegment: Segment1<'input> = {
-    <start:@L> <id:Ident> <end:@L> => Segment1::from_id(id, start, end),
+    <id:Ident> => Segment1::from_id(id),
 }
 
 

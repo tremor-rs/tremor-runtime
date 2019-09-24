@@ -18,13 +18,13 @@ select
     "measurement": event.measurement,
     "tags": patch event.tags of insert "window" => "10s" end,
     "fields": record::from_array([
-      [string::format("sum_{}", $`group`[2]), stats::sum(event.fields[$`group`[2]])],
-      [string::format("mean_{}", $`group`[2]), stats::mean(event.fields[$`group`[2]])],
-      [string::format("var_{}", $`group`[2]), stats::var(event.fields[$`group`[2]])],
-      [string::format("min_{}", $`group`[2]), stats::min(event.fields[$`group`[2]])],
-      [string::format("max_{}", $`group`[2]), stats::max(event.fields[$`group`[2]])],
-      [string::format("stdev_{}", $`group`[2]), stats::stdev(event.fields[$`group`[2]])],
-      [string::format("count_{}", $`group`[2]), stats::count()]
+      [string::format("sum_{}", group[2]), stats::sum(event.fields[group[2]])],
+      [string::format("mean_{}", group[2]), stats::mean(event.fields[group[2]])],
+      [string::format("var_{}", group[2]), stats::var(event.fields[group[2]])],
+      [string::format("min_{}", group[2]), stats::min(event.fields[group[2]])],
+      [string::format("max_{}", group[2]), stats::max(event.fields[group[2]])],
+      [string::format("stdev_{}", group[2]), stats::stdev(event.fields[group[2]])],
+      [string::format("count_{}", group[2]), stats::count()]
     ])
   }
 from in[`10secs`]
