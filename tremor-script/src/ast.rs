@@ -2011,14 +2011,25 @@ impl<'script> Upable<'script> for Segment1<'script> {
 }
 
 impl<'script> Segment1<'script> {
-    pub fn from_id(id: Ident<'script>, start: Location, end: Location) -> Self {
+    pub fn from_id(id: Ident<'script>) -> Self {
+        Segment1::ElementSelector {
+            start: id.start,
+            end: id.end,
+            expr: ImutExpr1::Literal(Literal {
+                start: id.start,
+                end: id.end,
+                value: Value::String(id.id),
+            }),
+        }
+    }
+    pub fn from_str(id: &'script str, start: Location, end: Location) -> Self {
         Segment1::ElementSelector {
             start,
             end,
             expr: ImutExpr1::Literal(Literal {
-                start,
-                end,
-                value: Value::String(id.id),
+                start: start,
+                end: end,
+                value: Value::String(id.into()),
             }),
         }
     }
