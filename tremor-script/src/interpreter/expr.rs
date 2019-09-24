@@ -475,14 +475,36 @@ where
                     expr: ImutExpr::Path(Path::Event(EventPath { segments, .. })),
                     port,
                     ..
-                } if segments.is_empty() => Ok(Cont::EmitEvent(port.clone())),
-                expr => Ok(Cont::Emit(
-                    stry!(expr
-                        .expr
-                        .run(opts, context, aggrs, event, meta, local, consts))
-                    .into_owned(),
-                    expr.port.clone(),
-                )),
+                } if segments.is_empty() => {
+                    let port = if let Some(port) = port {
+                        Some(
+                            stry!(port
+                                .eval_to_string(opts, context, aggrs, event, meta, local, consts))
+                            .to_string(),
+                        )
+                    } else {
+                        None
+                    };
+                    Ok(Cont::EmitEvent(port))
+                }
+                expr => {
+                    let port = if let Some(port) = &expr.port {
+                        Some(
+                            stry!(port
+                                .eval_to_string(opts, context, aggrs, event, meta, local, consts))
+                            .to_string(),
+                        )
+                    } else {
+                        None
+                    };
+                    Ok(Cont::Emit(
+                        stry!(expr
+                            .expr
+                            .run(opts, context, aggrs, event, meta, local, consts))
+                        .into_owned(),
+                        port,
+                    ))
+                }
             },
             Expr::Drop { .. } => Ok(Cont::Drop),
             Expr::AssignMoveLocal { idx, path, .. } => {

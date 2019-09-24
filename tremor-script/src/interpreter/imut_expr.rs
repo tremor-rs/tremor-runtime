@@ -74,8 +74,10 @@ where
                     let result = stry!(field
                         .value
                         .run(opts, context, aggrs, event, meta, local, consts));
-
-                    object.insert(field.name.clone(), result.into_owned());
+                    let name = stry!(field
+                        .name
+                        .eval_to_string(opts, context, aggrs, event, meta, local, consts));
+                    object.insert(name, result.into_owned());
                 }
 
                 Ok(Cow::Owned(Value::Object(object)))

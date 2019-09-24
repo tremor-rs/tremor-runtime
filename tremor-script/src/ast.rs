@@ -310,7 +310,7 @@ impl_expr1!(Ident);
 pub struct Field1<'script> {
     pub start: Location,
     pub end: Location,
-    pub name: Cow<'script, str>,
+    pub name: StringLit1<'script>,
     pub value: ImutExpr1<'script>,
 }
 
@@ -320,7 +320,7 @@ impl<'script> Upable<'script> for Field1<'script> {
         Ok(Field {
             start: self.start,
             end: self.end,
-            name: self.name,
+            name: ImutExpr1::String(self.name).up(helper)?,
             value: self.value.up(helper)?,
         })
     }
@@ -330,7 +330,7 @@ impl<'script> Upable<'script> for Field1<'script> {
 pub struct Field<'script> {
     pub start: Location,
     pub end: Location,
-    pub name: Cow<'script, str>,
+    pub name: ImutExpr<'script>,
     pub value: ImutExpr<'script>,
 }
 impl_expr!(Field);
@@ -395,6 +395,38 @@ pub struct Literal<'script> {
     pub value: Value<'script>,
 }
 impl_expr1!(Literal);
+
+pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprs1<'script>);
+impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
+    fn from(mut es: StrLitElements<'script>) -> StringLit1<'script> {
+        // We need to reverse them since the grammer creates them in backwards order.
+        es.0.reverse();
+        es.1.reverse();
+        let string = if es.0.len() == 1 {
+            es.0.pop().unwrap_or_else(|| unreachable!())
+        } else {
+            let mut s = String::new();
+            for e in es.0 {
+                s.push_str(&e);
+            }
+            s.into()
+        };
+        StringLit1 {
+            start: Location::default(),
+            end: Location::default(),
+            string,
+            exprs: es.1,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct StringLit1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub string: Cow<'script, str>,
+    pub exprs: ImutExprs1<'script>,
+}
 
 fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
     match expr {
@@ -497,6 +529,7 @@ pub enum ImutExpr1<'script> {
         start: Location,
         end: Location,
     },
+    String(StringLit1<'script>),
 }
 
 impl<'script> Upable<'script> for ImutExpr1<'script> {
@@ -555,15 +588,38 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                 }
                 u1 => ImutExpr::Unary(Box::new(u1)),
             },
+            ImutExpr1::String(mut s) => {
+                let lit = ImutExpr1::Literal(Literal {
+                    start: s.start,
+                    end: s.end,
+                    value: Value::String(s.string),
+                });
+                if s.exprs.is_empty() {
+                    lit.up(helper)?
+                } else {
+                    let mut args = vec![lit];
+                    args.append(&mut s.exprs);
+                    ImutExpr1::Invoke(Invoke1 {
+                        start: s.start,
+                        end: s.end,
+                        module: "string".into(),
+                        fun: "format".into(),
+                        args,
+                    })
+                    .up(helper)?
+                }
+            }
             ImutExpr1::Record(r) => {
                 let r = r.up(helper)?;
-                if r.fields.iter().all(|e| is_lit(&e.value)) {
+                if r.fields.iter().all(|f| is_lit(&f.name) && is_lit(&f.value)) {
                     let obj: Result<borrowed::Map> = r
                         .fields
                         .into_iter()
                         .map(|f| {
-                            let n = f.name.clone();
-                            reduce2(f.value).map(|v| (n, v))
+                            reduce2(f.name.clone()).and_then(|n| {
+                                let n = n.as_string().unwrap_or_else(|| unreachable!());
+                                reduce2(f.value).map(|v| (n.into(), v))
+                            })
                         })
                         .collect();
                     ImutExpr::Literal(Literal {
@@ -807,7 +863,7 @@ pub struct EmitExpr1<'script> {
     pub start: Location,
     pub end: Location,
     pub expr: ImutExpr1<'script>,
-    pub port: Option<String>,
+    pub port: Option<ImutExpr1<'script>>,
 }
 
 impl<'script> Upable<'script> for EmitExpr1<'script> {
@@ -817,7 +873,7 @@ impl<'script> Upable<'script> for EmitExpr1<'script> {
             start: self.start,
             end: self.end,
             expr: self.expr.up(helper)?,
-            port: self.port,
+            port: self.port.up(helper)?,
         })
     }
 }
@@ -826,7 +882,7 @@ pub struct EmitExpr<'script> {
     pub start: Location,
     pub end: Location,
     pub expr: ImutExpr<'script>,
-    pub port: Option<String>,
+    pub port: Option<ImutExpr<'script>>,
 }
 impl_expr!(EmitExpr);
 

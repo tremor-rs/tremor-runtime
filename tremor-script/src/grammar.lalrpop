@@ -14,7 +14,7 @@
 
 use crate::ast::*;
 use crate::lexer;
-use crate::lexer::{Token};
+use crate::lexer::Token;
 use crate::pos::Location;
 use crate::tilde::Extractor;
 use simd_json::BorrowedValue as Value;
@@ -169,6 +169,8 @@ AlwaysImutExpr: ImutExpr1<'input> = {
     <path:Path> => ImutExpr1::Path(path),
     <record:Record> => ImutExpr1::Record(Box::new(record)),
     <list:List> => ImutExpr1::List(Box::new(list)),
+    <s:StringLiteral> => ImutExpr1::String(s)
+
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
@@ -263,7 +265,6 @@ Literal: Literal<'input> = {
     <start:@L> <v:Bool> <end:@L> => Literal{value: v, start, end},
     <start:@L> <v:Int> <end:@L> => Literal{value: v, start, end},
     <start:@L> <v:Float> <end:@L> => Literal{value: v, start, end},
-    <start:@L> <v:String> <end:@L> => Literal{value: v, start, end},
 }
 
 /// null
@@ -286,11 +287,48 @@ Float: Value<'input> = {
     <literal:"float"> => Value::from(literal.0),
 }
 
-/// strings
-String: Value<'input> = {
-    <literal:StringLiteral>  => Value::String(literal),
+                                                                                                                                                                                                                                                                                                  StringLiteral: StringLit1<'input> = {
+    <start:@L> <doc:"heredoc"> <end:@L> =>   StringLit1 {
+        start,
+        end,
+        string: doc.join("\n").into(),
+        exprs: vec![],
+    },
+    <start:@L> "\"" <es:StrLitElements> "\"" <end:@L> => {
+        let mut sl: StringLit1 = es.into();
+        sl.start = start;
+        sl.end = end;
+        sl
+    },
+    <start:@L> "\""  "\"" <end:@L> => {
+        StringLit1 {
+            start,
+            end,
+            string: "".into(),
+            exprs: vec![],
+        }
+    },
 }
 
+StrLitElements: StrLitElements<'input> = {
+    <literal:StringPart> <es:StrLitElements> => {
+        let mut es = es;
+        es.0.push(literal);
+        es
+    },
+    "{" <expr:ExprImut> "}" <es:StrLitElements> => {
+        let mut es = es;
+        es.0.push("{}".into());
+        es.1.push(expr);
+        es
+    },
+    <literal:StringPart> => StrLitElements(vec![literal], vec![]),
+    "{" <expr:ExprImut> "}" => StrLitElements(vec!["{}".into()], vec![expr]),
+}
+
+StringPart: Cow<'input, str> = {
+    "string" => <>
+}
 /// array semi literals
 List: List1<'input> = {
     <start:@L> "[" <exprs:ListElements> "]" <end:@L> => List1{start, end, exprs},
@@ -438,9 +476,9 @@ Drop: Expr1<'input> = {
 
 /// emits the current event to a given output
 Emit: Expr1<'input> = {
-    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: Some(port.to_string()) }),
+    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: Some(ImutExpr1::String(port)) }),
     <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: None }),
-    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: Some(port.to_string()) }) ,
+    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: Some(ImutExpr1::String(port)) }) ,
     <start:@L> "emit" <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: None }),
 }
 
@@ -725,12 +763,6 @@ Ident: Ident<'input> = {
 }
 
 #[inline]
-StringLiteral: Cow<'input, str> = {
-    "string" => <>,
-    "heredoc" => <>.join("\n").into(),
-}
-
-#[inline]
 TestLiteral: String = {
     "test" => <>.join(""),
 }
@@ -786,93 +818,94 @@ extern {
     type Location = Location;
     type Error = crate::errors::Error;
     enum Token<'input> {
-        "<doc-comment>" => lexer::Token::DocComment(<&'input str>),
-        "<single-line-comment>" => lexer::Token::SingleLineComment(<&'input str>),
-        "let" => lexer::Token::Let,
-        "const" => lexer::Token::Const,
-        "match" => lexer::Token::Match,
-        "of" => lexer::Token::Of,
-        "end" => lexer::Token::End,
-        "case" => lexer::Token::Case,
-        "when" => lexer::Token::When,
-        "for" => lexer::Token::For,
-        "nil" => lexer::Token::Nil,
-        "and" => lexer::Token::And,
-        "or" => lexer::Token::Or,
-        "not" => lexer::Token::Not,
-        "drop" => lexer::Token::Drop,
-        "emit" => lexer::Token::Emit,
-        "default" => lexer::Token::Default,
-        "patch" => lexer::Token::Patch,
-        "insert" => lexer::Token::Insert,
-        "upsert" => lexer::Token::Upsert,
-        "update" => lexer::Token::Update,
-        "erase" => lexer::Token::Erase,
-        "move" => lexer::Token::Move,
-        "copy" => lexer::Token::Copy,
-        "merge" => lexer::Token::Merge,
-        "event" => lexer::Token::Event,
-        "present" => lexer::Token::Present,
-        "absent" => lexer::Token::Absent,
-        "." => lexer::Token::Dot,
-        ";" => lexer::Token::Semi,
-        "::" => lexer::Token::ColonColon,
-        ":" => lexer::Token::Colon,
-        "," => lexer::Token::Comma,
-        "=" => lexer::Token::Eq,
-//        "_" => lexer::Token::DontCare,
-        "==" => lexer::Token::EqEq,
-        "!=" => lexer::Token::NotEq,
-        "{" => lexer::Token::LBrace,
-        "}" => lexer::Token::RBrace,
-        "(" => lexer::Token::LParen,
-        ")" => lexer::Token::RParen,
-        "." => lexer::Token::Dot,
-        "$" => lexer::Token::Dollar,
-        "=>" => lexer::Token::EqArrow,
-        "[" => lexer::Token::LBracket,
-        "]" => lexer::Token::RBracket,
-        ">=" => lexer::Token::Gte,
-        ">" => lexer::Token::Gt,
-        "<=" => lexer::Token::Lte,
-        "<" => lexer::Token::Lt,
-        "+" => lexer::Token::Add,
-        "-" => lexer::Token::Sub,
-        "*" => lexer::Token::Mul,
-        "/" => lexer::Token::Div,
-        "%[" => lexer::Token::LPatBracket,
-        "%{" => lexer::Token::LPatBrace,
-        "%" => lexer::Token::Mod,
-        "~=" => lexer::Token::TildeEq,
-        "~" => lexer::Token::Tilde,
-        "bool" => lexer::Token::BoolLiteral(<bool>),
-        "int" => lexer::Token::IntLiteral(<i64>),
-        "float" => lexer::Token::FloatLiteral(<f64>, <String>),
-        "string" => lexer::Token::StringLiteral(<Cow<'input, str>>),
-        "heredoc" => lexer::Token::HereDoc(_, <Vec<String>>),
-        "test" => lexer::Token::TestLiteral(_, <Vec<String>>),
-        "<ident>" => lexer::Token::Ident(<Cow<'input, str>>, <bool>),
-        "<error>" => lexer::Token::BadToken(<String>),
-        "<end-of-stream>" => lexer::Token::EndOfStream,
+        "<doc-comment>" => Token::DocComment(<&'input str>),
+        "<single-line-comment>" => Token::SingleLineComment(<&'input str>),
+        "let" => Token::Let,
+        "const" => Token::Const,
+        "match" => Token::Match,
+        "of" => Token::Of,
+        "end" => Token::End,
+        "case" => Token::Case,
+        "when" => Token::When,
+        "for" => Token::For,
+        "nil" => Token::Nil,
+        "and" => Token::And,
+        "or" => Token::Or,
+        "not" => Token::Not,
+        "drop" => Token::Drop,
+        "emit" => Token::Emit,
+        "default" => Token::Default,
+        "patch" => Token::Patch,
+        "insert" => Token::Insert,
+        "upsert" => Token::Upsert,
+        "update" => Token::Update,
+        "erase" => Token::Erase,
+        "move" => Token::Move,
+        "copy" => Token::Copy,
+        "merge" => Token::Merge,
+        "event" => Token::Event,
+        "present" => Token::Present,
+        "absent" => Token::Absent,
+        "." => Token::Dot,
+        "\"" => Token::DQuote,
+        ";" => Token::Semi,
+        "::" => Token::ColonColon,
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "=" => Token::Eq,
+//        "_" => Token::DontCare,
+        "==" => Token::EqEq,
+        "!=" => Token::NotEq,
+        "{" => Token::LBrace,
+        "}" => Token::RBrace,
+        "(" => Token::LParen,
+        ")" => Token::RParen,
+        "." => Token::Dot,
+        "$" => Token::Dollar,
+        "=>" => Token::EqArrow,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        ">=" => Token::Gte,
+        ">" => Token::Gt,
+        "<=" => Token::Lte,
+        "<" => Token::Lt,
+        "+" => Token::Add,
+        "-" => Token::Sub,
+        "*" => Token::Mul,
+        "/" => Token::Div,
+        "%[" => Token::LPatBracket,
+        "%{" => Token::LPatBrace,
+        "%" => Token::Mod,
+        "~=" => Token::TildeEq,
+        "~" => Token::Tilde,
+        "bool" => Token::BoolLiteral(<bool>),
+        "int" => Token::IntLiteral(<i64>),
+        "float" => Token::FloatLiteral(<f64>, <String>),
+        "string" => Token::StringLiteral(<Cow<'input, str>>),
+        "heredoc" => Token::HereDoc(_, <Vec<String>>),
+        "test" => Token::TestLiteral(_, <Vec<String>>),
+        "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
+        "<error>" => Token::BadToken(<String>),
+        "<end-of-stream>" => Token::EndOfStream,
 
-        "select" => lexer::Token::Select,
-        "from" => lexer::Token::From,
-        "into" => lexer::Token::Into,
-        "create" => lexer::Token::Create,
-        "tumbling" => lexer::Token::Tumbling,
-        "sliding" => lexer::Token::Sliding,
-        "window" => lexer::Token::Window,
-        "stream" => lexer::Token::Stream,
-        "operator" => lexer::Token::Operator,
-        "where" => lexer::Token::Where,
-        "with" => lexer::Token::With,
-        "script" => lexer::Token::Script,
-        "having" => lexer::Token::Having,
-        "group" => lexer::Token::Group,
-        "by" => lexer::Token::By,
+        "select" => Token::Select,
+        "from" => Token::From,
+        "into" => Token::Into,
+        "create" => Token::Create,
+        "tumbling" => Token::Tumbling,
+        "sliding" => Token::Sliding,
+        "window" => Token::Window,
+        "stream" => Token::Stream,
+        "operator" => Token::Operator,
+        "where" => Token::Where,
+        "with" => Token::With,
+        "script" => Token::Script,
+        "having" => Token::Having,
+        "group" => Token::Group,
+        "by" => Token::By,
 
-        "set" => lexer::Token::Set,
-        "each" => lexer::Token::Each,
+        "set" => Token::Set,
+        "each" => Token::Each,
     }
 }
 
