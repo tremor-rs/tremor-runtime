@@ -976,58 +976,46 @@ impl<'input> Lexer<'input> {
         end.absolute.0 += 1;
         let q1 = spanned2(start, end, Token::DQuote);
         let mut res = vec![q1];
-        let mut string = String::new();
+        let string = String::new();
 
-        match self.bump() {
+        match self.lookahead() {
             // This would be the second quote
-            Some((mut end, '"')) => match self.lookahead() {
-                Some((end, '"')) => {
-                    self.bump();
-                    // We don't allow anything tailing the initial `"""`
-                    match self.bump() {
-                        Some((_end, '\n')) => self.hd(start).map(|e| vec![e]),
-                        Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            format!(r#""""{}\n"#, ch),
-                            ch,
-                        )
-                        .into()),
-                        None => Err(ErrorKind::UnterminatedHereDoc(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            r#""""\n"#.to_string(),
-                        )
-                        .into()),
+            Some((mut end, '"')) => {
+                self.bump();
+                match self.lookahead() {
+                    Some((end, '"')) => {
+                        self.bump();
+                        // We don't allow anything tailing the initial `"""`
+                        match self.bump() {
+                            Some((_end, '\n')) => self.hd(start).map(|e| vec![e]),
+                            Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, end)),
+                                format!(r#""""{}\n"#, ch),
+                                ch,
+                            )
+                            .into()),
+                            None => Err(ErrorKind::UnterminatedHereDoc(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, end)),
+                                r#""""\n"#.to_string(),
+                            )
+                            .into()),
+                        }
+                    }
+                    // We had two quotes followed by something not a quote so
+                    // it is an empty string.
+                    _ => {
+                        //TODO :make slice
+                        let start = end;
+                        end.column.0 += 1;
+                        end.absolute.0 += 1;
+                        res.push(spanned2(start, end, Token::DQuote));
+                        Ok(res)
                     }
                 }
-                // We had two quotes followed by something not a quote so
-                // it is an empty string.
-                _ => {
-                    //TODO :make slice
-                    let start = end;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
-                    res.push(spanned2(start, end, Token::DQuote));
-                    Ok(res)
-                }
-            },
-            Some((end, '\\')) => {
-                if let Some(c) = self.escape_code(&string, start)? {
-                    string.push(c);
-                };
-                self.qs(start, end, true, string, res)
             }
-            Some((end, '\n')) => Err(ErrorKind::UnterminatedStringLiteral(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((start, end)),
-                format!("\"{}\n", string),
-            )
-            .into()),
-            Some((end, ch)) => {
-                string.push(ch);
-                self.qs(start, end, false, string, res)
-            }
+            Some(_) => self.qs(start, end, false, string, res),
             None => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, start)).expand_lines(2),
                 Range::from((start, start)),
@@ -1532,6 +1520,11 @@ mod tests {
 
     #[test]
     fn interpolat() {
+        lex_ok! {
+            r#"  "" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~ "# => Token::DQuote,
+        };
         lex_ok! {
             r#"  "hello" "#,
             r#"  ~ "# => Token::DQuote,
