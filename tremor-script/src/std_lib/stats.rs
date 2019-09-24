@@ -1,7 +1,12 @@
 use crate::registry::{AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
+use halfbrown::hashmap;
+use hdrhistogram::Histogram;
 use simd_json::value::ValueTrait;
 use simd_json::BorrowedValue as Value;
+use std::f64;
+use std::marker::Send;
 use std::ops::RangeInclusive;
+use std::u64;
 
 #[derive(Clone, Debug, Default)]
 struct Count(i64);
@@ -14,7 +19,7 @@ impl TremorAggrFn for Count {
         self.0 += 1;
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::I64(self.0))
     }
     fn init(&mut self) {
@@ -47,7 +52,7 @@ impl TremorAggrFn for Sum {
         }
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::F64(self.0))
     }
     fn init(&mut self) {
@@ -82,7 +87,7 @@ impl TremorAggrFn for Mean {
         }
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
             Ok(Value::Null)
         } else {
@@ -118,7 +123,7 @@ impl TremorAggrFn for Min {
         // FIXME: how?
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::F64(self.0.unwrap_or_default()))
     }
     fn init(&mut self) {
@@ -149,7 +154,7 @@ impl TremorAggrFn for Max {
         // FIXME: how?
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::F64(self.0.unwrap_or_default()))
     }
     fn init(&mut self) {
@@ -195,7 +200,7 @@ impl TremorAggrFn for Var {
         }
         Ok(())
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {
             Ok(Value::F64(0.0))
         } else {
@@ -227,7 +232,7 @@ impl TremorAggrFn for Stdev {
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.compensate(args)
     }
-    fn emit<'event>(&self) -> FResult<Value<'event>> {
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         self.0.emit().map(|v| match v {
             Value::F64(v) => Value::F64(v.sqrt()),
             v => v,
@@ -241,6 +246,96 @@ impl TremorAggrFn for Stdev {
     }
     fn arity(&self) -> RangeInclusive<usize> {
         1..=1
+    }
+}
+
+#[derive(Clone)]
+struct Hdr {
+    histo: Histogram,
+    percentiles: Option<Vec<String>>,
+}
+
+impl std::default::Default for Hdr {
+    fn default() -> Self {
+        Hdr {
+            histo: Histogram::init(1, u64::MAX >> 1, 2).unwrap(),
+            percentiles: None,
+        }
+    }
+}
+
+unsafe impl Send for Hdr {}
+unsafe impl Sync for Hdr {}
+
+impl TremorAggrFn for Hdr {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+        if self.percentiles == None {
+            let percentiles: Vec<String> = args[1]
+                .as_array()
+                .iter()
+                .flat_map(|x| {
+                    let y: Vec<String> =
+                        x.iter().map(|x| x.to_string().replace("\"", "")).collect();
+                    y
+                })
+                .collect();
+            self.percentiles = Some(percentiles);
+        }
+        if let Some(v) = args[0].as_i64() {
+            // if self.n == 0 {
+            // FIXME error
+            // }
+            self.histo.record_values(v as u64, 1);
+        }
+        Ok(())
+    }
+
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+        // FIXME there's no facility for this with hdr histogram, punt for now
+        Ok(())
+    }
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
+        if self.percentiles.is_none() {
+            self.percentiles = Some(vec![
+                "0.5".to_string(),
+                "0.9".to_string(),
+                "0.95".to_string(),
+                "0.99".to_string(),
+                "0.999".to_string(),
+                "0.9999".to_string(),
+                "0.99999".to_string(),
+            ])
+        };
+
+        let mut p = hashmap! {};
+        for pcn in self.percentiles.clone().unwrap() {
+            let percentile: f64 = pcn.parse().expect("");
+            let pp = pcn.clone();
+            let pp: std::borrow::Cow<str> = pp.into();
+            p.insert(
+                pp,
+                Value::I64(self.histo.value_at_percentile(percentile * 100.0) as i64),
+            );
+        }
+
+        Ok(Value::Object(hashmap! {
+             "count".into() => Value::I64(self.histo.total_count() as i64),
+            "min".into() => Value::I64(self.histo.min() as i64),
+            "max".into() => Value::I64(self.histo.max() as i64),
+            "mean".into() => Value::F64(self.histo.mean()),
+            "stdev".into() => Value::F64(self.histo.stddev()),
+            "var".into() => Value::F64(self.histo.stddev().powf(2.0)),
+            "percentiles".into() => Value::Object(p),
+        }))
+    }
+    fn init(&mut self) {
+        self.histo.reset();
+    }
+    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=2
     }
 }
 
@@ -280,6 +375,11 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
             module: "stats".to_string(),
             name: "mean".to_string(),
             fun: Box::new(Mean::default()),
+        })
+        .insert(TremorAggrFnWrapper {
+            module: "stats".to_string(),
+            name: "hdr".to_string(),
+            fun: Box::new(Hdr::default()),
         });
 }
 
@@ -287,6 +387,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 mod test {
     use super::*;
     use crate::registry::FunctionError;
+    use simd_json::json;
     #[test]
     fn count() -> Result<(), FunctionError> {
         let mut a = Count::default();
@@ -378,6 +479,53 @@ mod test {
         a.accumulate(&[&four])?;
         a.accumulate(&[&nineteen])?;
         assert!((a.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
+        Ok(())
+    }
+
+    #[test]
+    fn hdr() -> Result<(), FunctionError> {
+        use simd_json::BorrowedValue;
+
+        let mut a = Hdr::default();
+        a.init();
+        let mut i = 1;
+
+        loop {
+            if i > 100 {
+                break;
+            }
+            a.accumulate(&[
+                &Value::from(i),
+                &Value::Array(vec![
+                    Value::String(std::borrow::Cow::Borrowed("0.5")),
+                    Value::String(std::borrow::Cow::Borrowed("0.9")),
+                    Value::String(std::borrow::Cow::Borrowed("0.95")),
+                    Value::String(std::borrow::Cow::Borrowed("0.99")),
+                    Value::String(std::borrow::Cow::Borrowed("0.999")),
+                    Value::String(std::borrow::Cow::Borrowed("0.9999")),
+                ]),
+            ])?;
+            i += 1;
+        }
+        let v = a.emit()?;
+        let e: BorrowedValue = json!({
+            "min": 1,
+            "max": 100,
+            "count": 100,
+            "mean": 50.5,
+            "stdev": 28.86607004772212,
+            "var": 833.25,
+            "percentiles": {
+                "0.5": 50,
+                "0.9": 90,
+                "0.95": 95,
+                "0.99": 99,
+                "0.999": 100,
+                "0.9999": 100
+            }
+        })
+        .into();
+        assert_eq!(v, e);
         Ok(())
     }
 }
