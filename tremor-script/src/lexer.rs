@@ -18,6 +18,7 @@ use crate::errors::*;
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
 use crate::parser::grammar::__ToTriple;
+pub use crate::pos::*;
 use codespan::ByteIndex;
 use codespan::ByteOffset;
 use codespan::ColumnIndex;
@@ -25,12 +26,11 @@ use codespan::LineIndex;
 use codespan::Span;
 use lalrpop_util;
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_xid::UnicodeXID;
-
-pub use crate::pos::*;
 
 pub trait ParserSource {
     fn src(&self) -> &str;
@@ -130,9 +130,12 @@ pub enum Token<'input> {
     BoolLiteral(bool),
     IntLiteral(i64),
     FloatLiteral(f64, String),
-    StringLiteral(Cow<'input, str>),
     TestLiteral(usize, Vec<String>),
     HereDoc(usize, Vec<String>),
+
+    // String
+    DQuote,
+    StringLiteral(Cow<'input, str>),
 
     // Keywords
     Let,
@@ -317,6 +320,7 @@ impl<'input> TokenFuns for Token<'input> {
     fn is_string_like(&self) -> bool {
         match *self {
             Token::StringLiteral(_) => true,
+            Token::DQuote => true,
             Token::TestLiteral(_, _) => true,
             Token::HereDoc(_, _) => true,
             _ => false,
@@ -411,11 +415,12 @@ impl<'input> fmt::Display for Token<'input> {
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
-            Token::StringLiteral(value) => write!(
-                f,
-                "{}",
-                simd_json::OwnedValue::from(value.to_string()).to_string()
-            ),
+            Token::DQuote => write!(f, "\""),
+            Token::StringLiteral(value) => {
+                let s = simd_json::OwnedValue::from(value.to_string()).to_string();
+                // Strip the quotes
+                write!(f, "{}", &s[1..s.len() - 1])
+            }
             Token::HereDoc(indent, lines) => {
                 writeln!(f, r#"""""#)?;
                 let space = String::from(" ");
@@ -625,6 +630,7 @@ pub struct Lexer<'input> {
     input: &'input str,
     chars: CharLocations<'input>,
     start_index: BytePos,
+    stored_tokens: VecDeque<TokenSpan<'input>>,
 }
 
 type Lexeme = Option<(Location, char)>;
@@ -640,6 +646,7 @@ impl<'input> Lexer<'input> {
             input: input.src(),
             chars,
             start_index: input.start_index(),
+            stored_tokens: VecDeque::new(),
         }
     }
 
@@ -963,8 +970,14 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn qs_or_hd(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
+        let mut end = start;
+        end.column.0 += 1;
+        end.absolute.0 += 1;
+        let q1 = spanned2(start, end, Token::DQuote);
+        let mut res = vec![q1];
         let mut string = String::new();
+
         match self.bump() {
             // This would be the second quote
             Some((mut end, '"')) => match self.lookahead() {
@@ -972,7 +985,7 @@ impl<'input> Lexer<'input> {
                     self.bump();
                     // We don't allow anything tailing the initial `"""`
                     match self.bump() {
-                        Some((_end, '\n')) => self.hd(start),
+                        Some((_end, '\n')) => self.hd(start).map(|e| vec![e]),
                         Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -992,17 +1005,18 @@ impl<'input> Lexer<'input> {
                 // it is an empty string.
                 _ => {
                     //TODO :make slice
-                    let token = Token::StringLiteral(string.into());
+                    let start = end;
                     end.column.0 += 1;
                     end.absolute.0 += 1;
-                    Ok(spanned2(start, end, token))
+                    res.push(spanned2(start, end, Token::DQuote));
+                    Ok(res)
                 }
             },
             Some((end, '\\')) => {
                 if let Some(c) = self.escape_code(&string, start)? {
                     string.push(c);
                 };
-                self.qs(start, end, true, string)
+                self.qs(start, end, true, string, res)
             }
             Some((end, '\n')) => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, end)).expand_lines(2),
@@ -1012,7 +1026,7 @@ impl<'input> Lexer<'input> {
             .into()),
             Some((end, ch)) => {
                 string.push(ch);
-                self.qs(start, end, false, string)
+                self.qs(start, end, false, string, res)
             }
             None => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, start)).expand_lines(2),
@@ -1061,14 +1075,16 @@ impl<'input> Lexer<'input> {
         }
         //let mut strings = Vec::new();
     }
+
     /// Handle quote strings `"`  ...
     fn qs(
         &mut self,
-        start: Location,
+        mut start: Location,
         mut end: Location,
         mut has_escapes: bool,
         mut string: String,
-    ) -> Result<TokenSpan<'input>> {
+        mut res: Vec<TokenSpan<'input>>,
+    ) -> Result<Vec<TokenSpan<'input>>> {
         loop {
             match self.bump() {
                 Some((e, '\\')) => {
@@ -1079,13 +1095,41 @@ impl<'input> Lexer<'input> {
                     end = e;
                 }
                 Some((mut end, '"')) => {
-                    // we got to bump end by one so we claim the tailing `"`
-                    let e = end;
+                    // If the string is empty we kind of don't need it.
+                    if !string.is_empty() {
+                        // we got to bump end by one so we claim the tailing `"`
+
+                        let e = end;
+                        let mut s = start;
+                        s.column.0 += 1;
+                        s.absolute.0 += 1;
+                        let token = if has_escapes {
+                            // The string was modified so we can't use the slice
+                            Token::StringLiteral(string.into())
+                        } else if let Some(slice) = self.slice(s, e) {
+                            Token::StringLiteral(slice.into())
+                        } else {
+                            // Invalid start end case :(
+                            Token::StringLiteral(string.into())
+                        };
+                        res.push(spanned2(start, end, token));
+                    }
+                    let start = end;
+                    end.column.0 += 1;
+                    end.absolute.0 += 1;
+                    res.push(spanned2(start, end, Token::DQuote));
+                    return Ok(res);
+                }
+                Some((eend, '{')) => {
+                    if let Some((e, '}')) = self.lookahead() {
+                        string.push('}');
+                        end = e;
+                        continue;
+                    }
+                    let e = eend;
                     let mut s = start;
                     s.column.0 += 1;
                     s.absolute.0 += 1;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
                     let token = if has_escapes {
                         // The string was modified so we can't use the slice
                         Token::StringLiteral(string.into())
@@ -1095,8 +1139,32 @@ impl<'input> Lexer<'input> {
                         // Invalid start end case :(
                         Token::StringLiteral(string.into())
                     };
-
-                    return Ok(spanned2(start, end, token));
+                    res.push(spanned2(start, eend, token));
+                    string = String::new();
+                    start = eend;
+                    end = eend;
+                    end.column.0 += 1;
+                    end.absolute.0 += 1;
+                    res.push(spanned2(start, end, Token::LBrace));
+                    let mut pcount = 0;
+                    while let Some(s) = self.next() {
+                        let s = s?;
+                        match &s.value {
+                            Token::RBrace if pcount == 0 => {
+                                start = s.span.start();
+                                res.push(s);
+                                break;
+                            }
+                            Token::RBrace => {
+                                pcount -= 1;
+                            }
+                            Token::LBrace => {
+                                pcount += 1;
+                            }
+                            _ => {}
+                        };
+                        res.push(s);
+                    }
                 }
                 Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
@@ -1199,54 +1267,6 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /*
-    // NOTE rs is a quoted string variant that interprets escapes whereas qs above passes them through
-    #[allow(unused)]
-    fn rs(&mut self, start: Location) -> Result<TokenSpan> {
-        let mut delimiters = 0;
-        while let Some((end, ch)) = self.bump() {
-            match ch {
-                '#' => delimiters += 1,
-                '"' => break,
-                _ => {
-                    return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
-                    )
-                    .into())
-                }
-            }
-        }
-
-        let content_start = self.next_index()?;
-        loop {
-            self.take_until(content_start, |b| b == '"');
-            match self.bump() {
-                Some((_, '"')) => {
-                    let mut found_delimiters = 0;
-                    while let Some((_, ch)) = self.bump() {
-                        match ch {
-                            '#' => found_delimiters += 1,
-                            '"' => found_delimiters = 0,
-                            _ => break,
-                        }
-                        if found_delimiters == delimiters {
-                            let end = self.next_index()?;
-                            let mut content_end = end;
-                            content_end.absolute.0 -= delimiters + 1;
-                            let string = self.slice(content_start, content_end).into();
-
-                            let token = Token::StringLiteral(string);
-                            return Ok(spanned2(start, end, token));
-                        }
-                    }
-                }
-                _ => continue,
-            }
-        }
-    }
-    */
-
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.take_while(start, is_dec_digit);
 
@@ -1341,33 +1361,6 @@ impl<'input> Lexer<'input> {
                     }
                 }
             }
-            // Some((_, '')) => {
-            //     self.bump(); // Skip ''
-            //     let end = self.next_index()?;
-            //     match self.lookahead() {
-            //         Some((pos, ch)) if is_ident_start(ch) => {
-            //             let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
-            //             // HACK
-            //             return Err(ErrorKind::UnterminatedStringLiteral {
-            //                 start: ByteIndex(0),
-            //                 end: ByteIndex(0),
-            //             });
-            //             //                        return self.error(pos, UnexpectedChar(ch));
-            //         }
-            //         _ => {
-            //             if let Ok(val) = int.parse() {
-            //                 (start, end, Token::ByteLiteral(val))
-            //             } else {
-            //                 //                            return self.error(start, NonParseableInt);
-            //                 // HACK
-            //                 return Err(ErrorKind::UnterminatedStringLiteral {
-            //                     start: ByteIndex(0),
-            //                     end: ByteIndex(0),
-            //                 });
-            //             }
-            //         }
-            //     }
-            // }
             Some((_, ch)) if is_ident_start(ch) => {
                 return Err(ErrorKind::UnexpectedCharacter(
                     Range::from((start, end)).expand_lines(2),
@@ -1419,6 +1412,9 @@ impl<'input> Iterator for Lexer<'input> {
     type Item = Result<TokenSpan<'input>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.stored_tokens.pop_front() {
+            return Some(Ok(next));
+        }
         let lexeme = self.bump();
         match lexeme {
             None => None,
@@ -1454,7 +1450,15 @@ impl<'input> Iterator for Lexer<'input> {
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
                     ch if is_ident_start(ch) => Some(self.id(start)),
-                    '"' => Some(self.qs_or_hd(start)),
+                    '"' => match self.qs_or_hd(start) {
+                        Ok(mut tokens) => {
+                            for t in tokens.drain(..) {
+                                self.stored_tokens.push_back(t)
+                            }
+                            self.next()
+                        }
+                        Err(e) => Some(Err(e)),
+                    },
                     ch if is_test_start(ch) => Some(self.pl(start)),
                     ch if is_dec_digit(ch) => Some(self.nm(start)),
                     ch if ch.is_whitespace() => Some(self.ws(start)),
@@ -1527,6 +1531,49 @@ mod tests {
      */
 
     #[test]
+    fn interpolat() {
+        lex_ok! {
+            r#"  "hello" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~ "# => Token::StringLiteral("hello".into()),
+            r#"        ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#"  "hello {7}" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
+            r#"         ~ "# => Token::LBrace,
+            r#"          ~ "# => Token::IntLiteral(7),
+            r#"           ~ "# => Token::RBrace,
+            r#"            ~ "# => Token::DQuote,
+
+        };
+        lex_ok! {
+            r#"  "{7} hello" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~ "# => Token::LBrace,
+            r#"    ~ "# => Token::IntLiteral(7),
+            r#"     ~ "# => Token::RBrace,
+            r#"      ~~~~~~ "# => Token::StringLiteral(" hello".into()),
+            r#"            ~ "# => Token::DQuote,
+
+        };
+        lex_ok! {
+            r#"  "hello { "snot {7}" }" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
+            r#"         ~ "# => Token::LBrace,
+            r#"            ~ "# => Token::DQuote,
+            r#"             ~~~~ "# => Token::StringLiteral("snot ".into()),
+            r#"                  ~ "# => Token::LBrace,
+            r#"                   ~ "# => Token::IntLiteral(7),
+            r#"                    ~ "# => Token::RBrace,
+            r#"                     ~ "# => Token::DQuote,
+            r#"                        ~ "# => Token::RBrace,
+            r#"                         ~ "# => Token::DQuote,
+        };
+    }
+    #[test]
     fn paths() {
         lex_ok! {
             "  hello-hahaha8ABC ",
@@ -1562,7 +1609,8 @@ mod tests {
 
     #[test]
     fn operators() {
-        lex_ok! { " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
+        lex_ok! {
+        " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
 
         lex_ok! { " and ", " ~ " => Token::And, };
