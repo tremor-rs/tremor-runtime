@@ -21,16 +21,18 @@ create stream normalize;
 select patch {} of
   insert "measurement" => event.measurement,
   insert "tags" => event.tags,
-  insert "count_{event.class}" => event.stats.count,
-  insert "min_{event.class}" => event.stats.min,
-  insert "max_{event.class}" => event.stats.max,
-  insert "mean_{event.class}" => event.stats.mean,
-  insert "stdev_{event.class}" => event.stats.stdev,
-  insert "var_{event.class}" => event.stats.var,
-  insert "p50_{event.class}" => event.stats.percentiles["0.5"],
-  insert "p90_{event.class}" => event.stats.percentiles["0.9"],
-  insert "p99_{event.class}" => event.stats.percentiles["0.99"],
-  insert "p99.9_{event.class}" => event.stats.percentiles["0.999"]
+  insert "fields" => patch {} of
+      insert "count_{event.class}" => event.stats.count,
+      insert "min_{event.class}" => event.stats.min,
+      insert "max_{event.class}" => event.stats.max,
+      insert "mean_{event.class}" => event.stats.mean,
+      insert "stdev_{event.class}" => event.stats.stdev,
+      insert "var_{event.class}" => event.stats.var,
+      insert "p50_{event.class}" => event.stats.percentiles["0.5"],
+      insert "p90_{event.class}" => event.stats.percentiles["0.9"],
+      insert "p99_{event.class}" => event.stats.percentiles["0.99"],
+      insert "p99.9_{event.class}" => event.stats.percentiles["0.999"]
+  end
 end
 from normalize
 into out;
