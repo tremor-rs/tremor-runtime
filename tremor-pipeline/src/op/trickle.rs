@@ -13,3 +13,6 @@
 // limitations under the License.
 
 pub mod select;
+pub mod operator;
+pub mod script;
+

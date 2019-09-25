@@ -242,10 +242,8 @@ pub fn buildin_ops(
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     use op::runtime::TremorFactory;
-    //    use op::trickle::TrickleSelectFactory;
     let name_parts: Vec<&str> = node._type.split("::").collect();
     let factory = match name_parts.as_slice() {
-        // ["trickle", "select"] => TrickleSelectFactory::new_boxed(),
         ["passthrough"] => PassthroughFactory::new_boxed(),
         ["debug", "history"] => EventHistoryFactory::new_boxed(),
         ["runtime", "tremor"] => TremorFactory::new_boxed(),

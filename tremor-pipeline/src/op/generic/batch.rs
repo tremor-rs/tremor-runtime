@@ -28,13 +28,13 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone)]
-struct Batch {
+pub struct Batch {
     pub config: Config,
-    data: Vec<OwnedValue>,
-    max_delay_ns: Option<u64>,
-    first_ns: u64,
-    id: String,
-    event_id: u64,
+    pub data: Vec<OwnedValue>,
+    pub max_delay_ns: Option<u64>,
+    pub first_ns: u64,
+    pub id: String,
+    pub event_id: u64,
 }
 
 op!(BatchFactory(node) {
