@@ -21,3 +21,12 @@ pub trait BaseExpr: Clone {
         Range(self.s(), self.e())
     }
 }
+
+impl BaseExpr for (Location, Location) {
+    fn s(&self) -> Location {
+        self.0
+    }
+    fn e(&self) -> Location {
+        self.1
+    }
+}

@@ -22,6 +22,7 @@ use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
 use crate::registry::{AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::tilde::Extractor;
+use crate::EventContext;
 pub use base_expr::BaseExpr;
 pub use base_stmt::BaseStmt;
 use halfbrown::HashMap;
@@ -747,11 +748,37 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                     ImutExpr::InvokeAggr(i.to_aggregate(helper).up(helper)?)
                 } else {
                     let i = i.up(helper)?;
-                    match i.args.len() {
-                        1 => ImutExpr::Invoke1(i),
-                        2 => ImutExpr::Invoke2(i),
-                        3 => ImutExpr::Invoke3(i),
-                        _ => ImutExpr::Invoke(i),
+                    if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f)) {
+                        dbg!("const");
+                        let args: Result<Vec<Value<'script>>> =
+                            i.args.into_iter().map(reduce2).collect();
+                        let args = args?;
+                        let mut args2: Vec<&Value<'script>> = Vec::new();
+                        let start = i.start;
+                        let end = i.end;
+                        unsafe {
+                            for i in 0..args.len() {
+                                args2.push(args.get_unchecked(i));
+                            }
+                        }
+                        let v = i
+                            .invocable
+                            .invoke(&EventContext::default(), &args2)
+                            .map_err(|e| {
+                                e.into_err(&(start, end), &(start, end), Some(&helper.reg))
+                            })?;
+                        ImutExpr::Literal(Literal {
+                            value: v,
+                            start,
+                            end,
+                        })
+                    } else {
+                        match i.args.len() {
+                            1 => ImutExpr::Invoke1(i),
+                            2 => ImutExpr::Invoke2(i),
+                            3 => ImutExpr::Invoke3(i),
+                            _ => ImutExpr::Invoke(i),
+                        }
                     }
                 }
             }

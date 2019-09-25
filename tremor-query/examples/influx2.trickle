@@ -1,16 +1,12 @@
 # to be run with metrics_dev_5.txt.xz
 create tumbling window `1secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(5),
-   interval = 1000000000
+   interval = datetime::with_seconds(1),
 end;
 
 create tumbling window `10secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(5),
-   interval = 10000000000
+   interval = datetime::with_seconds(10),
 end;
 
 select
@@ -28,6 +24,5 @@ select
     ])
   }
 from in[`10secs`]
-#where record::contains(event.fields, "value") and record::contains(event.tags, "app")
 group by set(event.measurement, event.tags, each(record::keys(event.fields)))
 into out;
