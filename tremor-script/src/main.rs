@@ -51,7 +51,7 @@ use std::iter::FromIterator;
 #[macro_use]
 extern crate serde_derive;
 
-use crate::registry::{Registry, TremorFnWrapper};
+use crate::registry::Registry;
 
 fn main() -> Result<()> {
     let matches = App::new("tremor-script")

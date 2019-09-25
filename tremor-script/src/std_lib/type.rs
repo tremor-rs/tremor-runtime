@@ -12,20 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//cuse crate::errors::*;
-
 use crate::registry::Registry;
-use crate::tremor_fn;
+use crate::tremor_const_fn;
 use simd_json::{ValueTrait, ValueType};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
-        tremor_fn! (type::$name(_context, _input) {
+        tremor_const_fn! (type::$name(_context, _input) {
             Ok(Value::from(_input.$fun()))
         })
     };
         ($fun:ident) => {
-            tremor_fn!(type::$fun(_context, _input) {
+            tremor_const_fn!(type::$fun(_context, _input) {
                 Ok(Value::from(_input.$fun()))
             })
         }
@@ -40,7 +38,7 @@ pub fn load(registry: &mut Registry) {
         .insert(map_function!(is_string))
         .insert(map_function!(is_array))
         .insert(map_function!(is_record, is_object))
-        .insert(tremor_fn! (type::as_string(_context, _input) {
+        .insert(tremor_const_fn! (type::as_string(_context, _input) {
             Ok(match _input.kind() {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
@@ -51,7 +49,7 @@ pub fn load(registry: &mut Registry) {
                 ValueType::Object => Value::from("record"),
             })
         }))
-        .insert(tremor_fn! (type::is_number(_context, _input) {
+        .insert(tremor_const_fn! (type::is_number(_context, _input) {
             Ok(match _input.kind() {
                 ValueType::I64 => Value::from(true),
                 ValueType::F64 => Value::from(true),

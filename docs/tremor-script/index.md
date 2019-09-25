@@ -130,6 +130,14 @@ The language does not support literal character or Unicode code-points at this t
 "I am a string"
 ```
 
+##### String Interpolation
+
+For strings tremor allows string polation, this means embedding code directly into strings to create strings out of them. This
+is a convinience as an alternative of using the string::format function. 
+```tremor
+"I am a { "string with {1} interpolation." }"
+```
+
 ##### HereDocs
 
 To deal with pre formatted strings in tremor script we allow for **here docs** they are started by using triple quotes `"""`  that terminate the line (aka `"""bla`  isn't legal) .
