@@ -20,7 +20,7 @@ mod upable;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
-use crate::registry::{AggrRegistry, Registry, TremorAggrFnWrapper, TremorFn};
+use crate::registry::{AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::tilde::Extractor;
 pub use base_expr::BaseExpr;
 pub use base_stmt::BaseStmt;
@@ -992,7 +992,7 @@ impl<'script> Upable<'script> for Invoke1<'script> {
             end: self.end,
             module: self.module,
             fun: self.fun,
-            invocable,
+            invocable: invocable.clone(),
             args,
         })
     }
@@ -1031,7 +1031,7 @@ pub struct Invoke<'script> {
     pub module: String,
     pub fun: String,
     #[serde(skip)]
-    pub invocable: TremorFn,
+    pub invocable: TremorFnWrapper,
     pub args: ImutExprs<'script>,
 }
 impl_expr!(Invoke);

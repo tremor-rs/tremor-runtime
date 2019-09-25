@@ -25,6 +25,7 @@ mod re;
 mod record;
 mod stats;
 mod string;
+mod system;
 mod r#type;
 
 use crate::registry::{AggrRegistry, Registry};
@@ -34,15 +35,16 @@ pub fn load(registry: &mut Registry) {
     chash::load(registry);
     datetime::load(registry);
     dummy::load(registry);
-    integer::load(registry);
     float::load(registry);
+    integer::load(registry);
     json::load(registry);
     math::load(registry);
-    r#type::load(registry);
     random::load(registry);
     re::load(registry);
     record::load(registry);
     string::load(registry);
+    system::load(registry);
+    r#type::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {

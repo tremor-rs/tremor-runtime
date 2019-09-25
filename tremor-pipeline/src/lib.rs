@@ -37,12 +37,12 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde::Serialize;
 use simd_json::json;
-use simd_json::{BorrowedValue, OwnedValue};
+use simd_json::OwnedValue;
 use std::iter;
 use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tremor_script::{EventContext, LineValue, Registry, TremorFnWrapper};
+use tremor_script::{LineValue, Registry};
 pub mod config;
 pub mod errors;
 #[macro_use]
@@ -65,19 +65,7 @@ lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
     pub static ref FN_REGISTRY: Mutex<Registry> = {
-        use tremor_script::registry::FResult;
-        let mut registry: Registry = tremor_script::registry();
-        #[allow(unused_variables)]
-        fn ingest_ns<'event>(ctx: &EventContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
-            Ok(BorrowedValue::I64(ctx.at as i64))
-        }
-        registry
-            .insert(TremorFnWrapper {
-                module: "system".to_owned(),
-                name: "ingest_ns".to_string(),
-                fun: ingest_ns,
-                argc: 0
-            });
+        let registry: Registry = tremor_script::registry();
         Mutex::new(registry)
     };
 }

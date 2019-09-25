@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::registry::Registry;
-use crate::tremor_fn;
+use crate::tremor_const_fn;
 use jumphash;
 use simd_json::BorrowedValue as Value;
 use std::io;
@@ -20,18 +20,18 @@ use std::io::Write;
 
 pub fn load(registry: &mut Registry) {
     registry.insert(
-        tremor_fn! (chash::jump(_context, _key: String, _slot_count: I64) {
+        tremor_const_fn! (chash::jump(_context, _key: String, _slot_count: I64) {
             // This is 'tremor\0\0'  and '\0\0tremor' as integers
             let jh = jumphash::JumpHasher::new_with_keys(8_390_880_576_440_238_080, 128_034_676_764_530);
             Ok(jh.slot(&_key, *_slot_count as u32).into())
         }),
     ).insert(
-        tremor_fn!(chash::jump_with_keys(_context, _k1: I64, _k2: I64, _key: String, _slot_count: I64) {
+        tremor_const_fn!(chash::jump_with_keys(_context, _k1: I64, _k2: I64, _key: String, _slot_count: I64) {
             let jh = jumphash::JumpHasher::new_with_keys(*_k1 as u64, *_k2 as u64);
             Ok(jh.slot(&_key, *_slot_count as u32).into())
         }),
     ).insert(
-        tremor_fn!(chash::sorted_serialize(_context, _data) {
+        tremor_const_fn!(chash::sorted_serialize(_context, _data) {
             let mut d: Vec<u8> = Vec::new();
             sorted_serialize_(_data, &mut d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
             Ok(Value::String(String::from_utf8(d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Encountered invalid UTF8 in serialisation".to_string()})?.into()

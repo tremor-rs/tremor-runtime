@@ -13,39 +13,39 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_fn;
+use crate::tremor_const_fn;
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (math::floor(_context, _input) {
+        .insert(tremor_const_fn! (math::floor(_context, _input) {
             match _input {
                 Value::I64(v) => Ok(Value::I64(*v)),
                 Value::F64(v) => Ok(Value::I64(v.floor() as i64)),
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
-        .insert(tremor_fn! (math::ceil(_context, _input) {
+        .insert(tremor_const_fn! (math::ceil(_context, _input) {
             match _input {
                 Value::I64(v) => Ok(Value::I64(*v)),
                 Value::F64(v) => Ok(Value::I64(v.ceil() as i64)),
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
-        .insert(tremor_fn! (math::round(_context, _input) {
+        .insert(tremor_const_fn! (math::round(_context, _input) {
             match _input {
                 Value::I64(v) => Ok(Value::I64(*v)),
                 Value::F64(v) => Ok(Value::I64(v.round() as i64)),
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
-        .insert(tremor_fn! (math::trunc(_context, _input) {
+        .insert(tremor_const_fn! (math::trunc(_context, _input) {
             match _input {
                 Value::I64(v) => Ok(Value::I64(*v)),
                 Value::F64(v) => Ok(Value::I64(v.trunc() as i64)),
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
-        .insert(tremor_fn! (math::max(_context, a, b) {
+        .insert(tremor_const_fn! (math::max(_context, a, b) {
             match (a, b) {
                 (Value::F64(a), Value::F64(b)) if a > b  => Ok(Value::from(a.to_owned())),
                 (Value::F64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
@@ -58,7 +58,7 @@ pub fn load(registry: &mut Registry) {
                 _ => Err(FunctionError::BadType{mfa: this_mfa()}),
             }
         }))
-        .insert(tremor_fn!(math::min(_context, a, b) {
+        .insert(tremor_const_fn!(math::min(_context, a, b) {
             match (a, b) {
                 (Value::F64(a), Value::F64(b)) if a < b  => Ok(Value::from(a.to_owned())),
                 (Value::F64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),

@@ -502,7 +502,8 @@ where
                 .args
                 .get_unchecked(0)
                 .run(opts, context, aggrs, event, meta, local, consts));
-            (expr.invocable)(context, &[v.borrow()])
+            expr.invocable
+                .invoke(context, &[v.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -531,7 +532,8 @@ where
                 .args
                 .get_unchecked(1)
                 .run(opts, context, aggrs, event, meta, local, consts));
-            (expr.invocable)(context, &[v1.borrow(), v2.borrow()])
+            expr.invocable
+                .invoke(context, &[v1.borrow(), v2.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -564,7 +566,8 @@ where
                 .args
                 .get_unchecked(2)
                 .run(opts, context, aggrs, event, meta, local, consts));
-            (expr.invocable)(context, &[v1.borrow(), v2.borrow(), v3.borrow()])
+            expr.invocable
+                .invoke(context, &[v1.borrow(), v2.borrow(), v3.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -595,7 +598,8 @@ where
                 argv1.push(argv.get_unchecked(i));
             }
         }
-        (expr.invocable)(context, &argv1)
+        expr.invocable
+            .invoke(context, &argv1)
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;

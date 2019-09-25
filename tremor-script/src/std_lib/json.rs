@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_fn;
+use crate::tremor_const_fn;
 use serde_json;
 use simd_json::to_owned_value;
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (json::decode(_context, _input: String) {
+        .insert(tremor_const_fn! (json::decode(_context, _input: String) {
             // We need to clone here since we do not want to destroy the
             // original value
             let mut s: String = _input.to_string();
@@ -29,10 +29,10 @@ pub fn load(registry: &mut Registry) {
             // We need to do this since otherwise we depend on the clone of s
             to_owned_value(&mut bytes).map_err(to_runtime_error).map(Value::from)
         }))
-        .insert(tremor_fn! (json::encode(_context, _input) {
+        .insert(tremor_const_fn! (json::encode(_context, _input) {
             serde_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
         }))
-        .insert(tremor_fn! (json::encode_pretty(_context, _input) {
+        .insert(tremor_const_fn! (json::encode_pretty(_context, _input) {
             serde_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
         }));
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFnWrapper};
+use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
 use crate::tremor_fn;
 use crate::EventContext;
 use rand::distributions::Alphanumeric;
@@ -31,13 +31,20 @@ pub fn load(registry: &mut Registry) {
     // the range. we will be sampling a lot during a typical use case, so swap it
     // for a distribution based sampling (if we can cache the distribution):
     // https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.gen_range
-    fn integer<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
-        let this_mfa = || mfa("random", "integer", args.len());
-        let mut rng = rand::thread_rng();
-        match args.len() {
-            2 => {
-                let (low, high) = (&args[0], &args[1]);
-                match (low, high) {
+    #[derive(Clone, Debug, Default)]
+    struct RandomInteger {}
+    impl TremorFn for RandomInteger {
+        fn invoke<'event, 'c>(
+            &self,
+            _ctx: &'c EventContext,
+            args: &[&Value<'event>],
+        ) -> FResult<Value<'event>> {
+            let this_mfa = || mfa("random", "integer", args.len());
+            let mut rng = rand::thread_rng();
+            match args.len() {
+                2 => {
+                    let (low, high) = (&args[0], &args[1]);
+                    match (low, high) {
                     (Value::I64(low), Value::I64(high)) if low < high => Ok(Value::I64(
                         // random integer between low and high (not including high)
                         rng.gen_range(low, high),
@@ -50,39 +57,56 @@ pub fn load(registry: &mut Registry) {
                     }),
                     _ => Err(FunctionError::BadType { mfa: this_mfa() }),
                 }
-            }
-            1 => {
-                let input = &args[0];
-                match input {
-                    Value::I64(input) if *input > 0 => Ok(Value::I64(
-                        // random integer between 0 and input (not including input)
-                        rng.gen_range(0, input),
-                    )),
-                    Value::I64(_input) => Err(FunctionError::RuntimeError {
-                        mfa: this_mfa(),
-                        error: "Invalid argument. Must be greater than 0".to_string(),
-                    }),
-                    _ => Err(FunctionError::BadType { mfa: this_mfa() }),
                 }
+                1 => {
+                    let input = &args[0];
+                    match input {
+                        Value::I64(input) if *input > 0 => Ok(Value::I64(
+                            // random integer between 0 and input (not including input)
+                            rng.gen_range(0, input),
+                        )),
+                        Value::I64(_input) => Err(FunctionError::RuntimeError {
+                            mfa: this_mfa(),
+                            error: "Invalid argument. Must be greater than 0".to_string(),
+                        }),
+                        _ => Err(FunctionError::BadType { mfa: this_mfa() }),
+                    }
+                }
+                0 => Ok(Value::I64(
+                    rng.gen(), // random integer
+                )),
+                _ => Err(FunctionError::BadArity {
+                    mfa: this_mfa(),
+                    calling_a: args.len(),
+                }),
             }
-            0 => Ok(Value::I64(
-                rng.gen(), // random integer
-            )),
-            _ => Err(FunctionError::BadArity {
-                mfa: this_mfa(),
-                calling_a: args.len(),
-            }),
+        }
+        fn snot_clone(&self) -> Box<dyn TremorFn> {
+            Box::new(self.clone())
+        }
+        fn arity(&self) -> std::ops::RangeInclusive<usize> {
+            0..=2
+        }
+        fn is_const(&self) -> bool {
+            false
         }
     }
     // TODO try to consolidate this with the integer implementation -- mostly a copy-pasta
     // of that right now, with types changed
-    fn float<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
-        let this_mfa = || mfa("random", "float", args.len());
-        let mut rng = rand::thread_rng();
-        match args.len() {
-            2 => {
-                let (low, high) = (&args[0], &args[1]);
-                match (low, high) {
+    #[derive(Clone, Debug, Default)]
+    struct RandomFloat {}
+    impl TremorFn for RandomFloat {
+        fn invoke<'event, 'c>(
+            &self,
+            _ctx: &'c EventContext,
+            args: &[&Value<'event>],
+        ) -> FResult<Value<'event>> {
+            let this_mfa = || mfa("random", "float", args.len());
+            let mut rng = rand::thread_rng();
+            match args.len() {
+                2 => {
+                    let (low, high) = (&args[0], &args[1]);
+                    match (low, high) {
                     (Value::F64(low), Value::F64(high)) if low < high => Ok(Value::F64(
                         // random float between low and high (not including high)
                         rng.gen_range(low, high),
@@ -95,28 +119,39 @@ pub fn load(registry: &mut Registry) {
                     }),
                     _ => Err(FunctionError::BadType { mfa: this_mfa() }),
                 }
-            }
-            1 => {
-                let input = &args[0];
-                match input {
-                    Value::F64(input) if *input > 0.0 => Ok(Value::F64(
-                        // random float between 0 and input (not including input)
-                        rng.gen_range(0.0, input),
-                    )),
-                    Value::F64(_input) => Err(FunctionError::RuntimeError {
-                        mfa: this_mfa(),
-                        error: "Invalid argument. Must be greater than 0.0".to_string(),
-                    }),
-                    _ => Err(FunctionError::BadType { mfa: this_mfa() }),
                 }
+                1 => {
+                    let input = &args[0];
+                    match input {
+                        Value::F64(input) if *input > 0.0 => Ok(Value::F64(
+                            // random float between 0 and input (not including input)
+                            rng.gen_range(0.0, input),
+                        )),
+                        Value::F64(_input) => Err(FunctionError::RuntimeError {
+                            mfa: this_mfa(),
+                            error: "Invalid argument. Must be greater than 0.0".to_string(),
+                        }),
+                        _ => Err(FunctionError::BadType { mfa: this_mfa() }),
+                    }
+                }
+                0 => Ok(Value::F64(
+                    rng.gen(), // random float (between 0.0 and 1.0, not including 1.0)
+                )),
+                _ => Err(FunctionError::BadArity {
+                    mfa: this_mfa(),
+                    calling_a: args.len(),
+                }),
             }
-            0 => Ok(Value::F64(
-                rng.gen(), // random float (between 0.0 and 1.0, not including 1.0)
-            )),
-            _ => Err(FunctionError::BadArity {
-                mfa: this_mfa(),
-                calling_a: args.len(),
-            }),
+        }
+
+        fn snot_clone(&self) -> Box<dyn TremorFn> {
+            Box::new(self.clone())
+        }
+        fn arity(&self) -> std::ops::RangeInclusive<usize> {
+            0..=2
+        }
+        fn is_const(&self) -> bool {
+            false
         }
     }
     registry
@@ -140,14 +175,12 @@ pub fn load(registry: &mut Registry) {
         .insert(TremorFnWrapper {
             module: "random".to_string(),
             name: "integer".to_string(),
-            fun: integer,
-            argc: 0,
+            fun: Box::new(RandomInteger::default()),
         })
         .insert(TremorFnWrapper {
             module: "random".to_string(),
             name: "float".to_string(),
-            fun: float,
-            argc: 0,
+            fun: Box::new(RandomFloat::default()),
         });
 }
 

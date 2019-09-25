@@ -34,7 +34,21 @@ pub trait TremorAggrFn: Sync + Send {
     }
 }
 
-pub type TremorFn = for<'event> fn(&EventContext, &[&Value<'event>]) -> FResult<Value<'event>>;
+pub trait TremorFn: Sync + Send {
+    fn invoke<'event, 'c>(
+        &self,
+        ctx: &EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>>;
+    fn snot_clone(&self) -> Box<dyn TremorFn>;
+    fn arity(&self) -> RangeInclusive<usize>;
+    fn valid_arity(&self, n: usize) -> bool {
+        self.arity().contains(&n)
+    }
+    fn is_const(&self) -> bool {
+        false
+    }
+}
 pub type FResult<T> = std::result::Result<T, FunctionError>;
 
 #[allow(unused_variables)]
@@ -93,7 +107,7 @@ pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError 
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum FunctionError {
     BadArity { mfa: MFA, calling_a: usize },
     RuntimeError { mfa: MFA, error: String },
@@ -148,12 +162,10 @@ impl FunctionError {
     }
 }
 
-#[derive(Clone)]
 pub struct TremorFnWrapper {
     pub module: String,
     pub name: String,
-    pub fun: TremorFn,
-    pub argc: usize,
+    pub fun: Box<dyn TremorFn>,
 }
 
 impl TremorFnWrapper {
@@ -162,10 +174,30 @@ impl TremorFnWrapper {
         context: &EventContext,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
-        (self.fun)(context, args)
+        self.fun.invoke(context, args)
+    }
+
+    pub fn valid_arity(&self, n: usize) -> bool {
+        self.fun.valid_arity(n)
+    }
+    pub fn arity(&self) -> RangeInclusive<usize> {
+        self.fun.arity()
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.fun.is_const()
     }
 }
 
+impl Clone for TremorFnWrapper {
+    fn clone(&self) -> Self {
+        TremorFnWrapper {
+            module: self.module.clone(),
+            name: self.name.clone(),
+            fun: self.fun.snot_clone(),
+        }
+    }
+}
 impl fmt::Debug for TremorFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}::{}", self.module, self.name)
@@ -184,125 +216,231 @@ pub struct Registry {
 
 #[macro_export]
 macro_rules! tremor_fn {
-
     ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
-            macro_rules! replace_expr {
-                ($_t:tt $sub:expr) => {
-                    $sub
-                };
-            }
-            use simd_json::BorrowedValue as Value;
-            use $crate::TremorFnWrapper;
-            #[allow(unused_imports)] // We might not use all of this imports
-            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
-            const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
-
-                fn this_mfa() -> MFA {
-                    mfa(stringify!($module), stringify!($name), ARGC)
-                }
-                #[allow(dead_code)] // We want to expose this
-                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
-                    to_runtime_error_ext(this_mfa(), error)
-                }
-                // rust claims that the pattern is unreachable even
-                // though it isn't, so linting it
-                match args {
-                    [$(
-                        $arg,
-                    )*] => {$code}
-                    _ => Err(FunctionError::BadArity{
-                        mfa: this_mfa(),
-                        calling_a:args.len()
-                    })
-                }
-            }
-            TremorFnWrapper {
-                module: stringify!($module).to_string(),
-                name: stringify!($name).to_string(),
-                argc: ARGC,
-                fun: $name
-            }
+            use $crate::tremor_fn_;
+            tremor_fn_!($module :: $name(false, $context, $($arg),*) $code)
         }
     };
-
     ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
+            use $crate::tremor_fn_;
+            tremor_fn_!($module :: $name(false, $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:ident :: $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!($module::$name(false, $context) $code)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! tremor_const_fn {
+    ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!($module :: $name(true, $context, $($arg),*) $code)
+        }
+    };
+    ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!($module :: $name(true, $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:ident :: $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!($module::$name(true, $context) $code)
+        }
+    };
+}
+#[macro_export]
+macro_rules! tremor_fn_ {
+    ($module:ident :: $name:ident($const:expr, $context:ident, $($arg:ident),*) $code:block) => {
+        {
             macro_rules! replace_expr {
                 ($_t:tt $sub:expr) => {
                     $sub
                 };
             }
             use simd_json::BorrowedValue as Value;
-            use $crate::TremorFnWrapper;
+            use $crate::EventContext;
+            use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
-            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
-                fn this_mfa() -> MFA {
-                    mfa(stringify!($module), stringify!($name), ARGC)
+            mod $name {
+                #[derive(Clone, Debug, Default)]
+                pub(crate) struct Func {}
+            };
+            impl TremorFn for $name::Func {
+                #[allow(unused_variables)]
+                fn invoke<'event, 'c>(
+                    & self,
+                    $context: &'c EventContext,
+                    args: &[&Value<'event>],
+                ) -> FResult<Value<'event>> {
+                    fn this_mfa() -> MFA {
+                        mfa(stringify!($module), stringify!($name), ARGC)
+                    }
+                    #[allow(dead_code)] // We want to expose this
+                    fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                        to_runtime_error_ext(this_mfa(), error)
+                    }
+                    // rust claims that the pattern is unreachable even
+                    // though it isn't, so linting it
+                    match args {
+                        [$(
+                            $arg,
+                        )*] => {$code}
+                        _ => Err(FunctionError::BadArity{
+                            mfa: this_mfa(),
+                            calling_a:args.len()
+                        })
+                    }
                 }
-                #[allow(dead_code)] // We want to expose this
-                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
-                    to_runtime_error_ext(this_mfa(), error)
+
+                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                    Box::new(self.clone())
                 }
-                // rust claims that the pattern is unreachable even
-                // though it isn't, so linting it
-                match args {
-                    [$(
-                        Value::$type($arg),
-                    )*] => {$code}
-                    [$(
-                        $arg,
-                    )*] => Err(FunctionError::BadType{
-                        mfa: this_mfa(),
-                    }),
-                    _ => Err(FunctionError::BadArity{
-                        mfa: this_mfa(),
-                        calling_a: args.len()
-                    })
+                fn arity(&self) -> std::ops::RangeInclusive<usize> {
+                    ARGC..=ARGC
+                }
+                fn is_const(&self) -> bool {
+                    $const
                 }
             }
+
             TremorFnWrapper {
                 module: stringify!($module).to_string(),
                 name: stringify!($name).to_string(),
-                fun: $name,
-                argc: ARGC
+                fun: Box::new($name::Func{})
             }
         }
     };
 
-    ($module:ident :: $name:ident($context:ident) $code:block) => {
+    ($module:ident :: $name:ident($const:expr, $context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+        {
+            macro_rules! replace_expr {
+                ($_t:tt $sub:expr) => {
+                    $sub
+                };
+            }
+            use simd_json::BorrowedValue as Value;
+            use $crate::EventContext;
+            use $crate::registry::{TremorFnWrapper, TremorFn};
+            #[allow(unused_imports)] // We might not use all of this imports
+            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
+            mod $name {
+                #[derive(Clone, Debug, Default)]
+                pub(crate) struct Func {}
+            };
+            impl TremorFn for $name::Func {
+                #[allow(unused_variables)]
+                fn invoke<'event, 'c>(
+                    & self,
+                    $context: &'c EventContext,
+                    args: &[&Value<'event>],
+                ) -> FResult<Value<'event>> {
+                    fn this_mfa() -> MFA {
+                        mfa(stringify!($module), stringify!($name), ARGC)
+                    }
+                    #[allow(dead_code)] // We want to expose this
+                    fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                        to_runtime_error_ext(this_mfa(), error)
+                    }
+                    // rust claims that the pattern is unreachable even
+                    // though it isn't, so linting it
+                    match args {
+                        [$(
+                            Value::$type($arg),
+                        )*] => {$code}
+                        [$(
+                            $arg,
+                        )*] => Err(FunctionError::BadType{
+                            mfa: this_mfa(),
+                        }),
+                        _ => Err(FunctionError::BadArity{
+                            mfa: this_mfa(),
+                            calling_a: args.len()
+                        })
+                    }
+                }
+                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                    Box::new(self.clone())
+                }
+                fn arity(&self) -> std::ops::RangeInclusive<usize> {
+                    ARGC..=ARGC
+                }
+                fn is_const(&self) -> bool {
+                    $const
+                }
+            }
+
+            TremorFnWrapper {
+                module: stringify!($module).to_string(),
+                name: stringify!($name).to_string(),
+                fun: Box::new($name::Func{})
+            }
+        }
+    };
+
+    ($module:ident :: $name:ident($const:expr, $context:ident) $code:block) => {
         {
             use simd_json::BorrowedValue as Value;
-            use $crate::TremorFnWrapper;
+            use $crate::EventContext;
+            use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
-            fn $name<'event, 'c>($context: &'c $crate::EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>>{
-                fn this_mfa() -> MFA {
-                    mfa(stringify!($module), stringify!($name), ARGC)
+            mod $name {
+                #[derive(Clone, Debug, Default)]
+                pub(crate) struct Func {}
+            };
+            impl TremorFn for $name::Func {
+                #[allow(unused_variables)]
+                fn invoke<'event, 'c>(
+                    &self,
+                    $context: &'c EventContext,
+                    args: &[&Value<'event>],
+                ) -> FResult<Value<'event>> {
+
+                    fn this_mfa() -> MFA {
+                        mfa(stringify!($module), stringify!($name), ARGC)
+                    }
+                    #[allow(dead_code)] // We want to expose this
+                    fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
+                        to_runtime_error_ext(this_mfa(), error)
+                    }
+                    // rust claims that the pattern is unreachable even
+                    // though it isn't, so linting it
+                    match args {
+                        [] => {$code}
+                        _ => Err(FunctionError::BadArity{
+                            mfa: this_mfa(),
+                            calling_a: args.len()
+                        })
+                    }
                 }
-                #[allow(dead_code)] // We want to expose this
-                fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
-                    to_runtime_error_ext(this_mfa(), error)
+                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                    Box::new(self.clone())
                 }
-                // rust claims that the pattern is unreachable even
-                // though it isn't, so linting it
-                match args {
-                    [] => {$code}
-                    _ => Err(FunctionError::BadArity{
-                        mfa: this_mfa(),
-                        calling_a: args.len()
-                    })
+                fn arity(&self) -> std::ops::RangeInclusive<usize> {
+                    ARGC..=ARGC
+                }
+                fn is_const(&self) -> bool {
+                    $const
                 }
             }
+
             TremorFnWrapper {
                 module: stringify!($module).to_string(),
                 name: stringify!($name).to_string(),
-                fun: $name,
-                argc: 0
+                fun: Box::new($name::Func{})
             }
         }
     };
@@ -317,13 +455,13 @@ impl Default for Registry {
 }
 
 impl Registry {
-    pub fn find(&self, module: &str, function: &str) -> FResult<TremorFn> {
+    pub fn find(&self, module: &str, function: &str) -> FResult<&TremorFnWrapper> {
         if let Some(functions) = self.functions.get(module) {
             if let Some(rf) = functions.get(function) {
                 // TODO: We couldn't return the function wrapper but we can return
                 // the function It's not a big issue but it would have been nice to
                 // know why.
-                Ok(rf.fun)
+                Ok(rf)
             } else {
                 Err(FunctionError::MissingFunction {
                     m: module.to_string(),
@@ -456,8 +594,11 @@ impl AggrRegistry {
 // Test utility to grab a function from the registry
 #[cfg(test)]
 pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
-    let f = registry().find(m, f).expect("could not find function");
-    move |args: &[&Value]| -> FResult<Value> { f(&EventContext { at: 0 }, &args) }
+    let f = registry()
+        .find(m, f)
+        .expect("could not find function")
+        .clone();
+    move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext { at: 0 }, &args) }
 }
 
 #[cfg(test)]

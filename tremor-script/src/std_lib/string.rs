@@ -12,28 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFnWrapper};
-use crate::tremor_fn;
+use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
+use crate::tremor_const_fn;
 use crate::EventContext;
 use simd_json::BorrowedValue as Value;
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
-        tremor_fn! (string::$name(_context, _input: String) {
+        tremor_const_fn! (string::$name(_context, _input: String) {
             Ok(Value::from(_input.$fun()))
         })
     };
     ($fun:ident) => {
-        tremor_fn! (string::$fun(_context, _input: String) {
+        tremor_const_fn! (string::$fun(_context, _input: String) {
             Ok(Value::from(_input.$fun()))
         })
     }
 }
 pub fn load(registry: &mut Registry) {
-    fn format<'event>(_context: &EventContext, args: &[&Value<'event>]) -> FResult<Value<'event>> {
-        let this_mfa = || mfa("string", "format", args.len());
+    #[derive(Clone, Debug, Default)]
+    struct StringFormat {}
+    impl TremorFn for StringFormat {
+        fn invoke<'event, 'c>(
+            &self,
+            _ctx: &'c EventContext,
+            args: &[&Value<'event>],
+        ) -> FResult<Value<'event>> {
+            let this_mfa = || mfa("string", "format", args.len());
 
-        match args.len() {
+            match args.len() {
             0 => Err(FunctionError::BadArity {
                 mfa: this_mfa(), calling_a: args.len()
             }),
@@ -94,34 +101,45 @@ pub fn load(registry: &mut Registry) {
                 }
             }
         }
+        }
+
+        fn snot_clone(&self) -> Box<dyn TremorFn> {
+            Box::new(self.clone())
+        }
+        fn arity(&self) -> std::ops::RangeInclusive<usize> {
+            1usize..=std::usize::MAX
+        }
+        fn is_const(&self) -> bool {
+            true
+        }
     }
     registry
         .insert(
-            tremor_fn! (string::replace(_context, _input: String, _from: String, _to: String) {
+            tremor_const_fn! (string::replace(_context, _input: String, _from: String, _to: String) {
                 let from: &str = _from;
                 let to: &str = _to;
                 Ok(Value::from(_input.replace(from, to)))
             }),
         )
         .insert(map_function!(is_empty))
-        .insert(tremor_fn! (string::len(_context, _input: String) {
+        .insert(tremor_const_fn! (string::len(_context, _input: String) {
             Ok(Value::from(_input.chars().count() as i64))
         }))
-        .insert(tremor_fn! (string::bytes(_context, _input: String) {
+        .insert(tremor_const_fn! (string::bytes(_context, _input: String) {
             Ok(Value::from(_input.len() as i64))
         }))
-        .insert(tremor_fn! (string::trim(_context, _input: String) {
+        .insert(tremor_const_fn! (string::trim(_context, _input: String) {
             Ok(Value::from(_input.trim().to_string()))
         }))
-        .insert(tremor_fn! (string::trim_start(_context, _input: String) {
+        .insert(tremor_const_fn! (string::trim_start(_context, _input: String) {
             Ok(Value::from(_input.trim_start().to_string()))
         }))
-        .insert(tremor_fn! (string::trim_end(_context, _input: String) {
+        .insert(tremor_const_fn! (string::trim_end(_context, _input: String) {
             Ok(Value::from(_input.trim_end().to_string()))
         }))
         .insert(map_function!(lowercase, to_lowercase))
         .insert(map_function!(uppercase, to_uppercase))
-        .insert(tremor_fn!(string::capitalize(_context, _input: String) {
+        .insert(tremor_const_fn!(string::capitalize(_context, _input: String) {
             let mut c = _input.chars();
             Ok(match c.next() {
                 None => Value::from(""),
@@ -129,7 +147,7 @@ pub fn load(registry: &mut Registry) {
             })
         }))
         .insert(
-            tremor_fn!(string::substr(_context, _input: String, _start: I64, _end: I64) {
+            tremor_const_fn!(string::substr(_context, _input: String, _start: I64, _end: I64) {
                 // Since rust doens't handle UTF8 indexes we have to translate this
                 // _input.char_indices() - get an iterator over codepoint indexes
                 //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple 
@@ -142,7 +160,7 @@ pub fn load(registry: &mut Registry) {
             }),
         )
         .insert(
-            tremor_fn! (string::split(_context, _input: String, _sep: String) {
+            tremor_const_fn! (string::split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
                 Ok(Value::Array(_input.split(sep).map(|v| Value::from(v.to_string())).collect()))
             }),
@@ -150,8 +168,7 @@ pub fn load(registry: &mut Registry) {
         .insert(TremorFnWrapper {
             module: "string".to_string(),
             name: "format".to_string(),
-            fun: format,
-            argc: 2,
+            fun: Box::new(StringFormat::default()),
         });
 }
 

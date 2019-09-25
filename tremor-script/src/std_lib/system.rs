@@ -13,29 +13,11 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_const_fn;
+use crate::tremor_fn;
+use simd_json::BorrowedValue;
 
 pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_const_fn! (float::parse(_context, _input: String) {
-        _input.parse::<f64>().map_err(to_runtime_error).map(Value::from)
+    registry.insert(tremor_fn! (system::ingest_ns(ctx) {
+        Ok(BorrowedValue::I64(ctx.at as i64))
     }));
-}
-
-#[cfg(test)]
-mod test {
-    use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
-
-    macro_rules! assert_val {
-        ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(Value::from($r)))
-        };
-    }
-
-    #[test]
-    fn parse() {
-        let f = fun("float", "parse");
-        let v = Value::from("42.314");
-        assert_val!(f(&[&v]), 42.314);
-    }
 }
