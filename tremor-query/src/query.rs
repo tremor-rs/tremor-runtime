@@ -114,26 +114,6 @@ pub struct Query {
 
 fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     use tremor_pipeline::op::trickle::select::*;
-    /*
-    let opts = ExecOpts {
-        result_needed: true,
-        aggr: AggrType::Emit,
-    };
-    let mut local = LocalStack::with_size(0);
-    let context: EventContext::from_ingest_ns(0);
-
-    let params = d.params.expect("grrr").expr.run(
-        opts.with_result(),
-        context,
-        &vec![],
-        &Value::Null,
-        &Value::Null,
-        &mut local,
-        &vec![],
-    )?;
-    paramsp["inteval"]
-     */
-
     match &d.kind {
         WindowKind::Sliding => unreachable!(),
         WindowKind::Tumbling => {
@@ -315,6 +295,36 @@ where
                         outputs.push(id);
                     };
                 }
+                Stmt::WindowDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    let src = resolve_output_port(name.clone())?;
+                    if !nodes.contains_key(&src.id) {
+                        let id = graph.add_node(NodeConfig {
+                            id: src.id.to_string(),
+                            kind: NodeKind::Operator,
+                            _type: "fake.window".to_string(),
+                            config: None,
+                            stmt: None, // FIXME
+                        });
+                        nodes.insert(name.clone().into(), id);
+                        outputs.push(id);
+                    };
+                }
+                Stmt::OperatorDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    let src = resolve_output_port(name.clone())?;
+                    if !nodes.contains_key(&src.id) {
+                        let id = graph.add_node(NodeConfig {
+                            id: src.id.to_string(),
+                            kind: NodeKind::Operator,
+                            _type: "fake.operator".to_string(),
+                            config: None,
+                            stmt: None, // FIXME
+                        });
+                        nodes.insert(name.clone().into(), id);
+                        outputs.push(id);
+                    };
+                }
                 not_yet_implemented => {
                     dbg!(("not yet implemented", &not_yet_implemented));
                 }
@@ -486,7 +496,7 @@ where
                             kind: NodeKind::Operator,
                             _type: "passthrough".to_string(),
                             config: None,
-                            stmt: None, // FIXME
+                            stmt: None,
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone().into(), id);
@@ -499,8 +509,46 @@ where
                     let name = w.id.clone().to_string();
                     windows.insert(name, window_decl_to_impl(w)?);
                 }
-                not_yet_implemented => {
-                    dbg!(("not yet implemented", &not_yet_implemented));
+                Stmt::OperatorDecl(o) => {
+                    let name = o.id.clone().to_string();
+                    dbg!((&name, &o));
+                    let _op_in = resolve_input_port(name.clone())?;
+                    let _op_out = resolve_output_port(name.clone())?;
+
+                    let node = NodeConfig {
+                        id: name.to_string(),
+                        kind: NodeKind::Operator,
+                        _type: "trickle::operator".to_string(),
+                        config: None,
+                        stmt: None, // FIXME
+                    };
+                    let id = pipe_graph.add_node(node.clone());
+                    let op = node.to_op(supported_operators, Some(that), None);
+                    pipe_ops.insert(id, op);
+                    nodes.insert(o.id.clone().into(), id);
+                    outputs.push(id);
+                }
+                Stmt::ScriptDecl(o) => {
+                    let name = o.id.clone().to_string();
+                    dbg!((&name, &o));
+                    let _op_in = resolve_input_port(name.clone())?;
+                    let _op_out = resolve_output_port(name.clone())?;
+
+                    let node = NodeConfig {
+                        id: name.to_string(),
+                        kind: NodeKind::Operator,
+                        _type: "trickle::script".to_string(),
+                        config: None,
+                        stmt: None, // FIXME
+                    };
+                    let id = pipe_graph.add_node(node.clone());
+                    let op = node.to_op(supported_operators, Some(that), None);
+                    pipe_ops.insert(id, op);
+                    nodes.insert(o.id.clone().into(), id);
+                    outputs.push(id);
+                }
+                NotYetImplemented => {
+                    dbg!(("not yet implemented", &NotYetImplemented));
                 }
             };
         }
@@ -623,11 +671,15 @@ pub fn supported_operators(
     stmt: Option<tremor_script::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> std::result::Result<OperatorNode, tremor_pipeline::errors::Error> {
+    //    use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
+    //    use op::runtime::TremorFactory;
+    use op::trickle::operator::TrickleOperator;
+    use op::trickle::script::TrickleScript;
     use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
-    let op = match name_parts.as_slice() {
+    let op: Box<dyn tremor_pipeline::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
             let stmt = stmt.expect("no surprises here unless there is");
             let groups = SelectDims::from_query(stmt.stmt.clone());
@@ -645,11 +697,15 @@ pub fn supported_operators(
                 groups,
                 window,
             })
-            // FIXME only needed during initial dev - then die die die i fire
-            //            let op = PassthroughFactory::new_boxed();
-            //            op.from_node(node)?
-            //                TrickleSelectFactory::new_boxed_w_stmt(node, stmt.expect("snot"))
         }
+        ["trickle", "operator"] => Box::new(TrickleOperator::with_stmt(
+            node.id.clone(),
+            stmt.expect("shoudl have had a stmt"),
+        )),
+        ["trickle", "script"] => Box::new(TrickleScript::with_stmt(
+            node.id.clone(),
+            stmt.expect("shoudl have had a stmt"),
+        )),
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();
             op.from_node(node)?

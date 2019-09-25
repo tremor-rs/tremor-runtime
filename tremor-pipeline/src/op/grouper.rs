@@ -12,5 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod bucket;
+pub mod bucket;
 pub use bucket::BucketGrouperFactory;

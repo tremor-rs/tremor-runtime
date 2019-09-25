@@ -37,9 +37,9 @@ op!(EventHistoryFactory(node) {
     }});
 
 #[derive(Debug, Clone)]
-struct EventHistory {
+pub struct EventHistory {
     pub config: Config,
-    id: String,
+    pub id: String,
 }
 
 impl Operator for EventHistory {

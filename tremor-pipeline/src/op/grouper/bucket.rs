@@ -110,7 +110,7 @@ impl Rate {
     }
 }
 
-struct Bucket {
+pub struct Bucket {
     cache: LruCache<String, TimeWindow>,
     pass: u64,
     overflow: u64,
@@ -126,8 +126,8 @@ impl Bucket {
 }
 
 pub struct BucketGrouper {
-    _id: String,
-    buckets: HashMap<String, Bucket>,
+    pub _id: String,
+    pub buckets: HashMap<String, Bucket>,
 }
 
 impl std::fmt::Debug for BucketGrouper {

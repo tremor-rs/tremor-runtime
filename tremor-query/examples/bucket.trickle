@@ -3,10 +3,16 @@ create grouper::bucket operator kfc;
 create script categorize
 script
   let $rate = 1;
-  let $category = "test";
-  event
+  let $class = event.`group`;
+  { "event": event, "rate": $rate, "class": $class };
 end;
 
+
+# Stream ingested data into categorize script
 select event from in into categorize;
+
+# Stream scripted events into kfc bucket operator
 select event from categorize into kfc;
+
+# Stream bucketed events into out stream
 select event from kfc into out;

@@ -44,9 +44,9 @@ pub struct Config {
 
 #[derive(Debug, Clone)]
 pub struct Backpressure {
-    config: Config,
-    backoff: u64,
-    last_pass: u64,
+    pub config: Config,
+    pub backoff: u64,
+    pub last_pass: u64,
 }
 
 fn d_steps() -> Vec<u64> {

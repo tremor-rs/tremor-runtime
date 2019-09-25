@@ -297,6 +297,79 @@ pub struct Script<'script> {
     pub aggregates: Vec<InvokeAggrFn<'script>>,
 }
 
+use crate::interpreter::*;
+use crate::script::Return;
+use crate::stry;
+
+impl<'run, 'script, 'event> Script<'script>
+where
+    'script: 'event,
+    'event: 'run,
+{
+    pub fn run(
+        &'script self,
+        context: &'run crate::EventContext,
+        aggr: AggrType,
+        event: &'run mut Value<'event>,
+        meta: &'run mut Value<'event>,
+    ) -> Result<Return<'event>> {
+        // FIXME: find a way to pre-allocate this .unwrap()
+        let mut local = LocalStack::with_size(0);
+
+        let mut exprs = self.exprs.iter().peekable();
+        let opts = ExecOpts {
+            result_needed: true,
+            aggr,
+        };
+        while let Some(expr) = exprs.next() {
+            if exprs.peek().is_none() {
+                match stry!(expr.run(
+                    opts.with_result(),
+                    context,
+                    &self.aggregates,
+                    event,
+                    meta,
+                    &mut local,
+                    &self.consts,
+                )) {
+                    Cont::Drop => return Ok(Return::Drop),
+                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
+                    Cont::EmitEvent(port) => {
+                        return Ok(Return::EmitEvent { port });
+                    }
+                    Cont::Cont(v) => {
+                        return Ok(Return::Emit {
+                            value: v.into_owned(),
+                            port: None,
+                        })
+                    }
+                }
+            } else {
+                match stry!(expr.run(
+                    opts.without_result(),
+                    context,
+                    &self.aggregates,
+                    event,
+                    meta,
+                    &mut local,
+                    &self.consts,
+                )) {
+                    Cont::Drop => return Ok(Return::Drop),
+                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
+                    Cont::EmitEvent(port) => {
+                        return Ok(Return::EmitEvent { port });
+                    }
+                    Cont::Cont(_v) => (),
+                }
+            }
+        }
+        Ok(Return::Emit {
+            value: Value::Null,
+            port: None,
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Ident<'script> {
     pub start: Location,

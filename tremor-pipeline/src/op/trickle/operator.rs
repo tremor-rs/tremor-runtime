@@ -14,17 +14,9 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-// use halfbrown::HashMap;
-// use serde::Serialize;
-// use std::borrow::Cow;
-// use std::sync::Arc;
 
 use tremor_script::{
     self,
-//    ast::InvokeAggrFn,
-//    interpreter::{AggrType, ExecOpts},
-//    script::rentals::Stmt,
-//    Context, EventContext,
 };
 
 #[derive(Debug)]
@@ -41,7 +33,6 @@ impl TrickleOperator {
         let stmt = stmt_rentwrapped.stmt.suffix();
         let op: Box<dyn Operator> = match stmt {
             tremor_script::ast::Stmt::OperatorDecl(ref op) => {
-                // buildin_ops(node: &NodeConfig, stmt: Option<tremor_script::StmtRentalWrapper>)
                 match (op.kind.module.as_str(), op.kind.operation.as_str()) {
                     ("debug", "history") => { 
                         Box::new(op::debug::history::EventHistory {

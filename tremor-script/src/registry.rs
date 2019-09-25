@@ -25,7 +25,7 @@ use std::ops::RangeInclusive;
 pub trait TremorAggrFn: Sync + Send {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
-    fn emit<'event>(&self) -> FResult<Value<'event>>;
+    fn emit<'event>(&mut self) -> FResult<Value<'event>>;
     fn init(&mut self);
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
     fn arity(&self) -> RangeInclusive<usize>;
