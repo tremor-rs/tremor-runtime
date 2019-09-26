@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_fn;
+use crate::tremor_const_fn;
 
 pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_fn! (integer::parse(_context, _input: String) {
+    registry.insert(tremor_const_fn! (integer::parse(_context, _input: String) {
         _input.parse::<i64>().map_err(to_runtime_error).map(Value::from)
     }));
 }
