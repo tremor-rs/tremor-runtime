@@ -1118,17 +1118,19 @@ impl<'input> Lexer<'input> {
                     let mut s = start;
                     s.column.0 += 1;
                     s.absolute.0 += 1;
-                    let token = if has_escapes {
-                        // The string was modified so we can't use the slice
-                        Token::StringLiteral(string.into())
-                    } else if let Some(slice) = self.slice(s, e) {
-                        Token::StringLiteral(slice.into())
-                    } else {
-                        // Invalid start end case :(
-                        Token::StringLiteral(string.into())
-                    };
-                    res.push(spanned2(start, eend, token));
-                    string = String::new();
+                    if !string.is_empty() {
+                        let token = if has_escapes {
+                            // The string was modified so we can't use the slice
+                            Token::StringLiteral(string.into())
+                        } else if let Some(slice) = self.slice(s, e) {
+                            Token::StringLiteral(slice.into())
+                        } else {
+                            // Invalid start end case :(
+                            Token::StringLiteral(string.into())
+                        };
+                        res.push(spanned2(start, eend, token));
+                        string = String::new();
+                    }
                     start = eend;
                     end = eend;
                     end.column.0 += 1;
@@ -1659,18 +1661,60 @@ mod tests {
 
     #[test]
     fn string() {
-        lex_ok! { r#" "\n" "#, " ~~~~ " => Token::StringLiteral("\n".into()), }
-        lex_ok! { r#" "\r" "#, " ~~~~  " => Token::StringLiteral("\r".into()), }
-        lex_ok! { r#" "\t" "#, " ~~~  " => Token::StringLiteral("\t".into()), }
-        lex_ok! { r#" "\\" "#, " ~~~~  " => Token::StringLiteral("\\".into()), }
-        lex_ok! { r#" "\"" "#, " ~~~~ " => Token::StringLiteral("\"".into()), }
-        lex_ok! { r#" "\"\"" "#, " ~~~~~ " => Token::StringLiteral("\"\"".into()), }
+        lex_ok! {
+            r#" "\n" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\n".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\r" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\r".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\t" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\t".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+             r#" "\\" "#,
+             r#" ~    "# => Token::DQuote,
+             r#"  ~~  "# => Token::StringLiteral("\\".into()),
+             r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
+        lex_ok! {
+            r#" "\"\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\"\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
+        lex_ok! {
+            r#" "\\\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\\\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
         lex_ok! {
             r#" "\"\"""\"\"" "#,
-            " ~~~~~ " => Token::StringLiteral("\"\"".into()),
-            "       ~~~~~ " => Token::StringLiteral("\"\"".into()),
+            r#" ~            "# => Token::DQuote,
+            r#"  ~~~~        "# => Token::StringLiteral("\"\"".into()),
+            r#"      ~       "# => Token::DQuote,
+            r#"       ~      "# => Token::DQuote,
+            r#"        ~~~~  "# => Token::StringLiteral("\"\"".into()),
+            r#"            ~ "# => Token::DQuote,
         }
-        lex_ok! { r#" "\\\"" "#, " ~~~~ " => Token::StringLiteral("\\\"".into()), }
         //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
     }
 }
