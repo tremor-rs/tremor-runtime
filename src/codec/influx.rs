@@ -204,8 +204,14 @@ mod tests {
 
         let encoded = codec.encode(s.into()).expect("failed to encode");
 
-        let raw = r#"wea\,\\\ ther temp\=erature=82,too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
+        let raw =
+            r#"wea\,\\\ ther temp\=erature=82.0,too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
 
+        println!(
+            "got: {}",
+            str::from_utf8(&encoded).expect("failed to convert utf8")
+        );
+        println!("exp: {}", raw);
         assert_eq!(
             str::from_utf8(&encoded).expect("failed to convert utf8"),
             raw
@@ -390,10 +396,9 @@ json!({
                 .decode(encoded.clone(), 0)
                 .expect("failed to dencode")
                 .expect("failed to decode");
-
             if decoded != case.1 {
                 println!("{} fails while decoding", &case.2);
-                assert_eq!(decoded, case.1);
+                assert_eq!(decoded.suffix().to_string(), case.1.to_string());
             }
         })
     }

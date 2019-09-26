@@ -49,3 +49,4 @@ matches = "0.1.8"
 [dev-dependencies]
 criterion = "0.3.0"
 matches = "0.1"
+pretty_assertions = "0.6.1"
