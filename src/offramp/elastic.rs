@@ -135,28 +135,27 @@ impl Elastic {
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: String) -> Result<()> {
+    fn enqueue_send_future(
+        &mut self,
+        pipelines: Vec<(TremorURL, PipelineAddr)>,
+        payload: String,
+        mut meta: MetaMap,
+    ) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = channel();
-        let pipelines: Vec<(TremorURL, PipelineAddr)> = self
-            .pipelines
-            .iter()
-            .map(|(i, p)| (i.clone(), p.clone()))
-            .collect();
         self.pool.execute(move || {
             let r = Self::flush(&destination.client, payload.as_str());
-            let mut m = MetaMap::new();
             if let Ok(t) = r {
-                m.insert("time".into(), json!(t));
+                meta.insert("time".into(), json!(t));
             } else {
                 error!("Elastic search error: {:?}", r);
-                m.insert("error".into(), json!("Failed to send to ES"));
+                meta.insert("error".into(), json!("Failed to send to ES"));
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
-                meta: m,
+                meta,
                 value: LineValue::new(Box::new(vec![]), |_| Value::Null),
                 ingest_ns: nanotime(),
                 kind: None,
@@ -167,22 +166,40 @@ impl Elastic {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
-
             // TODO: Handle contraflow for notification
             let _ = tx.send(r);
         });
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: String) -> Result<()> {
+    fn maybe_enque(&mut self, payload: String, mut meta: MetaMap) -> Result<()> {
+        let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+            .pipelines
+            .iter()
+            .map(|(i, p)| (i.clone(), p.clone()))
+            .collect();
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                //TODO: how do we handle this?
+                meta.insert("error".into(), json!("Offramp overloaded"));
+                let insight = Event {
+                    is_batch: false,
+                    id: 0,
+                    meta,
+                    value: LineValue::new(Box::new(vec![]), |_| Value::Null),
+                    ingest_ns: nanotime(),
+                    kind: None,
+                };
+
+                for (pid, p) in pipelines {
+                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
             }
             _ => {
-                if self.enqueue_send_future(payload).is_err() {
+                if self.enqueue_send_future(pipelines, payload, meta).is_err() {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request to elastic");
                     Err("Failed to enqueue send request to elastic".into())
@@ -198,7 +215,7 @@ impl Offramp for Elastic {
     // We enforce json here!
     fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
         let mut payload = String::from("");
-
+        let mut meta = MetaMap::new();
         for event in event.into_iter() {
             let index = if let Some(OwnedValue::String(index)) = event.meta.get("index") {
                 index
@@ -240,6 +257,7 @@ impl Offramp for Elastic {
                     .as_str(),
                 ),
             };
+            meta = event.meta;
             payload.push('\n');
             match serde_json::to_string(&event.value) {
                 Ok(s) => {
@@ -249,7 +267,7 @@ impl Offramp for Elastic {
                 Err(e) => error!("Failed to encode json {}", e),
             }
         }
-        let _ = self.maybe_enque(payload);
+        let _ = self.maybe_enque(payload, meta);
     }
     fn default_codec(&self) -> &str {
         "json"

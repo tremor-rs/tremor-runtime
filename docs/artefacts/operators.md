@@ -123,6 +123,7 @@ The backpressure operator is used to introduce delays based on downstream system
 
 * `timeout` - Maximum allowed 'write' time in milliseconds.
 * `steps` - Array of values to delay when a we detect backpressure. (default: `[50, 100, 250, 500, 1000, 5000, 10000]`)
+* `outputs` - Array of outputs, data will be round robined between outputs and backpressure kept track of on a per output basis. (Default: `["out"]`)
 
 **Outputs**:
 
