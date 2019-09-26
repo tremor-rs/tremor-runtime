@@ -25,6 +25,7 @@ struct State {
     counter: AtomicUsize,
     size: AtomicUsize,
     _work_delay: u64,
+    last_print: AtomicUsize,
 }
 
 fn index(
@@ -56,8 +57,11 @@ fn index(
             let size = body.len();
             let c = data.counter.fetch_add(items, Ordering::Relaxed) + items;
             let s = data.size.fetch_add(size, Ordering::Relaxed) + size;
-            let d = format!("{} / {} MB", c, s / 1024 / 1024);
-            println!("{}", d);
+            let d = if c - data.last_print.load(Ordering::Relaxed) > 1000 {
+                format!("{} / {} MB", c, s / 1024 / 1024)
+            } else {
+                String::new()
+            };
             Ok(HttpResponse::Ok().body(d)) // <- send response
         })
 }
@@ -67,6 +71,7 @@ fn main() -> std::io::Result<()> {
         counter: AtomicUsize::new(0),
         size: AtomicUsize::new(0),
         _work_delay: 0,
+        last_print: AtomicUsize::new(0),
     });
     HttpServer::new(move || {
         App::new()
