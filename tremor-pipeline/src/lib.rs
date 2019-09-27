@@ -37,7 +37,8 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde::Serialize;
 use simd_json::json;
-use simd_json::OwnedValue;
+use simd_json::value::ValueTrait;
+use simd_json::{BorrowedValue, OwnedValue};
 use std::iter;
 use std::iter::Iterator;
 use std::sync::Arc;
@@ -121,6 +122,86 @@ impl Iterator for EventIter {
             return self.next();
         }
         Some(s)
+    }
+}
+
+impl Event {
+    pub fn value_meta_iter<'value>(&'value self) -> ValueMetaIter<'value> {
+        ValueMetaIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
+
+pub struct ValueMetaIter<'value> {
+    event: &'value Event,
+    idx: usize,
+}
+
+impl<'value> Iterator for ValueMetaIter<'value> {
+    type Item = (&'value BorrowedValue<'value>, MetaMap);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.event.is_batch {
+            self.idx += 1;
+            self.event
+                .value
+                .suffix()
+                .as_array()
+                .and_then(|arr| arr.get(self.idx - 1))
+                .and_then(|e| {
+                    Some((
+                        e.get("value")?,
+                        match OwnedValue::from(e.get("meta")?.clone()) {
+                            OwnedValue::Object(o) => o,
+                            _ => return None,
+                        },
+                    ))
+                })
+        } else if self.idx == 0 {
+            let v = self.event.value.suffix();
+            self.idx += 1;
+            Some((v, self.event.meta.clone()))
+        } else {
+            None
+        }
+    }
+}
+
+impl Event {
+    pub fn value_iter<'value>(&'value self) -> ValueIter<'value> {
+        ValueIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
+
+pub struct ValueIter<'value> {
+    event: &'value Event,
+    idx: usize,
+}
+
+impl<'value> Iterator for ValueIter<'value> {
+    type Item = &'value BorrowedValue<'value>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.event.is_batch {
+            self.idx += 1;
+            self.event
+                .value
+                .suffix()
+                .as_array()
+                .and_then(|arr| arr.get(self.idx - 1))
+                .and_then(|e| e.get("value"))
+        } else if self.idx == 0 {
+            dbg!();
+            let v = self.event.value.suffix();
+            self.idx += 1;
+            Some(v)
+        } else {
+            dbg!();
+            None
+        }
     }
 }
 
@@ -867,5 +948,4 @@ mod test {
             (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())
         );
     }
-
 }

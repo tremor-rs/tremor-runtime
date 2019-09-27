@@ -128,7 +128,7 @@ impl Offramp for Kafka {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            if let Ok(raw) = codec.encode(event.value) {
+            if let Ok(raw) = codec.encode_rental(event.value) {
                 let mut record = FutureRecord::to(&self.topic);
                 record = record.payload(&raw);
                 //TODO: Key
