@@ -71,7 +71,7 @@ where
     pub locals: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QueryRentalWrapper {
     pub query: Arc<rentals::Query>,
     pub source: String,

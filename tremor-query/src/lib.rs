@@ -11,5 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![forbid(warnings)]
+#![warn(unused_extern_crates)]
+#![recursion_limit = "128"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+)]
 
 pub mod query;
