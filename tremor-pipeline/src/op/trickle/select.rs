@@ -263,6 +263,9 @@ impl Operator for TrickleSelect {
                     group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
                 };
             }
+            if group_values.is_empty() {
+                group_values.push(vec![Value::Null])
+            };
             for group in group_values {
                 let group = Value::Array(group);
                 let event = event.clone();
@@ -486,7 +489,13 @@ mod test {
             id: "select".to_string(),
             stmt,
             groups,
-            window: Some(WindowImpl::default()),
+            window: Some(
+                TumblingWindowOnEventTime {
+                    size: 15_000_000_000,
+                    next_window: None,
+                }
+                .into(),
+            ),
         }
     }
 
@@ -517,7 +526,8 @@ mod test {
         let mut op = parse_query("select stats::sum(event.h2g2) from in into out;")?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
+        let (out, event) =
+            try_enqueue(&mut op, test_event(15))?.expect("no event emitted after aggregation");
         assert_eq!("out", out);
 
         let j: OwnedValue = event.value.rent(|j| j.clone().into());
