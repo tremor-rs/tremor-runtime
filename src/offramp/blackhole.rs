@@ -118,7 +118,7 @@ impl Offramp for Blackhole {
 
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(v) = codec.encode(event.value) {
+                if let Ok(v) = codec.encode_rental(event.value) {
                     self.bytes += v.len();
                 };
                 if let Err(e) = self.delivered.record(delta_ns) {

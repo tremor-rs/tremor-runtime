@@ -166,8 +166,8 @@ impl Rest {
 impl Offramp for Rest {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         let mut payload = String::from("");
-        for event in event.into_iter() {
-            match codec.encode(event.value) {
+        for value in event.value_iter() {
+            match codec.encode(value) {
                 Ok(raw) => {
                     if let Ok(s) = str::from_utf8(&raw) {
                         payload.push_str(s);

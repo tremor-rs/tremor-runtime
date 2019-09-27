@@ -62,8 +62,8 @@ impl From<std::str::Utf8Error> for RentalSnot {
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> =
-            LineValue::try_new(Box::new(data), |raw| {
-                match parse(str::from_utf8(raw)?, ingest_ns) {
+            LineValue::try_new(Box::new(vec![data]), |raw| {
+                match parse(str::from_utf8(&raw[0])?, ingest_ns) {
                     Ok(None) => Err(RentalSnot::Skip),
                     Ok(Some(v)) => Ok(v),
                     Err(e) => Err(RentalSnot::Error(e.into())),
@@ -77,17 +77,15 @@ impl Codec for Influx {
         }
     }
 
-    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
-        data.rent(|json| {
-            if let Some(bytes) = try_to_bytes(json) {
-                Ok(bytes)
-            } else {
-                Err(ErrorKind::InvalidInfluxData(
-                    "This event does not conform with the influx schema ".into(),
-                )
-                .into())
-            }
-        })
+    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+        if let Some(bytes) = try_to_bytes(data) {
+            Ok(bytes)
+        } else {
+            Err(ErrorKind::InvalidInfluxData(
+                "This event does not conform with the influx schema ".into(),
+            )
+            .into())
+        }
     }
 }
 
@@ -168,16 +166,17 @@ mod tests {
 
     #[test]
     pub fn encode() {
-        let s = json!({
+        let s: Value = json!({
             "measurement": "weather",
            "tags": hashmap!{"location" => "us-midwest"},
             "fields": hashmap!{"temperature" => 82.0},
             "timestamp": 1_465_839_830_100_400_200i64
-        });
+        })
+        .into();
 
         let codec = Influx {};
 
-        let encoded = codec.encode(s.into()).expect("failed to encode");
+        let encoded = codec.encode(&s).expect("failed to encode");
 
         let influx: Value = json!({
             "measurement": "weather",
@@ -193,16 +192,16 @@ mod tests {
     #[test]
     pub fn encode_mixed_bag() {
         let tags: HashMap<String, String> = HashMap::new();
-        let s = json!({
+        let s:Value = json!({
             "measurement": r#"wea,\ ther"#,
             "tags": tags,
             "fields": hashmap!{"temp=erature" => OwnedValue::F64(82.0), r#"too\ \\\"hot""# => OwnedValue::Bool(true)},
             "timestamp": 1_465_839_830_100_400_200i64
-        });
+        }).into();
 
         let codec = Influx {};
 
-        let encoded = codec.encode(s.into()).expect("failed to encode");
+        let encoded = codec.encode(&s).expect("failed to encode");
 
         let raw =
             r#"wea\,\\\ ther temp\=erature=82.0,too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
@@ -387,10 +386,8 @@ json!({
 
         pairs.iter().for_each(|case| {
             let mut codec = Influx {};
-
-            let encoded = codec
-                .encode(case.1.clone().into())
-                .expect("failed to encode");
+            let v = case.1.clone().into();
+            let encoded = codec.encode(&v).expect("failed to encode");
 
             let decoded = codec
                 .decode(encoded.clone(), 0)
@@ -475,7 +472,7 @@ json!({
             .decode(s.clone(), 0)
             .expect("failed to decode")
             .expect("failed to decode");
-        let encoded = codec.encode(decoded.clone()).expect("failed to encode");
+        let encoded = codec.encode(decoded.suffix()).expect("failed to encode");
 
         assert_eq!(decoded, e);
         unsafe {

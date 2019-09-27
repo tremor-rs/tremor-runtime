@@ -68,23 +68,47 @@ rental! {
 
         #[rental_mut(covariant,debug)]
         pub struct Value {
-            raw: Box<Vec<u8>>,
-            parsed: borrowed::Value<'raw>
+            raw: Box<Vec<Vec<u8>>>,
+            parsed: borrowed::Value<'raw>,
         }
 
     }
 }
 
-impl PartialEq<simd_json::OwnedValue> for rentals::Value {
+impl rentals::Value {
+    pub fn consume<E, F>(&mut self, other: LineValue, join_f: F) -> Result<(), E>
+    where
+        E: std::error::Error,
+        F: Fn(&mut Value<'static>, Value<'static>) -> Result<(), E>,
+    {
+        // FIXME .unwrap() Heinz owes a long explenation on this
+        // it's terrible but Darach will love it and end up using it
+        // everywhere! :.(
+        pub struct ScrewRental {
+            pub parsed: simd_json::BorrowedValue<'static>,
+            pub raw: Box<Vec<Vec<u8>>>,
+        }
+        unsafe {
+            use std::mem::transmute;
+            let self_unrent: &mut ScrewRental = transmute(self);
+            let mut other_unrent: ScrewRental = transmute(other);
+            self_unrent.raw.append(&mut other_unrent.raw);
+            join_f(&mut self_unrent.parsed, other_unrent.parsed)?;
+        }
+        Ok(())
+    }
+}
+
+impl PartialEq<simd_json::OwnedValue> for LineValue {
     fn eq(&self, other: &simd_json::OwnedValue) -> bool {
         //TODO: This  is ugly but good enough for now as it's only used in tests
         self.rent(|this| &simd_json::OwnedValue::from(this.clone()) == other)
     }
 }
 
-impl From<simd_json::OwnedValue> for rentals::Value {
+impl From<simd_json::OwnedValue> for LineValue {
     fn from(v: simd_json::OwnedValue) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| v.into())
+        rentals::Value::new(Box::new(vec![vec![]]), |_| v.into())
     }
 }
 

@@ -57,7 +57,7 @@ fn onramp_loop(
                 OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
                 OnrampMsg::Disconnect { tx, .. } => {
                     let _ = tx.send(true);
-                    return Ok(());;
+                    return Ok(());
                 }
             };
             continue;
@@ -72,7 +72,7 @@ fn onramp_loop(
                     pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if pipelines.is_empty() {
                         let _ = tx.send(true);
-                        return Ok(());;
+                        return Ok(());
                     } else {
                         let _ = tx.send(false);
                     }

@@ -16,7 +16,9 @@ use crate::config::dflt;
 use crate::errors::*;
 use crate::{Event, MetaMap, Operator};
 use serde_yaml;
+use simd_json::value::borrowed::Map;
 use simd_json::OwnedValue;
+
 use tremor_script::{LineValue, Value};
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -30,11 +32,16 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct Batch {
     pub config: Config,
-    pub data: Vec<OwnedValue>,
+    pub data: LineValue,
+    pub len: usize,
     pub max_delay_ns: Option<u64>,
     pub first_ns: u64,
     pub id: String,
     pub event_id: u64,
+}
+
+pub fn empty() -> LineValue {
+    LineValue::new(Box::new(vec![vec![]]), |_| Value::Array(vec![]))
 }
 
 op!(BatchFactory(node) {
@@ -47,7 +54,8 @@ op!(BatchFactory(node) {
         };
         Ok(Box::new(Batch {
             event_id: 0,
-            data: Vec::with_capacity(config.count),
+            data: empty(),
+            len: 0,
             config,
             max_delay_ns,
             first_ns: 0,
@@ -60,21 +68,47 @@ op!(BatchFactory(node) {
 
 impl Operator for Batch {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        let ingest_ns = event.ingest_ns;
         // TODO: This is ugly
-        self.data.push(simd_json::serde::to_owned_value(event)?);
-        let l = self.data.len();
-        if l == 1 {
+        let Event {
+            id,
+            meta,
+            value,
+            ingest_ns,
+            kind: _,
+            is_batch,
+        } = event;
+        self.data.consume(
+            value,
+            move |data: &mut Value<'static>, value: Value<'static>| -> Result<()> {
+                let mut e = Map::with_capacity(7);
+                e.insert("id".into(), id.into());
+                // FIXME
+                e.insert("meta".into(), OwnedValue::Object(meta.clone()).into());
+                e.insert("value".into(), value);
+                e.insert("ingest_ns".into(), ingest_ns.into());
+                // FIXME ? Do we need this?
+                // e.insert("kind", Value::Null);
+                e.insert("is_batch".into(), is_batch.into());
+                match data {
+                    Value::Array(ref mut a) => a.push(Value::Object(e)),
+                    _ => (),
+                };
+                Ok(())
+            },
+        )?;
+        self.len += 1;
+        if self.len == 1 {
             self.first_ns = ingest_ns;
         };
         let flush = match self.max_delay_ns {
             Some(t) if ingest_ns - self.first_ns > t => true,
-            _ => l == self.config.count,
+            _ => self.len == self.config.count,
         };
         if flush {
             //TODO: This is ugly
-            let out: Vec<Value> = self.data.drain(0..).map(std::convert::Into::into).collect();
-            let value = LineValue::new(Box::new(vec![]), |_| Value::Array(out));
+            let mut value = empty();
+            std::mem::swap(&mut value, &mut self.data);
+            self.len = 0;
             let event = Event {
                 id: self.event_id,
                 meta: MetaMap::new(),
@@ -99,8 +133,10 @@ impl Operator for Batch {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
                 // create a new event.
-                let out: Vec<Value> = self.data.drain(0..).map(std::convert::Into::into).collect();
-                let value = LineValue::new(Box::new(vec![]), |_| Value::Array(out));
+
+                let mut value = empty();
+                std::mem::swap(&mut value, &mut self.data);
+                self.len = 0;
                 let event = Event {
                     id: self.event_id,
                     meta: MetaMap::new(),
@@ -136,7 +172,8 @@ mod test {
             event_id: 0,
             first_ns: 0,
             max_delay_ns: None,
-            data: Vec::with_capacity(2),
+            data: empty(),
+            len: 0,
             id: "badger".to_string(),
         };
         let event1 = Event {
@@ -167,6 +204,7 @@ mod test {
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
+        dbg!(&event);
         assert_eq!("out", out);
         let events: Vec<Event> = event.into_iter().collect();
         assert_eq!(events, vec![event1, event2]);
@@ -194,7 +232,8 @@ mod test {
             event_id: 0,
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
-            data: Vec::with_capacity(2),
+            data: empty(),
+            len: 0,
             id: "badger".to_string(),
         };
         let event1 = Event {
@@ -265,7 +304,8 @@ mod test {
             event_id: 0,
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
-            data: Vec::with_capacity(2),
+            data: empty(),
+            len: 0,
             id: "badger".to_string(),
         };
         let event1 = Event {
