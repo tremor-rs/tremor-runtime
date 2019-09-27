@@ -31,10 +31,16 @@ extern crate log;
 
 mod args;
 
+use crate::errors::*;
 use crate::system::World;
+use crate::url::TremorURL;
+use actix_cors::Cors;
+use actix_files as fs;
 use env_logger;
 use serde_yaml;
 use tremor_api;
+use tremor_pipeline::FN_REGISTRY;
+use tremor_query::query::Query;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -44,11 +50,6 @@ use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system;
 use tremor_runtime::url;
 use tremor_runtime::version;
-
-use crate::errors::*;
-use crate::url::TremorURL;
-use actix_cors::Cors;
-use actix_files as fs;
 
 use actix_web::{
     //error,
@@ -60,6 +61,7 @@ use actix_web::{
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
+use std::path::Path;
 
 fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
@@ -81,7 +83,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         info!("Loading {} from file.", id);
         world
             .repo
-            .publish_pipeline(id, false, PipelineArtefact { pipeline })?;
+            .publish_pipeline(id, false, PipelineArtefact::Pipeline(pipeline))?;
         count += 1;
     }
     for o in config.onramps {
@@ -109,6 +111,37 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     }
     Ok(count)
 }
+
+fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
+    use std::ffi::OsStr;
+    use std::io::Read;
+    info!("Loading configuration from {}", file_name);
+    let path = Path::new(file_name);
+    let id = path
+        .file_stem()
+        .unwrap_or_else(|| OsStr::new(file_name))
+        .to_string_lossy();
+    let mut file = File::open(path)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+    let mut raw = String::new();
+
+    file.read_to_string(&mut raw)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+
+    // FIXME: We should have them constanted
+    let aggr_reg = tremor_script::registry::aggr_registry();
+
+    let query = Query::parse(&raw, &*FN_REGISTRY.lock()?, &aggr_reg)?;
+
+    let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
+    info!("Loading {} from file.", id);
+    world
+        .repo
+        .publish_pipeline(id, false, PipelineArtefact::Query(query))?;
+
+    Ok(1)
+}
+
 fn run_dun() -> Result<()> {
     functions::load()?;
 
@@ -142,6 +175,13 @@ fn run_dun() -> Result<()> {
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
     let (world, handle) = World::start(50, storage_directory)?;
+
+    // We load queries first since those are only pipelines.
+    if let Some(query_files) = matches.values_of("query") {
+        for query_file in query_files {
+            load_query_file(&world, query_file)?;
+        }
+    }
 
     if let Some(config_files) = matches.values_of("config") {
         for config_file in config_files {

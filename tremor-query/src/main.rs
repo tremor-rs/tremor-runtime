@@ -11,12 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![forbid(warnings)]
+#![warn(unused_extern_crates)]
 #![recursion_limit = "128"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+)]
 
-#[macro_use]
-extern crate serde_derive;
-
-#[allow(unused, dead_code)]
 mod query;
 
 use crate::query::Query; // {Query, Return};
@@ -229,7 +231,7 @@ fn main() -> Result<()> {
         let mut last = 0;
         loop {
             for event in &events {
-                let value = LineValue::new(Box::new(vec![]), |data| unsafe {
+                let value = LineValue::new(Box::new(vec![]), |_| unsafe {
                     std::mem::transmute(event.clone())
                 });
                 continuation.clear();
@@ -279,7 +281,7 @@ fn main() -> Result<()> {
             }
             id += 1;
             if matches.value_of("replay-influx").is_none() {
-                std::thread::sleep_ms(1000);
+                std::thread::sleep(std::time::Duration::from_secs(1));
             } else {
                 break;
             }

@@ -21,7 +21,7 @@ use crate::system::{PipelineAddr, PipelineMsg, World};
 use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
-
+use tremor_query::query;
 pub type ArtefactId = TremorURL;
 pub use crate::OffRamp as OfframpArtefact;
 pub use crate::OnRamp as OnrampArtefact;
@@ -34,13 +34,32 @@ pub struct BindingArtefact {
 }
 
 #[derive(Clone)]
-pub struct PipelineArtefact {
-    pub pipeline: tremor_pipeline::Pipeline,
+pub enum PipelineArtefact {
+    Pipeline(tremor_pipeline::Pipeline),
+    Query(query::Query),
+}
+
+impl PipelineArtefact {
+    pub fn to_executable_graph(
+        &self,
+        resolver: tremor_pipeline::NodeLookupFn,
+    ) -> Result<tremor_pipeline::ExecutableGraph> {
+        match self {
+            PipelineArtefact::Pipeline(p) => Ok(p.to_executable_graph(resolver)?),
+            PipelineArtefact::Query(q) => Ok(q.to_pipe()?),
+        }
+    }
 }
 
 impl From<tremor_pipeline::Pipeline> for PipelineArtefact {
     fn from(pipeline: tremor_pipeline::Pipeline) -> PipelineArtefact {
-        PipelineArtefact { pipeline }
+        PipelineArtefact::Pipeline(pipeline)
+    }
+}
+
+impl From<query::Query> for PipelineArtefact {
+    fn from(query: query::Query) -> PipelineArtefact {
+        PipelineArtefact::Query(query)
     }
 }
 

@@ -107,7 +107,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Query {
     pub query: tremor_script::QueryRentalWrapper,
 }
@@ -546,9 +546,6 @@ where
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone().into(), id);
                     outputs.push(id);
-                }
-                NotYetImplemented => {
-                    dbg!(("not yet implemented", &NotYetImplemented));
                 }
             };
         }

@@ -44,8 +44,12 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     let res = data
         .world
         .repo
-        .publish_pipeline(url, false, PipelineArtefact { pipeline })
-        .map(|res| res.pipeline.config);
+        .publish_pipeline(url, false, PipelineArtefact::Pipeline(pipeline))
+        .map(|res| match res {
+            PipelineArtefact::Pipeline(p) => p.config,
+            //NOTE:  We publish a pipeline we can't ever get anything else back
+            _ => unreachable!(),
+        });
     reply(req, data, res, true, 201)
 }
 
@@ -57,7 +61,10 @@ pub fn unpublish_artefact(
         .world
         .repo
         .unpublish_pipeline(url)
-        .map(|res| res.pipeline.config);
+        .and_then(|res| match res {
+            PipelineArtefact::Pipeline(p) => Ok(p.config),
+            _ => Err("This is a query".into()), // FIXME
+        });
     reply(req, data, res, true, 200)
 }
 
@@ -69,17 +76,25 @@ pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -
         .find_pipeline(url)
         .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
     match res {
-        Some(res) => {
-            let res: Result<PipelineWrap> = Ok(PipelineWrap {
-                artefact: res.artefact.pipeline.config,
-                instances: res
-                    .instances
-                    .iter()
-                    .filter_map(tremor_runtime::url::TremorURL::instance)
-                    .collect(),
-            });
-            reply(req, data, res, false, 200)
-        }
+        Some(res) => match res.artefact {
+            PipelineArtefact::Pipeline(p) => reply(
+                req,
+                data,
+                Ok(PipelineWrap {
+                    artefact: p.config,
+                    instances: res
+                        .instances
+                        .iter()
+                        .filter_map(tremor_runtime::url::TremorURL::instance)
+                        .collect(),
+                }),
+                false,
+                200,
+            ),
+            _ => Err(error::ErrorNotFound(
+                r#"{"error": "Artefact is a pipeline"}"#,
+            )),
+        },
         None => Err(error::ErrorNotFound(r#"{"error": "Artefact not found"}"#)),
     }
 }

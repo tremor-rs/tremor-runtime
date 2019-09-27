@@ -31,6 +31,16 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .required(false),
         )
         .arg(
+            Arg::with_name("query")
+                .long("query")
+                .short("q")
+                .help("query file to load")
+                .takes_value(true)
+                .min_values(1)
+                .max_values(10000) // there is no 'as many as you want' but this comes close
+                .required(false),
+        )
+        .arg(
             Arg::with_name("storage-directory")
                 .long("storage-directory")
                 .short("d")

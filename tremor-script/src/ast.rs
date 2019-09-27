@@ -99,7 +99,7 @@ pub struct Script1<'script> {
     pub exprs: Exprs1<'script>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Warning {
     pub outer: Range,
     pub inner: Range,

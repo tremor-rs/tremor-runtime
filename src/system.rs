@@ -163,9 +163,7 @@ impl Handler<CreatePipeline> for Manager {
             halfbrown::HashMap::new();
         let mut eventset = Vec::new();
         let (tx, rx) = bounded::<PipelineMsg>(self.qsize);
-        let mut pipeline = config
-            .pipeline
-            .to_executable_graph(tremor_pipeline::buildin_ops)?;
+        let mut pipeline = config.to_executable_graph(tremor_pipeline::buildin_ops)?;
         let mut pid = req.id.clone();
         pid.trim_to_instance();
         pipeline.id = pid.to_string();
@@ -597,7 +595,10 @@ impl World {
             .repo
             .serialize_pipelines()?
             .into_iter()
-            .map(|p| p.pipeline.config)
+            .filter_map(|p| match p {
+                PipelineArtefact::Pipeline(p) => Some(p.config),
+                PipelineArtefact::Query(_q) => None, // FIXME
+            })
             .collect();
         let onramp: OnRampVec = self.repo.serialize_onramps()?;
         let offramp: OffRampVec = self.repo.serialize_offramps()?;
@@ -731,9 +732,7 @@ links:
   in: [ out ]
 "#,
         )?;
-        let artefact = PipelineArtefact {
-            pipeline: tremor_pipeline::build_pipeline(metric_config)?,
-        };
+        let artefact = PipelineArtefact::Pipeline(tremor_pipeline::build_pipeline(metric_config)?);
         self.repo
             .publish_pipeline(METRICS_PIPELINE.clone(), true, artefact)?;
         self.bind_pipeline(METRICS_PIPELINE.clone())?;

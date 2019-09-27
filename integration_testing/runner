@@ -22,6 +22,7 @@ tremor-server test runner
              build target. Required for 'none'.
 EOF
 }
+
 while getopts hdlt:c:n: opt; do
     case $opt in
         h)
@@ -64,7 +65,6 @@ then
     build_target=debug
 fi
 
-set -ex
 case $build_target in
     debug)
         cargo build -p tremor-server --features "${FEATURES}"
@@ -79,7 +79,6 @@ case $build_target in
         exit 1
         ;;
 esac
-set +ex
 
 shift "$((OPTIND-1))"
 
@@ -152,6 +151,8 @@ do
         exit 1
     fi
 
+    query_file="${TEST_DIR}/query.tickle"
+
     out_file="${TEST_DIR}/out.json.xz"
     if [ ! -f "${out_file}" ]
     then
@@ -196,7 +197,14 @@ do
         then
             $pre_file "${TEST_DIR}" "$run_cmd"
         fi
-        if $run_cmd --config "${yaml_file}.out" "${mapping_file}" 2> ${log_file}
+        if [ -f "${query_file}" ]
+        then
+            additional_args="--query ${query_file}"
+        else
+            additional_args=""
+        fi
+
+        if $run_cmd --config "${yaml_file}.out" "${mapping_file}" $additional_args 2> ${log_file}
         then
             if [ -f $post_file ] 
             then

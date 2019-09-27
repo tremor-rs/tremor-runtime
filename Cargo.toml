@@ -71,6 +71,7 @@ lz4 = "1.23.1"
 openssl = "0.10"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
+tremor-query = { path = "tremor-query" }
 http = "0.1.18"
 
 crossbeam-channel = "0.3"
