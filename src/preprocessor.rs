@@ -60,8 +60,8 @@ impl Clone for Box<dyn Preprocessor> {
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         // TODO once preprocessors allow configuration, remove multiple entries for lines here
-        "lines" => Ok(Box::new(lines::Lines::new('\n'))),
-        "lines-null" => Ok(Box::new(lines::Lines::new('\0'))),
+        "lines" => Ok(Box::new(lines::Lines::new('\n', 1_048_576))),
+        "lines-null" => Ok(Box::new(lines::Lines::new('\0', 1_048_576))),
         // "influx" => Ok(Box::new(Influx::default())),
         "base64" => Ok(Box::new(Base64 {})),
         "gzip" => Ok(Box::new(Gzip {})),

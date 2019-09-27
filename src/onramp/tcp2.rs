@@ -23,12 +23,23 @@ use std::time::Duration;
 
 const ONRAMP: Token = Token(0);
 
-#[derive(Deserialize, Debug, Clone)]
+// TODO expose this as config (but still main the buffer on stack)
+//const BUFFER_SIZE_BYTES: usize = 8192;
+const BUFFER_SIZE_BYTES: usize = 16; // test value
+
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub port: u32,
     pub host: String,
-    // TODO add config for message delimiter and max length
+    //#[serde(default = "dflt_bsize")]
+    //pub buffer_size_bytes: usize,
 }
+
+/*
+fn dflt_bsize() -> usize {
+    8192 // in bytes
+}
+*/
 
 pub struct Tcp {
     pub config: Config,
@@ -57,8 +68,7 @@ fn onramp_loop(
     let mut codec = codec::lookup(&codec)?;
     let mut preprocessors = make_preprocessors(&preprocessors)?;
 
-    // TODO expose this as max length of message, and track read buffers per connection
-    let mut buffer = [0; 65535];
+    let mut buffer = [0; BUFFER_SIZE_BYTES];
 
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -112,14 +122,16 @@ fn onramp_loop(
                         Ok((stream, client_addr)) => {
                             debug!("Accepted connection from client: {}", client_addr);
 
-                            // get the token for the socket
+                            // make a new token for the socket to keep track of the connection
                             connection_token_number += 1;
                             let token = Token(connection_token_number);
 
-                            // register the new socket w/ poll
+                            // register the new socket with poll
                             poll.register(&stream, token, Ready::readable(), PollOpt::edge())?;
 
                             connections.insert(token, stream);
+
+                            // TODO create actors for each connection
                         }
                         Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful accept
                         Err(e) => {
@@ -130,40 +142,39 @@ fn onramp_loop(
                 },
                 token => {
                     if let Some(stream) = connections.get_mut(&token) {
-                        let mut buffer_end_index = 0;
                         loop {
                             // TODO implement resume from partial reads (until a delimiter is hit)
-                            match stream.read(&mut buffer[buffer_end_index..]) {
+                            match stream.read(&mut buffer) {
                                 Ok(0) => {
                                     debug!("Connection closed by client: {}", stream.peer_addr()?);
                                     connections.remove(&token);
                                     break;
                                 }
-                                Ok(n) => buffer_end_index += n,
+                                Ok(n) => {
+                                    // TODO remove later
+                                    trace!(
+                                        "Read {} bytes: {}",
+                                        n,
+                                        String::from_utf8_lossy(&buffer[0..n])
+                                    );
+                                    send_event(
+                                        &pipelines,
+                                        &mut preprocessors,
+                                        &mut codec,
+                                        id,
+                                        buffer[0..n].to_vec(),
+                                    );
+                                    // TODO should we bumping up this id on every partial read too?
+                                    id += 1;
+                                }
                                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful read
-                                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue, // will try to resume read
+                                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue, // will continue read
                                 Err(e) => {
                                     error!("Failed to read data from tcp client connection: {}", e);
                                     break;
                                 }
                             }
-                        }
-                        if buffer_end_index > 0 {
-                            // TODO remove later
-                            trace!(
-                                "Read {} bytes: {}",
-                                buffer_end_index,
-                                String::from_utf8_lossy(&buffer[0..256])
-                            );
-                            send_event(
-                                &pipelines,
-                                &mut preprocessors,
-                                &mut codec,
-                                id,
-                                buffer[0..buffer_end_index].to_vec(),
-                            );
-                            id += 1;
-                        }
+                        } // end of read
                     } else {
                         error!(
                             "Failed to retrieve tcp client connection for token: {}",
