@@ -226,7 +226,7 @@ impl Offramp for Elastic {
             let doc_type = if let Some(OwnedValue::String(doc_type)) = event.meta.get("doc_type") {
                 doc_type
             } else {
-                error!("'doc-type' not set for elastic offramp!");
+                error!("'doc_type' not set for elastic offramp!");
                 return;
             };
             let pipeline = if let Some(OwnedValue::String(pipeline)) = event.meta.get("pipeline") {
