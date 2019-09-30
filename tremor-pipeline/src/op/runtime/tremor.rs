@@ -59,13 +59,13 @@ pub struct Tremor {
 }
 
 impl Operator for Tremor {
-    fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    #[allow(mutable_transmutes)]
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
-        let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-        let mut event_meta: simd_json::borrowed::Value =
-            simd_json::owned::Value::Object(event.meta).into();
+        let data = event.data.suffix();
+        let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+        let mut event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
         // unwind_event => the event
         // event_meta => mneta
         let value = self.runtime.run(
@@ -76,48 +76,24 @@ impl Operator for Tremor {
         );
         match value {
             Ok(Return::EmitEvent { port }) => {
-                let event_meta: simd_json::owned::Value = event_meta.into();
-                if let simd_json::owned::Value::Object(map) = event_meta {
-                    event.meta = map;
-                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-                } else {
-                    unreachable!();
-                }
+                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
             }
 
             Ok(Return::Emit { value, port }) => {
-                let event_meta: simd_json::owned::Value = event_meta.into();
-                if let simd_json::owned::Value::Object(map) = event_meta {
-                    event.meta = map;
-                    *unwind_event = value;
-                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-                } else {
-                    unreachable!();
-                }
+                *unwind_event = value;
+                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
-                /*
-                *unwind_event = Value::Object(hashmap! {
+                let mut o = Value::Object(hashmap! {
                     "error".into() => Value::String(self.runtime.format_error(e).into()),
-                    "event".into() => *unwind_event
                 });
-                 */
-                let event_meta: simd_json::owned::Value = event_meta.into();
-                if let simd_json::owned::Value::Object(map) = event_meta {
-                    event.meta = map;
-                    let mut o = Value::Object(hashmap! {
-                        "error".into() => Value::String(self.runtime.format_error(e).into()),
-                    });
-                    std::mem::swap(&mut o, unwind_event);
-                    if let Some(error) = unwind_event.as_object_mut() {
-                        error.insert("event".into(), o);
-                    };
-                    //*unwind_event = data;
-                    Ok(vec![("error".to_string(), event)])
-                } else {
-                    unreachable!();
-                }
+                std::mem::swap(&mut o, unwind_event);
+                if let Some(error) = unwind_event.as_object_mut() {
+                    error.insert("event".into(), o);
+                };
+                //*unwind_event = data;
+                Ok(vec![("error".to_string(), event)])
             }
         }
     }
@@ -126,8 +102,8 @@ impl Operator for Tremor {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{MetaMap, FN_REGISTRY};
-    use simd_json::{json, OwnedValue};
+    use crate::FN_REGISTRY;
+    use simd_json::json;
 
     #[test]
     fn mutate() {
@@ -149,8 +125,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(json!({"a": 1}).into()),
+            data: Value::from(json!({"a": 1})).into(),
             kind: None,
         };
 
@@ -161,8 +136,10 @@ mod test {
             .expect("no event returned");
         assert_eq!("out", out);
 
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(j, json!({"snot": "badger", "a": 1}))
+        assert_eq!(
+            event.data.suffix().value,
+            Value::from(json!({"snot": "badger", "a": 1}))
+        )
     }
 
     #[test]

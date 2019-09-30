@@ -36,6 +36,7 @@ mod std_lib;
 mod str_suffix;
 mod tilde;
 pub use ctx::EventContext;
+pub mod prelude;
 
 #[cfg(test)]
 #[macro_use]
@@ -51,6 +52,7 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{self, Serialize};
 pub use simd_json::value::borrowed::Map;
 pub use simd_json::value::borrowed::Value;
+use simd_json::value::ValueTrait;
 use simd_json::OwnedValue;
 
 pub use crate::registry::{
@@ -58,6 +60,21 @@ pub use crate::registry::{
     TremorFnWrapper,
 };
 pub use crate::script::{QueryRentalWrapper, Return, Script, StmtRentalWrapper};
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ValueAndMeta<'event> {
+    pub value: Value<'event>,
+    pub meta: Value<'event>,
+}
+
+impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
+    fn from(value: Value<'v>) -> ValueAndMeta<'v> {
+        ValueAndMeta {
+            value,
+            meta: Value::Object(Map::default()),
+        }
+    }
+}
 
 rental! {
     pub mod rentals {
@@ -69,23 +86,33 @@ rental! {
         #[rental_mut(covariant,debug)]
         pub struct Value {
             raw: Box<Vec<Vec<u8>>>,
-            parsed: borrowed::Value<'raw>,
+            parsed: ValueAndMeta<'raw>
         }
 
     }
 }
 
 impl rentals::Value {
+    pub fn parts<'run>(&self) -> (&mut Value, &mut Value) {
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        #[allow(mutable_transmutes)]
+        unsafe {
+            let data = self.suffix();
+            let unwind_event: &mut Value<'_> = std::mem::transmute(&data.value);
+            let event_meta: &mut Value<'_> = std::mem::transmute(&data.meta);
+            (unwind_event, event_meta)
+        }
+    }
     pub fn consume<E, F>(&mut self, other: LineValue, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
-        F: Fn(&mut Value<'static>, Value<'static>) -> Result<(), E>,
+        F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
         // FIXME .unwrap() Heinz owes a long explenation on this
         // it's terrible but Darach will love it and end up using it
         // everywhere! :.(
         pub struct ScrewRental {
-            pub parsed: simd_json::BorrowedValue<'static>,
+            pub parsed: ValueAndMeta<'static>,
             pub raw: Box<Vec<Vec<u8>>>,
         }
         unsafe {
@@ -99,25 +126,89 @@ impl rentals::Value {
     }
 }
 
-impl PartialEq<simd_json::OwnedValue> for LineValue {
-    fn eq(&self, other: &simd_json::OwnedValue) -> bool {
-        //TODO: This  is ugly but good enough for now as it's only used in tests
-        self.rent(|this| &simd_json::OwnedValue::from(this.clone()) == other)
+#[cfg(test)]
+impl From<simd_json::OwnedValue> for LineValue {
+    fn from(v: simd_json::OwnedValue) -> Self {
+        rentals::Value::new(Box::new(vec![vec![]]), |_| ValueAndMeta {
+            value: v.into(),
+            meta: Value::Object(Map::new()),
+        })
     }
 }
 
-impl From<simd_json::OwnedValue> for LineValue {
-    fn from(v: simd_json::OwnedValue) -> Self {
-        rentals::Value::new(Box::new(vec![vec![]]), |_| v.into())
+impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
+    fn from(v: simd_json::BorrowedValue<'static>) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: v,
+            meta: Value::Object(Map::new()),
+        })
+    }
+}
+
+impl
+    From<(
+        simd_json::BorrowedValue<'static>,
+        simd_json::BorrowedValue<'static>,
+    )> for rentals::Value
+{
+    fn from(
+        v: (
+            simd_json::BorrowedValue<'static>,
+            simd_json::BorrowedValue<'static>,
+        ),
+    ) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: v.0,
+            meta: v.1,
+        })
+    }
+}
+
+impl
+    From<(
+        simd_json::BorrowedValue<'static>,
+        simd_json::value::borrowed::Map<'static>,
+    )> for rentals::Value
+{
+    fn from(
+        v: (
+            simd_json::BorrowedValue<'static>,
+            simd_json::value::borrowed::Map<'static>,
+        ),
+    ) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: v.0,
+            meta: Value::Object(v.1),
+        })
+    }
+}
+
+impl From<(simd_json::BorrowedValue<'static>, simd_json::OwnedValue)> for rentals::Value {
+    fn from(v: (simd_json::BorrowedValue<'static>, simd_json::OwnedValue)) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: v.0,
+            meta: v.1.into(),
+        })
+    }
+}
+
+impl From<(simd_json::OwnedValue, simd_json::OwnedValue)> for rentals::Value {
+    fn from(v: (simd_json::OwnedValue, simd_json::OwnedValue)) -> Self {
+        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: v.0.into(),
+            meta: v.1.into(),
+        })
     }
 }
 
 impl Clone for LineValue {
     fn clone(&self) -> Self {
         LineValue::new(Box::new(vec![]), |_| {
-            self.rent(|parsed| -> Value<'static> {
-                Into::<OwnedValue>::into(parsed.clone()).into()
-            })
+            let v = self.suffix();
+            ValueAndMeta {
+                value: Into::<OwnedValue>::into(v.value.clone()).into(),
+                meta: Into::<OwnedValue>::into(v.meta.clone()).into(),
+            }
         })
     }
 }
@@ -137,7 +228,13 @@ impl<'de> Deserialize<'de> for LineValue {
         D: Deserializer<'de>,
     {
         let r = OwnedValue::deserialize(deserializer)?;
-        Ok(LineValue::new(Box::new(vec![]), |_| r.into()))
+        // FIXME after POC
+        let value = r.get("value").unwrap();
+        let meta = r.get("meta").unwrap();
+        Ok(LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
+            value: value.clone().into(),
+            meta: meta.clone().into(),
+        }))
     }
 }
 

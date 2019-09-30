@@ -14,12 +14,10 @@
 
 use crate::config::dflt;
 use crate::errors::*;
-use crate::{Event, MetaMap, Operator};
+use crate::{Event, Operator};
 use serde_yaml;
-use simd_json::value::borrowed::Map;
-use simd_json::OwnedValue;
+use tremor_script::prelude::*;
 
-use tremor_script::{LineValue, Value};
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
@@ -41,7 +39,10 @@ pub struct Batch {
 }
 
 pub fn empty() -> LineValue {
-    LineValue::new(Box::new(vec![vec![]]), |_| Value::Array(vec![]))
+    LineValue::new(Box::new(vec![vec![]]), |_| ValueAndMeta {
+        value: Value::Array(vec![]),
+        meta: Value::Object(Map::default()),
+    })
 }
 
 op!(BatchFactory(node) {
@@ -71,27 +72,34 @@ impl Operator for Batch {
         // TODO: This is ugly
         let Event {
             id,
-            meta,
-            value,
+            data,
             ingest_ns,
             kind: _,
             is_batch,
         } = event;
         self.data.consume(
-            value,
-            move |data: &mut Value<'static>, value: Value<'static>| -> Result<()> {
-                let mut e = Map::with_capacity(7);
-                e.insert("id".into(), id.into());
-                // FIXME
-                e.insert("meta".into(), OwnedValue::Object(meta.clone()).into());
-                e.insert("value".into(), value);
-                e.insert("ingest_ns".into(), ingest_ns.into());
-                // FIXME ? Do we need this?
-                // e.insert("kind", Value::Null);
-                e.insert("is_batch".into(), is_batch.into());
-                match data {
-                    Value::Array(ref mut a) => a.push(Value::Object(e)),
-                    _ => (),
+            data,
+            move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
+                if let Some(ref mut a) = this.value.as_array_mut() {
+                    let mut e = Map::with_capacity(7);
+                    // {"id":1,
+                    e.insert("id".into(), id.into());
+                    //  "data": {
+                    //      "value": "snot", "meta":{}
+                    //  },
+                    let mut data = Map::with_capacity(2);
+                    data.insert("value".into(), other.value);
+                    data.insert("meta".into(), other.meta);
+                    e.insert("data".into(), Value::Object(data));
+                    //  "ingest_ns":1,
+                    e.insert("ingest_ns".into(), ingest_ns.into());
+                    //  "kind":null,
+                    // kind is always null on events
+                    e.insert("kind".into(), Value::Null);
+                    //  "is_batch":false
+                    e.insert("is_batch".into(), is_batch.into());
+                    // }
+                    a.push(Value::Object(e))
                 };
                 Ok(())
             },
@@ -106,13 +114,12 @@ impl Operator for Batch {
         };
         if flush {
             //TODO: This is ugly
-            let mut value = empty();
-            std::mem::swap(&mut value, &mut self.data);
+            let mut data = empty();
+            std::mem::swap(&mut data, &mut self.data);
             self.len = 0;
             let event = Event {
                 id: self.event_id,
-                meta: MetaMap::new(),
-                value,
+                data,
                 ingest_ns: self.first_ns,
                 kind: None,
                 is_batch: true,
@@ -134,13 +141,12 @@ impl Operator for Batch {
                 // We don't want to modify the original signal we clone it to
                 // create a new event.
 
-                let mut value = empty();
-                std::mem::swap(&mut value, &mut self.data);
+                let mut data = empty();
+                std::mem::swap(&mut data, &mut self.data);
                 self.len = 0;
                 let event = Event {
                     id: self.event_id,
-                    meta: MetaMap::new(),
-                    value,
+                    data,
                     ingest_ns: self.first_ns,
                     kind: None,
                     is_batch: true,
@@ -159,7 +165,6 @@ impl Operator for Batch {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::MetaMap;
     use tremor_script::Value;
 
     #[test]
@@ -180,8 +185,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -194,8 +198,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badger")),
+            data: Value::from("badger").into(),
             kind: None,
         };
 
@@ -206,15 +209,17 @@ mod test {
         let (out, event) = r.pop().expect("no results");
         dbg!(&event);
         assert_eq!("out", out);
-        let events: Vec<Event> = event.into_iter().collect();
-        assert_eq!(events, vec![event1, event2]);
+        let events: Vec<&Value> = event.value_iter().collect();
+        assert_eq!(
+            events,
+            vec![&event1.data.suffix().value, &event2.data.suffix().value]
+        );
 
         let event = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -240,10 +245,16 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
+
+        println!(
+            "{}",
+            simd_json::serde::to_owned_value(event1.clone())
+                .expect("")
+                .to_string()
+        );
 
         let r = op
             .on_event("in", event1.clone())
@@ -254,8 +265,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badger")),
+            data: Value::from("badger").into(),
             kind: None,
         };
 
@@ -266,15 +276,17 @@ mod test {
         let (out, event) = r.pop().expect("empty results");
         assert_eq!("out", out);
 
-        let events: Vec<Event> = event.into_iter().collect();
-        assert_eq!(events, vec![event1, event2]);
+        let events: Vec<&Value> = event.value_iter().collect();
+        assert_eq!(
+            events,
+            vec![&event1.data.suffix().value, &event2.data.suffix().value]
+        );
 
         let event = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -285,8 +297,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -312,8 +323,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -326,8 +336,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
-            meta: MetaMap::new(),
-            value: OwnedValue::Null.into(),
+            data: Value::Null.into(),
             kind: None,
         };
 
@@ -336,15 +345,14 @@ mod test {
         let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);
 
-        let events: Vec<Event> = event.into_iter().collect();
-        assert_eq!(events, vec![event1]);
+        let events: Vec<&Value> = event.value_iter().collect();
+        assert_eq!(events, vec![&event1.data.suffix().value]);
 
         let event = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 
@@ -355,8 +363,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
 

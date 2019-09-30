@@ -24,9 +24,6 @@ pub mod string;
 
 pub trait Codec: Send {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
-    fn encode_rental(&self, data: LineValue) -> Result<Vec<u8>> {
-        self.encode(data.suffix())
-    }
     fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
 }
 

@@ -15,7 +15,7 @@
 use super::Codec;
 use crate::errors::*;
 use simd_json;
-use tremor_script::LineValue;
+use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct JSON {}
@@ -23,7 +23,7 @@ pub struct JSON {}
 impl Codec for JSON {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(Box::new(vec![data]), |data| {
-            simd_json::to_borrowed_value(&mut data[0])
+            simd_json::to_borrowed_value(&mut data[0]).map(ValueAndMeta::from)
         })
         .map(Some)
         .map_err(|e| e.0.into())

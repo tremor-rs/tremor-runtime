@@ -43,7 +43,8 @@ use std::iter;
 use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tremor_script::{LineValue, Registry};
+use tremor_script::prelude::*;
+
 pub mod config;
 pub mod errors;
 #[macro_use]
@@ -94,35 +95,10 @@ pub enum NodeKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     pub id: u64,
-    pub meta: MetaMap,
-    pub value: tremor_script::LineValue,
+    pub data: tremor_script::LineValue,
     pub ingest_ns: u64,
     pub kind: Option<SignalKind>,
     pub is_batch: bool,
-}
-
-pub struct EventIter {
-    current: Option<Box<EventIter>>,
-    data: Vec<Event>,
-}
-
-impl Iterator for EventIter {
-    type Item = Event;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut iter) = &mut self.current {
-            if let Some(v) = iter.next() {
-                return Some(v);
-            } else {
-                self.current = None;
-            }
-        }
-        let s = self.data.pop()?;
-        if s.is_batch {
-            self.current = Some(Box::new(s.into_iter()));
-            return self.next();
-        }
-        Some(s)
-    }
 }
 
 impl Event {
@@ -140,28 +116,21 @@ pub struct ValueMetaIter<'value> {
 }
 
 impl<'value> Iterator for ValueMetaIter<'value> {
-    type Item = (&'value BorrowedValue<'value>, MetaMap);
+    type Item = (&'value Value<'value>, &'value Value<'value>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.event.is_batch {
             self.idx += 1;
             self.event
-                .value
+                .data
                 .suffix()
+                .value
                 .as_array()
                 .and_then(|arr| arr.get(self.idx - 1))
-                .and_then(|e| {
-                    Some((
-                        e.get("value")?,
-                        match OwnedValue::from(e.get("meta")?.clone()) {
-                            OwnedValue::Object(o) => o,
-                            _ => return None,
-                        },
-                    ))
-                })
+                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)))
         } else if self.idx == 0 {
-            let v = self.event.value.suffix();
+            let v = self.event.data.suffix();
             self.idx += 1;
-            Some((v, self.event.meta.clone()))
+            Some((&v.value, &v.meta))
         } else {
             None
         }
@@ -188,59 +157,18 @@ impl<'value> Iterator for ValueIter<'value> {
         if self.event.is_batch {
             self.idx += 1;
             self.event
-                .value
+                .data
                 .suffix()
+                .value
                 .as_array()
                 .and_then(|arr| arr.get(self.idx - 1))
-                .and_then(|e| e.get("value"))
+                .and_then(|e| e.get("data")?.get("value"))
         } else if self.idx == 0 {
-            dbg!();
-            let v = self.event.value.suffix();
+            let v = &self.event.data.suffix().value;
             self.idx += 1;
             Some(v)
         } else {
-            dbg!();
             None
-        }
-    }
-}
-
-impl IntoIterator for Event {
-    type Item = Event;
-    type IntoIter = EventIter;
-    fn into_iter(self) -> Self::IntoIter {
-        if self.is_batch {
-            self.value.rent(|j| {
-                use tremor_script::Value;
-                if let Value::Array(data) = j {
-                    let data = data
-                        .iter()
-                        .filter_map(|e| {
-                            // TODO: This is ugly
-                            if let Ok(r) = simd_json::serde::from_borrowed_value(e.clone()) {
-                                Some(r)
-                            } else {
-                                None
-                            }
-                        })
-                        .rev()
-                        .collect();
-                    EventIter {
-                        data,
-                        current: None,
-                    }
-                } else {
-                    EventIter {
-                        data: vec![],
-                        current: None,
-                    }
-                }
-            })
-        } else {
-            EventIter {
-                data: vec![self],
-                current: None,
-            }
         }
     }
 }
@@ -458,33 +386,39 @@ impl NodeMetrics {
         metric_name: &str,
         tags: &mut HashMap<String, String>,
         timestamp: u64,
-    ) -> Result<Vec<OwnedValue>> {
+    ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for (k, v) in &self.inputs {
             tags.insert("direction".to_owned(), "input".to_owned());
             tags.insert("port".to_owned(), k.to_owned());
             //TODO: This is ugly
-            res.push(json!({
-                "measurement": metric_name,
-                "tags": tags,
-                "fields": {
-                    "count": v
-                },
-                "timestamp": timestamp
-            }))
+            res.push(
+                json!({
+                    "measurement": metric_name,
+                    "tags": tags,
+                    "fields": {
+                        "count": v
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            )
         }
         for (k, v) in &self.outputs {
             tags.insert("direction".to_owned(), "output".to_owned());
             tags.insert("port".to_owned(), k.to_owned());
             //TODO: This is ugly
-            res.push(json!({
-                "measurement": metric_name,
-                "tags": tags,
-                "fields": {
-                    "count": v
-                },
-                "timestamp": timestamp
-            }))
+            res.push(
+                json!({
+                    "measurement": metric_name,
+                    "tags": tags,
+                    "fields": {
+                        "count": v
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            )
         }
         Ok(res)
     }
@@ -591,8 +525,10 @@ impl ExecutableGraph {
                         "in".to_owned(),
                         Event {
                             id: 0,
-                            meta: MetaMap::default(),
-                            value: LineValue::new(Box::new(vec![]), |_| v.into()),
+                            data: LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
+                                value: v.into(),
+                                meta: Value::Object(Map::default()),
+                            }),
                             ingest_ns: timestamp,
                             kind: None,
                             is_batch: false,
@@ -607,8 +543,10 @@ impl ExecutableGraph {
                         "in".to_owned(),
                         Event {
                             id: 0,
-                            meta: MetaMap::default(),
-                            value: LineValue::new(Box::new(vec![]), |_| v.into()),
+                            data: LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
+                                value: v.into(),
+                                meta: Value::Object(Map::default()),
+                            }),
                             ingest_ns: timestamp,
                             kind: None,
                             is_batch: false,
@@ -784,8 +722,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: json!({"snot": "badger"}).into(),
+            data: Value::from(json!({"snot": "badger"})).into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -797,7 +734,7 @@ mod test {
         //if let simd_json::borrowed::Value::Object(value) = results[0].1.value.suffix() {
         //    assert_eq!(value["class"], "default");
         //}
-        assert_eq!(results[0].1.meta["class"], "default");
+        assert_eq!(results[0].1.data.suffix().meta["class"], "default");
         dbg!(&e.metrics);
         // We ignore the first, and the last three nodes because:
         // * The first one is the input, handled seperately
@@ -831,8 +768,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            data: Value::Null.into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -855,16 +791,14 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            data: Value::Null.into(),
             kind: None,
         };
         let event2 = Event {
             is_batch: false,
             id: 2,
             ingest_ns: 2,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            data: Value::Null.into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -876,44 +810,44 @@ mod test {
             assert_eq!(r.1.id, 1);
         }
         assert_eq!(
-            results[0].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"])
+            results[0].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[1].1.meta["debug::history"],
-            json!([
+            results[1].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
                 "evt: m2(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[2].1.meta["debug::history"],
-            json!([
+            results[2].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
                 "evt: m2(1)",
                 "evt: m3(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[3].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"])
+            results[3].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[4].1.meta["debug::history"],
-            json!([
+            results[4].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m2(1)",
                 "evt: m3(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[5].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"])
+            results[5].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"]))
         );
 
         let mut results = Vec::new();
@@ -925,16 +859,21 @@ mod test {
             assert_eq!(r.1.id, 2);
         }
         assert_eq!(
-            results[0].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: combine(2)"])
+            results[0].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: m1(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[1].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"])
+            results[1].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[2].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: m2(2)", "evt: m3(2)", "evt: combine(2)"])
+            results[2].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
+                "evt: m1(2)",
+                "evt: m2(2)",
+                "evt: m3(2)",
+                "evt: combine(2)"
+            ]))
         );
     }
 

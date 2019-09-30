@@ -95,8 +95,8 @@ impl Offramp for GPub {
         let methods = self.hub.projects();
         let topic_name = self.config.topic.clone();
 
-        for event in event.into_iter() {
-            if let Ok(ref raw) = codec.encode_rental(event.value) {
+        for value in event.value_iter() {
+            if let Ok(ref raw) = codec.encode(value) {
                 let message = google_pubsub1::PubsubMessage {
                     data: Some(base64::encode(&raw)),
                     ..Default::default()

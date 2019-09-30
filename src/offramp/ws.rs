@@ -112,8 +112,8 @@ impl Offramp for Ws {
     // TODO
     // FIXME IOU 1 reconnect handling .unwrap()
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            if let Ok(raw) = codec.encode_rental(event.value) {
+        for value in event.value_iter() {
+            if let Ok(raw) = codec.encode(value) {
                 match postprocess(&mut self.postprocessors, event.ingest_ns, raw) {
                     Ok(datas) => {
                         for raw in datas {

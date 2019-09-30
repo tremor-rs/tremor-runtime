@@ -346,11 +346,10 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         let l = line?;
         let mut codec =
             tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
-        let json = codec
+        let data = codec
             .decode(l.as_bytes().to_vec(), 0)
             .expect("Failed to decode input JSON")
             .expect("Failed to decode input JSON");
-        let m = hashmap! {};
 
         let mut eventset = Vec::new();
         flow.enqueue(
@@ -359,8 +358,7 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
                 is_batch: false,
                 id: num as u64,
                 ingest_ns: utils::nanotime(),
-                meta: m,
-                value: json,
+                data,
                 kind: None,
             },
             &mut eventset,

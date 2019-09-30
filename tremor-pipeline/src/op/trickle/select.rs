@@ -19,15 +19,12 @@ use simd_json::borrowed::Value;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::sync::Arc;
-//use simd_json::value::ValueTrait;
-//use tremor_script::ast::ImutExpr;
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Stmt},
-    interpreter::{AggrType, ExecOpts},
+    prelude::*,
     script::rentals::Stmt as StmtRental,
-    EventContext,
-}; //, FN_REGISTRY};
+};
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
 
@@ -228,9 +225,7 @@ impl Operator for TrickleSelect {
         //
         // FIXME: ?
         if let Some(guard) = &stmt.maybe_where {
-            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-            let event_meta: simd_json::borrowed::Value =
-                simd_json::owned::Value::Object(event.meta.clone()).into();
+            let (unwind_event, event_meta) = event.data.parts();
             let test = guard.run(
                 opts,
                 &ctx,
@@ -255,10 +250,7 @@ impl Operator for TrickleSelect {
         if let Some(window) = &self.window {
             let mut group_values = vec![];
             {
-                let unwind_event: &mut Value<'_> =
-                    unsafe { std::mem::transmute(event.value.suffix()) };
-                let event_meta: simd_json::borrowed::Value =
-                    simd_json::owned::Value::Object(event.meta.clone()).into();
+                let (unwind_event, event_meta) = event.data.parts();
                 if let Some(group_by) = &stmt.maybe_group_by {
                     group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
                 };
@@ -269,13 +261,16 @@ impl Operator for TrickleSelect {
             for group in group_values {
                 let group = Value::Array(group);
                 let event = event.clone();
-                let unwind_event: &mut Value<'_> =
-                    unsafe { std::mem::transmute(event.value.suffix()) };
-                let mut meta = event.meta.clone();
-                meta.insert("group".to_string(), group.clone().into());
-                let event_meta: simd_json::borrowed::Value =
-                    simd_json::owned::Value::Object(meta).into();
-
+                let data = event.data.suffix();
+                #[allow(clippy::transmute_ptr_to_ptr)]
+                #[allow(mutable_transmutes)]
+                let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+                #[allow(clippy::transmute_ptr_to_ptr)]
+                #[allow(mutable_transmutes)]
+                let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                if let Some(meta) = event_meta.as_object_mut() {
+                    meta.insert("group".into(), group.clone());
+                }
                 let groups: &mut HashMap<String, Window> =
                     unsafe { std::mem::transmute(self.groups.suffix()) };
                 let w = groups
@@ -332,7 +327,6 @@ impl Operator for TrickleSelect {
                         }
                     }
                     invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                        use tremor_script::Registry;
                         // FIXME nice error
                         let r: Option<&Registry> = None;
                         e.into_err(aggr, aggr, r)
@@ -373,9 +367,7 @@ impl Operator for TrickleSelect {
             //
             // FIXME: This can be nicer, got to look at run for tremor script
 
-            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-            let event_meta: simd_json::borrowed::Value =
-                simd_json::owned::Value::Object(event.meta.clone()).into();
+            let (unwind_event, event_meta) = event.data.parts();
 
             let value = stmt.target.run(
                 opts,
@@ -417,11 +409,8 @@ impl Operator for TrickleSelect {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::MetaMap; //, FN_REGISTRY};
-    use serde_json::json;
     use simd_json::borrowed::Value;
-    use simd_json::OwnedValue;
-    use std::convert::TryInto;
+    use simd_json::json;
     use tremor_script::ast;
     use tremor_script::pos::Location;
 
@@ -471,12 +460,10 @@ mod test {
             is_batch: false,
             id: s,
             ingest_ns: s * 1_000_000_000,
-            meta: MetaMap::new(),
-            value: sjv!(json!({
+            data: Value::from(json!({
                "h2g2" : 42,
-            })
-            .try_into()
-            .expect("failed to create test event")),
+            }))
+            .into(),
             kind: None,
         }
     }
@@ -530,8 +517,7 @@ mod test {
             try_enqueue(&mut op, test_event(15))?.expect("no event emitted after aggregation");
         assert_eq!("out", out);
 
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(j, 84.0);
+        assert_eq!(event.data.suffix().value, 84.0);
         Ok(())
     }
 
@@ -543,8 +529,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(j, 2);
+        assert_eq!(event.data.suffix().value, 2);
         Ok(())
     }
 
@@ -581,9 +566,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        //        let jj: OwnedValue = json!({"snot": "badger", "a": 1}).try_into().expect("");
-        assert_eq!(OwnedValue::I64(42), j);
+        assert_eq!(event.data.suffix().value, 42);
         Ok(())
     }
 
@@ -627,8 +610,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(OwnedValue::I64(42), j);
+        assert_eq!(event.data.suffix().value, 42);
         Ok(())
     }
 
@@ -755,8 +737,7 @@ mod test {
         let event = test_event(15);
         let (out, event) = try_enqueue(&mut op, event)?.expect("no event");
         assert_eq!("out", out);
-        let j: OwnedValue = event.value.rent(|j| j.clone().into());
-        assert_eq!(OwnedValue::I64(42), j);
+        assert_eq!(event.data.suffix().value, 42);
         Ok(())
     }
 

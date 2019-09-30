@@ -46,8 +46,8 @@ impl OfframpImpl for StdErr {
 }
 impl Offramp for StdErr {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            if let Ok(raw) = codec.encode_rental(event.value) {
+        for value in event.value_iter() {
+            if let Ok(raw) = codec.encode(value) {
                 match String::from_utf8(raw.to_vec()) {
                     Ok(s) => eprintln!("{}", s),
                     Err(_) => eprintln!("{:?}", raw),

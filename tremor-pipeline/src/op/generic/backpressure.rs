@@ -28,7 +28,7 @@
 use crate::errors::*;
 use crate::{Event, Operator};
 use serde_yaml;
-use simd_json::{OwnedValue, ValueTrait};
+use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -93,9 +93,10 @@ impl Operator for Backpressure {
     }
 
     fn on_contraflow(&mut self, insight: &mut Event) {
-        if let Some(OwnedValue::String(_s)) = insight.meta.get("error") {
+        let meta = &insight.data.suffix().meta;
+        if meta.get("error").is_some() {
             self.next_backoff();
-        } else if let Some(v) = insight.meta.get("time").and_then(OwnedValue::cast_f64) {
+        } else if let Some(v) = meta.get("time").and_then(Value::cast_f64) {
             if v > self.config.timeout {
                 self.next_backoff();
             } else {
@@ -108,9 +109,6 @@ impl Operator for Backpressure {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::MetaMap;
-    use simd_json::json;
-    use tremor_script::Value;
 
     #[test]
     fn pass_wo_error() {
@@ -129,8 +127,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
         let mut r = op
@@ -146,8 +143,7 @@ mod test {
             is_batch: false,
             id: 2,
             ingest_ns: 2,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badge")),
+            data: Value::from("badge").into(),
             kind: None,
         };
         let mut r = op
@@ -175,8 +171,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("snot")),
+            data: Value::from("snot").into(),
             kind: None,
         };
         let mut r = op
@@ -189,14 +184,13 @@ mod test {
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
         // one up the backup steps
-        let mut m = MetaMap::new();
-        m.insert("time".into(), json!(200.0));
+        let mut m = Map::new();
+        m.insert("time".into(), 200.0.into());
         let mut insight = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            meta: m,
-            value: sjv!(Value::Null),
+            data: (Value::Null, m).into(),
             kind: None,
         };
 
@@ -212,8 +206,7 @@ mod test {
             is_batch: false,
             id: 2,
             ingest_ns: 2_000_000 - 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badger")),
+            data: Value::from("badger").into(),
             kind: None,
         };
         let mut r = op
@@ -229,8 +222,7 @@ mod test {
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("boo")),
+            data: Value::from("boo").into(),
             kind: None,
         };
         let mut r = op
@@ -246,8 +238,7 @@ mod test {
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000 + 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badger")),
+            data: Value::from("badger").into(),
             kind: None,
         };
         let mut r = op
@@ -269,28 +260,26 @@ mod test {
             last_pass: 0,
         };
         // An contraflow that fails the timeout
-        let mut m = MetaMap::new();
-        m.insert("time".into(), json!(200.0));
+        let mut m = Map::new();
+        m.insert("time".into(), 200.0.into());
 
         let mut insight = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            meta: m,
-            value: sjv!(Value::Null),
+            data: (Value::Null, m).into(),
             kind: None,
         };
 
         // A contraflow that passes the timeout
-        let mut m = MetaMap::new();
-        m.insert("time".into(), json!(99.0));
+        let mut m = Map::new();
+        m.insert("time".into(), 99.0.into());
 
         let mut insight_reset = Event {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            meta: m.clone(),
-            value: sjv!(Value::Null),
+            data: (Value::Null, m).into(),
             kind: None,
         };
 

@@ -62,10 +62,10 @@
 //! ```
 
 use crate::errors::*;
-use crate::{Event, MetaMap, Operator};
+use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::{json, OwnedValue, ValueTrait};
+use simd_json::{json, OwnedValue, BorrowedValue as Value, ValueTrait};
 use std::borrow::Borrow;
 use window::TimeWindow;
 
@@ -91,16 +91,16 @@ pub struct Rate {
 }
 
 impl Rate {
-    pub fn from_meta(meta: &MetaMap) -> Option<Self> {
+    pub fn from_meta<'any>(meta: &Value<'any>) -> Option<Self> {
         let rate = meta.get("rate")?.as_u64()?;
 
         let time_range = meta
             .get("time_range")
-            .and_then(OwnedValue::as_u64)
+            .and_then(Value::as_u64)
             .unwrap_or(1000);
         let windows = meta
             .get("windows")
-            .and_then(OwnedValue::as_u64)
+            .and_then(Value::as_u64)
             .unwrap_or(100) as usize;
         Some(Rate {
             rate,
@@ -138,14 +138,15 @@ impl std::fmt::Debug for BucketGrouper {
 
 impl Operator for BucketGrouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        if let Some(OwnedValue::String(class)) = event.meta.get("class") {
+        let meta = &event.data.suffix().meta;
+        if let Some(class) = meta.get("class").and_then(Value::as_string) {
             let groups = match self.buckets.get_mut(class.borrow() as &str) {
                 Some(g) => g,
                 None => {
-                    let cardinality = event
-                        .meta
+                    let cardinality = 
+                        meta
                         .get("cardinality")
-                        .and_then(OwnedValue::as_u64)
+                        .and_then(Value::as_u64)
                         .unwrap_or(1000) as usize;
                     self.buckets
                         .insert(class.to_string(), Bucket::new(cardinality));
@@ -156,15 +157,15 @@ impl Operator for BucketGrouper {
                     }
                 }
             };
-            let d = if let Some(d) = event.meta.get("dimensions") {
+            let d = if let Some(d) = meta.get("dimensions") {
                 d
             } else {
-                &OwnedValue::Null
+                &Value::Null
             };
             let dimensions = serde_json::to_string(d)?;
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {
-                    let rate = if let Some(rate) = Rate::from_meta(&event.meta) {
+                    let rate = if let Some(rate) = Rate::from_meta(&meta) {
                         rate
                     } else {
                         return Ok(vec![("error".to_string(), event)]);

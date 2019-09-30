@@ -98,7 +98,7 @@ impl Offramp for Blackhole {
         self.pipelines.is_empty()
     }
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
+        for value in event.value_iter() {
             let now_ns = utils::nanotime();
 
             if self.has_stop_limit && now_ns > self.stop_after {
@@ -118,7 +118,7 @@ impl Offramp for Blackhole {
 
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(v) = codec.encode_rental(event.value) {
+                if let Ok(v) = codec.encode(value) {
                     self.bytes += v.len();
                 };
                 if let Err(e) = self.delivered.record(delta_ns) {
