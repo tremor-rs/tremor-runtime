@@ -53,6 +53,20 @@ impl Preprocessor for Lines {
     }
     */
 
+    fn process2(
+        &mut self,
+        ingest_ns: &mut u64,
+        source_id: &str,
+        data: &[u8],
+    ) -> Option<Result<Vec<Vec<u8>>>> {
+        dbg!(source_id);
+
+        // TODO track buffers by source_id
+        // might be tricky to clear the buffer if the connection drops (eg: in the case of onramps
+        // like tcp)
+        Some(self.process(ingest_ns, data))
+    }
+
     // TODO separate out some of the logic here in other functions for readability
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut result: Vec<Vec<u8>> = Vec::new();

@@ -26,6 +26,16 @@ pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {
     fn as_any(&self) -> &dyn Any;
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+
+    // TODO rename as process. optional method right now for testing
+    fn process2(
+        &mut self,
+        _ingest_ns: &mut u64,
+        _source_id: &str,
+        _data: &[u8],
+    ) -> Option<Result<Vec<Vec<u8>>>> {
+        None
+    }
 }
 
 fn downcast<T: Preprocessor + 'static>(this: &dyn Preprocessor) -> Option<&T> {

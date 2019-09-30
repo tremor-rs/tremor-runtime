@@ -20,6 +20,7 @@ pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
 pub use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+pub use simd_json::OwnedValue;
 // TODO pub here too?
 use std::mem;
 pub use std::thread;
@@ -55,6 +56,36 @@ pub fn handle_pp(
     Ok(data)
 }
 
+// TODO rename as handle_pp. here right now for testing
+pub fn handle_pp2(
+    preprocessors: &mut Preprocessors,
+    ingest_ns: &mut u64,
+    source_id: &str,
+    data: Vec<u8>,
+) -> Result<Vec<Vec<u8>>> {
+    let mut data = vec![data];
+    let mut data1 = Vec::new();
+    for pp in preprocessors {
+        data1.clear();
+        for (i, d) in data.iter().enumerate() {
+            // TODO remove option matching here onece process2 is merged with process
+            let result = match pp.process2(ingest_ns, source_id, d) {
+                Some(r) => r,
+                None => pp.process(ingest_ns, d),
+            };
+            match result {
+                Ok(mut r) => data1.append(&mut r),
+                Err(e) => {
+                    error!("Preprocessor[{}] error {}", i, e);
+                    return Err(e);
+                }
+            }
+        }
+        mem::swap(&mut data, &mut data1);
+    }
+    Ok(data)
+}
+
 // TODO rename as send_event. here right now for testing
 // We are borrowing a dyn box as we don't want to pass ownership.
 #[allow(clippy::borrowed_box)]
@@ -67,8 +98,18 @@ pub fn send_event2(
     id: u64,
     data: Vec<u8>,
 ) {
-    //dbg!(&meta); // TODO remove later
-    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
+    // TODO remove later
+    //dbg!(&meta);
+
+    // TODO remove if we don't track source id from preprocesors
+    let source_id = if let Some(OwnedValue::String(source_id)) = meta.get("source_id") {
+        source_id
+    } else {
+        // TODO handle this better
+        "0"
+    };
+
+    if let Ok(data) = handle_pp2(preprocessors, ingest_ns, &source_id, data) {
         for d in data {
             match codec.decode(d, *ingest_ns) {
                 Ok(Some(value)) => {
