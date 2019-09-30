@@ -9,6 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: Install deps
+      run: apt install libssl-dev openssl
     - name: Build
       run: cargo build --verbose
     - name: Run tests
