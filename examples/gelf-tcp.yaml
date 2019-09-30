@@ -52,6 +52,14 @@ pipeline:
               default =>
                 null
             end;
+
+            # add source info to the event via pipeline variables (passed from the tcp onramp)
+            let event = patch event of
+              upsert "source_id" => $source_id,
+              upsert "source_ip" => $source_ip,
+              upsert "source_port" => $source_port
+            end;
+
             event;
     links:
       in: [ runtime ]

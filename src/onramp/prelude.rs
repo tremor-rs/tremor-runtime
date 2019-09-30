@@ -20,9 +20,10 @@ pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
 pub use crate::utils::nanotime;
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+// TODO pub here too?
 use std::mem;
 pub use std::thread;
-pub use tremor_pipeline::Event;
+pub use tremor_pipeline::{Event, MetaMap};
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
@@ -52,6 +53,53 @@ pub fn handle_pp(
         mem::swap(&mut data, &mut data1);
     }
     Ok(data)
+}
+
+// TODO rename as send_event. here right now for testing
+// We are borrowing a dyn box as we don't want to pass ownership.
+#[allow(clippy::borrowed_box)]
+pub fn send_event2(
+    pipelines: &[(TremorURL, PipelineAddr)],
+    preprocessors: &mut Preprocessors,
+    codec: &mut Box<dyn Codec>,
+    ingest_ns: &mut u64,
+    meta: &mut MetaMap,
+    id: u64,
+    data: Vec<u8>,
+) {
+    //dbg!(&meta); // TODO remove later
+    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
+        for d in data {
+            match codec.decode(d, *ingest_ns) {
+                Ok(Some(value)) => {
+                    let event = tremor_pipeline::Event {
+                        is_batch: false,
+                        id,
+                        value,
+                        // TODO better way to do this?
+                        meta: (*meta).clone(),
+                        ingest_ns: *ingest_ns,
+                        kind: None,
+                    };
+                    let len = pipelines.len();
+                    for (input, addr) in &pipelines[..len - 1] {
+                        if let Some(input) = input.instance_port() {
+                            let _ = addr.addr.send(PipelineMsg::Event {
+                                input,
+                                event: event.clone(),
+                            });
+                        }
+                    }
+                    let (input, addr) = &pipelines[len - 1];
+                    if let Some(input) = input.instance_port() {
+                        let _ = addr.addr.send(PipelineMsg::Event { input, event });
+                    }
+                }
+                Ok(None) => (),
+                Err(e) => error!("{}", e),
+            }
+        }
+    };
 }
 
 // We are borrowing a dyn box as we don't want to pass ownership.
@@ -96,3 +144,18 @@ pub fn send_event(
         }
     };
 }
+
+// TODO remove. is part of tremor_pipeline crate now
+/*
+macro_rules! metamap {
+    { $($key:expr => $value:expr),+ } => {
+        {
+            let mut m = tremor_pipeline::MetaMap::new();
+            $(
+                m.insert($key.into(), simd_json::OwnedValue::from($value));
+            )+
+            m
+        }
+     };
+}
+*/

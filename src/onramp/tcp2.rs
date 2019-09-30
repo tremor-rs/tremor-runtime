@@ -24,8 +24,9 @@ use std::time::Duration;
 const ONRAMP: Token = Token(0);
 
 // TODO expose this as config (but still main the buffer on stack)
-//const BUFFER_SIZE_BYTES: usize = 8192;
-const BUFFER_SIZE_BYTES: usize = 16; // test value
+const BUFFER_SIZE_BYTES: usize = 8192;
+// TODO remove later. test value
+//const BUFFER_SIZE_BYTES: usize = 16;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -143,11 +144,46 @@ fn onramp_loop(
                 },
                 token => {
                     if let Some(stream) = connections.get_mut(&token) {
+                        // TODO test re-connections
+                        let client_addr = stream.peer_addr()?;
+
+                        //let mut meta = metamap! { // TODO remove. uses macro local to the crate
+                        let mut meta = tremor_pipeline::metamap! {
+                            "source_id" => token.0.to_string(),
+                            "source_ip" => client_addr.ip().to_string(),
+                            "source_port" => client_addr.port()
+                        };
+
+                        // TODO remove, since we do this via metamap macro now
+                        /*
+                        use simd_json;
+                        let mut meta = tremor_pipeline::MetaMap::new();
+                        meta.insert(
+                            "source_id".to_string(),
+                            // TODO see if this is the best way to achieve this
+                            //simd_json::OwnedValue::from(token.0.to_string()),
+                            simd_json::value::owned::Value::String(token.0.to_string()),
+                        );
+                        meta.insert(
+                            "source_ip".to_string(),
+                            //simd_json::OwnedValue::from(client_addr.ip().to_string()),
+                            simd_json::value::owned::Value::String(client_addr.ip().to_string()),
+                        );
+                        meta.insert(
+                            "source_port".to_string(),
+                            simd_json::OwnedValue::from(client_addr.port()),
+                            //simd_json::value::owned::Value::I64(client_addr.port() as i64),
+                        );
+                        */
+
                         loop {
                             // TODO implement resume from partial reads (until a delimiter is hit)
                             match stream.read(&mut buffer) {
                                 Ok(0) => {
-                                    debug!("Connection closed by client: {}", stream.peer_addr()?);
+                                    debug!(
+                                        "Connection closed by client: {}",
+                                        client_addr.to_string()
+                                    );
                                     connections.remove(&token);
                                     break;
                                 }
@@ -158,11 +194,23 @@ fn onramp_loop(
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
+                                    /*
                                     send_event(
                                         &pipelines,
                                         &mut preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
+                                        id,
+                                        buffer[0..n].to_vec(),
+                                    );
+                                    */
+                                    // TODO remove later. temp code for testing
+                                    send_event2(
+                                        &pipelines,
+                                        &mut preprocessors,
+                                        &mut codec,
+                                        &mut ingest_ns,
+                                        &mut meta,
                                         id,
                                         buffer[0..n].to_vec(),
                                     );

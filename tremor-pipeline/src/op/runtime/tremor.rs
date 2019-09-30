@@ -77,6 +77,8 @@ impl Operator for Tremor {
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
         let mut event_meta: simd_json::borrowed::Value =
             simd_json::owned::Value::Object(event.meta).into();
+        // TODO remove later
+        dbg!(&event_meta);
         // unwind_event => the event
         // event_meta => meta
         let value = self.runtime.run(
