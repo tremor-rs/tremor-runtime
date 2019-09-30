@@ -47,7 +47,7 @@ pub trait Operator: std::fmt::Debug + Send {
     // Returns metrics for this operator
     fn metrics(
         &self,
-        _tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        _tags: HashMap<Cow<'static, str>, Value<'static>>,
         _timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         Ok(Vec::new())

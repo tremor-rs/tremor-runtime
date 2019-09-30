@@ -248,11 +248,9 @@ mod tests {
     use crate::lexer::{TokenFuns, TokenSpan};
     use halfbrown::hashmap;
     use simd_json::borrowed::{Map, Value};
-    use simd_json::json;
 
     macro_rules! parse_lit {
         ($src:expr, $expected:pat) => {{
-            let _vals: Value = json!({}).into();
             let r: Registry = registry();
             let ar: AggrRegistry = aggr_registry();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
@@ -282,7 +280,6 @@ mod tests {
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
-            let _vals: Value = json!({}).into();
             let _r: Registry = registry();
             let src = format!("{} ", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer(&src).collect();
@@ -317,7 +314,6 @@ mod tests {
 
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
-            let _vals: Value = json!({}).into();
             let _r: Registry = registry();
             //let src = format!("{}", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
@@ -346,7 +342,6 @@ mod tests {
 
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
-            let _vals: Value = json!({}).into();
             let _r: Registry = registry();
             //let src = format!("{}", $src);
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();

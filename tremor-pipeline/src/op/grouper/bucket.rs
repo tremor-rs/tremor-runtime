@@ -65,8 +65,8 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::{json, BorrowedValue as Value, ValueTrait};
 use std::borrow::{Borrow, Cow};
+use tremor_script::prelude::*;
 use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
@@ -196,40 +196,35 @@ impl Operator for BucketGrouper {
 
     fn metrics(
         &self,
-        mut tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
             // FIXME: .unwrap() this can be done w/o conversion
             tags.insert("class".into(), class.clone().into());
-
             tags.insert("action".into(), "pass".into());
             // TODO: this is ugly
-            res.push(
-                json!({
-                    "measurement": "bucketing",
-                    "tags": tags,
-                    "fields": {
-                        "count": b.pass
-                    },
-                    "timestamp": timestamp
-                })
-                .into(),
-            );
+            // Count good cases
+            let mut m = Map::with_capacity(4);
+            m.insert("measurement".into(), "bucketing".into());
+            m.insert("tags".into(), Value::Object(tags.clone()));
+            let mut fields = Map::with_capacity(1);
+            fields.insert("count".into(), b.pass.into());
+            m.insert("fields".into(), Value::Object(fields));
+            m.insert("timestamp".into(), timestamp.into());
+            res.push(Value::Object(m.clone()));
+
+            // Count bad cases
             tags.insert("action".into(), "overflow".into());
-            // TODO: this is ugly
-            res.push(
-                json!({
-                    "measurement": "bucketing",
-                    "tags": tags,
-                    "fields": {
-                        "count": b.overflow
-                    },
-                    "timestamp": timestamp
-                })
-                .into(),
-            );
+            let mut m = Map::with_capacity(4);
+            m.insert("measurement".into(), "bucketing".into());
+            m.insert("tags".into(), Value::Object(tags.clone()));
+            let mut fields = Map::with_capacity(1);
+            fields.insert("count".into(), b.pass.into());
+            m.insert("fields".into(), Value::Object(fields));
+            m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly
+            res.push(Value::Object(m.clone()));
         }
         Ok(res)
     }
