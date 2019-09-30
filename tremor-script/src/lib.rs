@@ -53,7 +53,6 @@ use serde::ser::{self, Serialize};
 pub use simd_json::value::borrowed::Map;
 pub use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
-use simd_json::OwnedValue;
 
 pub use crate::registry::{
     aggr_registry, registry, AggrRegistry, Registry, TremorAggrFn, TremorAggrFnWrapper, TremorFn,
@@ -65,6 +64,15 @@ pub use crate::script::{QueryRentalWrapper, Return, Script, StmtRentalWrapper};
 pub struct ValueAndMeta<'event> {
     pub value: Value<'event>,
     pub meta: Value<'event>,
+}
+
+impl<'event> Default for ValueAndMeta<'event> {
+    fn default() -> Self {
+        ValueAndMeta {
+            value: Value::Object(Map::default()),
+            meta: Value::Object(Map::default()),
+        }
+    }
 }
 
 impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
@@ -126,16 +134,6 @@ impl rentals::Value {
     }
 }
 
-#[cfg(test)]
-impl From<simd_json::OwnedValue> for LineValue {
-    fn from(v: simd_json::OwnedValue) -> Self {
-        rentals::Value::new(Box::new(vec![vec![]]), |_| ValueAndMeta {
-            value: v.into(),
-            meta: Value::Object(Map::new()),
-        })
-    }
-}
-
 impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
         rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
@@ -183,26 +181,16 @@ impl
     }
 }
 
-impl From<(simd_json::BorrowedValue<'static>, simd_json::OwnedValue)> for rentals::Value {
-    fn from(v: (simd_json::BorrowedValue<'static>, simd_json::OwnedValue)) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
-            value: v.0,
-            meta: v.1.into(),
-        })
-    }
-}
-
-impl From<(simd_json::OwnedValue, simd_json::OwnedValue)> for rentals::Value {
-    fn from(v: (simd_json::OwnedValue, simd_json::OwnedValue)) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
-            value: v.0.into(),
-            meta: v.1.into(),
-        })
-    }
-}
-
 impl Clone for LineValue {
     fn clone(&self) -> Self {
+        // The only safe way to clone a line value is to clone
+        // the data and then turn it into a owned value
+        // then turn this owned value back into a borrowed value
+        // we need to do this dance to 'free' value from the
+        // linked lifetime.
+        // An alternative would be keeping the raw data in an ARC
+        // instea of a Box.
+        use simd_json::OwnedValue;
         LineValue::new(Box::new(vec![]), |_| {
             let v = self.suffix();
             ValueAndMeta {
@@ -227,6 +215,11 @@ impl<'de> Deserialize<'de> for LineValue {
     where
         D: Deserializer<'de>,
     {
+        // We need to convert the data first into a owned value since
+        // serde doesn't like lifetimes. Then we convert it into a line
+        // value.
+        // FIXME we should find a way to not do this!
+        use simd_json::OwnedValue;
         let r = OwnedValue::deserialize(deserializer)?;
         // FIXME after POC
         let value = r.get("value").unwrap();

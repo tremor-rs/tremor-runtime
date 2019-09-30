@@ -65,8 +65,8 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::{json, OwnedValue, BorrowedValue as Value, ValueTrait};
-use std::borrow::Borrow;
+use simd_json::{json, BorrowedValue as Value, ValueTrait};
+use std::borrow::{Borrow, Cow};
 use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
@@ -98,10 +98,7 @@ impl Rate {
             .get("time_range")
             .and_then(Value::as_u64)
             .unwrap_or(1000);
-        let windows = meta
-            .get("windows")
-            .and_then(Value::as_u64)
-            .unwrap_or(100) as usize;
+        let windows = meta.get("windows").and_then(Value::as_u64).unwrap_or(100) as usize;
         Some(Rate {
             rate,
             time_range,
@@ -143,8 +140,7 @@ impl Operator for BucketGrouper {
             let groups = match self.buckets.get_mut(class.borrow() as &str) {
                 Some(g) => g,
                 None => {
-                    let cardinality = 
-                        meta
+                    let cardinality = meta
                         .get("cardinality")
                         .and_then(Value::as_u64)
                         .unwrap_or(1000) as usize;
@@ -200,33 +196,40 @@ impl Operator for BucketGrouper {
 
     fn metrics(
         &self,
-        mut tags: HashMap<String, String>,
+        mut tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
         timestamp: u64,
-    ) -> Result<Vec<OwnedValue>> {
+    ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
-            tags.insert("class".to_owned(), class.to_owned());
+            // FIXME: .unwrap() this can be done w/o conversion
+            tags.insert("class".into(), class.clone().into());
 
-            tags.insert("action".to_owned(), "pass".to_owned());
+            tags.insert("action".into(), "pass".into());
             // TODO: this is ugly
-            res.push(json!({
-                "measurement": "bucketing",
-                "tags": tags,
-                "fields": {
-                    "count": b.pass
-                },
-                "timestamp": timestamp
-            }));
-            tags.insert("action".to_owned(), "overflow".to_owned());
+            res.push(
+                json!({
+                    "measurement": "bucketing",
+                    "tags": tags,
+                    "fields": {
+                        "count": b.pass
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            );
+            tags.insert("action".into(), "overflow".into());
             // TODO: this is ugly
-            res.push(json!({
-                "measurement": "bucketing",
-                "tags": tags,
-                "fields": {
-                    "count": b.overflow
-                },
-                "timestamp": timestamp
-            }));
+            res.push(
+                json!({
+                    "measurement": "bucketing",
+                    "tags": tags,
+                    "fields": {
+                        "count": b.overflow
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            );
         }
         Ok(res)
     }

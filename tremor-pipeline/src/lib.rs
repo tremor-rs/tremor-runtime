@@ -38,7 +38,8 @@ use petgraph::visit::EdgeRef;
 use serde::Serialize;
 use simd_json::json;
 use simd_json::value::ValueTrait;
-use simd_json::{BorrowedValue, OwnedValue};
+use simd_json::BorrowedValue;
+use std::borrow::Cow;
 use std::iter;
 use std::iter::Iterator;
 use std::sync::Arc;
@@ -221,7 +222,11 @@ impl Operator for OperatorNode {
     fn on_contraflow(&mut self, contraevent: &mut Event) {
         self.op.on_contraflow(contraevent)
     }
-    fn metrics(&self, tags: HashMap<String, String>, timestamp: u64) -> Result<Vec<OwnedValue>> {
+    fn metrics(
+        &self,
+        tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        timestamp: u64,
+    ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 }
@@ -376,21 +381,21 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
 
 #[derive(Debug, Default, Clone)]
 pub struct NodeMetrics {
-    inputs: HashMap<String, u64>,
-    outputs: HashMap<String, u64>,
+    inputs: HashMap<Cow<'static, str>, u64>,
+    outputs: HashMap<Cow<'static, str>, u64>,
 }
 
 impl NodeMetrics {
     fn to_value(
         &self,
         metric_name: &str,
-        tags: &mut HashMap<String, String>,
+        tags: &mut HashMap<Cow<'static, str>, Cow<'static, str>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for (k, v) in &self.inputs {
-            tags.insert("direction".to_owned(), "input".to_owned());
-            tags.insert("port".to_owned(), k.to_owned());
+            tags.insert("direction".into(), "input".into());
+            tags.insert("port".into(), k.clone());
             //TODO: This is ugly
             res.push(
                 json!({
@@ -405,8 +410,8 @@ impl NodeMetrics {
             )
         }
         for (k, v) in &self.outputs {
-            tags.insert("direction".to_owned(), "output".to_owned());
-            tags.insert("port".to_owned(), k.to_owned());
+            tags.insert("direction".into(), "output".into());
+            tags.insert("port".into(), k.clone());
             //TODO: This is ugly
             res.push(
                 json!({
@@ -452,7 +457,7 @@ impl ExecutableGraph {
         if let Some(ival) = self.metric_interval {
             if event.ingest_ns - self.last_metrics > ival {
                 let mut tags = HashMap::new();
-                tags.insert("pipeline".to_string(), self.id.clone());
+                tags.insert("pipeline".into(), self.id.clone().into());
                 self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
                 self.last_metrics = event.ingest_ns;
             }
@@ -489,13 +494,13 @@ impl ExecutableGraph {
                 for (out_port, _) in &res {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs
-                        .get_mut(out_port)
+                        .get_mut(out_port.as_str())
                     {
                         *count += 1;
                     } else {
                         unsafe { self.metrics.get_unchecked_mut(idx) }
                             .outputs
-                            .insert(out_port.clone(), 1);
+                            .insert(out_port.clone().into(), 1);
                     }
                 }
                 self.enqueue_events(idx, res);
@@ -509,12 +514,12 @@ impl ExecutableGraph {
     fn enqueue_metrics(
         &mut self,
         metric_name: String,
-        mut tags: HashMap<String, String>,
+        mut tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
         timestamp: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
-            tags.insert("node".to_owned(), unsafe {
-                self.graph.get_unchecked(i).id.clone()
+            tags.insert("node".into(), unsafe {
+                self.graph.get_unchecked(i).id.clone().into()
             });
             if let Ok(metrics) =
                 unsafe { self.graph.get_unchecked(i) }.metrics(tags.clone(), timestamp)
@@ -564,26 +569,26 @@ impl ExecutableGraph {
                 for (idx, in_port) in outgoing.iter().take(len - 1) {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
                         .inputs
-                        .get_mut(in_port)
+                        .get_mut(in_port.as_str())
                     {
                         *count += 1;
                     } else {
                         unsafe { self.metrics.get_unchecked_mut(*idx) }
                             .inputs
-                            .insert(in_port.clone(), 1);
+                            .insert(in_port.clone().into(), 1);
                     }
                     self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
                 let (idx, in_port) = unsafe { outgoing.get_unchecked(len - 1) };
                 if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
                     .inputs
-                    .get_mut(in_port)
+                    .get_mut(in_port.as_str())
                 {
                     *count += 1;
                 } else {
                     unsafe { self.metrics.get_unchecked_mut(*idx) }
                         .inputs
-                        .insert(in_port.clone(), 1);
+                        .insert(in_port.clone().into(), 1);
                 }
                 self.stack.push((*idx, in_port.clone(), event))
             }
