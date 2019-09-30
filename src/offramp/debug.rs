@@ -30,8 +30,8 @@ use crate::system::PipelineAddr;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
-use simd_json::OwnedValue;
 use std::time::{Duration, Instant};
+use tremor_script::prelude::*;
 
 #[derive(Debug, Clone)]
 struct DebugBucket {
@@ -61,7 +61,7 @@ impl OfframpImpl for Debug {
 }
 impl Offramp for Debug {
     fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
+        for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
                 println!();
@@ -74,7 +74,7 @@ impl Offramp for Debug {
                 println!();
                 self.buckets.clear();
             }
-            let c = if let Some(OwnedValue::String(s)) = event.meta.get("class") {
+            let c = if let Some(s) = meta.get("class").and_then(Value::as_string) {
                 s.to_string()
             } else {
                 "<unclassified>".into()

@@ -26,14 +26,12 @@ use crate::utils::{duration_to_millis, nanotime};
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
 use serde_yaml;
-use simd_json::json;
 use std::convert::From;
 use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
-use tremor_pipeline::MetaMap;
-use tremor_script::{LineValue, Value};
+use tremor_script::prelude::*;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -115,18 +113,18 @@ impl Rest {
         let config = self.config.clone();
         self.pool.execute(move || {
             let r = Self::flush(&destination, config, payload.as_str());
-            let mut m = MetaMap::new();
+            let mut m = Map::new();
             if let Ok(t) = r {
-                m.insert("time".into(), json!(t));
+                m.insert("time".into(), t.into());
             } else {
                 error!("REST offramp error: {:?}", r);
-                m.insert("error".into(), json!("Failed to send"));
+                m.insert("error".into(), "Failed to send".into());
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
-                meta: m,
-                value: LineValue::new(Box::new(vec![]), |_| Value::Null),
+
+                data: (Value::Null, m).into(),
                 ingest_ns: nanotime(),
                 kind: None,
             };

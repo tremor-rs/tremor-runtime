@@ -21,7 +21,9 @@ pub struct Null {}
 
 impl Codec for Null {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        Ok(Some(LineValue::new(Box::new(vec![data]), |_| Value::Null)))
+        Ok(Some(LineValue::new(Box::new(vec![data]), |_| {
+            Value::Null.into()
+        })))
     }
     fn encode(&self, _data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Ok(vec![])

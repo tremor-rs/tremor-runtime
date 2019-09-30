@@ -67,12 +67,11 @@ pub fn send_event(
     if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
         for d in data {
             match codec.decode(d, *ingest_ns) {
-                Ok(Some(value)) => {
+                Ok(Some(data)) => {
                     let event = tremor_pipeline::Event {
                         is_batch: false,
                         id,
-                        meta: tremor_pipeline::MetaMap::new(),
-                        value,
+                        data,
                         ingest_ns: *ingest_ns,
                         kind: None,
                     };

@@ -15,7 +15,8 @@
 use crate::errors::*;
 use crate::{Event, Operator};
 use serde_yaml;
-use simd_json::OwnedValue;
+use tremor_script::prelude::*;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
@@ -44,24 +45,27 @@ pub struct EventHistory {
 
 impl Operator for EventHistory {
     fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
-        match event.meta.get_mut(&self.config.name) {
-            Some(OwnedValue::Array(ref mut history)) => {
-                history.push(OwnedValue::from(format!(
-                    "evt: {}({})",
-                    self.config.op, event.id
-                )));
-            }
-            None => {
-                event.meta.insert(
-                    self.config.name.clone(),
-                    OwnedValue::Array(vec![OwnedValue::from(format!(
-                        "evt: {}({})",
-                        self.config.op, event.id
-                    ))]),
-                );
-            }
-            _ => (),
-        };
+        let id = event.id;
+        event.data.rent_mut(|data| {
+            let meta = &mut data.meta;
+            match meta.get_mut(&self.config.name) {
+                Some(Value::Array(ref mut history)) => {
+                    history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
+                }
+                None => {
+                    if let Some(ref mut obj) = meta.as_object_mut() {
+                        obj.insert(
+                            self.config.name.clone().into(),
+                            Value::Array(vec![Value::from(format!(
+                                "evt: {}({})",
+                                self.config.op, id
+                            ))]),
+                        );
+                    }
+                }
+                _ => (),
+            };
+        });
         Ok(vec![("out".to_string(), event)])
     }
 
@@ -69,24 +73,27 @@ impl Operator for EventHistory {
         true
     }
     fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
-        match signal.meta.get_mut(&self.config.name) {
-            Some(OwnedValue::Array(ref mut history)) => {
-                history.push(OwnedValue::from(format!(
-                    "sig: {}({})",
-                    self.config.op, signal.id
-                )));
-            }
-            None => {
-                signal.meta.insert(
-                    self.config.name.clone(),
-                    OwnedValue::Array(vec![OwnedValue::from(format!(
-                        "sig: {}({})",
-                        self.config.op, signal.id
-                    ))]),
-                );
-            }
-            _ => (),
-        };
+        let id = signal.id;
+        signal.data.rent_mut(|data| {
+            let meta = &mut data.meta;
+            match meta.get_mut(&self.config.name) {
+                Some(Value::Array(ref mut history)) => {
+                    history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
+                }
+                None => {
+                    if let Some(ref mut obj) = meta.as_object_mut() {
+                        obj.insert(
+                            self.config.name.clone().into(),
+                            Value::Array(vec![Value::from(format!(
+                                "sig: {}({})",
+                                self.config.op, id
+                            ))]),
+                        );
+                    }
+                }
+                _ => (),
+            };
+        });
         Ok(vec![])
     }
 }
@@ -94,10 +101,6 @@ impl Operator for EventHistory {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::MetaMap;
-    use simd_json::OwnedValue;
-    use tremor_script::Value;
-
     #[test]
     fn history_op_test() {
         let mut op = EventHistory {
@@ -111,8 +114,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: MetaMap::new(),
-            value: sjv!(Value::from("badger")),
+            data: Value::from("badger").into(),
             kind: None,
         };
 
@@ -124,10 +126,10 @@ mod test {
         assert_eq!("out", out);
         let _ = op.on_signal(&mut event);
 
-        let history = event.meta.get(&op.config.name);
+        let history = event.data.suffix().meta.get(&op.config.name);
 
-        match history {
-            Some(OwnedValue::Array(ref history)) => {
+        match history.and_then(Value::as_array) {
+            Some(history) => {
                 assert_eq!(2, history.len());
             }
             _ => unreachable!(),

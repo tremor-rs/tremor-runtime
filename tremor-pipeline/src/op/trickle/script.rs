@@ -13,11 +13,8 @@
 // limitations under the License.
 use crate::errors::*;
 use crate::{Event, Operator};
-// use halfbrown::hashmap;
-use simd_json::borrowed::Value;
-// use simd_json::value::ValueTrait;
-use tremor_script::{self, interpreter::AggrType, EventContext, Return};
 use std::sync::Arc;
+use tremor_script::{self, interpreter::AggrType, EventContext, Return};
 
 rental! {
     pub mod rentals {
@@ -35,7 +32,6 @@ rental! {
     }
 }
 
-
 #[derive(Debug)]
 pub struct TrickleScript {
     pub id: String,
@@ -44,37 +40,42 @@ pub struct TrickleScript {
 }
 
 impl TrickleScript {
-    pub fn with_stmt(id: String, stmt_rentwrapped: tremor_script::StmtRentalWrapper) -> TrickleScript {
+    pub fn with_stmt(
+        id: String,
+        stmt_rentwrapped: tremor_script::StmtRentalWrapper,
+    ) -> TrickleScript {
         let s = match stmt_rentwrapped.stmt.suffix() {
-            tremor_script::ast::Stmt::ScriptDecl(ref script) =>
-                Some(script.clone()),
-            _ => {
-                None
-            }
+            tremor_script::ast::Stmt::ScriptDecl(ref script) => Some(script.clone()),
+            _ => None,
         };
 
         if let Some(script) = s {
-                            TrickleScript {
-                    id,
-                    stmt: stmt_rentwrapped.stmt.clone(),
-                    script: rentals::Script::new(stmt_rentwrapped.stmt.clone(), |_| unsafe { std::mem::transmute(script.clone()) }),
-                }
-
+            TrickleScript {
+                id,
+                stmt: stmt_rentwrapped.stmt.clone(),
+                script: rentals::Script::new(stmt_rentwrapped.stmt.clone(), |_| unsafe {
+                    std::mem::transmute(script.clone())
+                }),
+            }
         } else {
-unreachable!("bad script");
+            unreachable!("bad script");
         }
     }
 }
 
 impl Operator for TrickleScript {
-    fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
+
+        let data = event.data.suffix();
         #[allow(clippy::transmute_ptr_to_ptr)]
         #[allow(mutable_transmutes)]
-        let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(event.value.suffix()) };
-        let mut event_meta: simd_json::borrowed::Value =
-            simd_json::owned::Value::Object(event.meta).into();
-
+        let mut unwind_event: &mut tremor_script::Value<'_> =
+            unsafe { std::mem::transmute(&data.value) };
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        #[allow(mutable_transmutes)]
+        let mut event_meta: &mut tremor_script::Value<'_> =
+            unsafe { std::mem::transmute(&data.meta) };
         let value = self.script.suffix().script.run(
             &context,
             AggrType::Emit,
@@ -83,24 +84,12 @@ impl Operator for TrickleScript {
         );
         match value {
             Ok(Return::EmitEvent { port }) => {
-                let event_meta: simd_json::owned::Value = event_meta.into();
-                if let simd_json::owned::Value::Object(map) = event_meta {
-                    event.meta = map;
-                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-                } else {
-                    unreachable!();
-                }
+                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
             }
 
             Ok(Return::Emit { value, port }) => {
-                let event_meta: simd_json::owned::Value = event_meta.into();
-                if let simd_json::owned::Value::Object(map) = event_meta {
-                    event.meta = map;
-                    *unwind_event = value;
-                    Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-                } else {
-                    unreachable!();
-                }
+                *unwind_event = value;
+                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(_e) => {
@@ -116,10 +105,9 @@ impl Operator for TrickleScript {
                 //     };
                 //     Ok(vec![("error".to_string(), event)])
                 // } else {
-                    unreachable!();
-//                }
+                unreachable!();
+                //                }
             }
         }
     }
 }
-

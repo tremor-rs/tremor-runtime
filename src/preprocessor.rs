@@ -138,7 +138,10 @@ impl Preprocessor for Influx {
             Ok(vec![])
         } else {
             match self.codec.decode(data.to_vec(), *ingest_ns) {
-                Ok(Some(x)) => Ok(vec![self.json.encode_rental(x).expect("could not encode")]),
+                Ok(Some(x)) => Ok(vec![self
+                    .json
+                    .encode(&x.suffix().value)
+                    .expect("could not encode")]),
                 Ok(None) => Ok(vec![]),
                 Err(e) => {
                     dbg!(("influx", &e));

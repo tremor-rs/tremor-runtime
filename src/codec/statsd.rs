@@ -17,16 +17,18 @@ use crate::errors::*;
 use simd_json::value::borrowed::{Map, Value};
 use simd_json::value::ValueTrait;
 use std::str;
-use tremor_script::LineValue;
+use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct StatsD {}
 
 impl Codec for StatsD {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(vec![data]), |raw| decode(&raw[0], ingest_ns))
-            .map_err(|e| e.0)
-            .map(Some)
+        LineValue::try_new(Box::new(vec![data]), |raw| {
+            decode(&raw[0], ingest_ns).map(ValueAndMeta::from)
+        })
+        .map_err(|e| e.0)
+        .map(Some)
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {

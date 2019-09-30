@@ -65,8 +65,8 @@ impl OfframpImpl for File {
 impl Offramp for File {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            if let Ok(ref raw) = codec.encode_rental(event.value) {
+        for value in event.value_iter() {
+            if let Ok(ref raw) = codec.encode(value) {
                 //TODO: Error handling
                 if let Err(e) = self
                     .file
