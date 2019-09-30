@@ -22,7 +22,8 @@ pub mod trickle;
 use super::{Event, NodeConfig};
 use crate::errors::*;
 use halfbrown::HashMap;
-use simd_json::OwnedValue;
+use std::borrow::Cow;
+use tremor_script::Value;
 
 pub trait Operator: std::fmt::Debug + Send {
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>>;
@@ -44,7 +45,11 @@ pub trait Operator: std::fmt::Debug + Send {
     fn on_contraflow(&mut self, _insight: &mut Event) {}
 
     // Returns metrics for this operator
-    fn metrics(&self, _tags: HashMap<String, String>, _timestamp: u64) -> Result<Vec<OwnedValue>> {
+    fn metrics(
+        &self,
+        _tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        _timestamp: u64,
+    ) -> Result<Vec<Value<'static>>> {
         Ok(Vec::new())
     }
 }

@@ -526,6 +526,8 @@ impl Extractor {
                             return Ok(Value::Null);
                         }
                         //FIXME: This is needed for removing the lifetimne from the result
+                        // The reason for this madness is that r might refference some
+                        // data in v and we can't guarantee that v outlifes r.
                         let r: OwnedValue = Value::Object(r.clone()).into();
                         Ok(r.into())
                     } else {

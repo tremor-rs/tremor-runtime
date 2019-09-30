@@ -232,7 +232,10 @@ fn main() -> Result<()> {
         loop {
             for event in &events {
                 let value = LineValue::new(Box::new(vec![]), |_| unsafe {
-                    std::mem::transmute(event.clone())
+                    std::mem::transmute(ValueAndMeta {
+                        value: event.clone(),
+                        ..Default::default()
+                    })
                 });
                 continuation.clear();
                 let ingest_ns = if matches.value_of("replay-influx").is_some() {
@@ -256,14 +259,13 @@ fn main() -> Result<()> {
                         ingest_ns,
                         is_batch: false,
                         kind: None,
-                        meta: tremor_pipeline::MetaMap::new(),
-                        value: value.clone(),
+                        data: value.clone().into(),
                     },
                     &mut continuation,
                 );
 
                 for (output, event) in continuation.drain(..) {
-                    let event = event.value.suffix();
+                    let event = &event.data.suffix().value;
                     if matches.is_present("quiet") {
                     } else if matches.is_present("print-result-raw") {
                         println!("{}", serde_json::to_string_pretty(event).expect(""));
