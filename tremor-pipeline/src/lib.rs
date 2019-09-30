@@ -224,7 +224,7 @@ impl Operator for OperatorNode {
     }
     fn metrics(
         &self,
-        tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
@@ -389,13 +389,13 @@ impl NodeMetrics {
     fn to_value(
         &self,
         metric_name: &str,
-        tags: &mut HashMap<Cow<'static, str>, Cow<'static, str>>,
+        tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for (k, v) in &self.inputs {
             tags.insert("direction".into(), "input".into());
-            tags.insert("port".into(), k.clone());
+            tags.insert("port".into(), Value::String(k.clone()));
             //TODO: This is ugly
             res.push(
                 json!({
@@ -411,7 +411,7 @@ impl NodeMetrics {
         }
         for (k, v) in &self.outputs {
             tags.insert("direction".into(), "output".into());
-            tags.insert("port".into(), k.clone());
+            tags.insert("port".into(), Value::String(k.clone()));
             //TODO: This is ugly
             res.push(
                 json!({
@@ -514,7 +514,7 @@ impl ExecutableGraph {
     fn enqueue_metrics(
         &mut self,
         metric_name: String,
-        mut tags: HashMap<Cow<'static, str>, Cow<'static, str>>,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
