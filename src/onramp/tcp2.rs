@@ -177,7 +177,6 @@ fn onramp_loop(
                         */
 
                         loop {
-                            // TODO implement resume from partial reads (until a delimiter is hit)
                             match stream.read(&mut buffer) {
                                 Ok(0) => {
                                     debug!(
