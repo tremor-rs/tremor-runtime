@@ -1,0 +1,44 @@
+onramp:
+  - id: udp
+    type: udp
+    preprocessors:
+      - lines
+    codec: json
+    config:
+      host: 127.0.0.1
+      port: 8081
+
+offramp:
+  - id: console
+    type: stdout
+    codec: json
+
+pipeline:
+  - id: demo
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: to_influx
+        op: runtime::tremor
+        config:
+          script: |
+            match event of
+                case rp = %{ body ~= influx|| } => let msg = rp.body, let msg.timestamp = system::ingest_ns(), msg
+            end
+    links:
+      in: [ to_influx ]
+      to_influx: [ out ]
+
+
+binding:
+  - id: default
+    links:
+      '/onramp/udp/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
+      '/pipeline/demo/{instance}/out': [ '/offramp/console/{instance}/in' ]
+
+mapping:
+  /binding/default/01:
+    instance: 01
