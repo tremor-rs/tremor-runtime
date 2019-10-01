@@ -100,7 +100,7 @@ impl Backpressure {
                 break;
             }
         }
-        return b;
+        b
     }
 }
 
