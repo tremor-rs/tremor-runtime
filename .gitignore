@@ -30,3 +30,5 @@ tremor-script/priv
 *.swp
 .*.swp
 target.vsc
+ccov.zip
+grcov
