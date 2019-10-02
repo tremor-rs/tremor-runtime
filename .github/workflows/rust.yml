@@ -1,4 +1,4 @@
-name: Rust
+name: Rust - Latest
 
 on: [push]
 
@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Check Formating
         run: cargo fmt --all -- --check
   tests:
@@ -31,6 +35,10 @@ jobs:
       - uses: actions/checkout@v1
       - name: Install deps
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Build
         run: cargo build --all --verbose
       - name: Run tests
@@ -43,6 +51,10 @@ jobs:
       - uses: actions/checkout@v1
       - name: Install deps
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
