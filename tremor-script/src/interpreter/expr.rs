@@ -20,10 +20,11 @@ use crate::ast::*;
 use crate::errors::*;
 use crate::stry;
 use crate::EventContext;
-use simd_json::value::borrowed::{Map, Value};
-use simd_json::value::ValueTrait;
-use std::borrow::Borrow;
-use std::borrow::Cow;
+use simd_json::value::{
+    borrowed::{Map, Value},
+    ValueTrait,
+};
+use std::borrow::{Borrow, Cow};
 
 #[derive(Debug)]
 pub enum Cont<'run, 'event>
