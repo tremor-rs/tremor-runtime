@@ -75,8 +75,10 @@ jobs:
         run: cargo install cargo-tarpaulin -f
       - name: run tarpaulin
         run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/*
-      - name: upload
-        run: bash <(curl -s https://codecov.io/bash)
+      - uses: codecov/codecov-action@v1.0.2
+        with:
+          token: ${{secrets.CODECOV_TOKEN}} #required
+          file: ./cobertura.xml
   # code-coverage:
   #   runs-on: ubuntu-latest
   #   steps:
