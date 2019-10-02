@@ -80,6 +80,10 @@ jobs:
           'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
       - id: coverage
         uses: actions-rs/grcov@v0.1
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ steps.coverage.outputs.report }}
+          path: coverage/report
       - name: Upload to codecov
         uses: codecov/codecov-action@v1.0.2
         with:
