@@ -3,13 +3,29 @@ name: Rust
 on: [push]
 
 jobs:
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Check license headers
+        run: make chk_copyright_ci
+      - name: Install clippy-deny
+        run: cargo install cargo-deny
+      - name: Check dependencies
+        run: cargo deny check
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Check Formating
+        run: make chk_copyright_ci
   format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
       - name: Check Formating
         run: cargo fmt --all -- --check
-  build:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -19,7 +35,8 @@ jobs:
         run: cargo build --all --verbose
       - name: Run tests
         run: cargo test --all --verbose
-
+      - name: Run Integration Tests
+        run: make it
   clippy_check:
     runs-on: ubuntu-latest
     steps:
@@ -58,4 +75,3 @@ jobs:
           file: ${{ steps.coverage.outputs.report }}
           #flags: unittests #optional
           #name: codecov-umbrella #optional
-
