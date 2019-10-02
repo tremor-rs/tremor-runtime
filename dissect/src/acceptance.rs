@@ -417,7 +417,7 @@ fn do_repeat_kv() {
 /*
 #[test]
 fn do_arr() {
-    let p = "this is a %{^arr} case named %{^arr}");;
+    let p = "this is a %{^arr} case named %{^arr}");
     let mut m = HashMap::new();
     m.insert(
         "arr".into(),
@@ -465,7 +465,7 @@ fn do_str_error1() {
 
 #[test]
 fn do_str_error2() {
-    let p = Pattern::try_from("this is a %{arr:int} %{+arr}");;
+    let p = Pattern::try_from("this is a %{arr:int} %{+arr}");
 
     assert_eq!(
         p,
