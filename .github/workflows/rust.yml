@@ -71,19 +71,35 @@ jobs:
         with:
           toolchain: nightly
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --no-fail-fast --all
-        env:
-          'CARGO_INCREMENTAL': '0'
-          'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
-      - id: coverage
-        uses: actions-rs/grcov@v0.1
-      - uses: actions/upload-artifact@master
-        with:
-          name: coverage-report
-          path: ${{ steps.coverage.outputs.report }}
+      - name: install tarpaulin
+        run: cargo install cargo-tarpaulin -f
+      - name: run tarpaulin
+        run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/*
+      - name: upload
+        run: bash <(curl -s https://codecov.io/bash)
+  # code-coverage:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v1
+  #     - name: Install deps
+  #       run: sudo apt-get install -y libssl1.0-dev libssl1.0
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: nightly
+  #         override: true
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: test
+  #         args: --no-fail-fast --all
+  #       env:
+  #         'CARGO_INCREMENTAL': '0'
+  #         'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+  #     - id: coverage
+  #       uses: actions-rs/grcov@v0.1
+  #     - uses: actions/upload-artifact@master
+  #       with:
+  #         name: coverage-report
+  #         path: ${{ steps.coverage.outputs.report }}
       # - name: Upload to codecov
       #   uses: codecov/codecov-action@v1.0.2
       #   with:

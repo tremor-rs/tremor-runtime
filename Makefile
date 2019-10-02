@@ -57,3 +57,7 @@ chk_panic_ci:
 
 docserve:
 	mkdocs serve
+
+tarpaulin:
+	docker build . -f Dockerfile.tarpaulin -t tremor-tarpaulin
+	docker run --privileged --mount type=bind,source="$$(pwd)",target=/code -t tremor-tarpaulin

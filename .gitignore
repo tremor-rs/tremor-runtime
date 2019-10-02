@@ -32,3 +32,4 @@ tremor-script/priv
 target.vsc
 ccov.zip
 grcov
+cobertura.xml
