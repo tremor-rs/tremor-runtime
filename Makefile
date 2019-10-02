@@ -38,22 +38,22 @@ force:
 	true
 
 chk_copyright:
-	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || (echo "##[error] No copyright in $$f") done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || (echo "##[error] No copyright in $$f") done
 
 chk_copyright_ci:
-	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
 
 chk_unwrap:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'unwrap()' $$f > /dev/null && (echo "unwrap found in $$f") done
+	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'unwrap()' $$f > /dev/null && (echo "unwrap found in $$f") done
 
 chk_unwrap_ci:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'unwrap()' > /dev/null && exit 1; done; exit 0
+	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'unwrap()' > /dev/null && exit 1; done; exit 0
 
 chk_panic:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'panic!(' $$f > /dev/null && (echo "panic found in $$f") done
+	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'panic!(' $$f > /dev/null && (echo "panic found in $$f") done
 
 chk_panic_ci:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'panic!(' > /dev/null && exit 1; done; exit 0
+	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'panic!(' > /dev/null && exit 1; done; exit 0
 
 docserve:
 	mkdocs serve
