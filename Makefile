@@ -61,5 +61,5 @@ docserve:
 tarpaulin:
 	@docker build . -f Dockerfile.tarpaulin -t tremor-tarpaulin
 	@docker run --privileged --mount type=bind,source="$$(pwd)",target=/code -t tremor-tarpaulin
-	@echo "To view run: pycobertura show cobertura.xml"
+	@echo "To view run: pycobertura show --format html --output coverage.html cobertura.xml && open coverage.html"
 	@echo "  pycobertura can be installed via pip3 install pycobertura"

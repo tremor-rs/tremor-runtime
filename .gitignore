@@ -33,3 +33,4 @@ target.vsc
 ccov.zip
 grcov
 cobertura.xml
+coverage.html
