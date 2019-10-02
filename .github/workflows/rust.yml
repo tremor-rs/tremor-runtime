@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Check license headers
-        run: make chk_copyright_ci
+        run: make chk_copyright; make chk_copyright_ci
       - name: Install clippy-deny
         run: cargo install cargo-deny
       - name: Check dependencies
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Check for 'forbidden' code
-        run: make chk_unwrap_ci
+        run: make chk_unwrap; make chk_unwrap_ci
   format:
     runs-on: ubuntu-latest
     steps:
