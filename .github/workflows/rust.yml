@@ -13,12 +13,12 @@ jobs:
         run: cargo install cargo-deny
       - name: Check dependencies
         run: cargo deny check
-  license:
+  sanity:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Check Formating
-        run: make chk_copyright_ci
+      - name: Check for 'forbidden' code
+        run: make chk_unwrap_ci
   format:
     runs-on: ubuntu-latest
     steps:
