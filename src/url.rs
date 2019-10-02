@@ -274,5 +274,4 @@ mod test {
         assert_eq!(Some("01".to_owned()), url.instance());
         assert_eq!(Some("in".to_owned()), url.instance_port());
     }
-
 }

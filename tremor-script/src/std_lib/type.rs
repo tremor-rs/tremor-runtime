@@ -161,5 +161,4 @@ mod test {
         let v = Value::Object(Map::new());
         assert_val!(f(&[&v]), "record");
     }
-
 }

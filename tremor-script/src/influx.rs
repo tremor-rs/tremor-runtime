@@ -658,5 +658,4 @@ mod tests {
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
     }
-
 }

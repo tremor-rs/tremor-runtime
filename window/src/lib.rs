@@ -262,7 +262,6 @@ mod tests {
         println!("{:?}", tw);
         assert!(r.is_ok());
     }
-
 }
 
 #[cfg(test)]

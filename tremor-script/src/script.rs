@@ -61,9 +61,7 @@ where
 }
 
 #[derive(Debug)] // FIXME rename ScriptRentalWrapper
-pub struct Script
-where
-{
+pub struct Script {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
     pub script: rentals::Script,
     pub source: String,
@@ -112,11 +110,11 @@ rental! {
     }
 }
 
-unsafe impl Send for rentals::Query where {
+unsafe impl Send for rentals::Query {
     // Nothing to do
 }
 
-impl PartialEq for rentals::Stmt where {
+impl PartialEq for rentals::Stmt {
     fn eq(&self, other: &rentals::Stmt) -> bool {
         self.suffix() == other.suffix()
     }
@@ -124,13 +122,13 @@ impl PartialEq for rentals::Stmt where {
 
 impl Eq for rentals::Stmt {}
 
-impl PartialOrd for rentals::Stmt where {
+impl PartialOrd for rentals::Stmt {
     fn partial_cmp(&self, _other: &rentals::Stmt) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
     }
 }
 
-impl std::hash::Hash for rentals::Stmt where {
+impl std::hash::Hash for rentals::Stmt {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
         // self.suffix().stmt.hash(state);
         // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER

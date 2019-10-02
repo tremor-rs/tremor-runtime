@@ -384,5 +384,4 @@ mod tests {
         let input = 1_559_655_782_123_456_789u64;
         assert_eq!(_without_subseconds(input), 1559655782u64);
     }
-
 }

@@ -302,5 +302,4 @@ mod test {
         op.on_contraflow(&mut insight_reset);
         assert_eq!(op.backoff, 0);
     }
-
 }

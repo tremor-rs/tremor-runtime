@@ -65,5 +65,4 @@ mod tests {
             .expect("cannot parse datetime");
         assert_eq!(output, 1_565_210_472_159_975_000);
     }
-
 }
