@@ -35,6 +35,7 @@ skip = [
 # Crates with licenses this tool fails to auto-detect with high confidence we explicitly allow
 #
 
+# This is MIT Apache dual licensed
 [[licenses.ignore]]
 name = "criterion-plot"
 license_files = [
@@ -42,12 +43,14 @@ license_files = [
   { path = "LICENSE-APACHE", hash = 0xa577772b },
 ]
 
+# This is MIT, Apache, CC, BSD-2 and BSD-3
 [[licenses.ignore]]
 name = "crossbeam-channel"
 license_files = [
   { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
 ]
 
+# This is MIT, Apache, ISC tripple licensed
 [[licenses.ignore]]
 name = "hyper-rustls"
 license_files = [
@@ -63,24 +66,28 @@ license_files = [
   { path = "LICENSE", hash = 0xbd0eed23 },
 ]
 
+# This is MIT, Apache, ISC tripple licensed
 [[licenses.ignore]]
 name = "rustls"
 license_files = [
   { path = "LICENSE", hash = 0xe567c411 },
 ]
 
+# This is MIT, Apache, ISC tripple licensed
 [[licenses.ignore]]
 name = "sct"
 license_files = [
   { path = "LICENSE", hash = 0xb7619ae7 },
 ]
 
+# ISC style
 [[licenses.ignore]]
 name = "webpki"
 license_files = [
   { path = "LICENSE", hash = 0x1c7e6c },
 ]
 
+# MPL-2.0
 [[licenses.ignore]]
 name = "webpki-roots"
 license_files = [
