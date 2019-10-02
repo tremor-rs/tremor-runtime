@@ -86,3 +86,10 @@ name = "webpki-roots"
 license_files = [
   { path = "LICENSE", hash = 0x6c919c48 },
 ]
+
+# This is Zlib
+[[licenses.ignore]]
+name = "adler32"
+license_files = [
+  { path = "LICENSE", hash = 0x1e225da6 },
+]
