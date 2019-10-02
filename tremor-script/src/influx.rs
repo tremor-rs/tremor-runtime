@@ -107,7 +107,7 @@ pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
 
     output.write_all(&[b' ']).ok()?;
     let t = v.get("timestamp")?;
-    if t.as_u64().is_some() {
+    if t.is_u64() {
         t.write(&mut output).ok()?;
         Some(output)
     } else {

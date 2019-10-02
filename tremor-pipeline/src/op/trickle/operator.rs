@@ -14,6 +14,7 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
+use tremor_script::prelude::*;
 
 use tremor_script::{self};
 
@@ -30,7 +31,6 @@ impl TrickleOperator {
         stmt_rentwrapped: tremor_script::StmtRentalWrapper,
     ) -> TrickleOperator {
         use crate::op;
-        use simd_json::value::ValueTrait;
         let stmt = stmt_rentwrapped.stmt.suffix();
         let op: Box<dyn Operator> = match stmt {
             tremor_script::ast::Stmt::OperatorDecl(ref op) => {
@@ -55,12 +55,14 @@ impl TrickleOperator {
                                 timeout: op
                                     .params
                                     .as_ref()
-                                    .expect("expected timeout to be configured")["timeout"]
-                                    .cast_f64()
+                                    .and_then(|v| v.get("timeout"))
+                                    .and_then(Value::cast_f64)
                                     .expect("snot badger"),
-                                steps: op.params.as_ref().expect("expected steps to be configured")
-                                    ["steps"]
-                                    .as_array()
+                                steps: op
+                                    .params
+                                    .as_ref()
+                                    .and_then(|v| v.get("steps"))
+                                    .and_then(Value::as_array)
                                     .expect("expected to be an array type")
                                     .iter()
                                     .map(|x| x.as_u64().expect("snot biscuit"))
@@ -75,23 +77,21 @@ impl TrickleOperator {
                         let count = op
                             .params
                             .as_ref()
-                            .expect("expected timeout to be configured")["count"]
-                            .as_u64()
-                            .expect("snot badger") as usize;
-                        let timeout = match op.params.as_ref().expect("...").get("timeout") {
-                            Some(v) => Some(v.as_u64()),
-                            None => None,
-                        };
+                            .and_then(|v| v.get("count"))
+                            .and_then(Value::as_usize)
+                            .expect("snot badger");
+                        let timeout = op
+                            .params
+                            .as_ref()
+                            .and_then(|v| v.get("timeout"))
+                            .and_then(Value::as_u64);
                         let max_delay_ns = if let Some(max_delay_ms) = timeout {
-                            Some(max_delay_ms.expect("") * 1_000_000)
+                            Some(max_delay_ms * 1_000_000)
                         } else {
                             None
                         };
                         Box::new(op::generic::batch::Batch {
-                            config: op::generic::batch::Config {
-                                count,
-                                timeout: timeout.expect(""),
-                            },
+                            config: op::generic::batch::Config { count, timeout },
                             event_id: 0,
                             len: 0,
                             data: op::generic::batch::empty(),

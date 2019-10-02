@@ -120,7 +120,8 @@ fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
             if let Some(interval) = d
                 .params
                 .as_ref()
-                .and_then(|p| p.get("interval").and_then(|i| i.as_u64()))
+                .and_then(|p| p.get("interval"))
+                .and_then(Value::as_u64)
             {
                 Ok(TumblingWindowOnEventTime {
                     size: interval,

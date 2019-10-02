@@ -98,7 +98,7 @@ impl Rate {
             .get("time_range")
             .and_then(Value::as_u64)
             .unwrap_or(1000);
-        let windows = meta.get("windows").and_then(Value::as_u64).unwrap_or(100) as usize;
+        let windows = meta.get("windows").and_then(Value::as_usize).unwrap_or(100);
         Some(Rate {
             rate,
             time_range,
@@ -142,8 +142,8 @@ impl Operator for BucketGrouper {
                 None => {
                     let cardinality = meta
                         .get("cardinality")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(1000) as usize;
+                        .and_then(Value::as_usize)
+                        .unwrap_or(1000);
                     self.buckets
                         .insert(class.to_string(), Bucket::new(cardinality));
                     if let Some(g) = self.buckets.get_mut(class.borrow() as &str) {

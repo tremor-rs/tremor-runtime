@@ -457,15 +457,15 @@ where
                             range_start.run(opts, context, aggrs, event, meta, local, consts)
                         );
 
-                        if let Some(range_start) = s.as_u64() {
-                            let range_start = range_start as usize + start;
+                        if let Some(range_start) = s.as_usize() {
+                            let range_start = range_start + start;
 
                             let e = stry!(
                                 range_end.run(opts, context, aggrs, event, meta, local, consts)
                             );
 
-                            if let Some(range_end) = e.as_u64() {
-                                let range_end = range_end as usize + start;
+                            if let Some(range_end) = e.as_usize() {
+                                let range_end = range_end + start;
                                 // We're exceeding the erray
                                 if range_end >= end {
                                     return Ok(Cow::Borrowed(&FALSE));
