@@ -18,3 +18,4 @@ rm -r grcov
 mkdir grcov
 grcov ccov.zip -s . -t lcov --llvm --branch --ignore-not-existing --ignore-dir "/*" -o grcov/lcov.info;
 genhtml --ignore-errors source -o grcov grcov/lcov.info
+open grcov/index.html
