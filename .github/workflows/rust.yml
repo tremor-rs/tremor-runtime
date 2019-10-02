@@ -42,10 +42,13 @@ jobs:
         env:
           'CARGO_INCREMENTAL': '0'
           'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
-      - uses: actions-rs/grcov@v0.1
-      - name: Coveralls upload
-        uses: coverallsapp/github-action@master
+      - id: coverage
+        uses: actions-rs/grcov@v0.1
+      - name: Upload to codecov
+        uses: codecov/codecov-action@v1.0.2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ${{ steps.coverage.outputs.report }}
+          token: ${{ secrets.CODECOV_TOKEN }} #required
+          file: ${{ steps.coverage.outputs.report }}
+          #flags: unittests #optional
+          #name: codecov-umbrella #optional
 
