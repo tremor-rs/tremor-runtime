@@ -17,10 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Check for 'unwrap'
-        run: make chk_unwrap; make chk_unwrap_ci
-      - name: Check for 'panic'
-        run: make chk_panic; make chk_panic_ci
+      - name: Check for 'unwrap' and 'panic'
+        run: make chk_unwrap chk_panic
   format:
     runs-on: ubuntu-latest
     steps:
