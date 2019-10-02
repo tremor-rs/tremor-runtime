@@ -24,7 +24,7 @@ pub struct StatsD {}
 
 impl Codec for StatsD {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(vec![data]), |raw| {
+        LineValue::try_new(vec![data], |raw| {
             decode(&raw[0], ingest_ns).map(ValueAndMeta::from)
         })
         .map_err(|e| e.0)

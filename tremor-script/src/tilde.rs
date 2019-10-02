@@ -291,35 +291,35 @@ impl<'de> Deserialize<'de> for Extractor {
                 match s {
                     Some((ref x, ref args)) if x.as_str() == "Glob" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
+                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
                         Ok(Extractor::new("glob", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Re" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
+                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
                         Ok(Extractor::new("re", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Dissect" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
+                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
                         Ok(Extractor::new("dissect", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Grok" => {
                         let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
+                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
                         Ok(Extractor::new("grok", &rule).expect("should have worked"))
                     }
                     Some((ref x, ref _args)) if x.as_str() == "Kv" => {
                         // let field_seps = args.get("field_separators").expect("expected a rule").foreach().map(|x| x.to_string()).collect();
-                        // let field_seps = field_seps.trim_start_matches("\"").trim_end_matches("\"");
+                        // let field_seps = field_seps.trim_start_matches('"').trim_end_matches('"');
                         // let kv_seps = args.get("key_separators").expect("expected a rule").to_string();
-                        // let kv_seps = kv_seps.trim_start_matches("\"").trim_end_matches("\"");
+                        // let kv_seps = kv_seps.trim_start_matches('"').trim_end_matches('"');
                         //dbg!(("kv", &field_seps, &kv_seps));
                         Ok(Extractor::new("kv", "").expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Datetime" => {
                         let format = args.get("format").expect("expected a format").to_string();
-                        let format = format.trim_start_matches("\"").trim_end_matches("\"");
+                        let format = format.trim_start_matches('"').trim_end_matches('"');
                         Ok(Extractor::new("datetime", &format).expect("should have worked"))
                     }
                     Some((ref x, ref args)) if x.as_str() == "Cidr" => {
@@ -328,7 +328,7 @@ impl<'de> Deserialize<'de> for Extractor {
                         let a = rules.as_array().expect("it should be an array");
                         for rule in a {
                             let rule = rule.to_string();
-                            let rule = rule.trim_start_matches("\"").trim_end_matches("\"");
+                            let rule = rule.trim_start_matches('"').trim_end_matches('"');
                             dbg!(&rule);
                             let _ = rule;
                             s = format!("{}{}, ", s, rule);

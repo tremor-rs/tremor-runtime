@@ -22,7 +22,7 @@ pub struct MsgPack {}
 
 impl Codec for MsgPack {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(vec![data]), |data| {
+        LineValue::try_new(vec![data], |data| {
             rmps::from_slice::<Value>(&data[0]).map(ValueAndMeta::from)
         })
         .map(Some)

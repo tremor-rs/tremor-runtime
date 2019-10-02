@@ -93,7 +93,7 @@ rental! {
 
         #[rental_mut(covariant,debug)]
         pub struct Value {
-            raw: Box<Vec<Vec<u8>>>,
+            raw: Vec<Vec<u8>>,
             parsed: ValueAndMeta<'raw>
         }
 
@@ -101,7 +101,7 @@ rental! {
 }
 
 impl rentals::Value {
-    pub fn parts<'run>(&self) -> (&mut Value, &mut Value) {
+    pub fn parts(&self) -> (&mut Value, &mut Value) {
         #[allow(clippy::transmute_ptr_to_ptr)]
         #[allow(mutable_transmutes)]
         unsafe {
@@ -121,8 +121,9 @@ impl rentals::Value {
         // everywhere! :.(
         pub struct ScrewRental {
             pub parsed: ValueAndMeta<'static>,
-            pub raw: Box<Vec<Vec<u8>>>,
+            pub raw: Vec<Vec<u8>>,
         }
+        #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
             use std::mem::transmute;
             let self_unrent: &mut ScrewRental = transmute(self);
@@ -136,7 +137,7 @@ impl rentals::Value {
 
 impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+        rentals::Value::new(vec![], |_| ValueAndMeta {
             value: v,
             meta: Value::Object(Map::new()),
         })
@@ -155,7 +156,7 @@ impl
             simd_json::BorrowedValue<'static>,
         ),
     ) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+        rentals::Value::new(vec![], |_| ValueAndMeta {
             value: v.0,
             meta: v.1,
         })
@@ -174,7 +175,7 @@ impl
             simd_json::value::borrowed::Map<'static>,
         ),
     ) -> Self {
-        rentals::Value::new(Box::new(vec![]), |_| ValueAndMeta {
+        rentals::Value::new(vec![], |_| ValueAndMeta {
             value: v.0,
             meta: Value::Object(v.1),
         })
@@ -191,7 +192,7 @@ impl Clone for LineValue {
         // An alternative would be keeping the raw data in an ARC
         // instea of a Box.
         use simd_json::OwnedValue;
-        LineValue::new(Box::new(vec![]), |_| {
+        LineValue::new(vec![], |_| {
             let v = self.suffix();
             ValueAndMeta {
                 value: Into::<OwnedValue>::into(v.value.clone()).into(),
@@ -224,7 +225,7 @@ impl<'de> Deserialize<'de> for LineValue {
         // FIXME after POC
         let value = r.get("value").unwrap();
         let meta = r.get("meta").unwrap();
-        Ok(LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
+        Ok(LineValue::new(vec![], |_| ValueAndMeta {
             value: value.clone().into(),
             meta: meta.clone().into(),
         }))

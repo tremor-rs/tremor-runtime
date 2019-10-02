@@ -620,7 +620,7 @@ where
         unsafe {
             // FIXME?
             use std::mem;
-            #[allow(mutable_transmutes)]
+            #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
             let invocable: &mut TremorAggrFnWrapper =
                 mem::transmute(&aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {

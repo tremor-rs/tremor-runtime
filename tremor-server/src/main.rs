@@ -83,7 +83,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         info!("Loading {} from file.", id);
         world
             .repo
-            .publish_pipeline(id, false, PipelineArtefact::Pipeline(pipeline))?;
+            .publish_pipeline(id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
         count += 1;
     }
     for o in config.onramps {

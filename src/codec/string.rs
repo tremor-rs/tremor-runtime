@@ -23,7 +23,7 @@ pub struct String {}
 
 impl Codec for String {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(vec![data]), |data| {
+        LineValue::try_new(vec![data], |data| {
             Ok(Value::from(std::str::from_utf8(data[0].as_slice())?).into())
         })
         .map_err(|e| e.0)

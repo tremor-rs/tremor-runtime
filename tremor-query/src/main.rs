@@ -231,7 +231,7 @@ fn main() -> Result<()> {
         let mut last = 0;
         loop {
             for event in &events {
-                let value = LineValue::new(Box::new(vec![]), |_| unsafe {
+                let value = LineValue::new(vec![], |_| unsafe {
                     std::mem::transmute(ValueAndMeta {
                         value: event.clone(),
                         ..Default::default()
@@ -259,7 +259,7 @@ fn main() -> Result<()> {
                         ingest_ns,
                         is_batch: false,
                         kind: None,
-                        data: value.clone().into(),
+                        data: value.clone(),
                     },
                     &mut continuation,
                 );
@@ -269,15 +269,12 @@ fn main() -> Result<()> {
                     if matches.is_present("quiet") {
                     } else if matches.is_present("print-result-raw") {
                         println!("{}", serde_json::to_string_pretty(event).expect(""));
-                    } else {
-                        if selected_output.is_none() || selected_output == Some(&output) {
-                            println!("{}>>", output);
-                            let result =
-                                format!("{} ", serde_json::to_string_pretty(event).expect(""));
-                            let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
-                            let mut h = TermHighlighter::new();
-                            h.highlight(lexed_tokens)?;
-                        }
+                    } else if selected_output.is_none() || selected_output == Some(&output) {
+                        println!("{}>>", output);
+                        let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
+                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                        let mut h = TermHighlighter::new();
+                        h.highlight(lexed_tokens)?;
                     }
                 }
             }

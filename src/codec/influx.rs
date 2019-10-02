@@ -61,15 +61,14 @@ impl From<std::str::Utf8Error> for RentalSnot {
 
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        let r: std::result::Result<LineValue, RentalSnot> =
-            LineValue::try_new(Box::new(vec![data]), |raw| {
-                match parse(str::from_utf8(&raw[0])?, ingest_ns) {
-                    Ok(None) => Err(RentalSnot::Skip),
-                    Ok(Some(v)) => Ok(v.into()),
-                    Err(e) => Err(RentalSnot::Error(e.into())),
-                }
-            })
-            .map_err(|e| e.0);
+        let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
+            match parse(str::from_utf8(&raw[0])?, ingest_ns) {
+                Ok(None) => Err(RentalSnot::Skip),
+                Ok(Some(v)) => Ok(v.into()),
+                Err(e) => Err(RentalSnot::Error(e.into())),
+            }
+        })
+        .map_err(|e| e.0);
         match r {
             Ok(v) => Ok(Some(v)),
             Err(RentalSnot::Skip) => Ok(None),

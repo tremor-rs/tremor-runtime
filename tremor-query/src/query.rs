@@ -191,7 +191,7 @@ where
 
     pub fn to_config(&'script self) -> Result<config::Pipeline> {
         let script = self.query.query.suffix();
-        let mut stmts = script.stmts.iter().peekable();
+        let stmts = script.stmts.iter();
 
         let mut config = config::Pipeline {
             id: "generated".to_string(), // FIXME derive from some other ctx
@@ -232,7 +232,7 @@ where
         }
         let mut port_indexes: PortIndexMap = HashMap::new();
 
-        while let Some(stmt) = stmts.next() {
+        for stmt in stmts {
             match stmt {
                 Stmt::SelectStmt { stmt: s, .. } => {
                     let from = s.from.id.clone().to_string();
@@ -276,7 +276,7 @@ where
                         config: None,
                         stmt: None, // FIXME
                     });
-                    nodes.insert(select_in.id.clone().into(), id);
+                    nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                     // };
                 }
@@ -291,7 +291,7 @@ where
                             config: None,
                             stmt: None, // FIXME
                         });
-                        nodes.insert(name.clone().into(), id);
+                        nodes.insert(name.clone(), id);
                         outputs.push(id);
                     };
                 }
@@ -306,7 +306,7 @@ where
                             config: None,
                             stmt: None, // FIXME
                         });
-                        nodes.insert(name.clone().into(), id);
+                        nodes.insert(name.clone(), id);
                         outputs.push(id);
                     };
                 }
@@ -321,7 +321,7 @@ where
                             config: None,
                             stmt: None, // FIXME
                         });
-                        nodes.insert(name.clone().into(), id);
+                        nodes.insert(name.clone(), id);
                         outputs.push(id);
                     };
                 }
@@ -340,7 +340,7 @@ where
             stmt: None,
         });
         nodes.insert("metrics".to_string(), id);
-        outputs.push(id.into());
+        outputs.push(id);
 
         // Link graph edges
         for (from, tos) in &config.links {
@@ -484,7 +484,7 @@ where
                     // FIXME
                     let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
                     pipe_ops.insert(id, op);
-                    nodes.insert(select_in.id.clone().into(), id);
+                    nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                 }
                 Stmt::StreamDecl(s) => {
@@ -499,7 +499,7 @@ where
                             stmt: None,
                         };
                         let id = pipe_graph.add_node(node.clone());
-                        nodes.insert(name.clone().into(), id);
+                        nodes.insert(name.clone(), id);
                         let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
                         pipe_ops.insert(id, op);
                         outputs.push(id);
@@ -525,7 +525,7 @@ where
                     let id = pipe_graph.add_node(node.clone());
                     let op = node.to_op(supported_operators, Some(that), None);
                     pipe_ops.insert(id, op);
-                    nodes.insert(o.id.clone().into(), id);
+                    nodes.insert(o.id.clone(), id);
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(o) => {
@@ -544,7 +544,7 @@ where
                     let id = pipe_graph.add_node(node.clone());
                     let op = node.to_op(supported_operators, Some(that), None);
                     pipe_ops.insert(id, op);
-                    nodes.insert(o.id.clone().into(), id);
+                    nodes.insert(o.id.clone(), id);
                     outputs.push(id);
                 }
             };
@@ -561,7 +561,7 @@ where
         nodes.insert("metrics".to_string(), id);
         let op = pipe_graph[id].to_op(supported_operators, None, None);
         pipe_ops.insert(id, op);
-        outputs.push(id.into());
+        outputs.push(id);
 
         // Link graph edges
         for (from, tos) in &links {
@@ -663,6 +663,7 @@ where
     }
 }
 
+#[allow(clippy::implicit_hasher)]
 pub fn supported_operators(
     node: &NodeConfig,
     stmt: Option<tremor_script::StmtRentalWrapper>,

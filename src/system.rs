@@ -732,7 +732,8 @@ links:
   in: [ out ]
 "#,
         )?;
-        let artefact = PipelineArtefact::Pipeline(tremor_pipeline::build_pipeline(metric_config)?);
+        let artefact =
+            PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(metric_config)?));
         self.repo
             .publish_pipeline(METRICS_PIPELINE.clone(), true, artefact)?;
         self.bind_pipeline(METRICS_PIPELINE.clone())?;

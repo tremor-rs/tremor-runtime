@@ -266,7 +266,7 @@ impl<'script> Script1<'script> {
                             expr: i,
                             port: None,
                         };
-                        exprs.push(Expr::Emit(expr))
+                        exprs.push(Expr::Emit(Box::new(expr)))
                     } else {
                         unreachable!()
                     }
@@ -524,7 +524,7 @@ pub enum Expr1<'script> {
         start: Location,
         end: Location,
     },
-    Emit(EmitExpr1<'script>),
+    Emit(Box<EmitExpr1<'script>>),
     Imut(ImutExpr1<'script>), //Test(TestExpr1)
 }
 
@@ -578,7 +578,7 @@ impl<'script> Upable<'script> for Expr1<'script> {
             }
             Expr1::Comprehension(c) => Expr::Comprehension(Box::new(c.up(helper)?)),
             Expr1::Drop { start, end } => Expr::Drop { start, end },
-            Expr1::Emit(e) => Expr::Emit(e.up(helper)?),
+            Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             Expr1::Imut(i) => i.up(helper)?.into(),
         })
     }
@@ -745,7 +745,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
             ImutExpr1::Literal(l) => ImutExpr::Literal(l),
             ImutExpr1::Invoke(i) => {
                 if i.is_aggregate(helper) {
-                    ImutExpr::InvokeAggr(i.to_aggregate(helper).up(helper)?)
+                    ImutExpr::InvokeAggr(i.into_aggregate(helper).up(helper)?)
                 } else {
                     let i = i.up(helper)?;
                     if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f)) {
@@ -837,7 +837,7 @@ pub enum Expr<'script> {
         start: Location,
         end: Location,
     },
-    Emit(EmitExpr<'script>),
+    Emit(Box<EmitExpr<'script>>),
     Imut(ImutExpr<'script>),
 }
 
@@ -1030,7 +1030,7 @@ impl<'script> Invoke1<'script> {
         helper.aggr_reg.find(&self.module, &self.fun).is_ok()
     }
 
-    fn to_aggregate<'registry>(
+    fn into_aggregate<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> InvokeAggr1<'script> {
@@ -2183,8 +2183,8 @@ impl<'script> Segment1<'script> {
             start,
             end,
             expr: ImutExpr1::Literal(Literal {
-                start: start,
-                end: end,
+                start,
+                end,
                 value: Value::String(id.into()),
             }),
         }

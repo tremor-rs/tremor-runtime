@@ -39,7 +39,7 @@ pub struct Batch {
 }
 
 pub fn empty() -> LineValue {
-    LineValue::new(Box::new(vec![vec![]]), |_| ValueAndMeta {
+    LineValue::new(vec![], |_| ValueAndMeta {
         value: Value::Array(vec![]),
         meta: Value::Object(Map::default()),
     })
@@ -74,8 +74,8 @@ impl Operator for Batch {
             id,
             data,
             ingest_ns,
-            kind: _,
             is_batch,
+            ..
         } = event;
         self.data.consume(
             data,

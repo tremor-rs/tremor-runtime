@@ -35,11 +35,8 @@ pub trait TremorAggrFn: Sync + Send {
 }
 
 pub trait TremorFn: Sync + Send {
-    fn invoke<'event, 'c>(
-        &self,
-        ctx: &EventContext,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>>;
+    fn invoke<'event>(&self, ctx: &EventContext, args: &[&Value<'event>])
+        -> FResult<Value<'event>>;
     fn snot_clone(&self) -> Box<dyn TremorFn>;
     fn arity(&self) -> RangeInclusive<usize>;
     fn valid_arity(&self, n: usize) -> bool {
@@ -518,13 +515,13 @@ impl TremorAggrFnWrapper {
     pub fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         self.fun.emit()
     }
-    pub fn init<'event>(&mut self) {
+    pub fn init(&mut self) {
         self.fun.init()
     }
-    pub fn valid_arity<'event>(&self, n: usize) -> bool {
+    pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
-    pub fn arity<'event>(&self) -> RangeInclusive<usize> {
+    pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
 }
@@ -815,5 +812,4 @@ mod tests {
 
         assert!(res.is_err());
     }
-
 }

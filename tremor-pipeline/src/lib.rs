@@ -103,7 +103,7 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn value_meta_iter<'value>(&'value self) -> ValueMetaIter<'value> {
+    pub fn value_meta_iter(&self) -> ValueMetaIter {
         ValueMetaIter {
             event: self,
             idx: 0,
@@ -139,7 +139,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
 }
 
 impl Event {
-    pub fn value_iter<'value>(&'value self) -> ValueIter<'value> {
+    pub fn value_iter(&self) -> ValueIter {
         ValueIter {
             event: self,
             idx: 0,
@@ -232,6 +232,8 @@ impl Operator for OperatorNode {
 }
 
 // TODO We need an actual operator registry ...
+// because we really don't care here.
+#[allow(clippy::implicit_hasher)]
 pub fn buildin_ops(
     node: &NodeConfig,
     _stmt: Option<tremor_script::StmtRentalWrapper>,
@@ -524,14 +526,14 @@ impl ExecutableGraph {
             if let Ok(metrics) =
                 unsafe { self.graph.get_unchecked(i) }.metrics(tags.clone(), timestamp)
             {
-                for v in metrics {
+                for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
                         "in".to_owned(),
                         Event {
                             id: 0,
-                            data: LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
-                                value: v.into(),
+                            data: LineValue::new(vec![], |_| ValueAndMeta {
+                                value,
                                 meta: Value::Object(Map::default()),
                             }),
                             ingest_ns: timestamp,
@@ -542,14 +544,14 @@ impl ExecutableGraph {
                 }
             }
             if let Ok(metrics) = m.to_value(&metric_name, &mut tags, timestamp) {
-                for v in metrics {
+                for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
                         "in".to_owned(),
                         Event {
                             id: 0,
-                            data: LineValue::new(Box::new(vec![]), |_| ValueAndMeta {
-                                value: v.into(),
+                            data: LineValue::new(vec![], |_| ValueAndMeta {
+                                value,
                                 meta: Value::Object(Map::default()),
                             }),
                             ingest_ns: timestamp,

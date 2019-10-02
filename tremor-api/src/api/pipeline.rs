@@ -44,7 +44,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     let res = data
         .world
         .repo
-        .publish_pipeline(url, false, PipelineArtefact::Pipeline(pipeline))
+        .publish_pipeline(url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
         .map(|res| match res {
             PipelineArtefact::Pipeline(p) => p.config,
             //NOTE:  We publish a pipeline we can't ever get anything else back

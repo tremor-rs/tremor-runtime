@@ -345,14 +345,16 @@ impl Operator for TrickleSelect {
                             &local_stack,
                             &consts,
                         )?;
-                        let _ = match test.into_owned() {
+                        match test.into_owned() {
                             Value::Bool(true) => (),
                             Value::Bool(false) => {
                                 return Ok(vec![]);
                             }
                             other => {
                                 return tremor_script::errors::query_guard_not_bool(
-                                    &stmt, guard, &other,
+                                    stmt.borrow(),
+                                    guard,
+                                    &other,
                                 )?;
                             }
                         };
@@ -390,13 +392,17 @@ impl Operator for TrickleSelect {
                     &local_stack,
                     &consts,
                 )?;
-                let _ = match test.into_owned() {
+                match test.into_owned() {
                     Value::Bool(true) => (),
                     Value::Bool(false) => {
                         return Ok(vec![]);
                     }
                     other => {
-                        return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                        return tremor_script::errors::query_guard_not_bool(
+                            stmt.borrow(),
+                            guard,
+                            &other,
+                        )?;
                     }
                 };
             }

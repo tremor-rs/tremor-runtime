@@ -1138,6 +1138,8 @@ impl<'input> Lexer<'input> {
                     end.absolute.0 += 1;
                     res.push(spanned2(start, end, Token::LBrace));
                     let mut pcount = 0;
+                    // We can't use for because of the borrow checker ...
+                    #[allow(clippy::while_let_on_iterator)]
                     while let Some(s) = self.next() {
                         let s = s?;
                         match &s.value {

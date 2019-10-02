@@ -35,7 +35,7 @@ pub struct BindingArtefact {
 
 #[derive(Clone)]
 pub enum PipelineArtefact {
-    Pipeline(tremor_pipeline::Pipeline),
+    Pipeline(Box<tremor_pipeline::Pipeline>),
     Query(query::Query),
 }
 
@@ -53,7 +53,7 @@ impl PipelineArtefact {
 
 impl From<tremor_pipeline::Pipeline> for PipelineArtefact {
     fn from(pipeline: tremor_pipeline::Pipeline) -> PipelineArtefact {
-        PipelineArtefact::Pipeline(pipeline)
+        PipelineArtefact::Pipeline(Box::new(pipeline))
     }
 }
 

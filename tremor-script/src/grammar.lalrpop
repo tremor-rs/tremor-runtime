@@ -476,10 +476,10 @@ Drop: Expr1<'input> = {
 
 /// emits the current event to a given output
 Emit: Expr1<'input> = {
-    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: Some(ImutExpr1::String(port)) }),
-    <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => Expr1::Emit(EmitExpr1 { expr: expr, start, end, port: None }),
-    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: Some(ImutExpr1::String(port)) }) ,
-    <start:@L> "emit" <end:@L> => Expr1::Emit(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: None }),
+    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(Box::new(EmitExpr1 { expr: expr, start, end, port: Some(ImutExpr1::String(port)) })),
+    <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => Expr1::Emit(Box::new(EmitExpr1 { expr: expr, start, end, port: None })),
+    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => Expr1::Emit(Box::new(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: Some(ImutExpr1::String(port)) })) ,
+    <start:@L> "emit" <end:@L> => Expr1::Emit(Box::new(EmitExpr1 { expr: ImutExpr1::Path(Path1::Event(EventPath1 { segments: vec![], start, end })).into(), start, end, port: None })),
 }
 
 
