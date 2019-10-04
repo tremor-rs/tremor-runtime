@@ -116,9 +116,26 @@ impl rentals::Value {
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
-        // FIXME .unwrap() Heinz owes a long explenation on this
-        // it's terrible but Darach will love it and end up using it
-        // everywhere! :.(
+        // This function works around a rental limitation that is meant
+        // to protect it's users: Rental does not allow you to get both
+        // the owned and borrowed part at the same time.
+        //
+        // The reason for that is that once those are taken out of the
+        // rental the link of lifetimes between them would be broken
+        // and you'd risk invalid pointers or memory leaks.
+        // We however do not really want to take them out, all we want
+        // is combine two rentals. We can do this since:
+        // 1) the owned values are inside a vector, while the vector
+        //    itself may be relocated by adding to it, the values
+        //    in it will stay in the same location.
+        // 2) we are only ever adding / extending never deleting
+        //    or modifying.
+        //
+        // So what this function does it is crowbars the content
+        // from a rental into an accessible struct then uses this
+        // to modify it's content by adding the owned parts of
+        // `other` into the owned part `self` and the running
+        // a merge function on the borrowed parts
         pub struct ScrewRental {
             pub parsed: ValueAndMeta<'static>,
             pub raw: Vec<Vec<u8>>,
@@ -211,20 +228,34 @@ impl Serialize for LineValue {
     }
 }
 
+pub enum LineValueDeserError {
+    ValueMissing,
+    MetaMissing,
+}
+
 impl<'de> Deserialize<'de> for LineValue {
     fn deserialize<D>(deserializer: D) -> std::result::Result<LineValue, D::Error>
     where
         D: Deserializer<'de>,
     {
+        use serde::de::Error;
+        use simd_json::OwnedValue;
         // We need to convert the data first into a owned value since
         // serde doesn't like lifetimes. Then we convert it into a line
         // value.
         // FIXME we should find a way to not do this!
-        use simd_json::OwnedValue;
         let r = OwnedValue::deserialize(deserializer)?;
         // FIXME after POC
-        let value = r.get("value").unwrap();
-        let meta = r.get("meta").unwrap();
+        let value = if let Some(value) = r.get("value") {
+            value
+        } else {
+            return Err(D::Error::custom("value field missing"));
+        };
+        let meta = if let Some(meta) = r.get("meta") {
+            meta
+        } else {
+            return Err(D::Error::custom("meta field missing"));
+        };
         Ok(LineValue::new(vec![], |_| ValueAndMeta {
             value: value.clone().into(),
             meta: meta.clone().into(),
