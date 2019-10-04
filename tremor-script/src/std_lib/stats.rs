@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
+use crate::registry::{
+    mfa, AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
+};
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
 use simd_json::value::ValueTrait;
@@ -266,14 +268,25 @@ impl TremorAggrFn for Stdev {
 #[derive(Clone)]
 struct Hdr {
     histo: Histogram,
-    percentiles: Option<Vec<String>>,
+    percentiles: Vec<(String, f64)>,
+    percentiles_set: bool,
 }
 
 impl std::default::Default for Hdr {
     fn default() -> Self {
         Hdr {
+            //ALLOW: this values have been tested so an error can never be returned
             histo: Histogram::init(1, u64::MAX >> 1, 2).unwrap(),
-            percentiles: None,
+            percentiles: vec![
+                ("0.5".to_string(), 0.5),
+                ("0.9".to_string(), 0.9),
+                ("0.95".to_string(), 0.95),
+                ("0.99".to_string(), 0.99),
+                ("0.999".to_string(), 0.999),
+                ("0.9999".to_string(), 0.9999),
+                ("0.99999".to_string(), 0.99999),
+            ],
+            percentiles_set: false,
         }
     }
 }
@@ -283,17 +296,22 @@ unsafe impl Sync for Hdr {}
 
 impl TremorAggrFn for Hdr {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if self.percentiles == None {
-            let percentiles: Vec<String> = args[1]
-                .as_array()
-                .iter()
-                .flat_map(|x| {
-                    let y: Vec<String> =
-                        x.iter().map(|x| x.to_string().replace("\"", "")).collect();
-                    y
-                })
-                .collect();
-            self.percentiles = Some(percentiles);
+        if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
+            if !self.percentiles_set {
+                let percentiles: FResult<Vec<(String, f64)>> = vals
+                    .iter()
+                    .flat_map(|v| v.as_str().map(String::from))
+                    .map(|s| {
+                        let p = s.parse().map_err(|_| FunctionError::RuntimeError {
+                            mfa: mfa("stats", "hdr", 2),
+                            error: format!("Provided percentile '{}' isn't a float", s),
+                        })?;
+                        Ok((s, p))
+                    })
+                    .collect();
+                self.percentiles = percentiles?;
+                self.percentiles_set = true
+            }
         }
         if let Some(v) = args[0].as_i64() {
             // if self.n == 0 {
@@ -309,25 +327,10 @@ impl TremorAggrFn for Hdr {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        if self.percentiles.is_none() {
-            self.percentiles = Some(vec![
-                "0.5".to_string(),
-                "0.9".to_string(),
-                "0.95".to_string(),
-                "0.99".to_string(),
-                "0.999".to_string(),
-                "0.9999".to_string(),
-                "0.99999".to_string(),
-            ])
-        };
-
         let mut p = hashmap! {};
-        for pcn in self.percentiles.clone().unwrap() {
-            let percentile: f64 = pcn.parse().expect("");
-            let pp = pcn.clone();
-            let pp: std::borrow::Cow<str> = pp.into();
+        for (pcn, percentile) in self.percentiles.iter() {
             p.insert(
-                pp,
+                pcn.clone().into(),
                 Value::I64(self.histo.value_at_percentile(percentile * 100.0) as i64),
             );
         }
