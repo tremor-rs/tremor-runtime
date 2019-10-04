@@ -201,7 +201,6 @@ impl Operator for BucketGrouper {
     ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
-            // FIXME: .unwrap() this can be done w/o conversion
             tags.insert("class".into(), class.clone().into());
             tags.insert("action".into(), "pass".into());
             // TODO: this is ugly
