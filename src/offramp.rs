@@ -53,7 +53,7 @@ pub type OfframpAddr = Sender<OfframpMsg>;
 // borrowed contest
 #[allow(clippy::borrowed_box)]
 pub trait Offramp: Send {
-    fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]);
+    fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
     fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event);
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, _id: TremorURL, _addr: PipelineAddr);
@@ -115,7 +115,7 @@ impl Message for CreateOfframp {
 impl Handler<CreateOfframp> for Manager {
     type Result = Result<OfframpAddr>;
     fn handle(&mut self, mut req: CreateOfframp, _ctx: &mut Context<Self>) -> Self::Result {
-        req.offramp.start(&req.codec, &req.postprocessors);
+        req.offramp.start(&req.codec, &req.postprocessors)?;
 
         let (tx, rx) = bounded(self.qsize);
         let offramp_id = req.id.clone();

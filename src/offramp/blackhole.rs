@@ -108,11 +108,14 @@ impl Offramp for Blackhole {
                 if let Err(e) = serializer.serialize(&self.delivered, &mut buf) {
                     error!("Failed to serialize histogram: {:?}", e);
                 };
-                quantiles(buf.as_slice(), stdout(), 5, 2).expect("Failed to serialize histogram");
-                println!(
-                    "\n\nThroughput: {:.1} MB/s",
-                    (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
-                );
+                if quantiles(buf.as_slice(), stdout(), 5, 2).is_ok() {
+                    println!(
+                        "\n\nThroughput: {:.1} MB/s",
+                        (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
+                    );
+                } else {
+                    eprintln!("Failed to serialize histogram");
+                }
                 process::exit(0);
             };
 
@@ -130,9 +133,9 @@ impl Offramp for Blackhole {
     fn default_codec(&self) -> &str {
         "null"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }
 

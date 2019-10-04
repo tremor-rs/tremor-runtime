@@ -386,14 +386,14 @@ mod tests {
 
         pairs.iter().for_each(|case| {
             let mut codec = Influx {};
-            let v = case.1.clone().into();
+            let v = case.1.clone();
             let encoded = codec.encode(&v).expect("failed to encode");
 
             let decoded = codec
                 .decode(encoded.clone(), 0)
                 .expect("failed to dencode")
                 .expect("failed to decode");
-            let expected: Value = case.1.clone().into();
+            let expected: Value = case.1.clone();
             let got = &decoded.suffix().value;
             if got != &expected {
                 println!("{} fails while decoding", &case.2);

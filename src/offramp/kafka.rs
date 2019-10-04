@@ -102,8 +102,7 @@ impl OfframpImpl for Kafka {
                 .rdkafka_options
                 .iter()
                 .fold(producer_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
-                .create()
-                .expect("Producer creation failed");
+                .create()?;
             let key = config.key.clone();
             // Create the thread pool where the expensive computation will be performed.
             let pool = thread_pool::Builder::new()
@@ -159,8 +158,8 @@ impl Offramp for Kafka {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

@@ -100,9 +100,9 @@ impl Offramp for GCS {
         "json"
     }
 
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
@@ -117,7 +117,8 @@ impl Offramp for GCS {
                         .content_encoding(&self.config.content_encoding)
                         .upload(
                             Cursor::new(raw),
-                            "application/octet-stream".parse().expect("parse ok"),
+                            //ALLOW: This is a constant, we know that it will parse correctly
+                            "application/octet-stream".parse().unwrap(),
                         ),
                 );
                 self.cnt += 1;

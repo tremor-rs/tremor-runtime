@@ -59,13 +59,9 @@ impl OfframpImpl for Tcp {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let stream = TcpStream::connect((config.host.as_str(), config.port))?;
-            stream
-                .set_nonblocking(config.is_non_blocking)
-                .expect("cannot set non-blocking");
-            stream.set_ttl(config.ttl).expect("cannot set ttl");
-            stream
-                .set_nodelay(config.is_no_delay)
-                .expect("cannot set no delay");
+            stream.set_nonblocking(config.is_non_blocking)?;
+            stream.set_ttl(config.ttl)?;
+            stream.set_nodelay(config.is_no_delay)?;
             Ok(Box::new(Tcp {
                 config,
                 stream,
@@ -98,7 +94,9 @@ impl Offramp for Tcp {
                         self.config.host, self.config.port, e
                     ),
                 }
-                self.stream.flush().expect("failed to flush stream");
+                if let Err(e) = self.stream.flush() {
+                    error!("failed to flush stream: {}", e);
+                };
             }
         }
     }
@@ -112,8 +110,8 @@ impl Offramp for Tcp {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

@@ -39,8 +39,8 @@ skip = [
 [[licenses.ignore]]
 name = "criterion-plot"
 license_files = [
-  { path = "LICENSE-MIT", hash = 0x343f7050 },
   { path = "LICENSE-APACHE", hash = 0xa577772b },
+  { path = "LICENSE-MIT", hash = 0x343f7050 }
 ]
 
 # This is MIT, Apache, CC, BSD-2 and BSD-3
