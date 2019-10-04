@@ -274,7 +274,7 @@ impl Operator for TrickleSelect {
                 let groups: &mut HashMap<String, Window> =
                     unsafe { std::mem::transmute(self.groups.suffix()) };
                 let w = groups
-                    .entry(group.to_string())
+                    .entry(group.encode())
                     .or_insert_with(|| Window::from_aggregates(aggregates.clone(), window.clone()));
                 let window_event = w.on_event(&event);
                 if window_event.open {

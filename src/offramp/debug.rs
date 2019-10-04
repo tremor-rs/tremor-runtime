@@ -74,16 +74,16 @@ impl Offramp for Debug {
                 println!();
                 self.buckets.clear();
             }
-            let c = if let Some(s) = meta.get("class").and_then(Value::as_string) {
-                s.to_string()
+            let c = if let Some(s) = meta.get("class").and_then(Value::as_str) {
+                s
             } else {
-                "<unclassified>".into()
+                "<unclassified>"
             };
             //TODO: return to entry
-            if let Some(entry) = self.buckets.get_mut(&c) {
+            if let Some(entry) = self.buckets.get_mut(c) {
                 entry.cnt += 1;
             } else {
-                self.buckets.insert(c, DebugBucket { cnt: 1 });
+                self.buckets.insert(c.to_owned(), DebugBucket { cnt: 1 });
             }
             self.cnt += 1;
         }

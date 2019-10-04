@@ -68,7 +68,7 @@ pub fn load(registry: &mut Registry) {
                                 if let Value::String(s) = arg {
                                     out.push_str(&s)
                                 } else {
-                                    out.push_str(arg.to_string().as_str());
+                                    out.push_str(arg.encode().as_str());
                                 }
                             }
                             Some((_, '{')) => {

@@ -418,7 +418,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::DQuote => write!(f, "\""),
             Token::StringLiteral(value) => {
                 // We do thos to ensure proper escaping
-                let s = simd_json::BorrowedValue::String(value.clone()).to_string();
+                let s = simd_json::BorrowedValue::String(value.clone()).encode();
                 // Strip the quotes
                 write!(f, "{}", &s[1..s.len() - 1])
             }

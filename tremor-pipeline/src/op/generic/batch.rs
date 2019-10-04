@@ -41,7 +41,7 @@ pub struct Batch {
 pub fn empty() -> LineValue {
     LineValue::new(vec![], |_| ValueAndMeta {
         value: Value::Array(vec![]),
-        meta: Value::Object(Map::default()),
+        meta: Value::Object(Object::default()),
     })
 }
 
@@ -81,13 +81,13 @@ impl Operator for Batch {
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
                 if let Some(ref mut a) = this.value.as_array_mut() {
-                    let mut e = Map::with_capacity(7);
+                    let mut e = Object::with_capacity(7);
                     // {"id":1,
                     e.insert("id".into(), id.into());
                     //  "data": {
                     //      "value": "snot", "meta":{}
                     //  },
-                    let mut data = Map::with_capacity(2);
+                    let mut data = Object::with_capacity(2);
                     data.insert("value".into(), other.value);
                     data.insert("meta".into(), other.meta);
                     e.insert("data".into(), Value::Object(data));
@@ -253,7 +253,7 @@ mod test {
             "{}",
             simd_json::serde::to_owned_value(event1.clone())
                 .expect("")
-                .to_string()
+                .encode()
         );
 
         let r = op

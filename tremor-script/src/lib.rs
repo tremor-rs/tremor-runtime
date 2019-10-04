@@ -50,7 +50,7 @@ extern crate rental;
 
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{self, Serialize};
-pub use simd_json::value::borrowed::Map;
+pub use simd_json::value::borrowed::Object;
 pub use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
 
@@ -69,8 +69,8 @@ pub struct ValueAndMeta<'event> {
 impl<'event> Default for ValueAndMeta<'event> {
     fn default() -> Self {
         ValueAndMeta {
-            value: Value::Object(Map::default()),
-            meta: Value::Object(Map::default()),
+            value: Value::Object(Object::default()),
+            meta: Value::Object(Object::default()),
         }
     }
 }
@@ -79,7 +79,7 @@ impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
     fn from(value: Value<'v>) -> ValueAndMeta<'v> {
         ValueAndMeta {
             value,
-            meta: Value::Object(Map::default()),
+            meta: Value::Object(Object::default()),
         }
     }
 }
@@ -139,7 +139,7 @@ impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
         rentals::Value::new(vec![], |_| ValueAndMeta {
             value: v,
-            meta: Value::Object(Map::new()),
+            meta: Value::Object(Object::new()),
         })
     }
 }
@@ -166,13 +166,13 @@ impl
 impl
     From<(
         simd_json::BorrowedValue<'static>,
-        simd_json::value::borrowed::Map<'static>,
+        simd_json::value::borrowed::Object<'static>,
     )> for rentals::Value
 {
     fn from(
         v: (
             simd_json::BorrowedValue<'static>,
-            simd_json::value::borrowed::Map<'static>,
+            simd_json::value::borrowed::Object<'static>,
         ),
     ) -> Self {
         rentals::Value::new(vec![], |_| ValueAndMeta {
@@ -248,7 +248,7 @@ mod tests {
     use crate::interpreter::AggrType;
     use crate::lexer::{TokenFuns, TokenSpan};
     use halfbrown::hashmap;
-    use simd_json::borrowed::{Map, Value};
+    use simd_json::borrowed::{Object, Value};
 
     macro_rules! parse_lit {
         ($src:expr, $expected:pat) => {{
@@ -295,7 +295,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let mut event = simd_json::borrowed::Value::Object(Object::new());
             let mut global_map = Value::Object(hashmap! {});
             let value = runnable.run(
                 &EventContext { at: 0 },
@@ -329,7 +329,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let mut event = simd_json::borrowed::Value::Object(Object::new());
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(
                 &EventContext { at: 0 },
@@ -357,7 +357,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Map::new());
+            let mut event = simd_json::borrowed::Value::Object(Object::new());
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(
                 &EventContext { at: 0 },
@@ -518,17 +518,16 @@ mod tests {
     #[test]
     fn test_assign_event() {
         use simd_json::borrowed::Value::Array;
-        use simd_json::borrowed::Value::Object;
         use simd_json::borrowed::Value::I64;
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
-            Object(hashmap! {
+            Value::Object(hashmap! {
                 std::borrow::Cow::Borrowed("test") => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
-            Object(hashmap! {
+            Value::Object(hashmap! {
                 std::borrow::Cow::Borrowed("test") => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
             })
         );

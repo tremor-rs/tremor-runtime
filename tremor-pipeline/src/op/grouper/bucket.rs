@@ -65,7 +65,7 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use tremor_script::prelude::*;
 use window::TimeWindow;
 
@@ -136,8 +136,8 @@ impl std::fmt::Debug for BucketGrouper {
 impl Operator for BucketGrouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let meta = &event.data.suffix().meta;
-        if let Some(class) = meta.get("class").and_then(Value::as_string) {
-            let groups = match self.buckets.get_mut(class.borrow() as &str) {
+        if let Some(class) = meta.get("class").and_then(Value::as_str) {
+            let groups = match self.buckets.get_mut(class as &str) {
                 Some(g) => g,
                 None => {
                     let cardinality = meta
@@ -146,7 +146,7 @@ impl Operator for BucketGrouper {
                         .unwrap_or(1000);
                     self.buckets
                         .insert(class.to_string(), Bucket::new(cardinality));
-                    if let Some(g) = self.buckets.get_mut(class.borrow() as &str) {
+                    if let Some(g) = self.buckets.get_mut(class as &str) {
                         g
                     } else {
                         unreachable!()
@@ -206,10 +206,10 @@ impl Operator for BucketGrouper {
             tags.insert("action".into(), "pass".into());
             // TODO: this is ugly
             // Count good cases
-            let mut m = Map::with_capacity(4);
+            let mut m = Object::with_capacity(4);
             m.insert("measurement".into(), "bucketing".into());
             m.insert("tags".into(), Value::Object(tags.clone()));
-            let mut fields = Map::with_capacity(1);
+            let mut fields = Object::with_capacity(1);
             fields.insert("count".into(), b.pass.into());
             m.insert("fields".into(), Value::Object(fields));
             m.insert("timestamp".into(), timestamp.into());
@@ -217,10 +217,10 @@ impl Operator for BucketGrouper {
 
             // Count bad cases
             tags.insert("action".into(), "overflow".into());
-            let mut m = Map::with_capacity(4);
+            let mut m = Object::with_capacity(4);
             m.insert("measurement".into(), "bucketing".into());
             m.insert("tags".into(), Value::Object(tags.clone()));
-            let mut fields = Map::with_capacity(1);
+            let mut fields = Object::with_capacity(1);
             fields.insert("count".into(), b.pass.into());
             m.insert("fields".into(), Value::Object(fields));
             m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly

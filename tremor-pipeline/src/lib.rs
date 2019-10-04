@@ -54,7 +54,7 @@ pub mod op;
 
 pub use op::{InitializableOperator, Operator};
 pub type MetaValue = simd_json::value::owned::Value;
-pub type MetaMap = simd_json::value::owned::Map;
+pub type MetaMap = simd_json::value::owned::Object;
 pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
 pub type NodeLookupFn = fn(
@@ -534,7 +534,7 @@ impl ExecutableGraph {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
                                 value,
-                                meta: Value::Object(Map::default()),
+                                meta: Value::Object(Object::default()),
                             }),
                             ingest_ns: timestamp,
                             kind: None,
@@ -552,7 +552,7 @@ impl ExecutableGraph {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
                                 value,
-                                meta: Value::Object(Map::default()),
+                                meta: Value::Object(Object::default()),
                             }),
                             ingest_ns: timestamp,
                             kind: None,

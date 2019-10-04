@@ -397,7 +397,7 @@ mod tests {
             let got = &decoded.suffix().value;
             if got != &expected {
                 println!("{} fails while decoding", &case.2);
-                assert_eq!(got.to_string(), expected.to_string());
+                assert_eq!(got.encode(), expected.encode());
             }
         })
     }

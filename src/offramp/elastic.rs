@@ -145,7 +145,7 @@ impl Elastic {
             .collect();
         self.pool.execute(move || {
             let r = Self::flush(&destination.client, payload.as_str());
-            let mut m = Map::new();
+            let mut m = Object::new();
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());
             } else {
@@ -198,34 +198,34 @@ impl Offramp for Elastic {
         let mut payload = String::from("");
 
         for (value, meta) in event.value_meta_iter() {
-            let index = if let Some(index) = meta.get("index").and_then(Value::as_string) {
+            let index = if let Some(index) = meta.get("index").and_then(Value::as_str) {
                 index
             } else {
                 error!("'index' not set for elastic offramp!");
                 return;
             };
-            let doc_type = if let Some(doc_type) = meta.get("doc_type").and_then(Value::as_string) {
+            let doc_type = if let Some(doc_type) = meta.get("doc_type").and_then(Value::as_str) {
                 doc_type
             } else {
                 error!("'doc-type' not set for elastic offramp!");
                 return;
             };
-            let pipeline = if let Some(pipeline) = meta.get("pipeline").and_then(Value::as_string) {
+            let pipeline = if let Some(pipeline) = meta.get("pipeline").and_then(Value::as_str) {
                 Some(pipeline)
             } else {
                 None
             };
             match pipeline {
-                None => {
-                    let s = json!({
+                None => payload.push_str(
+                    json!({
                     "index":
                     {
                         "_index": index,
                         "_type": doc_type
                     }})
-                    .to_string();
-                    payload.push_str(s.as_str())
-                }
+                    .encode()
+                    .as_str(),
+                ),
                 Some(ref pipeline) => payload.push_str(
                     json!({
                     "index":
@@ -234,12 +234,12 @@ impl Offramp for Elastic {
                         "_type": doc_type,
                         "pipeline": pipeline
                     }})
-                    .to_string()
+                    .encode()
                     .as_str(),
                 ),
             };
             payload.push('\n');
-            let s = value.to_string();
+            let s = value.encode();
             payload.push_str(s.as_str());
             payload.push('\n');
         }

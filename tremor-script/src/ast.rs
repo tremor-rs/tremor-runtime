@@ -627,8 +627,8 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
                             b1.kind,
-                            lhs.kind(),
-                            rhs.kind(),
+                            lhs.value_type(),
+                            rhs.value_type(),
                         )
                         .into());
                     };
@@ -652,7 +652,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
                             u1.kind,
-                            expr.kind(),
+                            expr.value_type(),
                         )
                         .into());
                     };
@@ -686,13 +686,13 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
             ImutExpr1::Record(r) => {
                 let r = r.up(helper)?;
                 if r.fields.iter().all(|f| is_lit(&f.name) && is_lit(&f.value)) {
-                    let obj: Result<borrowed::Map> = r
+                    let obj: Result<borrowed::Object> = r
                         .fields
                         .into_iter()
                         .map(|f| {
                             reduce2(f.name.clone()).and_then(|n| {
-                                let n = n.as_string().unwrap_or_else(|| unreachable!());
-                                reduce2(f.value).map(|v| (n.into(), v))
+                                let n = n.as_str().unwrap_or_else(|| unreachable!());
+                                reduce2(f.value).map(|v| (n.to_owned().into(), v))
                             })
                         })
                         .collect();
@@ -2138,7 +2138,7 @@ impl<'script> Upable<'script> for Segment1<'script> {
                             return Err(ErrorKind::TypeConflict(
                                 r.expand_lines(2),
                                 r,
-                                other.kind(),
+                                other.value_type(),
                                 vec![ValueType::I64, ValueType::String],
                             )
                             .into());

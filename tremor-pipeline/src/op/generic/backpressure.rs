@@ -184,7 +184,7 @@ mod test {
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
         // one up the backup steps
-        let mut m = Map::new();
+        let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
         let mut insight = Event {
             is_batch: false,
@@ -260,7 +260,7 @@ mod test {
             last_pass: 0,
         };
         // An contraflow that fails the timeout
-        let mut m = Map::new();
+        let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
 
         let mut insight = Event {
@@ -272,7 +272,7 @@ mod test {
         };
 
         // A contraflow that passes the timeout
-        let mut m = Map::new();
+        let mut m = Object::new();
         m.insert("time".into(), 99.0.into());
 
         let mut insight_reset = Event {

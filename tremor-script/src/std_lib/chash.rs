@@ -43,7 +43,7 @@ pub fn load(registry: &mut Registry) {
 fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> io::Result<()> {
     match j {
         Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
-            write!(w, "{}", j.to_string())
+            write!(w, "{}", j.encode())
         }
         Value::Array(a) => {
             let mut iter = a.iter();

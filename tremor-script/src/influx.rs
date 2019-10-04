@@ -15,7 +15,7 @@
 
 use crate::errors::*;
 use halfbrown::HashMap;
-use simd_json::value::borrowed::{Map, Value};
+use simd_json::value::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Cow;
 use std::io::Write;
@@ -60,14 +60,14 @@ fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
 #[allow(dead_code)]
 pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     let mut output: Vec<u8> = Vec::with_capacity(512);
-    write_escaped_key(&mut output, v.get("measurement")?.as_string()?.as_bytes())?;
-    //let mut output: String = v.get("measurement")?.as_string()?.escape();
+    write_escaped_key(&mut output, v.get("measurement")?.as_str()?.as_bytes())?;
+    //let mut output: String = v.get("measurement")?.as_str()?.escape();
 
     let mut tag_collection = v
         .get("tags")?
         .as_object()?
         .iter()
-        .filter_map(|(key, value)| Some((key, value.as_string()?)))
+        .filter_map(|(key, value)| Some((key, value.as_str()?.to_owned())))
         .collect::<Vec<(&Cow<'input, str>, String)>>();
     tag_collection.sort_by_key(|v| v.0);
 
@@ -127,7 +127,7 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'
     let tags = if c == ',' {
         parse_tags(&mut chars)?
     } else {
-        Map::new()
+        Object::new()
     };
 
     let fields = parse_fields(&mut chars)?;
@@ -138,7 +138,7 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'
         chars.as_str().parse()?
     };
 
-    let mut m = Map::with_capacity(4);
+    let mut m = Object::with_capacity(4);
     m.insert_nocheck("measurement".into(), Value::String(measurement));
     m.insert_nocheck("tags".into(), Value::Object(tags));
     m.insert_nocheck("fields".into(), Value::Object(fields));
@@ -200,7 +200,7 @@ fn parse_value<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>
     }
 }
 
-fn parse_fields<'input>(chars: &mut Chars) -> Result<Map<'input>> {
+fn parse_fields<'input>(chars: &mut Chars) -> Result<Object<'input>> {
     let mut res = HashMap::new();
     loop {
         let key = parse_to_char(chars, '=')?;
@@ -219,7 +219,7 @@ fn parse_fields<'input>(chars: &mut Chars) -> Result<Map<'input>> {
     }
 }
 
-fn parse_tags<'input>(chars: &mut Chars) -> Result<Map<'input>> {
+fn parse_tags<'input>(chars: &mut Chars) -> Result<Object<'input>> {
     let mut res = HashMap::new();
     loop {
         let (key, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;

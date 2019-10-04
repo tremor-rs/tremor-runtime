@@ -49,7 +49,7 @@
 // | whitespace             | we always run in 'lenient mode' as is the default of LS | No        |
 
 use serde::{Deserialize, Serialize};
-use simd_json::value::borrowed::{Map, Value};
+use simd_json::value::borrowed::{Object, Value};
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -160,8 +160,8 @@ impl Pattern {
     /// * key_seperator - An array of characters that seperats the key from a value
     ///
     /// Note: Fields that have on value are dropped.
-    pub fn run<'input>(&self, input: &'input str) -> Option<Map<'input>> {
-        let r: Map = multi_split(input, &self.field_seperators)
+    pub fn run<'input>(&self, input: &'input str) -> Option<Object<'input>> {
+        let r: Object = multi_split(input, &self.field_seperators)
             .iter()
             .filter_map(|field| {
                 let kv: Vec<&str> = multi_split(field, &self.key_seperators);

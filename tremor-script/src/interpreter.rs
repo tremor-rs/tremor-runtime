@@ -276,7 +276,12 @@ where
                         );
                     }
                 } else {
-                    return error_type_conflict(outer, segment, current.kind(), ValueType::Object);
+                    return error_type_conflict(
+                        outer,
+                        segment,
+                        current.value_type(),
+                        ValueType::Object,
+                    );
                 }
             }
             Segment::IdxSelector { idx, .. } => {
@@ -301,7 +306,12 @@ where
                         return error_array_out_of_bound(outer, segment, &path, idx..idx);
                     }
                 } else {
-                    return error_type_conflict(outer, segment, current.kind(), ValueType::Array);
+                    return error_type_conflict(
+                        outer,
+                        segment,
+                        current.value_type(),
+                        ValueType::Array,
+                    );
                 }
             }
             Segment::ElementSelector { expr, .. } => {
@@ -324,7 +334,12 @@ where
                         }
                     }
                     (Value::Object(_), other) => {
-                        return error_type_conflict(outer, segment, other.kind(), ValueType::String)
+                        return error_type_conflict(
+                            outer,
+                            segment,
+                            other.value_type(),
+                            ValueType::String,
+                        )
                     }
                     (Value::Array(a), Value::I64(idx)) => {
                         let (start, end) = if let Some((start, end)) = subrange {
@@ -348,13 +363,28 @@ where
                         }
                     }
                     (Value::Array(_), other) => {
-                        return error_type_conflict(outer, segment, other.kind(), ValueType::I64)
+                        return error_type_conflict(
+                            outer,
+                            segment,
+                            other.value_type(),
+                            ValueType::I64,
+                        )
                     }
                     (other, Value::String(_)) => {
-                        return error_type_conflict(outer, segment, other.kind(), ValueType::Object)
+                        return error_type_conflict(
+                            outer,
+                            segment,
+                            other.value_type(),
+                            ValueType::Object,
+                        )
                     }
                     (other, Value::I64(_)) => {
-                        return error_type_conflict(outer, segment, other.kind(), ValueType::Array)
+                        return error_type_conflict(
+                            outer,
+                            segment,
+                            other.value_type(),
+                            ValueType::Array,
+                        )
                     }
                     _ => return error_oops(outer),
                 }
@@ -394,14 +424,24 @@ where
                             }
                         } else {
                             let re: &ImutExpr = range_end.borrow();
-                            return error_type_conflict(outer, re, e.kind(), ValueType::I64);
+                            return error_type_conflict(outer, re, e.value_type(), ValueType::I64);
                         }
                     } else {
                         let rs: &ImutExpr = range_start.borrow();
-                        return error_type_conflict(outer, rs.borrow(), s.kind(), ValueType::I64);
+                        return error_type_conflict(
+                            outer,
+                            rs.borrow(),
+                            s.value_type(),
+                            ValueType::I64,
+                        );
                     }
                 } else {
-                    return error_type_conflict(outer, segment, current.kind(), ValueType::Array);
+                    return error_type_conflict(
+                        outer,
+                        segment,
+                        current.value_type(),
+                        ValueType::Array,
+                    );
                 }
             }
         }
@@ -460,10 +500,12 @@ where
                         }
                     }
                 }
-                other => return error_type_conflict(outer, inner, other.kind(), ValueType::Object),
+                other => {
+                    return error_type_conflict(outer, inner, other.value_type(), ValueType::Object)
+                }
             }
         }
-        other => return error_type_conflict(outer, inner, other.kind(), ValueType::Object),
+        other => return error_type_conflict(outer, inner, other.value_type(), ValueType::Object),
     }
 
     Ok(())
@@ -594,7 +636,7 @@ where
                 }
             }
         } else {
-            return error_type_conflict(outer, &expr.target, value.kind(), ValueType::Object);
+            return error_type_conflict(outer, &expr.target, value.value_type(), ValueType::Object);
         }
     }
     Ok(())

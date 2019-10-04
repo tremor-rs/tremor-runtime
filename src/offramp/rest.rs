@@ -113,7 +113,7 @@ impl Rest {
         let config = self.config.clone();
         self.pool.execute(move || {
             let r = Self::flush(&destination, config, payload.as_str());
-            let mut m = Map::new();
+            let mut m = Object::new();
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());
             } else {

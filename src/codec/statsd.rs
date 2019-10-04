@@ -14,7 +14,7 @@
 
 use super::Codec;
 use crate::errors::*;
-use simd_json::value::borrowed::{Map, Value};
+use simd_json::value::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::str;
 use tremor_script::prelude::*;
@@ -38,12 +38,12 @@ impl Codec for StatsD {
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
     let mut r = String::new();
-    if let Some(m) = value.get("metric").and_then(|v| v.as_string()) {
+    if let Some(m) = value.get("metric").and_then(|v| v.as_str()) {
         r.push_str(&m);
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
     };
-    let t = if let Some(s) = value.get("type").and_then(|v| v.as_string()) {
+    let t = if let Some(s) = value.get("type").and_then(|v| v.as_str()) {
         s
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
@@ -51,8 +51,8 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("value") {
         r.push(':');
         if t == "g" {
-            if let Some(s) = value.get("action").and_then(|v| v.as_string()) {
-                match s.as_str() {
+            if let Some(s) = value.get("action").and_then(Value::as_str) {
+                match s {
                     "add" => r.push('+'),
                     "sub" => r.push('-'),
                     _ => (),
@@ -60,7 +60,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
             }
         };
         if val.is_i64() || val.is_f64() {
-            r.push_str(&val.to_string());
+            r.push_str(&val.encode());
         } else {
             return Err(ErrorKind::InvalidStatsD.into());
         }
@@ -74,7 +74,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("sample_rate") {
         r.push_str("|@");
         if val.is_i64() || val.is_f64() {
-            r.push_str(&val.to_string());
+            r.push_str(&val.encode());
         } else {
             return Err(ErrorKind::InvalidStatsD.into());
         }
@@ -90,7 +90,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         None,
     };
     let mut d = data.iter().enumerate().peekable();
-    let mut m = Map::with_capacity(4);
+    let mut m = Object::with_capacity(4);
     let value_start: usize;
     let mut is_float = false;
     loop {

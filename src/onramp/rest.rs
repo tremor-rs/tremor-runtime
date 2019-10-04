@@ -262,7 +262,7 @@ fn onramp_loop(
         } else {
             match dr.try_recv() {
                 Ok(data) => {
-                    let data = json!(data).to_string().into_bytes();
+                    let data = json!(data).encode().into_bytes();
                     let mut ingest_ns = nanotime();
                     send_event(
                         &pipelines,

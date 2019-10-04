@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::value::borrowed::Map;
+use simd_json::value::borrowed::Object;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -44,7 +44,7 @@ pub fn load(registry: &mut Registry) {
             ))
         }))
         .insert(tremor_const_fn! (record::from_array(_context, _input: Array) {
-        let r: FResult<Map> = _input.iter().map(|a| match a {
+        let r: FResult<Object> = _input.iter().map(|a| match a {
             Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.
                 let second = a.pop().expect("We know this has an element");
@@ -64,7 +64,7 @@ pub fn load(registry: &mut Registry) {
             Value::String(s) => Some(s.clone()),
             _ => None
         }).collect();
-        let r: Map =_input.iter().filter_map(|(k, v)| {
+        let r: Object =_input.iter().filter_map(|(k, v)| {
             if keys.contains(&k) {
                 Some((k.clone(), v.clone()))
             } else {

@@ -35,11 +35,11 @@ pub fn load(registry: &mut Registry) {
         .insert(map_function!(is_bool))
         .insert(map_function!(is_integer, is_i64))
         .insert(map_function!(is_float, is_f64))
-        .insert(map_function!(is_string))
+        .insert(map_function!(is_string, is_str))
         .insert(map_function!(is_array))
         .insert(map_function!(is_record, is_object))
         .insert(tremor_const_fn! (type::as_string(_context, _input) {
-            Ok(match _input.kind() {
+            Ok(match _input.value_type() {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
                 ValueType::I64 => Value::from("integer"),
@@ -50,7 +50,7 @@ pub fn load(registry: &mut Registry) {
             })
         }))
         .insert(tremor_const_fn! (type::is_number(_context, _input) {
-            Ok(match _input.kind() {
+            Ok(match _input.value_type() {
                 ValueType::I64 => Value::from(true),
                 ValueType::F64 => Value::from(true),
                 _ => Value::from(false),
@@ -61,7 +61,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::value::borrowed::Map;
+    use simd_json::value::borrowed::Object;
     use simd_json::BorrowedValue as Value;
 
     macro_rules! assert_val {
@@ -139,7 +139,7 @@ mod test {
         let f = fun("type", "is_record");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        let v = Value::Object(Map::new());
+        let v = Value::Object(Object::new());
         assert_val!(f(&[&v]), true);
     }
 
@@ -158,7 +158,7 @@ mod test {
         assert_val!(f(&[&v]), "string");
         let v = Value::Array(vec![]);
         assert_val!(f(&[&v]), "array");
-        let v = Value::Object(Map::new());
+        let v = Value::Object(Object::new());
         assert_val!(f(&[&v]), "record");
     }
 }

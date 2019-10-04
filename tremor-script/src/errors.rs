@@ -616,7 +616,7 @@ pub fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     got: &Value,
 ) -> Result<T> {
-    error_type_conflict(outer, inner, got.kind(), ValueType::Bool)
+    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
 }
 
 pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
@@ -625,7 +625,7 @@ pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
     op: ast::UnaryOpKind,
     val: &Value,
 ) -> Result<T> {
-    Err(ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.kind()).into())
+    Err(ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.value_type()).into())
 }
 
 pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
@@ -639,8 +639,8 @@ pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
         outer.extent(),
         inner.extent(),
         op,
-        left.kind(),
-        right.kind(),
+        left.value_type(),
+        right.value_type(),
     )
     .into())
 }
@@ -677,7 +677,7 @@ pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     key: String,
     val: &Value,
 ) -> Result<T> {
-    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.kind()).into())
+    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.value_type()).into())
 }
 
 pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {

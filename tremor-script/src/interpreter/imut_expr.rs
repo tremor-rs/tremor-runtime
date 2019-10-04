@@ -21,7 +21,7 @@ use crate::errors::*;
 use crate::registry::{Registry, TremorAggrFnWrapper};
 use crate::stry;
 use crate::EventContext;
-use simd_json::value::borrowed::{Map, Value};
+use simd_json::value::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -44,7 +44,7 @@ where
     ) -> Result<Cow<'event, str>> {
         match stry!(self.run(opts, context, aggrs, event, meta, local, consts)).borrow() {
             Value::String(s) => Ok(s.clone()),
-            other => error_type_conflict(self, self, other.kind(), ValueType::Object),
+            other => error_type_conflict(self, self, other.value_type(), ValueType::Object),
         }
     }
 
@@ -68,7 +68,7 @@ where
                 self.present(opts, context, aggrs, event, meta, local, consts, path)
             }
             ImutExpr::Record(ref record) => {
-                let mut object: Map = Map::with_capacity(record.fields.len());
+                let mut object: Object = Object::with_capacity(record.fields.len());
 
                 for field in &record.fields {
                     let result = stry!(field
@@ -683,10 +683,15 @@ where
                 stry!(merge_values(self, &expr.expr, &mut value, &replacement));
                 Ok(Cow::Owned(value))
             } else {
-                error_type_conflict(self, &expr.expr, replacement.kind(), ValueType::Object)
+                error_type_conflict(
+                    self,
+                    &expr.expr,
+                    replacement.value_type(),
+                    ValueType::Object,
+                )
             }
         } else {
-            error_type_conflict(self, &expr.target, value.kind(), ValueType::Object)
+            error_type_conflict(self, &expr.target, value.value_type(), ValueType::Object)
         }
     }
 }

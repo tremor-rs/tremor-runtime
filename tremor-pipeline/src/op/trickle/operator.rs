@@ -40,10 +40,14 @@ impl TrickleOperator {
                             config: op::debug::history::Config {
                                 // FIXME hygienic error handling
                                 op: op.params.as_ref().expect("expected op to be configured")["op"]
-                                    .to_string(),
+                                    .as_str()
+                                    .unwrap()
+                                    .to_owned(),
                                 name: op.params.as_ref().expect("expected name to be configured")
                                     ["name"]
-                                    .to_string(),
+                                    .as_str()
+                                    .unwrap()
+                                    .to_owned(),
                             },
                             id: op.id.to_string(),
                         })
