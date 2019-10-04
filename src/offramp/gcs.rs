@@ -117,8 +117,10 @@ impl Offramp for GCS {
                         .content_encoding(&self.config.content_encoding)
                         .upload(
                             Cursor::new(raw),
-                            //ALLOW: This is a constant, we know that it will parse correctly
-                            "application/octet-stream".parse().unwrap(),
+                            "application/octet-stream"
+                                .parse()
+                                //ALLOW: This is a constant, we know that it will parse correctly
+                                .expect("we know this is valid"),
                         ),
                 );
                 self.cnt += 1;
