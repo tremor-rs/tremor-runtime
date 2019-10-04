@@ -29,7 +29,10 @@ impl TrickleOperator {
     pub fn with_stmt(
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
-    ) -> TrickleOperator {
+    ) -> Result<TrickleOperator> {
+        fn missing_field(f: &str) -> Error {
+            ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
+        }
         use crate::op;
         let stmt = stmt_rentwrapped.stmt.suffix();
         let op: Box<dyn Operator> = match stmt {
@@ -39,14 +42,19 @@ impl TrickleOperator {
                         Box::new(op::debug::history::EventHistory {
                             config: op::debug::history::Config {
                                 // FIXME hygienic error handling
-                                op: op.params.as_ref().expect("expected op to be configured")["op"]
-                                    .as_str()
-                                    .unwrap()
+                                op: op
+                                    .params
+                                    .as_ref()
+                                    .and_then(|v| v.get("op"))
+                                    .and_then(Value::as_str)
+                                    .ok_or_else(|| missing_field("op"))?
                                     .to_owned(),
-                                name: op.params.as_ref().expect("expected name to be configured")
-                                    ["name"]
-                                    .as_str()
-                                    .unwrap()
+                                name: op
+                                    .params
+                                    .as_ref()
+                                    .and_then(|v| v.get("name"))
+                                    .and_then(Value::as_str)
+                                    .ok_or_else(|| missing_field("name"))?
                                     .to_owned(),
                             },
                             id: op.id.to_string(),
@@ -61,16 +69,16 @@ impl TrickleOperator {
                                     .as_ref()
                                     .and_then(|v| v.get("timeout"))
                                     .and_then(Value::cast_f64)
-                                    .expect("snot badger"),
+                                    .ok_or_else(|| missing_field("timeout"))?,
                                 steps: op
                                     .params
                                     .as_ref()
                                     .and_then(|v| v.get("steps"))
                                     .and_then(Value::as_array)
-                                    .expect("expected to be an array type")
-                                    .iter()
-                                    .map(|x| x.as_u64().expect("snot biscuit"))
-                                    .collect(),
+                                    .and_then(|a| {
+                                        a.iter().map(|x| x.as_u64()).collect::<Option<Vec<u64>>>()
+                                    })
+                                    .ok_or_else(|| missing_field("timeout"))?,
                             },
                             backoff: 0,
                             last_pass: 0,
@@ -83,7 +91,7 @@ impl TrickleOperator {
                             .as_ref()
                             .and_then(|v| v.get("count"))
                             .and_then(Value::as_usize)
-                            .expect("snot badger");
+                            .ok_or_else(|| missing_field("count"))?;
                         let timeout = op
                             .params
                             .as_ref()
@@ -111,9 +119,7 @@ impl TrickleOperator {
                             _id: op.id.clone(),
                         })
                     }
-                    _ => {
-                        unreachable!("invalid");
-                    }
+                    (s, o) => return Err(ErrorKind::UnknownOp(s.into(), o.into()).into()),
                 }
             }
             _ => {
@@ -121,11 +127,11 @@ impl TrickleOperator {
             }
         };
 
-        TrickleOperator {
+        Ok(TrickleOperator {
             id,
             stmt: stmt_rentwrapped,
             op,
-        }
+        })
     }
 }
 

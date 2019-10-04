@@ -589,9 +589,15 @@ pub fn supported_operators(
     use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
+    let stmt = if let Some(stmt) = stmt {
+        stmt
+    } else {
+        return Err(
+            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
+        );
+    };
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
-            let stmt = stmt.expect("no surprises here unless there is");
             let groups = SelectDims::from_query(stmt.stmt.clone());
             let window =
                 if let tremor_script::ast::Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
@@ -609,14 +615,8 @@ pub fn supported_operators(
                 window,
             })
         }
-        ["trickle", "operator"] => Box::new(TrickleOperator::with_stmt(
-            node.id.clone(),
-            stmt.expect("shoudl have had a stmt"),
-        )),
-        ["trickle", "script"] => Box::new(TrickleScript::with_stmt(
-            node.id.clone(),
-            stmt.expect("shoudl have had a stmt"),
-        )),
+        ["trickle", "operator"] => Box::new(TrickleOperator::with_stmt(node.id.clone(), stmt)?),
+        ["trickle", "script"] => Box::new(TrickleScript::with_stmt(node.id.clone(), stmt)),
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();
             op.from_node(node)?
