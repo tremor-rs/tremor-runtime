@@ -115,18 +115,20 @@ fn onramp_loop(
                     let ack_id = message.ack_id.unwrap_or_default();
                     let body = message.message.unwrap_or_default();
 
-                    let decoded = base64::decode(&body.data.unwrap_or_default())
-                        .expect("could not base64 decode");
-
-                    send_event(
-                        &pipelines,
-                        &mut preprocessors,
-                        &mut codec,
-                        &mut ingest_ns,
-                        id,
-                        decoded,
-                    );
-                    id += 1;
+                    match base64::decode(&body.data.unwrap_or_default()) {
+                        Ok(decoded) => {
+                            send_event(
+                                &pipelines,
+                                &mut preprocessors,
+                                &mut codec,
+                                &mut ingest_ns,
+                                id,
+                                decoded,
+                            );
+                            id += 1;
+                        }
+                        Err(e) => error!("base64 decoding error error: {:?}", e),
+                    }
 
                     if ack_id != "" {
                         if let Err(e) = projects
@@ -138,7 +140,7 @@ fn onramp_loop(
                             )
                             .doit()
                         {
-                            println!("Ack error: {:?}", e)
+                            error!("Ack error: {:?}", e)
                         }
                     };
                 }

@@ -133,9 +133,7 @@ fn onramp_loop(
     };
 
     let client_config = client_config.to_owned();
-    let consumer: LoggingConsumer = client_config
-        .create_with_context(context)
-        .expect("Consumer creation failed");
+    let consumer: LoggingConsumer = client_config.create_with_context(context)?;
 
     let topics: Vec<&str> = config
         .topics

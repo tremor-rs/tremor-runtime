@@ -47,13 +47,9 @@ impl OnrampImpl for Blaster {
                 .extension()
                 .map(std::ffi::OsStr::to_str);
             if ext == Some(Some("xz")) {
-                XzDecoder::new(source_data_file)
-                    .read_to_end(&mut data)
-                    .expect("Neither a readable nor valid XZ compressed file error");
+                XzDecoder::new(source_data_file).read_to_end(&mut data)?;
             } else {
-                source_data_file
-                    .read_to_end(&mut data)
-                    .expect("Unable to read data source file error");
+                source_data_file.read_to_end(&mut data)?;
             };
             Ok(Box::new(Blaster { config, data }))
         } else {

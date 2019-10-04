@@ -152,7 +152,10 @@ fn handler(
         match pp.process(&mut ingest_ns, &data) {
             Ok(r) => {
                 for data in r {
-                    let data = std::str::from_utf8(&data).expect("invalid utf8 content");
+                    let data = match std::str::from_utf8(&data) {
+                        Ok(d) => d,
+                        Err(e) => return Box::new(futures::future::err(e.into())),
+                    };
                     let data = data.trim(); // PERF trim in place
                     if data.is_empty() {
                         continue;
@@ -182,21 +185,17 @@ fn handler(
         Method::DELETE => 200u16,
         _ => 204u16,
     })
-    .expect("bad status code");
+    .unwrap_or_default();
     Box::new(result(Ok(HttpResponse::build(status).body("".to_string()))))
 }
 
 fn header(headers: &actix_web::http::header::HeaderMap) -> HashMap<String, String> {
-    let mut hm = HashMap::new();
-
-    headers.iter().for_each(|(key, value)| {
-        hm.insert(
-            key.as_str().to_string(),
-            value.to_str().expect("header isn't set").to_string(),
-        );
-    });
-
-    hm
+    headers
+        .iter()
+        .filter_map(|(key, value)| {
+            Some((key.as_str().to_string(), value.to_str().ok()?.to_string()))
+        })
+        .collect()
 }
 
 fn path_params(patterns: Vec<RestConfig>, path: &str) -> (String, HashMap<String, String>) {
@@ -245,7 +244,7 @@ fn onramp_loop(
             }
         })?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
-    let mut codec = codec::lookup(&codec).expect("");
+    let mut codec = codec::lookup(&codec)?;
     let mut preprocessors = Vec::<Box<dyn preprocessor::Preprocessor>>::new();
 
     loop {
