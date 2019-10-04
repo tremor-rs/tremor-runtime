@@ -14,15 +14,15 @@
 
 use crate::offramp::prelude::*;
 use actix::io::SinkWrite;
-use actix::*;
-use actix_codec::{AsyncRead, AsyncWrite, Framed};
+use actix::prelude::*;
+use actix_codec::Framed;
 use awc::{
     error::WsProtocolError,
     ws::{CloseCode, CloseReason, Codec as AxCodec, Frame, Message},
     BoxedSocket, Client,
 };
 use bytes::Bytes;
-use crossbeam_channel::bounded;
+use crossbeam_channel::{bounded, Receiver, Sender};
 use futures::{
     lazy,
     stream::{SplitSink, Stream},
@@ -37,10 +37,12 @@ use std::time::Duration;
 macro_rules! eat_error {
     ($e:expr) => {
         if let Err(e) = $e {
-            error!("[WS Offramp] {}", e)
+            error!("[WS Offramp] {}", dbg!(e))
         }
     };
 }
+
+type WsAddr = Addr<WsOfframpWorker>;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -52,10 +54,12 @@ pub struct Config {
 
 /// An offramp that write a given file
 pub struct Ws {
-    addr: Addr<WsOfframpWorker<BoxedSocket>>,
+    addr: Option<WsAddr>,
     config: Config,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
+    tx: Sender<Option<WsAddr>>,
+    rx: Receiver<Option<WsAddr>>,
 }
 
 #[derive(Message)]
@@ -70,6 +74,8 @@ impl OfframpImpl for Ws {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let url = config.url.clone();
             let (tx, rx) = bounded(0);
+            let txe = tx.clone();
+            let my_tx = tx.clone();
             thread::Builder::new()
                 .name(format!("offramp-ws-actix-loop-{}", "???"))
                 .spawn(move || -> io::Result<()> {
@@ -78,29 +84,32 @@ impl OfframpImpl for Ws {
                         Client::new()
                             .ws(&url)
                             .connect()
-                            .map_err(|e| {
-                                println!("Error: {}", e);
+                            .map_err(move |e| {
+                                eat_error!(txe.send(None));
+                                error!("[WS Offramp]: {}", e);
                             })
                             .map(move |(_response, framed)| {
                                 let (sink, stream) = framed.split();
+                                let url = url.clone();
+                                let tx1 = tx.clone();
                                 let addr = WsOfframpWorker::create(|ctx| {
                                     WsOfframpWorker::add_stream(stream, ctx);
-                                    WsOfframpWorker(SinkWrite::new(sink, ctx))
+                                    WsOfframpWorker(url, tx1, SinkWrite::new(sink, ctx))
                                 });
-                                if let Err(e) = tx.send(addr) {
+                                if let Err(e) = tx.send(Some(addr)) {
                                     error!("[WS Offramp] Failed to set up offramp: {}.", e)
                                 };
                             })
                     }));
-
                     sys.run()
                 })?;
-            let addr = rx.recv()?;
             Ok(Box::new(Ws {
-                addr,
+                addr: None,
                 config,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
+                tx: my_tx,
+                rx,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -109,28 +118,77 @@ impl OfframpImpl for Ws {
 }
 
 impl Offramp for Ws {
-    // TODO
-    // FIXME IOU 1 reconnect handling .unwrap()
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for value in event.value_iter() {
-            if let Ok(raw) = codec.encode(value) {
-                match postprocess(&mut self.postprocessors, event.ingest_ns, raw) {
-                    Ok(datas) => {
-                        for raw in datas {
-                            if self.config.binary {
-                                self.addr.do_send(WsMessage::Binary(raw));
-                            } else if let Ok(txt) = String::from_utf8(raw) {
-                                self.addr.do_send(WsMessage::Text(txt));
-                            } else {
-                                error!("[WS Offramp] Invalid utf8 data for text message")
+        // If we are not connected yet we wait for a message to connect
+        if self.addr.is_none() {
+            if let Ok(addr) = self.rx.recv() {
+                self.addr = addr;
+            }
+        }
+        // We eat up the entire buffer
+        while let Ok(addr) = self.rx.try_recv() {
+            self.addr = addr;
+        }
+        // If after that we're not connected yet we try to reconnect
+        if self.addr.is_none() {
+            std::thread::sleep(Duration::from_secs(1));
+            let url = self.config.url.clone();
+            let tx = self.tx.clone();
+            let txe = self.tx.clone();
+            let _i_don_even_know_anymore = thread::Builder::new()
+                .name(format!("offramp-ws-actix-loop-{}", "???"))
+                .spawn(move || -> io::Result<()> {
+                    let sys = actix::System::new("ws-offramp");
+                    Arbiter::spawn(lazy(move || {
+                        Client::new()
+                            .ws(&url)
+                            .connect()
+                            .map_err(move |e| {
+                                if let Err(e) = txe.send(None) {
+                                    error!("[WS Offramp] Failed to set up offramp: {}.", e)
+                                };
+                                error!("[WS Offramp]: {}", e);
+                            })
+                            .map(move |(_response, framed)| {
+                                let (sink, stream) = framed.split();
+                                let url = url.clone();
+                                let tx1 = tx.clone();
+                                let addr = WsOfframpWorker::create(|ctx| {
+                                    WsOfframpWorker::add_stream(stream, ctx);
+                                    WsOfframpWorker(url, tx1, SinkWrite::new(sink, ctx))
+                                });
+                                if let Err(e) = tx.send(Some(addr)) {
+                                    error!("[WS Offramp] Failed to set up offramp: {}.", e)
+                                };
+                            })
+                    }));
+
+                    sys.run()
+                });
+        }
+        if let Some(addr) = &self.addr {
+            for value in event.value_iter() {
+                if let Ok(raw) = codec.encode(value) {
+                    match postprocess(&mut self.postprocessors, event.ingest_ns, raw) {
+                        Ok(datas) => {
+                            for raw in datas {
+                                if self.config.binary {
+                                    addr.do_send(WsMessage::Binary(raw));
+                                } else if let Ok(txt) = String::from_utf8(raw) {
+                                    addr.do_send(WsMessage::Text(txt));
+                                } else {
+                                    error!("[WS Offramp] Invalid utf8 data for text message")
+                                }
                             }
                         }
+                        Err(e) => error!("[WS Offramp] Postprocessors failed: {}", e),
                     }
-                    Err(e) => error!("[WS Offramp] Postprocessors failed: {}", e),
+                } else {
+                    error!("[WS Offramp] Codec failed")
                 }
-            } else {
-                error!("[WS Offramp] Codec failed")
             }
+        } else {
+            error!("[WS Offramp] not connected")
         }
     }
 
@@ -149,30 +207,23 @@ impl Offramp for Ws {
         Ok(())
     }
 }
-struct WsOfframpWorker<T>(SinkWrite<SplitSink<Framed<T, AxCodec>>>)
-where
-    T: AsyncRead + AsyncWrite;
+struct WsOfframpWorker(
+    String,
+    Sender<Option<WsAddr>>,
+    SinkWrite<SplitSink<Framed<BoxedSocket, AxCodec>>>,
+);
 
-impl<T: 'static> WsOfframpWorker<T>
-where
-    T: AsyncRead + AsyncWrite,
-{
+impl WsOfframpWorker {
     fn hb(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(1, 0), |act, ctx| {
-            eat_error!(act.0.write(Message::Ping(String::from("Yay tremor!"))));
+            eat_error!(act.2.write(Message::Ping(String::from("Yay tremor!"))));
             act.hb(ctx);
         });
     }
 }
-impl<T: 'static> actix::io::WriteHandler<WsProtocolError> for WsOfframpWorker<T> where
-    T: AsyncRead + AsyncWrite
-{
-}
+impl actix::io::WriteHandler<WsProtocolError> for WsOfframpWorker {}
 
-impl<T: 'static> Actor for WsOfframpWorker<T>
-where
-    T: AsyncRead + AsyncWrite,
-{
+impl Actor for WsOfframpWorker {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
@@ -180,43 +231,38 @@ where
     }
 
     fn stopped(&mut self, _: &mut Context<Self>) {
+        eat_error!(self.1.send(None));
         System::current().stop();
     }
 }
 
 /// Handle stdin commands
-impl<T: 'static> Handler<WsMessage> for WsOfframpWorker<T>
-where
-    T: AsyncRead + AsyncWrite,
-{
+impl Handler<WsMessage> for WsOfframpWorker {
     type Result = ();
 
     fn handle(&mut self, msg: WsMessage, _ctx: &mut Context<Self>) {
         match msg {
-            WsMessage::Binary(data) => eat_error!(self.0.write(Message::Binary(data.into()))),
-            WsMessage::Text(data) => eat_error!(self.0.write(Message::Text(data))),
+            WsMessage::Binary(data) => eat_error!(self.2.write(Message::Binary(data.into()))),
+            WsMessage::Text(data) => eat_error!(self.2.write(Message::Text(data))),
         }
     }
 }
 
 /// Handle server websocket messages
-impl<T: 'static> StreamHandler<Frame, WsProtocolError> for WsOfframpWorker<T>
-where
-    T: AsyncRead + AsyncWrite,
-{
+impl StreamHandler<Frame, WsProtocolError> for WsOfframpWorker {
     fn handle(&mut self, msg: Frame, ctx: &mut Context<Self>) {
         match msg {
             Frame::Close(_) => {
-                eat_error!(self.0.write(Message::Close(None)));
+                eat_error!(self.2.write(Message::Close(None)));
             }
             Frame::Ping(data) => {
-                eat_error!(self.0.write(Message::Pong(data)));
+                eat_error!(self.2.write(Message::Pong(data)));
             }
             Frame::Text(Some(data)) => {
                 if let Ok(txt) = String::from_utf8(data.to_vec()) {
-                    eat_error!(self.0.write(Message::Text(txt)));
+                    eat_error!(self.2.write(Message::Text(txt)));
                 } else {
-                    eat_error!(self.0.write(Message::Close(Some(CloseReason {
+                    eat_error!(self.2.write(Message::Close(Some(CloseReason {
                         code: CloseCode::Error,
                         description: None,
                     }))));
@@ -224,41 +270,37 @@ where
                 }
             }
             Frame::Text(None) => {
-                eat_error!(self.0.write(Message::Text(String::new())));
+                eat_error!(self.2.write(Message::Text(String::new())));
             }
             Frame::Binary(Some(data)) => {
-                eat_error!(self.0.write(Message::Binary(data.into())));
+                eat_error!(self.2.write(Message::Binary(data.into())));
             }
             Frame::Binary(None) => {
-                eat_error!(self.0.write(Message::Binary(Bytes::new())));
+                eat_error!(self.2.write(Message::Binary(Bytes::new())));
             }
-            /* TODO: fixed in PR
-            Frame::Continue => {
-                //self.0.write(Message::Ping(String::new())).unwrap();
-                ()
-            }
-            */
             Frame::Pong(_) => (),
         }
     }
 
     fn error(&mut self, error: WsProtocolError, _ctx: &mut Context<Self>) -> Running {
         match error {
-            _ => eat_error!(self.0.write(Message::Close(Some(CloseReason {
+            _ => eat_error!(self.2.write(Message::Close(Some(CloseReason {
                 code: CloseCode::Protocol,
                 description: None,
             })))),
         };
-        Running::Stop
+        // Reconnect
+        dbg!("error");
+        Running::Continue
     }
 
     fn started(&mut self, _ctx: &mut Context<Self>) {
-        //println!("Connected");
+        println!("Connected");
     }
 
     fn finished(&mut self, ctx: &mut Context<Self>) {
-        //println!("Server disconnected");
-        eat_error!(self.0.write(Message::Close(None)));
+        println!("Server disconnected");
+        eat_error!(self.2.write(Message::Close(None)));
         ctx.stop()
     }
 }
