@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use super::{LineValue, Registry, TremorFnWrapper, ValueAndMeta};
+pub use super::{AggrRegistry, LineValue, Registry, TremorFnWrapper, ValueAndMeta};
 pub use crate::interpreter::{AggrType, ExecOpts};
-pub use crate::EventContext;
+pub use crate::{EventContext, Return};
 pub use simd_json::value::borrowed::{Object, Value};
 pub use simd_json::ValueTrait;

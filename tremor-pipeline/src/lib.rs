@@ -45,12 +45,14 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tremor_script::prelude::*;
+use tremor_script::query::*;
 
 pub mod config;
 pub mod errors;
 #[macro_use]
 mod macros;
 pub mod op;
+pub mod query;
 
 pub use op::{InitializableOperator, Operator};
 pub type MetaValue = simd_json::value::owned::Value;
@@ -59,7 +61,7 @@ pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
 pub type NodeLookupFn = fn(
     node: &NodeConfig,
-    stmt: Option<tremor_script::StmtRentalWrapper>,
+    stmt: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
 pub type NodeMap = HashMap<String, NodeIndex>;
@@ -192,7 +194,7 @@ pub struct NodeConfig {
     pub kind: NodeKind,
     pub _type: String,
     pub config: config::ConfigMap,
-    pub stmt: Option<Arc<tremor_script::StmtRentalWrapper>>,
+    pub stmt: Option<Arc<StmtRentalWrapper>>,
 }
 
 #[derive(Debug)]
@@ -236,7 +238,7 @@ impl Operator for OperatorNode {
 #[allow(clippy::implicit_hasher)]
 pub fn buildin_ops(
     node: &NodeConfig,
-    _stmt: Option<tremor_script::StmtRentalWrapper>,
+    _stmt: Option<StmtRentalWrapper>,
     _windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     // Resolve from registry
@@ -271,7 +273,7 @@ impl NodeConfig {
     pub fn to_op(
         &self,
         resolver: NodeLookupFn,
-        stmt: Option<tremor_script::StmtRentalWrapper>,
+        stmt: Option<StmtRentalWrapper>,
         window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
         resolver(&self, stmt, window)

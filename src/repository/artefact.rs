@@ -21,7 +21,7 @@ use crate::system::{PipelineAddr, PipelineMsg, World};
 use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
-use tremor_query::query;
+use tremor_pipeline::query;
 pub type ArtefactId = TremorURL;
 pub use crate::OffRamp as OfframpArtefact;
 pub use crate::OnRamp as OnrampArtefact;

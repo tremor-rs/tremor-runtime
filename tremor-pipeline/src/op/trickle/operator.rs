@@ -21,14 +21,14 @@ use tremor_script::{self};
 #[derive(Debug)]
 pub struct TrickleOperator {
     pub id: String,
-    pub stmt: tremor_script::StmtRentalWrapper,
+    pub stmt: tremor_script::query::StmtRentalWrapper,
     pub op: Box<dyn Operator>,
 }
 
 impl TrickleOperator {
     pub fn with_stmt(
         id: String,
-        stmt_rentwrapped: tremor_script::StmtRentalWrapper,
+        stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> TrickleOperator {
         use crate::op;
         let stmt = stmt_rentwrapped.stmt.suffix();

@@ -31,6 +31,7 @@ pub mod parser;
 pub mod pos;
 pub mod registry;
 pub mod script;
+pub mod query;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
@@ -58,7 +59,7 @@ pub use crate::registry::{
     aggr_registry, registry, AggrRegistry, Registry, TremorAggrFn, TremorAggrFnWrapper, TremorFn,
     TremorFnWrapper,
 };
-pub use crate::script::{QueryRentalWrapper, Return, Script, StmtRentalWrapper};
+pub use crate::script::{Return, Script};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ValueAndMeta<'event> {

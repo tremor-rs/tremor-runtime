@@ -41,6 +41,14 @@ error_chain! {
     }
 
     errors {
+        /*
+         * Query langauge pipeline conversion errors
+         */
+        PipelineError(g: String) {
+            description("Error detected in pipeline conversion")
+                display("Error detected in trickle: {}", g)
+        }
+
         CyclicGraphError(g: String) {
             description("Cycle detected in graph")
                 display("Cycle detected in graph: {}", g)

@@ -1,38 +1,20 @@
-// Copyright 2018-2019, Wayfair GmbH
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+use crate::config::{self, InputPort, OutputPort};
+use crate::errors::*;
+use crate::op;
+use crate::op::trickle::select::WindowImpl;
+use crate::OperatorNode;
+use crate::{ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
-use serde::Serialize;
-use simd_json::borrowed::Value;
-use simd_json::value::ValueTrait;
-use std::boxed::Box;
-use std::io::Write;
-use tremor_pipeline::config::{self, InputPort, OutputPort};
-use tremor_pipeline::op;
-use tremor_pipeline::op::trickle::select::WindowImpl;
-use tremor_pipeline::OperatorNode;
-use tremor_pipeline::{ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
-use tremor_script::ast::*;
-use tremor_script::errors::*;
-use tremor_script::highlighter::{DumbHighlighter, Highlighter};
-use tremor_script::interpreter::Cont;
-use tremor_script::lexer::{self};
-use tremor_script::pos::Range;
-use tremor_script::registry::{AggrRegistry, Registry};
+use simd_json::ValueTrait;
+use std::sync::Arc;
+use tremor_script::ast::Stmt;
+use tremor_script::ast::{WindowDecl, WindowKind};
+use tremor_script::errors::query_stream_not_defined;
+use tremor_script::highlighter::DumbHighlighter;
+use tremor_script::{AggrRegistry, Registry, Value};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
     let v: Vec<&str> = port.split('/').collect();
@@ -76,44 +58,8 @@ fn resolve_output_port(port: String) -> Result<OutputPort> {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-pub enum Return<'event> {
-    Emit {
-        value: Value<'event>,
-        port: Option<String>,
-    },
-    Drop,
-    EmitEvent {
-        port: Option<String>,
-    },
-}
-
-impl<'run, 'event> From<Cont<'run, 'event>> for Return<'event>
-where
-    'event: 'run,
-{
-    // This clones the data since we're returning it out of the scope of the
-    // esecution - we might want to investigate if we can get rid of this in some cases.
-    fn from(v: Cont<'run, 'event>) -> Self {
-        match v {
-            Cont::Cont(value) => Return::Emit {
-                value: value.into_owned(),
-                port: None,
-            },
-            Cont::Emit(value, port) => Return::Emit { value, port },
-            Cont::EmitEvent(port) => Return::EmitEvent { port },
-            Cont::Drop => Return::Drop,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Query {
-    pub query: tremor_script::QueryRentalWrapper,
-}
-
 fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
-    use tremor_pipeline::op::trickle::select::*;
+    use op::trickle::select::*;
     match &d.kind {
         WindowKind::Sliding => unreachable!(),
         WindowKind::Tumbling => {
@@ -134,267 +80,26 @@ fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
         }
     }
 }
-
-impl<'run, 'event, 'script> Query
-where
-    'script: 'event,
-    'event: 'run,
-{
-    pub fn parse(script: &'script str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
-        let query = tremor_script::QueryRentalWrapper::parse(script, reg, aggr_reg)?;
-        Ok(Query { query })
+#[derive(Clone, Debug)]
+pub struct Query(pub tremor_script::query::Query);
+impl From<tremor_script::query::Query> for Query {
+    fn from(q: tremor_script::query::Query) -> Self {
+        Query(q)
     }
-
-    pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        h.highlight(tokens)
+}
+impl Query {
+    pub fn parse(script: &str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+        Ok(Query(tremor_script::query::Query::parse(
+            script, reg, aggr_reg,
+        )?))
     }
-
-    pub fn format_error_from_script<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        e: &Error,
-    ) -> std::io::Result<()> {
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        match e.context() {
-            (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(tokens, start, end, Some(e.into()))
-            }
-
-            _other => {
-                let _ = write!(h.get_writer(), "Error: {}", e);
-                h.finalize()
-            }
-        }
-    }
-
-    pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
-        for w in &self.query.warnings {
-            let tokens: Vec<_> = lexer::tokenizer(&self.query.source).collect();
-            h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
-        }
-        Ok(())
-    }
-
-    #[allow(dead_code)] // NOTE: Damn dual main and lib crate ...
-    pub fn format_error(&self, e: Error) -> String {
-        let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, &e).is_ok() {
-            h.to_string()
-        } else {
-            format!("Failed to extract code for error: {}", e)
-        }
-    }
-
-    pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
-        Self::format_error_from_script(&self.query.source, h, e)
-    }
-
-    pub fn to_config(&'script self) -> Result<config::Pipeline> {
-        let script = self.query.query.suffix();
-        let stmts = script.stmts.iter();
-
-        let mut config = config::Pipeline {
-            id: "generated".to_string(), // FIXME derive from some other ctx
-            description: "Generated from <generated.trickle>".to_string(),
-            links: IndexMap::new(), // FIXME compute below
-            interface: config::Interfaces {
-                inputs: vec!["in".to_string()],
-                outputs: vec!["out".to_string()],
-            }, // FIXME compute below
-            nodes: Vec::new(),
-            metrics_interval_s: Some(10),
-        };
-        let mut graph = ConfigGraph::new();
-        let mut nodes = HashMap::new();
-        let mut inputs = HashMap::new();
-        for stream in config.interface.inputs.clone() {
-            let id = graph.add_node(NodeConfig {
-                id: stream.to_string(),
-                kind: NodeKind::Input,
-                _type: "passthrough".to_string(),
-                config: None,
-                stmt: None,
-            });
-            nodes.insert(stream.clone(), id);
-            inputs.insert(stream.clone(), id);
-        }
-        let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-        for stream in config.interface.outputs.clone() {
-            let id = graph.add_node(NodeConfig {
-                id: stream.to_string(),
-                kind: NodeKind::Output,
-                _type: "passthrough".to_string(),
-                config: None,
-                stmt: None,
-            });
-            nodes.insert(stream.clone(), id);
-            outputs.push(id);
-        }
-        let mut port_indexes: PortIndexMap = HashMap::new();
-
-        for stmt in stmts {
-            match stmt {
-                Stmt::SelectStmt { stmt: s, .. } => {
-                    let from = s.from.id.clone().to_string();
-                    if !nodes.contains_key(&from.clone()) {
-                        let mut h = DumbHighlighter::default();
-                        let arse = query_stream_not_defined(&s, &s.from, from)?;
-                        let _ = Query::format_error_from_script(&self.query.source, &mut h, &arse);
-                        std::process::exit(0);
-                    }
-                    let into = s.into.id.clone().to_string();
-
-                    let from = resolve_output_port(from)?;
-                    let select_in = resolve_input_port(from.id.clone() + "_select")?;
-                    let select_out = resolve_output_port(from.id.clone() + "_select")?;
-                    let into = resolve_input_port(into)?;
-                    if !config.links.contains_key(&from) {
-                        config.links.insert(from, vec![select_in.clone()]);
-                        config.links.insert(select_out, vec![into]);
-                    } else {
-                        match config.links.get_mut(&from) {
-                            Some(x) => x.push(select_in.clone()),
-                            None => panic!("should never get here - link should be ok"),
-                        }
-                        match config.links.get_mut(&select_out) {
-                            Some(x) => x.push(into),
-                            None => panic!("should never get here - link should be ok"),
-                        }
-                    }
-
-                    // dbg!(&s.maybe_where);
-                    // let where_json = serde_yaml::to_string(&s.maybe_where.clone()).expect("");
-                    // dbg!(&where_json);
-                    // let yaml_where = serde_yaml::to_value(&where_json).unwrap();
-                    // dbg!(&yaml_where);
-                    // let mut config = serde_yaml::Mapping::new();
-                    // config.insert("where".into(), yaml_where);
-                    let id = graph.add_node(NodeConfig {
-                        id: select_in.id.to_string(),
-                        kind: NodeKind::Operator,
-                        _type: "trickle::select".to_string(),
-                        config: None,
-                        stmt: None, // FIXME
-                    });
-                    nodes.insert(select_in.id.clone(), id);
-                    outputs.push(id);
-                    // };
-                }
-                Stmt::StreamDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "passthrough".to_string(),
-                            config: None,
-                            stmt: None, // FIXME
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                Stmt::WindowDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "fake.window".to_string(),
-                            config: None,
-                            stmt: None, // FIXME
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                Stmt::OperatorDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "fake.operator".to_string(),
-                            config: None,
-                            stmt: None, // FIXME
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                not_yet_implemented => {
-                    dbg!(("not yet implemented", &not_yet_implemented));
-                }
-            };
-        }
-
-        // Add metrics output port
-        let id = graph.add_node(NodeConfig {
-            id: "_metrics".to_string(),
-            kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
-            config: None,
-            stmt: None,
-        });
-        nodes.insert("metrics".to_string(), id);
-        outputs.push(id);
-
-        // Link graph edges
-        for (from, tos) in &config.links {
-            for to in tos {
-                let from_idx = nodes[&from.id];
-                let to_idx = nodes[&to.id];
-
-                let from_tpl = (from_idx, from.port.clone());
-                let to_tpl = (to_idx, to.port.clone());
-                match port_indexes.get_mut(&from_tpl) {
-                    None => {
-                        port_indexes.insert(from_tpl, vec![to_tpl]);
-                    }
-                    Some(ports) => {
-                        ports.push(to_tpl);
-                    }
-                }
-                graph.add_edge(from_idx, to_idx, ());
-            }
-        }
-
-        // iff cycles, fail and bail
-        if is_cyclic_directed(&graph) {
-            Err(ErrorKind::CyclicGraphError(format!(
-                "{:?}",
-                Dot::with_config(&graph, &[Config::EdgeNoLabel])
-            ))
-            .into())
-        } else {
-            config.nodes = graph
-                .node_indices()
-                .map(|i| {
-                    let nc = &graph[i];
-                    tremor_pipeline::config::Node {
-                        id: nc.id.clone(),
-                        node_type: nc._type.clone(),
-                        description: "generated".to_string(),
-                        config: nc.config.clone(),
-                    }
-                })
-                .collect();
-
-            Ok(config)
-        }
-    }
-
-    pub fn to_pipe(&'script self) -> Result<tremor_pipeline::ExecutableGraph> {
+    pub fn to_pipe(&self) -> Result<crate::ExecutableGraph> {
+        use crate::op::Operator;
+        use crate::ExecutableGraph;
+        use crate::NodeMetrics;
         use std::iter;
-        use tremor_pipeline::op::Operator;
-        use tremor_pipeline::ExecutableGraph;
-        use tremor_pipeline::NodeMetrics;
 
-        let script = self.query.query.suffix();
+        let script = self.0.query.suffix();
 
         let mut pipe_graph = ConfigGraph::new();
         let mut pipe_ops = HashMap::new();
@@ -437,11 +142,11 @@ where
 
         for stmt in &script.stmts {
             let stmt_rental =
-                tremor_script::script::rentals::Stmt::new(self.query.query.clone(), |_| unsafe {
+                tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
                     std::mem::transmute(stmt.clone())
                 });
 
-            let that = tremor_script::StmtRentalWrapper {
+            let that = tremor_script::query::StmtRentalWrapper {
                 stmt: std::sync::Arc::new(stmt_rental),
             };
 
@@ -451,7 +156,11 @@ where
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
                         let arse = query_stream_not_defined(&s, &s.from, from)?;
-                        let _ = Query::format_error_from_script(&self.query.source, &mut h, &arse);
+                        let _ = tremor_script::query::Query::format_error_from_script(
+                            &self.0.source,
+                            &mut h,
+                            &arse,
+                        );
                         std::process::exit(0);
                     }
                     let into = s.into.id.clone().to_string();
@@ -662,14 +371,216 @@ where
             Ok(exec)
         }
     }
+
+    pub fn to_config(&self) -> Result<config::Pipeline> {
+        let script = self.0.query.suffix();
+        let stmts = script.stmts.iter();
+
+        let mut config = config::Pipeline {
+            id: "generated".to_string(), // FIXME derive from some other ctx
+            description: "Generated from <generated.trickle>".to_string(),
+            links: IndexMap::new(), // FIXME compute below
+            interface: config::Interfaces {
+                inputs: vec!["in".to_string()],
+                outputs: vec!["out".to_string()],
+            }, // FIXME compute below
+            nodes: Vec::new(),
+            metrics_interval_s: Some(10),
+        };
+        let mut graph = ConfigGraph::new();
+        let mut nodes = HashMap::new();
+        let mut inputs = HashMap::new();
+        for stream in config.interface.inputs.clone() {
+            let id = graph.add_node(NodeConfig {
+                id: stream.to_string(),
+                kind: NodeKind::Input,
+                _type: "passthrough".to_string(),
+                config: None,
+                stmt: None,
+            });
+            nodes.insert(stream.clone(), id);
+            inputs.insert(stream.clone(), id);
+        }
+        let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
+        for stream in config.interface.outputs.clone() {
+            let id = graph.add_node(NodeConfig {
+                id: stream.to_string(),
+                kind: NodeKind::Output,
+                _type: "passthrough".to_string(),
+                config: None,
+                stmt: None,
+            });
+            nodes.insert(stream.clone(), id);
+            outputs.push(id);
+        }
+        let mut port_indexes: PortIndexMap = HashMap::new();
+
+        for stmt in stmts {
+            match stmt {
+                Stmt::SelectStmt { stmt: s, .. } => {
+                    let from = s.from.id.clone().to_string();
+                    if !nodes.contains_key(&from.clone()) {
+                        let mut h = DumbHighlighter::default();
+                        let arse = query_stream_not_defined(&s, &s.from, from)?;
+                        let _ = tremor_script::query::Query::format_error_from_script(
+                            &self.0.source,
+                            &mut h,
+                            &arse,
+                        );
+                        std::process::exit(0);
+                    }
+                    let into = s.into.id.clone().to_string();
+
+                    let from = resolve_output_port(from)?;
+                    let select_in = resolve_input_port(from.id.clone() + "_select")?;
+                    let select_out = resolve_output_port(from.id.clone() + "_select")?;
+                    let into = resolve_input_port(into)?;
+                    if !config.links.contains_key(&from) {
+                        config.links.insert(from, vec![select_in.clone()]);
+                        config.links.insert(select_out, vec![into]);
+                    } else {
+                        match config.links.get_mut(&from) {
+                            Some(x) => x.push(select_in.clone()),
+                            None => panic!("should never get here - link should be ok"),
+                        }
+                        match config.links.get_mut(&select_out) {
+                            Some(x) => x.push(into),
+                            None => panic!("should never get here - link should be ok"),
+                        }
+                    }
+
+                    // dbg!(&s.maybe_where);
+                    // let where_json = serde_yaml::to_string(&s.maybe_where.clone()).expect("");
+                    // dbg!(&where_json);
+                    // let yaml_where = serde_yaml::to_value(&where_json).unwrap();
+                    // dbg!(&yaml_where);
+                    // let mut config = serde_yaml::Mapping::new();
+                    // config.insert("where".into(), yaml_where);
+                    let id = graph.add_node(NodeConfig {
+                        id: select_in.id.to_string(),
+                        kind: NodeKind::Operator,
+                        _type: "trickle::select".to_string(),
+                        config: None,
+                        stmt: None, // FIXME
+                    });
+                    nodes.insert(select_in.id.clone(), id);
+                    outputs.push(id);
+                    // };
+                }
+                Stmt::StreamDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    let src = resolve_output_port(name.clone())?;
+                    if !nodes.contains_key(&src.id) {
+                        let id = graph.add_node(NodeConfig {
+                            id: src.id.to_string(),
+                            kind: NodeKind::Operator,
+                            _type: "passthrough".to_string(),
+                            config: None,
+                            stmt: None, // FIXME
+                        });
+                        nodes.insert(name.clone(), id);
+                        outputs.push(id);
+                    };
+                }
+                Stmt::WindowDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    let src = resolve_output_port(name.clone())?;
+                    if !nodes.contains_key(&src.id) {
+                        let id = graph.add_node(NodeConfig {
+                            id: src.id.to_string(),
+                            kind: NodeKind::Operator,
+                            _type: "fake.window".to_string(),
+                            config: None,
+                            stmt: None, // FIXME
+                        });
+                        nodes.insert(name.clone(), id);
+                        outputs.push(id);
+                    };
+                }
+                Stmt::OperatorDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    let src = resolve_output_port(name.clone())?;
+                    if !nodes.contains_key(&src.id) {
+                        let id = graph.add_node(NodeConfig {
+                            id: src.id.to_string(),
+                            kind: NodeKind::Operator,
+                            _type: "fake.operator".to_string(),
+                            config: None,
+                            stmt: None, // FIXME
+                        });
+                        nodes.insert(name.clone(), id);
+                        outputs.push(id);
+                    };
+                }
+                not_yet_implemented => {
+                    dbg!(("not yet implemented", &not_yet_implemented));
+                }
+            };
+        }
+
+        // Add metrics output port
+        let id = graph.add_node(NodeConfig {
+            id: "_metrics".to_string(),
+            kind: NodeKind::Output,
+            _type: "passthrough".to_string(),
+            config: None,
+            stmt: None,
+        });
+        nodes.insert("metrics".to_string(), id);
+        outputs.push(id);
+
+        // Link graph edges
+        for (from, tos) in &config.links {
+            for to in tos {
+                let from_idx = nodes[&from.id];
+                let to_idx = nodes[&to.id];
+
+                let from_tpl = (from_idx, from.port.clone());
+                let to_tpl = (to_idx, to.port.clone());
+                match port_indexes.get_mut(&from_tpl) {
+                    None => {
+                        port_indexes.insert(from_tpl, vec![to_tpl]);
+                    }
+                    Some(ports) => {
+                        ports.push(to_tpl);
+                    }
+                }
+                graph.add_edge(from_idx, to_idx, ());
+            }
+        }
+
+        // iff cycles, fail and bail
+        if is_cyclic_directed(&graph) {
+            Err(ErrorKind::CyclicGraphError(format!(
+                "{:?}",
+                Dot::with_config(&graph, &[Config::EdgeNoLabel])
+            ))
+            .into())
+        } else {
+            config.nodes = graph
+                .node_indices()
+                .map(|i| {
+                    let nc = &graph[i];
+                    crate::config::Node {
+                        id: nc.id.clone(),
+                        node_type: nc._type.clone(),
+                        description: "generated".to_string(),
+                        config: nc.config.clone(),
+                    }
+                })
+                .collect();
+
+            Ok(config)
+        }
+    }
 }
 
 #[allow(clippy::implicit_hasher)]
 pub fn supported_operators(
     node: &NodeConfig,
-    stmt: Option<tremor_script::StmtRentalWrapper>,
+    stmt: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
-) -> std::result::Result<OperatorNode, tremor_pipeline::errors::Error> {
+) -> Result<OperatorNode> {
     //    use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     //    use op::runtime::TremorFactory;
@@ -678,18 +589,19 @@ pub fn supported_operators(
     use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
-    let op: Box<dyn tremor_pipeline::Operator> = match name_parts.as_slice() {
+    let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
             let stmt = stmt.expect("no surprises here unless there is");
             let groups = SelectDims::from_query(stmt.stmt.clone());
-            let window = if let Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
-                let windows = windows.unwrap();
-                s.maybe_window
-                    .clone()
-                    .map(|n| windows.get(&n.id).unwrap().clone())
-            } else {
-                panic!("This is a mess");
-            };
+            let window =
+                if let tremor_script::ast::Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
+                    let windows = windows.unwrap();
+                    s.maybe_window
+                        .clone()
+                        .map(|n| windows.get(&n.id).unwrap().clone())
+                } else {
+                    panic!("This is a mess");
+                };
             Box::new(TrickleSelect {
                 id: node.id.clone(),
                 stmt,
@@ -715,17 +627,9 @@ pub fn supported_operators(
         // ["generic", "batch"] => BatchFactory::new_boxed(),
         // ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
         [namespace, name] => {
-            return Err(tremor_pipeline::errors::ErrorKind::UnknownOp(
-                namespace.to_string(),
-                name.to_string(),
-            )
-            .into());
+            return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }
-        _ => {
-            return Err(
-                tremor_pipeline::errors::ErrorKind::UnknownNamespace(node._type.clone()).into(),
-            )
-        }
+        _ => return Err(ErrorKind::UnknownNamespace(node._type.clone()).into()),
     };
     Ok(OperatorNode {
         id: node.id.clone(),

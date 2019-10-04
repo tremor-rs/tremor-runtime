@@ -13,12 +13,13 @@
 // limitations under the License.
 use crate::errors::*;
 use crate::{Event, Operator};
+use halfbrown::hashmap;
 use std::sync::Arc;
-use tremor_script::{self, interpreter::AggrType, EventContext, Return};
+use tremor_script::prelude::*;
 
 rental! {
     pub mod rentals {
-        use tremor_script::script::rentals::Stmt;
+        use tremor_script::query::rentals::Stmt;
         use std::sync::Arc;
         use halfbrown::HashMap;
         use serde::Serialize;
@@ -26,8 +27,8 @@ rental! {
 
         #[rental(covariant,debug)]
         pub struct Script {
-            query: Arc<Stmt>,
-            script: tremor_script::ast::ScriptDecl<'query>,
+            stmt: Arc<Stmt>,
+            script: tremor_script::ast::ScriptDecl<'stmt>,
         }
     }
 }
@@ -35,14 +36,14 @@ rental! {
 #[derive(Debug)]
 pub struct TrickleScript {
     pub id: String,
-    pub stmt: Arc<tremor_script::script::rentals::Stmt>,
+    pub stmt: Arc<tremor_script::query::rentals::Stmt>,
     script: rentals::Script,
 }
 
 impl TrickleScript {
     pub fn with_stmt(
         id: String,
-        stmt_rentwrapped: tremor_script::StmtRentalWrapper,
+        stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> TrickleScript {
         let s = match stmt_rentwrapped.stmt.suffix() {
             tremor_script::ast::Stmt::ScriptDecl(ref script) => Some(script.clone()),
@@ -92,21 +93,16 @@ impl Operator for TrickleScript {
                 Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
             }
             Ok(Return::Drop) => Ok(vec![]),
-            Err(_e) => {
-                // let event_meta: simd_json::owned::Value = event_meta.into();
-                // if let simd_json::owned::Value::Object(map) = event_meta {
-                //     event.meta = map;
-                //     let mut o = Value::Object(hashmap! {
-                //         "error".into() => unreachable!("fix me .unwrap()") // Value::String(script.format_error(e).into()),
-                //     });
-                //     std::mem::swap(&mut o, unwind_event);
-                //     if let Some(error) = unwind_event.as_object_mut() {
-                //         error.insert("event".into(), o);
-                //     };
-                //     Ok(vec![("error".to_string(), event)])
-                // } else {
-                unreachable!();
-                //                }
+            Err(e) => {
+                let mut o = Value::Object(hashmap! {
+                    "error".into() => Value::String(self.stmt.head().format_error(e).into()),
+                });
+                std::mem::swap(&mut o, unwind_event);
+                if let Some(error) = unwind_event.as_object_mut() {
+                    error.insert("event".into(), o);
+                };
+                //*unwind_event = data;
+                Ok(vec![("error".to_string(), event)])
             }
         }
     }

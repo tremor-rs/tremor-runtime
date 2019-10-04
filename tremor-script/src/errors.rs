@@ -173,8 +173,6 @@ impl ErrorKind {
             NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
-            | PipelineError(_)
-            | CyclicGraphError(_)
             | Grok(_)
             | InvalidInfluxData(_)
             | Io(_)
@@ -296,18 +294,6 @@ error_chain! {
         Utf8Error(std::str::Utf8Error);
     }
     errors {
-        /*
-         * Query langauge pipeline conversion errors
-         */
-        PipelineError(g: String) {
-            description("Error detected in pipeline conversion")
-                display("Error detected in trickle: {}", g)
-        }
-
-        CyclicGraphError(g: String) {
-            description("Cycle detected in graph")
-                display("Cycle detected in graph: {}", g)
-        }
         /*
          * ParserError
          */

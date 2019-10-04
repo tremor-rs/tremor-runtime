@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use crate::ast::Warning;
-use crate::ctx::EventContext;
 use crate::errors::*;
 use crate::highlighter::{DumbHighlighter, Highlighter};
-pub use crate::interpreter::AggrType;
 use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
-use crate::parser::grammar;
 use crate::pos::Range;
-use crate::registry::{AggrRegistry, Registry};
+use crate::prelude::*;
+use rental::rental;
 use serde::Serialize;
 use simd_json::borrowed::Value;
+use std::boxed::Box;
 use std::io::Write;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Return<'event> {
@@ -56,49 +56,97 @@ where
         }
     }
 }
-
-#[derive(Debug)] // FIXME rename ScriptRentalWrapper
-pub struct Script {
-    // TODO: This should probably be pulled out to allow people wrapping it themselves
-    pub script: rentals::Script,
-    pub source: String,
-    pub warnings: Vec<Warning>,
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
+pub struct StmtRentalWrapper {
+    pub stmt: Arc<rentals::Stmt>,
 }
-
 rental! {
     pub mod rentals {
         use crate::ast;
         use std::borrow::Cow;
         use serde::Serialize;
         use std::sync::Arc;
-        use std::marker::Send;
 
         #[rental_mut(covariant,debug)]
-        pub struct Script{
+        pub struct Query {
             script: Box<String>,
-            parsed: ast::Script<'script>
+            query: ast::Query<'script>,
+        }
+
+        #[rental(covariant,debug)]
+        pub struct Stmt {
+            query: Arc<super::Query>,
+            stmt: ast::Stmt<'query>,
         }
     }
 }
 
-impl<'run, 'event, 'script> Script
+impl PartialEq for rentals::Stmt {
+    fn eq(&self, other: &rentals::Stmt) -> bool {
+        self.suffix() == other.suffix()
+    }
+}
+
+impl Eq for rentals::Stmt {}
+
+impl PartialOrd for rentals::Stmt {
+    fn partial_cmp(&self, _other: &rentals::Stmt) -> Option<std::cmp::Ordering> {
+        None // NOTE Here be dragons FIXME
+    }
+}
+
+impl std::hash::Hash for rentals::Stmt {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.suffix().hash(state);
+    }
+}
+
+impl<'run, 'event, 'script> StmtRentalWrapper
 where
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(
-        script: &'script str,
-        reg: &Registry,
-        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
-    ) -> Result<Self> {
+    #[allow(dead_code)] // FIXME remove this shit
+    fn with_stmt<'elide>(query: &Query, encumbered_stmt: crate::ast::Stmt<'elide>) -> Self {
+        StmtRentalWrapper {
+            stmt: Arc::new(rentals::Stmt::new(Arc::new(query.clone()), |_| {
+                // NOTE We are eliding the lifetime 'elide here which is the purpose
+                // of the rental and the rental wrapper, so we disabuse mem::trensmute
+                // to avoid lifetime elision/mapping warnings from the rust compiler which
+                // under ordinary conditions are correct, but under rental conditions are
+                // exactly what we desire to avoid
+                //
+                // This is *safe* as the rental guarantees that Stmt and Query lifetimes
+                // are compatible by definition in their rentals::{Query,Struct} co-definitions
+                //
+                unsafe { std::mem::transmute(encumbered_stmt) }
+            })),
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Query {
+    pub query: Arc<rentals::Query>,
+    pub source: String,
+    pub warnings: Vec<Warning>,
+    pub locals: usize,
+}
+
+impl<'run, 'event, 'script> Query
+where
+    'script: 'event,
+    'event: 'run,
+{
+    pub fn parse(script: &'script str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut source = script.to_string();
 
         let mut warnings = vec![];
+        let mut locals = 0;
 
         // FIXME make lexer EOS tolerant to avoid this kludge
         source.push(' ');
 
-        let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
+        let query = rentals::Query::try_new(Box::new(source.clone()), |src| {
             let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
             let mut filtered_tokens = Vec::new();
 
@@ -109,18 +157,20 @@ where
                 }
             }
 
-            let fake_aggr_reg = AggrRegistry::default();
-            let (script, ws) = grammar::ScriptParser::new()
+            let (script, local_count, ws) = crate::parser::grammar::QueryParser::new()
                 .parse(filtered_tokens)?
-                .up_script(reg, &fake_aggr_reg)?;
+                .up_script(reg, aggr_reg)?;
+
             warnings = ws;
+            locals = local_count;
             Ok(script)
         })
         .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
 
-        Ok(Script {
-            script,
+        Ok(Query {
+            query: Arc::new(query),
             source,
+            locals,
             warnings,
         })
     }
@@ -136,7 +186,6 @@ where
         e: &Error,
     ) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        //dbg!(&tokens);
         match e.context() {
             (Some(Range(start, end)), _) => {
                 h.highlight_runtime_error(tokens, start, end, Some(e.into()))
@@ -157,7 +206,7 @@ where
         Ok(())
     }
 
-    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
+    #[allow(dead_code)] // NOTE: Damn dual main and lib crate ...
     pub fn format_error(&self, e: Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
@@ -169,15 +218,5 @@ where
 
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
-    }
-
-    pub fn run(
-        &'script self,
-        context: &'run EventContext,
-        aggr: AggrType,
-        event: &'run mut Value<'event>,
-        meta: &'run mut Value<'event>,
-    ) -> Result<Return<'event>> {
-        self.script.suffix().run(context, aggr, event, meta)
     }
 }

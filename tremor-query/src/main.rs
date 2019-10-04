@@ -19,12 +19,9 @@
     deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
 
-mod query;
-
 use crate::query::Query; // {Query, Return};
 use clap::{App, Arg};
 // use halfbrown::hashmap;
-use crate::errors::*;
 pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
@@ -33,6 +30,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::iter::FromIterator;
+use tremor_pipeline::errors::*;
 use tremor_script::highlighter::{Highlighter, TermHighlighter};
 use tremor_script::*;
 
@@ -144,22 +142,22 @@ fn main() -> Result<()> {
     runnable
         .format_warnings_with(&mut h)
         .expect("failed to format error");
-
+    let runnable = tremor_pipeline::query::Query(runnable);
     if matches.is_present("highlight-source") {
         println!();
         let mut h = TermHighlighter::new();
         Query::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
     }
     if matches.is_present("print-ast") {
-        let ast = serde_json::to_string_pretty(&runnable.query.query.suffix())
-            .expect("Failed to render AST");
+        let ast =
+            serde_json::to_string_pretty(&runnable.0.query.suffix()).expect("Failed to render AST");
         println!();
         let mut h = TermHighlighter::new();
         Query::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
     }
     if matches.is_present("print-ast-raw") {
-        let ast = serde_json::to_string_pretty(&runnable.query.query.suffix())
-            .expect("Failed to render AST");
+        let ast =
+            serde_json::to_string_pretty(&runnable.0.query.suffix()).expect("Failed to render AST");
         println!();
         println!("{}", ast);
     }
