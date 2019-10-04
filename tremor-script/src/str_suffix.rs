@@ -90,19 +90,6 @@ impl StrSuffix {
         &self.0[..0]
     }
 
-    pub fn restore_char(&self, prefix: &[u8]) -> char {
-        assert!(prefix.len() <= 4);
-        let mut buf = [0; 4];
-        buf[..prefix.len()].copy_from_slice(prefix);
-        let suffix = self.bytes_prefix();
-        buf[prefix.len()..(prefix.len() + suffix.len())].copy_from_slice(suffix);
-        str::from_utf8(&buf)
-            .expect("UTF-8 string")
-            .chars()
-            .next()
-            .expect("char")
-    }
-
     fn suffix(&self, index: usize) -> &Self {
         // Any suffix of a StrSuffix is a valid StrSuffix
         unsafe { mem::transmute(&self.0[index..]) }

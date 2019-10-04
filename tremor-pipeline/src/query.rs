@@ -306,10 +306,6 @@ impl Query {
             let mut signalflow = Vec::new();
             let mut i = 0;
             for nx in pipe_graph.node_indices() {
-                //            let op = pipe_graph[nx].to_op(supported_operators, None).expect("not good");
-                //            let op = pipe_ops[&nx].expect("should have been ok"); //
-                //                let op = pipe_ops.remove(&nx).expect("should have found an entry").expect("should have been some");
-
                 match pipe_ops.remove(&nx) {
                     Some(Ok(op)) => {
                         i2pos.insert(nx, i);
@@ -326,7 +322,6 @@ impl Query {
                         dbg!("That is not good");
                     }
                 }
-                //let op = op.expect("did not expect that");
             }
 
             // since contraflow is the reverse we need to reverse it.

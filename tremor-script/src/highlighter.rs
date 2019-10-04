@@ -131,10 +131,7 @@ pub trait Highlighter {
             _ => (),
         }
         for t in tokens {
-            if t.is_err() {
-                //break;
-            } else {
-                let t = t.expect("expected a legal token");
+            if let Ok(t) = t {
                 if t.span.start().line.0 != line {
                     line = t.span.start().line.0;
                     if let Some(HighlighterError {
@@ -346,7 +343,7 @@ impl Highlighter for DumbHighlighter {
 
 impl ToString for DumbHighlighter {
     fn to_string(&self) -> String {
-        String::from_utf8(self.buff.clone()).expect("Highlighted source isn't a valid string")
+        String::from_utf8_lossy(&self.buff).to_string()
     }
 }
 

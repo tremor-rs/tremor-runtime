@@ -588,21 +588,21 @@ impl AggrRegistry {
     }
 }
 
-// Test utility to grab a function from the registry
 #[cfg(test)]
-pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
-    let f = registry()
-        .find(m, f)
-        .expect("could not find function")
-        .clone();
-    move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext { at: 0 }, &args) }
-}
-
+pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
     use simd_json::BorrowedValue as Value;
 
+    // Test utility to grab a function from the registry
+    pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
+        let f = registry()
+            .find(m, f)
+            .expect("could not find function")
+            .clone();
+        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext { at: 0 }, &args) }
+    }
     #[test]
     pub fn call_a_function_from_a_registry_works() {
         let max = fun("math", "max");

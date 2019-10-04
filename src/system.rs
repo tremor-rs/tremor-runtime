@@ -43,14 +43,17 @@ pub use crate::onramp::CreateOnramp;
 lazy_static! {
     pub static ref METRICS_PIPELINE: TremorURL = {
         TremorURL::parse("/pipeline/system::metrics/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
     };
     pub static ref STDOUT_OFFRAMP: TremorURL = {
         TremorURL::parse("/offramp/system::stdout/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stdout offramp")
     };
     pub static ref STDERR_OFFRAMP: TremorURL = {
         TremorURL::parse("/offramp/system::stderr/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stderr offramp")
     };
 }

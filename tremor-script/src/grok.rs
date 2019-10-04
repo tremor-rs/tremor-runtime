@@ -23,12 +23,6 @@ use std::str;
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
-#[allow(unused)]
-pub fn resolve(pattern: String) -> GrokPattern {
-    GrokPattern::from_file(PATTERNS_FILE_DEFAULT_PATH.to_string(), pattern)
-        .expect("Could not create grok pattern recognizer")
-}
-
 #[derive(Debug)]
 pub struct GrokPattern {
     pub definition: String,
@@ -54,8 +48,10 @@ impl GrokPattern {
 
             match recognizer.match_against(&l) {
                 Some(m) => {
-                    if let Some(alias) = m.get("alias") {
-                        let pattern = m.get("pattern").expect("Expected a non-NONE value");
+                    if let Some((alias, pattern)) = m
+                        .get("alias")
+                        .and_then(|alias| Some((alias, m.get("pattern")?)))
+                    {
                         result.insert_definition(alias.to_string(), pattern.to_string())
                     } else {
                         return Err(
@@ -111,7 +107,8 @@ impl std::clone::Clone for GrokPattern {
     fn clone(&self) -> Self {
         Self {
             definition: self.definition.to_owned(),
-            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).expect(""),
+            //ALLOW: since we clone we know this exists
+            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).unwrap(),
         }
     }
 }

@@ -66,7 +66,7 @@ pub fn accept(req: &HttpRequest) -> ResourceType {
 }
 
 pub fn c(c: u16) -> StatusCode {
-    StatusCode::from_u16(c).expect("failed to create status code, this should not happen")
+    StatusCode::from_u16(c).unwrap_or_default()
 }
 
 pub fn handle_errors(e: TremorError) -> error::Error {

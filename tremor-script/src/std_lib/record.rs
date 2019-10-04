@@ -47,8 +47,10 @@ pub fn load(registry: &mut Registry) {
         let r: FResult<Object> = _input.iter().map(|a| match a {
             Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.
-                let second = a.pop().expect("We know this has an element");
-                if let Value::String(first) = a.pop().expect("We know this has an ellement") {
+                //ALLOW: We know this has an element
+                let second = a.pop().unwrap();
+                //ALLOW: We know this has an element
+                if let Value::String(first) = a.pop().unwrap() {
                     Ok((first, second))
                 } else {
                     Err(to_runtime_error(format!("The first element of the tuple needs to be a string: {:?}", a)))

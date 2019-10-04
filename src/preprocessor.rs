@@ -138,10 +138,7 @@ impl Preprocessor for Influx {
             Ok(vec![])
         } else {
             match self.codec.decode(data.to_vec(), *ingest_ns) {
-                Ok(Some(x)) => Ok(vec![self
-                    .json
-                    .encode(&x.suffix().value)
-                    .expect("could not encode")]),
+                Ok(Some(x)) => Ok(vec![self.json.encode(&x.suffix().value)?]),
                 Ok(None) => Ok(vec![]),
                 Err(e) => {
                     dbg!(("influx", &e));
@@ -207,8 +204,7 @@ impl Preprocessor for Gzip {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
         use std::io::Read;
-        let mut decoder =
-            MultiDecoder::new(&data[..]).expect("could not create multi decoder for gzip");
+        let mut decoder = MultiDecoder::new(&data[..])?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
         Ok(vec![decompressed])
