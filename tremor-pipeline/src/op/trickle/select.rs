@@ -204,7 +204,7 @@ impl Operator for TrickleSelect {
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let opts = Self::opts();
-        // FIXME .unwrap()
+        // We guarantee at compile time that select in itself can't have locals, so this is safe
         let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt

@@ -98,6 +98,13 @@ pub enum Stmt<'script> {
     },
 }
 
+impl<'script> std::hash::Hash for Stmt<'script> {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
+        // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
+        // .unwrap() :)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKind {
     pub start: Location,
@@ -161,6 +168,8 @@ impl<'script> ScriptDecl1<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<ScriptDecl<'script>> {
+        let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
+        helper.warnings.append(&mut warnings);
         Ok(ScriptDecl {
             start: self.start,
             end: self.end,
@@ -175,8 +184,7 @@ impl<'script> ScriptDecl1<'script> {
                 }
                 None => None,
             },
-            // FIXME side-effect of integrating two separate lines of code - we should really fuse/merge/join warnings and consts .unwrap()
-            script: self.script.up_script(helper.reg, helper.aggr_reg)?.0,
+            script,
         })
     }
 }
@@ -266,15 +274,38 @@ impl<'script> MutSelect1<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<MutSelect<'script>> {
+        let target = self.target.up(helper)?;
+        if !helper.locals.is_empty() {
+            return error_no_locals(&(self.start, self.end), &target);
+        };
+        let maybe_where = self.maybe_where.up(helper)?;
+        if !helper.locals.is_empty() {
+            if let Some(definitely) = maybe_where {
+                return error_no_locals(&(self.start, self.end), &definitely);
+            }
+        };
+        let maybe_having = self.maybe_having.up(helper)?;
+        if !helper.locals.is_empty() {
+            if let Some(definitely) = maybe_having {
+                return error_no_locals(&(self.start, self.end), &definitely);
+            }
+        };
+        let maybe_group_by = self.maybe_group_by.up(helper)?;
+        if !helper.locals.is_empty() {
+            if let Some(definitely) = maybe_group_by {
+                return error_no_locals(&(self.start, self.end), &definitely);
+            }
+        };
+
         Ok(MutSelect {
             start: self.start,
             end: self.end,
             from: self.from,
             into: self.into,
-            target: self.target.up(helper)?,
-            maybe_where: self.maybe_where.up(helper)?,
-            maybe_having: self.maybe_having.up(helper)?,
-            maybe_group_by: self.maybe_group_by.up(helper)?,
+            target,
+            maybe_where,
+            maybe_having,
+            maybe_group_by,
             maybe_window: self.maybe_window,
         })
     }
@@ -354,6 +385,22 @@ pub enum GroupBy<'script> {
         end: Location,
         expr: ImutExpr<'script>,
     },
+}
+impl<'script> BaseExpr for GroupBy<'script> {
+    fn s(&self) -> Location {
+        match self {
+            GroupBy::Expr { start, .. } => *start,
+            GroupBy::Set { start, .. } => *start,
+            GroupBy::Each { start, .. } => *start,
+        }
+    }
+    fn e(&self) -> Location {
+        match self {
+            GroupBy::Expr { end, .. } => *end,
+            GroupBy::Set { end, .. } => *end,
+            GroupBy::Each { end, .. } => *end,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

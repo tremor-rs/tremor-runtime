@@ -127,10 +127,8 @@ impl PartialOrd for rentals::Stmt {
 }
 
 impl std::hash::Hash for rentals::Stmt {
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
-        // self.suffix().stmt.hash(state);
-        // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
-        // .unwrap() :)
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.suffix().hash(state);
     }
 }
 
