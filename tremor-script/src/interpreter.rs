@@ -1167,11 +1167,10 @@ impl<'script> GroupBy<'script> {
                         }
                         std::mem::swap(groups, &mut new_groups);
                     }
+                    Ok(())
                 } else {
-                    panic!("TYPE ERROR HERE, NEED RECORD")
+                    error_type_conflict(self, self, v.value_type(), ValueType::Array)
                 }
-
-                Ok(())
             }
         }
     }
