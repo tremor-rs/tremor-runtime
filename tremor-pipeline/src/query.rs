@@ -446,13 +446,6 @@ impl Query {
                         }
                     }
 
-                    // dbg!(&s.maybe_where);
-                    // let where_json = serde_yaml::to_string(&s.maybe_where.clone()).expect("");
-                    // dbg!(&where_json);
-                    // let yaml_where = serde_yaml::to_value(&where_json).unwrap();
-                    // dbg!(&yaml_where);
-                    // let mut config = serde_yaml::Mapping::new();
-                    // config.insert("where".into(), yaml_where);
                     let id = graph.add_node(NodeConfig {
                         id: select_in.id.to_string(),
                         kind: NodeKind::Operator,
