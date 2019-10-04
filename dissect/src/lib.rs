@@ -17,18 +17,19 @@
 //! strings.
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
 //!
-//! let filter = Pattern::try_from("%{a} %{b}").expect("");
+//! let filter = Pattern::try_from("%{a} %{b}")?;
 //! let input = "John Doe";
 //!
-//! let output = filter.extract(input).expect("");
+//! let output = filter.extract(input)?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("a".into(), Value::String("John".into()));
 //! expected.insert("b".into(), Value::String("Doe".into()));
 //!
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! ### Categories
@@ -39,16 +40,17 @@
 //! key for the value. The characters between two fields are used as delimiters.
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
 //!
-//! let output = Pattern::try_from("%{name}, %{age}").expect("");
-//! let output = output.extract("John Doe, 22".into()).expect("");
+//! let output = Pattern::try_from("%{name}, %{age}")?;
+//! let output = output.extract("John Doe, 22".into())?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("John Doe".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //!
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! 2) Append (+)
@@ -56,15 +58,16 @@
 //! The append operator will append the value to another value creating an array.
 //!
 //! ```rust
-//! use dissect::{ Pattern, Dissect};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from( "%{+name} %{+name}, %{age}").expect("");
-//! let output = output.extract("John Doe, 22").expect("");
+//! let output = Pattern::try_from( "%{+name} %{+name}, %{age}")?;
+//! let output = output.extract("John Doe, 22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("John Doe".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //!
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! Append works only on strings and doesn't support other types. Using append with any non-string
@@ -83,14 +86,14 @@
 //!
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from("%{?name}, %{&name}").expect("");
-//! let output = output.extract( "John Doe, 22").expect("");
+//! let output = Pattern::try_from("%{?name}, %{&name}")?;
+//! let output = output.extract( "John Doe, 22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("John Doe".into(), Value::String("22".into()));
 //! assert_eq!(output, Dissect(expected));
-//!
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! 4) Empty fields
@@ -98,15 +101,16 @@
 //! Fields  will return an empty value if no data is present in the input.
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
 //!
-//! let output = Pattern::try_from("%{name}, %{age}").expect("");
-//! let output = output.extract(", 22").expect("");
+//! let output = Pattern::try_from("%{name}, %{age}")?;
+//! let output = output.extract(", 22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! 5) Skipped fields (?)
@@ -114,14 +118,15 @@
 //! The operator will prevent the value from being stored in the output, effectively skipping it.
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from("%{?first_name} %{last_name}, %{age}").expect("");
-//! let output = output.extract("John Doe, 22").expect("");
+//! let output = Pattern::try_from("%{?first_name} %{last_name}, %{age}")?;
+//! let output = output.extract("John Doe, 22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("last_name".into(), Value::String("Doe".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! 6) Types
@@ -132,14 +137,15 @@
 //!
 //! ```rust
 //!
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from("%{name}, %{age:int}").expect("");
-//! let output = output.extract( "John Doe, 22").expect("");
+//! let output = Pattern::try_from("%{name}, %{age:int}")?;
+//! let output = output.extract( "John Doe, 22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("John Doe".into()));
 //! expected.insert("age".into(),Value::I64(22));
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! 7) Padding (_)
@@ -148,25 +154,27 @@
 //! skipped character as a parameter to `_`. It will use ` ` by default.
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from("%{name}, %{_}%{age}").expect("");
-//! let output = output.extract("John Doe,                22").expect("");
+//! let output = Pattern::try_from("%{name}, %{_}%{age}")?;
+//! let output = output.extract("John Doe,                22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("John Doe".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 //! ```rust
-//! use dissect::{Dissect, Pattern};
+//! use dissect::{Dissect, Pattern, DissectError};
 //! use simd_json::borrowed::Value;
-//! let output = Pattern::try_from("%{name}, %{_(-)}%{age}").expect("");
-//! let output = output.extract("John Doe, -----------------------22").expect("");
+//! let output = Pattern::try_from("%{name}, %{_(-)}%{age}")?;
+//! let output = output.extract("John Doe, -----------------------22")?;
 //! let mut expected = halfbrown::HashMap::new();
 //! expected.insert("name".into(), Value::String("John Doe".into()));
 //! expected.insert("age".into(), Value::String("22".into()));
 //! assert_eq!(output, Dissect(expected));
+//! # Ok::<(), DissectError>(())
 //! ```
 //!
 use halfbrown::HashMap;
