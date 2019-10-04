@@ -129,7 +129,7 @@ impl Query {
             stmt: None,
         });
         nodes.insert(_in.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
         pipe_ops.insert(id, op);
         inputs.insert(_in, id);
 
@@ -143,7 +143,7 @@ impl Query {
             stmt: None,
         });
         nodes.insert(out.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
@@ -203,7 +203,7 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
                     // FIXME
-                    let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
+                    let op = node.to_op(supported_operators, Some(that), Some(windows.clone()))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
@@ -221,7 +221,8 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
-                        let op = node.to_op(supported_operators, Some(that), Some(windows.clone()));
+                        let op =
+                            node.to_op(supported_operators, Some(that), Some(windows.clone()))?;
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
@@ -244,7 +245,7 @@ impl Query {
                         stmt: None, // FIXME
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, Some(that), None);
+                    let op = node.to_op(supported_operators, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
@@ -263,7 +264,7 @@ impl Query {
                         stmt: None, // FIXME
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, Some(that), None);
+                    let op = node.to_op(supported_operators, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
@@ -280,7 +281,7 @@ impl Query {
             stmt: None,
         });
         nodes.insert("metrics".to_string(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None);
+        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
@@ -319,9 +320,11 @@ impl Query {
             // Nodes that handle signals
             let mut signalflow = Vec::new();
             let mut i = 0;
+            dbg!(&pipe_graph);
+            dbg!(&pipe_ops);
             for nx in pipe_graph.node_indices() {
                 match pipe_ops.remove(&nx) {
-                    Some(Ok(op)) => {
+                    Some(op) => {
                         i2pos.insert(nx, i);
                         if op.handles_contraflow() {
                             contraflow.push(i);
@@ -333,7 +336,8 @@ impl Query {
                         i += 1;
                     }
                     _ => {
-                        dbg!("That is not good");
+                        dbg!(&nx, "That is not good");
+                        return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
                     }
                 }
             }
@@ -588,15 +592,17 @@ pub fn supported_operators(
     use op::trickle::select::{SelectDims, TrickleSelect};
 
     let name_parts: Vec<&str> = node._type.split("::").collect();
-    let stmt = if let Some(stmt) = stmt {
-        stmt
-    } else {
-        return Err(
-            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
-        );
-    };
+
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
+            let stmt = if let Some(stmt) = stmt {
+                stmt
+            } else {
+                return Err(ErrorKind::MissingOpConfig(
+                    "trickle operators require a statement".into(),
+                )
+                .into());
+            };
             let groups = SelectDims::from_query(stmt.stmt.clone());
             let windows = if let Some(windows) = windows {
                 windows
@@ -631,8 +637,28 @@ pub fn supported_operators(
                 window,
             })
         }
-        ["trickle", "operator"] => Box::new(TrickleOperator::with_stmt(node.id.clone(), stmt)?),
-        ["trickle", "script"] => Box::new(TrickleScript::with_stmt(node.id.clone(), stmt)),
+        ["trickle", "operator"] => {
+            let stmt = if let Some(stmt) = stmt {
+                stmt
+            } else {
+                return Err(ErrorKind::MissingOpConfig(
+                    "trickle operators require a statement".into(),
+                )
+                .into());
+            };
+            Box::new(TrickleOperator::with_stmt(node.id.clone(), stmt)?)
+        }
+        ["trickle", "script"] => {
+            let stmt = if let Some(stmt) = stmt {
+                stmt
+            } else {
+                return Err(ErrorKind::MissingOpConfig(
+                    "trickle operators require a statement".into(),
+                )
+                .into());
+            };
+            Box::new(TrickleScript::with_stmt(node.id.clone(), stmt))
+        }
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();
             op.from_node(node)?
