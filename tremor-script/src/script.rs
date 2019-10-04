@@ -17,12 +17,11 @@ use crate::ctx::EventContext;
 use crate::errors::*;
 use crate::highlighter::{DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
-use crate::interpreter::{Cont, ExecOpts, LocalStack};
+use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
 use crate::parser::grammar;
 use crate::pos::Range;
 use crate::registry::{AggrRegistry, Registry};
-use crate::stry;
 use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;
@@ -66,7 +65,6 @@ pub struct Script {
     pub script: rentals::Script,
     pub source: String,
     pub warnings: Vec<Warning>,
-    pub locals: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -149,7 +147,6 @@ where
         let mut source = script.to_string();
 
         let mut warnings = vec![];
-        let mut locals = 0;
 
         // FIXME make lexer EOS tolerant to avoid this kludge
         source.push(' ');
@@ -166,11 +163,10 @@ where
             }
 
             let fake_aggr_reg = AggrRegistry::default();
-            let (script, local_count, ws) = grammar::ScriptParser::new()
+            let (script, ws) = grammar::ScriptParser::new()
                 .parse(filtered_tokens)?
                 .up_script(reg, &fake_aggr_reg)?;
             warnings = ws;
-            locals = local_count;
             Ok(script)
         })
         .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
@@ -178,7 +174,6 @@ where
         Ok(Script {
             script,
             source,
-            locals,
             warnings,
         })
     }
@@ -236,61 +231,7 @@ where
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
-        // FIXME: find a way to pre-allocate this
-        let mut local = LocalStack::with_size(self.locals);
-
-        let script = self.script.suffix();
-        let mut exprs = script.exprs.iter().peekable();
-        let opts = ExecOpts {
-            result_needed: true,
-            aggr,
-        };
-        while let Some(expr) = exprs.next() {
-            if exprs.peek().is_none() {
-                match stry!(expr.run(
-                    opts.with_result(),
-                    context,
-                    &script.aggregates,
-                    event,
-                    meta,
-                    &mut local,
-                    &script.consts,
-                )) {
-                    Cont::Drop => return Ok(Return::Drop),
-                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                    Cont::EmitEvent(port) => {
-                        return Ok(Return::EmitEvent { port });
-                    }
-                    Cont::Cont(v) => {
-                        return Ok(Return::Emit {
-                            value: v.into_owned(),
-                            port: None,
-                        })
-                    }
-                }
-            } else {
-                match stry!(expr.run(
-                    opts.without_result(),
-                    context,
-                    &script.aggregates,
-                    event,
-                    meta,
-                    &mut local,
-                    &script.consts,
-                )) {
-                    Cont::Drop => return Ok(Return::Drop),
-                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                    Cont::EmitEvent(port) => {
-                        return Ok(Return::EmitEvent { port });
-                    }
-                    Cont::Cont(_v) => (),
-                }
-            }
-        }
-        Ok(Return::Emit {
-            value: Value::Null,
-            port: None,
-        })
+        self.script.suffix().run(context, aggr, event, meta)
     }
 }
 

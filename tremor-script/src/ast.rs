@@ -209,7 +209,7 @@ impl<'script> Script1<'script> {
         self,
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
-    ) -> Result<(Script<'script>, usize, Vec<Warning>)> {
+    ) -> Result<(Script<'script>, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
         let mut consts: Vec<Value> = vec![];
         let mut exprs = vec![];
@@ -284,8 +284,8 @@ impl<'script> Script1<'script> {
                 exprs,
                 consts,
                 aggregates: helper.aggregates,
+                locals: helper.locals.len(),
             },
-            helper.locals.len(),
             helper.warnings,
         ))
     }
@@ -296,6 +296,7 @@ pub struct Script<'script> {
     pub exprs: Exprs<'script>,
     pub consts: Vec<Value<'script>>,
     pub aggregates: Vec<InvokeAggrFn<'script>>,
+    pub locals: usize,
 }
 
 use crate::interpreter::*;
@@ -314,8 +315,7 @@ where
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
-        // FIXME: find a way to pre-allocate this .unwrap()
-        let mut local = LocalStack::with_size(0);
+        let mut local = LocalStack::with_size(self.locals);
 
         let mut exprs = self.exprs.iter().peekable();
         let opts = ExecOpts {
