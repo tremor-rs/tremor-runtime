@@ -63,20 +63,17 @@ fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     match &d.kind {
         WindowKind::Sliding => unreachable!(),
         WindowKind::Tumbling => {
-            if let Some(interval) = d
+            let interval = d
                 .params
                 .as_ref()
                 .and_then(|p| p.get("interval"))
                 .and_then(Value::as_u64)
-            {
-                Ok(TumblingWindowOnEventTime {
-                    size: interval,
-                    next_window: None,
-                }
-                .into())
-            } else {
-                Err(".unwrap()".into())
+                .ok_or_else(|| error_missing_config("interval"))?;
+            Ok(TumblingWindowOnEventTime {
+                size: interval,
+                next_window: None,
             }
+            .into())
         }
     }
 }
@@ -599,14 +596,31 @@ pub fn supported_operators(
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
             let groups = SelectDims::from_query(stmt.stmt.clone());
+            let windows = if let Some(windows) = windows {
+                windows
+            } else {
+                return Err(ErrorKind::MissingOpConfig(
+                    "select operators require a window mapping".into(),
+                )
+                .into());
+            };
             let window =
                 if let tremor_script::ast::Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
-                    let windows = windows.unwrap();
-                    s.maybe_window
-                        .clone()
-                        .map(|n| windows.get(&n.id).unwrap().clone())
+                    if let Some(w) = &s.maybe_window {
+                        Some(
+                            windows
+                                .get(&w.id)
+                                .ok_or_else(|| {
+                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
+                                })?
+                                .clone(),
+                        )
+                    } else {
+                        None
+                    }
                 } else {
-                    panic!("This is a mess");
+                    // This already is a select statement so we know we can extract it
+                    unreachable!();
                 };
             Box::new(TrickleSelect {
                 id: node.id.clone(),

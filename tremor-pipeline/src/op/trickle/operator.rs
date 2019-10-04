@@ -30,9 +30,6 @@ impl TrickleOperator {
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<TrickleOperator> {
-        fn missing_field(f: &str) -> Error {
-            ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
-        }
         use crate::op;
         let stmt = stmt_rentwrapped.stmt.suffix();
         let op: Box<dyn Operator> = match stmt {
@@ -47,14 +44,14 @@ impl TrickleOperator {
                                     .as_ref()
                                     .and_then(|v| v.get("op"))
                                     .and_then(Value::as_str)
-                                    .ok_or_else(|| missing_field("op"))?
+                                    .ok_or_else(|| error_missing_config("op"))?
                                     .to_owned(),
                                 name: op
                                     .params
                                     .as_ref()
                                     .and_then(|v| v.get("name"))
                                     .and_then(Value::as_str)
-                                    .ok_or_else(|| missing_field("name"))?
+                                    .ok_or_else(|| error_missing_config("name"))?
                                     .to_owned(),
                             },
                             id: op.id.to_string(),
@@ -69,7 +66,7 @@ impl TrickleOperator {
                                     .as_ref()
                                     .and_then(|v| v.get("timeout"))
                                     .and_then(Value::cast_f64)
-                                    .ok_or_else(|| missing_field("timeout"))?,
+                                    .ok_or_else(|| error_missing_config("timeout"))?,
                                 steps: op
                                     .params
                                     .as_ref()
@@ -78,7 +75,7 @@ impl TrickleOperator {
                                     .and_then(|a| {
                                         a.iter().map(|x| x.as_u64()).collect::<Option<Vec<u64>>>()
                                     })
-                                    .ok_or_else(|| missing_field("timeout"))?,
+                                    .ok_or_else(|| error_missing_config("timeout"))?,
                             },
                             backoff: 0,
                             last_pass: 0,
@@ -91,7 +88,7 @@ impl TrickleOperator {
                             .as_ref()
                             .and_then(|v| v.get("count"))
                             .and_then(Value::as_usize)
-                            .ok_or_else(|| missing_field("count"))?;
+                            .ok_or_else(|| error_missing_config("count"))?;
                         let timeout = op
                             .params
                             .as_ref()
