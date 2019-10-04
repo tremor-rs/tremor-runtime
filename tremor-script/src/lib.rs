@@ -29,9 +29,9 @@ pub mod lexer;
 pub mod parser;
 #[allow(unused, dead_code)]
 pub mod pos;
+pub mod query;
 pub mod registry;
 pub mod script;
-pub mod query;
 mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;

@@ -406,7 +406,10 @@ where
                             current = match map.get_mut(id) {
                                 Some(v) => v,
                                 None => {
-                                    map.insert(id.clone(), Value::Object(Object::with_capacity(32)));
+                                    map.insert(
+                                        id.clone(),
+                                        Value::Object(Object::with_capacity(32)),
+                                    );
                                     // NOTE this is safe because we just added this element
                                     // to the map.
                                     map.get_mut(id).unwrap_or_else(|| unreachable!())
@@ -431,7 +434,10 @@ where
                             current = match map.get_mut(&id) {
                                 Some(v) => v,
                                 None => {
-                                    map.insert(id.clone(), Value::Object(Object::with_capacity(32)));
+                                    map.insert(
+                                        id.clone(),
+                                        Value::Object(Object::with_capacity(32)),
+                                    );
                                     // NOTE this is safe because we just added this element
                                     // to the map.
                                     map.get_mut(&id).unwrap_or_else(|| unreachable!())
