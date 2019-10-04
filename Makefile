@@ -44,16 +44,16 @@ chk_copyright_ci:
 	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
 
 chk_unwrap:
-	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'unwrap()' $$f > /dev/null && (echo "##[error] unwrap found in $$f") done
+	@./checks/safety.sh -u
 
 chk_unwrap_ci:
-	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'unwrap()' > /dev/null && exit 1; done; exit 0
+	@./checks/safety.sh -u
 
 chk_panic:
-	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'panic!(' $$f > /dev/null && (echo "##[error] panic found in $$f") done
+	@./checks/safety.sh -p
 
 chk_panic_ci:
-	@for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'panic!(' > /dev/null && exit 1; done; exit 0
+	@./checks/safety.sh -p
 
 docserve:
 	mkdocs serve
