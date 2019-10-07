@@ -587,7 +587,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -630,7 +630,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
 
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -674,7 +674,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
         let next = try_enqueue(&mut op, test_event(0))?;
         assert_eq!(None, next);
         Ok(())
@@ -712,7 +712,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
 
         assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
@@ -756,7 +756,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
 
         let event = test_event(0);
         assert!(try_enqueue(&mut op, event)?.is_none());
@@ -805,7 +805,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
         let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;
@@ -815,11 +815,11 @@ mod test {
     }
 
     fn test_select_stmt(stmt: tremor_script::ast::MutSelect) -> tremor_script::ast::Stmt {
-        ast::Stmt::SelectStmt {
+        ast::Stmt::SelectStmt(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
             consts: vec![],
-        }
+        })
     }
     #[test]
     fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
@@ -861,7 +861,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt);
+        let mut op = test_select(stmt)?;
         let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;
