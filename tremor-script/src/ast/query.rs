@@ -64,11 +64,11 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                 helper.swap(&mut aggregates, &mut consts);
                 // FIXME: iou a const
                 let consts = Vec::new();
-                Ok(Stmt::SelectStmt {
+                Ok(Stmt::SelectStmt(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
                     consts,
-                })
+                }))
             }
             Stmt1::StreamDecl(stmt) => Ok(Stmt::StreamDecl(stmt)),
             Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
@@ -85,24 +85,25 @@ impl<'script> Upable<'script> for Stmt1<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[allow(dead_code)]
 pub enum Stmt<'script> {
     WindowDecl(WindowDecl<'script>),
     StreamDecl(StreamDecl),
     OperatorDecl(OperatorDecl<'script>),
     ScriptDecl(ScriptDecl<'script>),
-    SelectStmt {
-        stmt: Box<MutSelect<'script>>,
-        aggregates: Vec<InvokeAggrFn<'script>>,
-        consts: Vec<Value<'script>>,
-    },
+    SelectStmt(SelectStmt<'script>),
 }
-
 impl<'script> std::hash::Hash for Stmt<'script> {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
         // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
         // .unwrap() :)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SelectStmt<'script> {
+    pub stmt: Box<MutSelect<'script>>,
+    pub aggregates: Vec<InvokeAggrFn<'script>>,
+    pub consts: Vec<Value<'script>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

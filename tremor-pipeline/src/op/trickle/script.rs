@@ -44,23 +44,24 @@ impl TrickleScript {
     pub fn with_stmt(
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
-    ) -> TrickleScript {
-        let s = match stmt_rentwrapped.stmt.suffix() {
-            tremor_script::ast::Stmt::ScriptDecl(ref script) => Some(script.clone()),
-            _ => None,
+    ) -> Result<TrickleScript> {
+        let script = match stmt_rentwrapped.stmt.suffix() {
+            tremor_script::ast::Stmt::ScriptDecl(ref script) => script.clone(),
+            _ => {
+                return Err(ErrorKind::PipelineError(
+                    "Trying to turn a non script into a script operator".into(),
+                )
+                .into())
+            }
         };
 
-        if let Some(script) = s {
-            TrickleScript {
-                id,
-                stmt: stmt_rentwrapped.stmt.clone(),
-                script: rentals::Script::new(stmt_rentwrapped.stmt.clone(), |_| unsafe {
-                    std::mem::transmute(script.clone())
-                }),
-            }
-        } else {
-            unreachable!("bad script");
-        }
+        Ok(TrickleScript {
+            id,
+            stmt: stmt_rentwrapped.stmt.clone(),
+            script: rentals::Script::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
+                std::mem::transmute(script)
+            }),
+        })
     }
 }
 

@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, Stmt},
+    ast::{InvokeAggrFn, SelectStmt},
     prelude::*,
     query::rentals::Stmt as StmtRental,
 };
@@ -39,6 +39,12 @@ rental! {
             query: Arc<StmtRental>,
             groups: HashMap<String, Window<'query>>,
         }
+
+        #[rental(covariant,debug)]
+        pub struct Select {
+            stmt: Arc<StmtRental>,
+            select: tremor_script::ast::SelectStmt<'stmt>,
+        }
     }
 }
 pub use rentals::Dims as SelectDims;
@@ -52,7 +58,7 @@ impl SelectDims {
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
-    pub stmt: tremor_script::query::StmtRentalWrapper,
+    pub select: rentals::Select,
     pub groups: SelectDims,
     pub window: Option<WindowImpl>,
 }
@@ -190,6 +196,31 @@ impl WindowTrait for TumblingWindowOnEventTime {
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl TrickleSelect {
+    pub fn with_stmt(
+        id: String,
+        groups: SelectDims,
+        window: Option<WindowImpl>,
+        stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
+    ) -> Result<Self> {
+        let select = match stmt_rentwrapped.stmt.suffix() {
+            tremor_script::ast::Stmt::SelectStmt(ref select) => select.clone(),
+            _ => {
+                return Err(ErrorKind::PipelineError(
+                    "Trying to turn a non select into a select operator".into(),
+                )
+                .into())
+            }
+        };
+
+        Ok(Self {
+            id,
+            groups,
+            window,
+            select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
+                std::mem::transmute(select)
+            }),
+        })
+    }
     fn opts() -> ExecOpts {
         ExecOpts {
             result_needed: true,
@@ -207,17 +238,13 @@ impl Operator for TrickleSelect {
         let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt
-        let stmt: &mut Stmt = unsafe { std::mem::transmute(self.stmt.stmt.suffix()) };
+        let SelectStmt {
+            stmt,
+            aggregates,
+            consts,
+        }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
 
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
-        let (stmt, aggregates, consts) = match stmt {
-            Stmt::SelectStmt {
-                stmt,
-                aggregates,
-                consts,
-            } => (stmt, aggregates, consts),
-            _ => unreachable!(),
-        };
 
         //
         // Before any select processing, we filter by where clause
@@ -476,20 +503,17 @@ mod test {
 
     use std::sync::Arc;
 
-    fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> TrickleSelect {
+    fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
         let groups = SelectDims::from_query(stmt.stmt.clone());
-        TrickleSelect {
-            id: "select".to_string(),
-            stmt,
-            groups,
-            window: Some(
-                TumblingWindowOnEventTime {
-                    size: 15_000_000_000,
-                    next_window: None,
-                }
-                .into(),
-            ),
-        }
+        let window = Some(
+            TumblingWindowOnEventTime {
+                size: 15_000_000_000,
+                next_window: None,
+            }
+            .into(),
+        );
+        let id = "select".to_string();
+        TrickleSelect::with_stmt(id, groups, window, stmt)
     }
 
     fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(String, Event)>> {
@@ -508,7 +532,7 @@ mod test {
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };
-        Ok(test_select(stmt))
+        Ok(test_select(stmt)?)
     }
 
     #[test]

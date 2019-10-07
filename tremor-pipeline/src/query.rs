@@ -162,7 +162,8 @@ impl Query {
             };
 
             match stmt {
-                Stmt::SelectStmt { stmt: s, .. } => {
+                Stmt::SelectStmt(ref select) => {
+                    let s = &select.stmt;
                     let from = s.from.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
@@ -427,7 +428,8 @@ impl Query {
 
         for stmt in stmts {
             match stmt {
-                Stmt::SelectStmt { stmt: s, .. } => {
+                Stmt::SelectStmt(select) => {
+                    let s = &select.stmt;
                     let from = s.from.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
@@ -612,29 +614,28 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            let window =
-                if let tremor_script::ast::Stmt::SelectStmt { stmt: s, .. } = stmt.stmt.suffix() {
-                    if let Some(w) = &s.maybe_window {
-                        Some(
-                            windows
-                                .get(&w.id)
-                                .ok_or_else(|| {
-                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
-                                })?
-                                .clone(),
-                        )
-                    } else {
-                        None
-                    }
+            let window = if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
+                if let Some(w) = &s.stmt.maybe_window {
+                    Some(
+                        windows
+                            .get(&w.id)
+                            .ok_or_else(|| {
+                                ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
+                            })?
+                            .clone(),
+                    )
                 } else {
-                    return Err("Declared as select but isn't a select".into());
-                };
-            Box::new(TrickleSelect {
-                id: node.id.clone(),
-                stmt,
+                    None
+                }
+            } else {
+                return Err("Declared as select but isn't a select".into());
+            };
+            Box::new(TrickleSelect::with_stmt(
+                node.id.clone(),
                 groups,
                 window,
-            })
+                stmt,
+            )?)
         }
         ["trickle", "operator"] => {
             let stmt = if let Some(stmt) = stmt {
@@ -656,7 +657,7 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            Box::new(TrickleScript::with_stmt(node.id.clone(), stmt))
+            Box::new(TrickleScript::with_stmt(node.id.clone(), stmt)?)
         }
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();

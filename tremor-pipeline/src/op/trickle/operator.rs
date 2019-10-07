@@ -120,7 +120,10 @@ impl TrickleOperator {
                 }
             }
             _ => {
-                unreachable!("bad operator");
+                return Err(ErrorKind::PipelineError(
+                    "Trying to turn a non operator into a operator".into(),
+                )
+                .into())
             }
         };
 
