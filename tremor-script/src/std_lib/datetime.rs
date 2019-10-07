@@ -279,7 +279,7 @@ mod tests {
         //let time = "2019-06-17T13:15:40.752";
         let output =
             _parse(time, "%Y-%m-%dT%H:%M:%S%.3fZ", false).expect("cannot parse datetime string");
-        assert_eq!(output, 1560777340752000000);
+        assert_eq!(output, 1_560_777_340_752_000_000);
     }
     #[test]
     pub fn parse_parses_it_to_ts() {
@@ -290,14 +290,14 @@ mod tests {
         )
         .expect("cannot parse datetime string");
 
-        assert_eq!(output, 419083754274000000);
+        assert_eq!(output, 419_083_754_274_000_000);
     }
 
     #[test]
     pub fn parse_unix_ts() {
         let output = _parse("1560777212", "%s", false).expect("cannot parse datetime string");
 
-        assert_eq!(output, 1560777212000000000);
+        assert_eq!(output, 1_560_777_212_000_000_000);
     }
 
     #[test]

@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn parse_no_timestamp() {
         let s = "weather temperature=82i";
-        let parsed = parse(s, 1465839830100400200u64).expect("failed to parse");
+        let parsed = parse(s, 1_465_839_830_100_400_200u64).expect("failed to parse");
         let r: Value = json!({
             "measurement": "weather",
             "tags": {},
@@ -566,7 +566,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot/cold"
             },
-            "timestamp": 1465839830100400201i64,
+            "timestamp": 1_465_839_830_100_400_201i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0));
@@ -583,7 +583,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\cold"
             },
-            "timestamp": 1465839830100400202i64,
+            "timestamp": 1_465_839_830_100_400_202i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -601,7 +601,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\cold"
             },
-            "timestamp": 1465839830100400203i64,
+            "timestamp": 1_465_839_830_100_400_203i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -619,7 +619,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\\\cold"
             },
-            "timestamp": 1465839830100400204i64,
+            "timestamp": 1_465_839_830_100_400_204i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -653,7 +653,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\\\\\cold"
             },
-            "timestamp": 1465839830100400206i64,
+            "timestamp": 1_465_839_830_100_400_206i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
