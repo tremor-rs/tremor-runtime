@@ -47,7 +47,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
         .publish_pipeline(url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
         .map(|res| match res {
             PipelineArtefact::Pipeline(p) => p.config,
-            //NOTE:  We publish a pipeline we can't ever get anything else back
+            //ALLOW:  We publish a pipeline we can't ever get anything else back
             _ => unreachable!(),
         });
     reply(req, data, res, true, 201)

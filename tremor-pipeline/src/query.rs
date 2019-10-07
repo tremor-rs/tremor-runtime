@@ -75,7 +75,7 @@ fn resolve_output_port(port: String) -> Result<OutputPort> {
 fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     use op::trickle::select::*;
     match &d.kind {
-        WindowKind::Sliding => unreachable!(),
+        WindowKind::Sliding => unimplemented!(),
         WindowKind::Tumbling => {
             let interval = d
                 .params
@@ -627,8 +627,7 @@ pub fn supported_operators(
                         None
                     }
                 } else {
-                    // This already is a select statement so we know we can extract it
-                    unreachable!();
+                    return Err("Declared as select but isn't a select".into());
                 };
             Box::new(TrickleSelect {
                 id: node.id.clone(),

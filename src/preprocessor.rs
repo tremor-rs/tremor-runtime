@@ -13,55 +13,20 @@
 // limitations under the License.
 
 mod gelf;
-
-use crate::codec::{self, Codec};
 use crate::errors::*;
 use base64;
-use std::any::Any;
 
 use byteorder::{BigEndian, ReadBytesExt};
 
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {
-    fn as_any(&self) -> &dyn Any;
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
-}
-
-fn downcast<T: Preprocessor + 'static>(this: &dyn Preprocessor) -> Option<&T> {
-    this.as_any().downcast_ref()
-}
-
-// NOTE required due to constraints imposed by actix to pass preproc's to actor state in
-// so that they can be applied in rest request handlers
-impl Clone for Box<dyn Preprocessor> {
-    fn clone(&self) -> Self {
-        if let Some(x) = downcast::<Lines>(&**self) {
-            return Box::new(x.clone());
-        };
-        if let Some(x) = downcast::<Influx>(&**self) {
-            return Box::new(x.clone());
-        };
-        if let Some(x) = downcast::<Base64>(&**self) {
-            return Box::new(x.clone());
-        };
-        if let Some(x) = downcast::<Decompress>(&**self) {
-            return Box::new(x.clone());
-        };
-        if let Some(x) = downcast::<gelf::GELF>(&**self) {
-            return Box::new(x.clone());
-        };
-        if let Some(x) = downcast::<Gzip>(&**self) {
-            return Box::new(x.clone());
-        };
-        unreachable!("Unable to clone unsupported preprocessor type");
-    }
 }
 
 #[deny(clippy::ptr_arg)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         "lines" => Ok(Box::new(Lines {})),
-        // "influx" => Ok(Box::new(Influx::default())),
         "base64" => Ok(Box::new(Base64 {})),
         "gzip" => Ok(Box::new(Gzip {})),
         "decompress" => Ok(Box::new(Decompress {})),
@@ -88,7 +53,7 @@ impl SliceTrim for [u8] {
             if let Some(last) = self.iter().rposition(is_not_whitespace) {
                 &self[first..last + 1]
             } else {
-                unreachable!();
+                &self[first..]
             }
         } else {
             &[]
@@ -100,9 +65,6 @@ impl SliceTrim for [u8] {
 struct FilterEmpty {}
 
 impl Preprocessor for FilterEmpty {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         if data.is_empty() {
             Ok(vec![])
@@ -113,48 +75,8 @@ impl Preprocessor for FilterEmpty {
 }
 
 #[derive(Clone)]
-struct Influx {
-    codec: Box<codec::influx::Influx>,
-    json: Box<codec::json::JSON>,
-}
-
-impl Influx {
-    #[allow(dead_code)]
-    fn default() -> Self {
-        Influx {
-            codec: Box::new(codec::influx::Influx {}),
-            json: Box::new(codec::json::JSON {}),
-        }
-    }
-}
-
-impl Preprocessor for Influx {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let data = data.trim();
-        if data.is_empty() {
-            Ok(vec![])
-        } else {
-            match self.codec.decode(data.to_vec(), *ingest_ns) {
-                Ok(Some(x)) => Ok(vec![self.json.encode(&x.suffix().value)?]),
-                Ok(None) => Ok(vec![]),
-                Err(e) => {
-                    dbg!(("influx", &e));
-                    Err(e)
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
 struct Nulls {}
 impl Preprocessor for Nulls {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
@@ -163,9 +85,6 @@ impl Preprocessor for Nulls {
 #[derive(Clone)]
 struct Lines {}
 impl Preprocessor for Lines {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
     }
@@ -174,9 +93,6 @@ impl Preprocessor for Lines {
 #[derive(Clone)]
 struct ExtractIngresTs {}
 impl Preprocessor for ExtractIngresTs {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Cursor;
         *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
@@ -187,9 +103,6 @@ impl Preprocessor for ExtractIngresTs {
 #[derive(Clone)]
 struct Base64 {}
 impl Preprocessor for Base64 {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::decode(&data)?])
     }
@@ -198,9 +111,6 @@ impl Preprocessor for Base64 {
 #[derive(Clone)]
 struct Gzip {}
 impl Preprocessor for Gzip {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
         use std::io::Read;
@@ -214,9 +124,6 @@ impl Preprocessor for Gzip {
 #[derive(Clone)]
 struct Decompress {}
 impl Preprocessor for Decompress {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Read;
 

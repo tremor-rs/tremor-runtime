@@ -16,7 +16,6 @@ use super::Preprocessor;
 use crate::errors::*;
 use hashbrown::{hash_map::Entry, HashMap};
 use rand::{self, RngCore};
-use std::any::Any;
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
@@ -122,9 +121,6 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
 }
 
 impl Preprocessor for GELF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {

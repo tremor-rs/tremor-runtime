@@ -27,7 +27,7 @@ while getopts hauipreb opt; do
             exit 0
             ;;
         a)
-            exec "$0" -uipe
+            exec "$0" -uirpe
             ;;
         u)
             for file in $files
@@ -42,9 +42,10 @@ while getopts hauipreb opt; do
         i)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' "$file" | grep 'unimplemented!' > /dev/null
+                if sed -e '/mod test.*/,$d'  "$file" | grep 'unimplemented!' > /dev/null
                 then
                     echo "##[error] unimplemented! found in $file"
+                    grep -nH 'unimplemented!' "$file"
                     count=$((count + 1))
                 fi
             done
@@ -52,9 +53,10 @@ while getopts hauipreb opt; do
         r)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' "$file" | grep 'unreachable!' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unreachable!' > /dev/null
                 then
                     echo "##[error] unreachable! found in $file"
+                    grep -nH 'unreachable!' "$file"
                     count=$((count + 1))
                 fi
             done
@@ -65,6 +67,7 @@ while getopts hauipreb opt; do
                 if sed -e '/mod test.*/,$d' "$file" | grep 'panic!(' > /dev/null
                 then
                     echo "##[error] panic found in $file"
+                    grep -nH 'panic!(' "$file"
                     count=$((count + 1))
                 fi
             done

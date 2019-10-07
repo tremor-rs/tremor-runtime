@@ -100,21 +100,19 @@ pub enum HttpMethod {
 
 #[derive(Clone)]
 struct OnrampState {
-    tx: Option<Sender<Response>>,
+    tx: Sender<Response>,
     config: Config,
-    preprocessors: Vec<Box<dyn Preprocessor>>,
 }
 
 impl Default for OnrampState {
     fn default() -> OnrampState {
+        let (tx, _) = bounded(1);
         OnrampState {
-            tx: None,
+            tx,
             config: Config::default(),
-            preprocessors: vec![],
         }
     }
 }
-
 impl actix_web::error::ResponseError for Error {}
 
 impl FromRequest for OnrampState {
@@ -138,47 +136,21 @@ fn handler(
     let payload = sp.1;
     let req = sp.2;
     let tx = state.tx.clone();
-    let tx = match tx {
-        Some(tx) => tx,
-        None => unreachable!(),
+    // apply preprocessors
+    let body = payload.to_vec();
+
+    let pp = path_params(state.config.resources.clone(), req.match_info().path());
+    let response = Response {
+        path: req.path().to_string(),
+        actual_path: pp.0,
+        query_params: req.query_string().to_owned(),
+        path_params: pp.1,
+        headers: header(req.headers()),
+        body,
+        method: req.method().as_str().to_owned(),
     };
 
-    // apply preprocessors
-    let data = payload.to_vec();
-
-    let preprocessors: Preprocessors = state.preprocessors.clone(); // PERF find a way to avoid clone
-    let mut ingest_ns = nanotime();
-    for mut pp in preprocessors {
-        match pp.process(&mut ingest_ns, &data) {
-            Ok(r) => {
-                for data in r {
-                    let data = match std::str::from_utf8(&data) {
-                        Ok(d) => d,
-                        Err(e) => return Box::new(futures::future::err(e.into())),
-                    };
-                    let data = data.trim(); // PERF trim in place
-                    if data.is_empty() {
-                        continue;
-                    }
-                    let pp = path_params(state.config.resources.clone(), req.match_info().path());
-                    let response = Response {
-                        path: req.path().to_string(),
-                        actual_path: pp.0,
-                        query_params: req.query_string().to_owned(),
-                        path_params: pp.1,
-                        headers: header(req.headers()),
-                        body: data.to_string(), // FIXME apply codecs to body content?
-                        method: req.method().as_str().to_owned(),
-                    };
-
-                    let _ = tx.send(response);
-                }
-            }
-            Err(e) => {
-                return Box::new(futures::future::err(e));
-            }
-        };
-    }
+    let _ = tx.send(response);
 
     let status = StatusCode::from_u16(match *req.method() {
         Method::POST => 201u16,
@@ -220,16 +192,11 @@ fn onramp_loop(
     codec: String,
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
-    let (dt, dr) = bounded::<Response>(1);
-    let preprocessors = make_preprocessors(&preprocessors)?;
+    let (tx, dr) = bounded::<Response>(1);
     let _ = thread::Builder::new()
         .name(format!("onramp-rest-{}", "???"))
         .spawn(move || {
-            let data = Data::new(OnrampState {
-                tx: Some(dt),
-                config,
-                preprocessors,
-            });
+            let data = Data::new(OnrampState { tx, config });
             let s = HttpServer::new(move || {
                 App::new()
                     .register_data(data.clone())
@@ -245,7 +212,7 @@ fn onramp_loop(
         })?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = Vec::<Box<dyn preprocessor::Preprocessor>>::new();
+    let mut preprocessors = make_preprocessors(&preprocessors)?;
 
     loop {
         if pipelines.is_empty() {
@@ -289,6 +256,6 @@ pub struct Response {
     actual_path: String,
     path_params: HashMap<String, String>,
     headers: HashMap<String, String>,
-    body: String,
+    body: Vec<u8>,
     method: String,
 }

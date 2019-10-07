@@ -200,8 +200,8 @@ pub struct ScriptDecl<'script> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum WindowKind {
-    Tumbling,
     Sliding,
+    Tumbling,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

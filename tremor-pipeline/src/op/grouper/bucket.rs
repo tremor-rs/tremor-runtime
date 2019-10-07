@@ -137,27 +137,15 @@ impl Operator for BucketGrouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let meta = &event.data.suffix().meta;
         if let Some(class) = meta.get("class").and_then(Value::as_str) {
-            let groups = match self.buckets.get_mut(class as &str) {
-                Some(g) => g,
-                None => {
-                    let cardinality = meta
-                        .get("cardinality")
-                        .and_then(Value::as_usize)
-                        .unwrap_or(1000);
-                    self.buckets
-                        .insert(class.to_string(), Bucket::new(cardinality));
-                    if let Some(g) = self.buckets.get_mut(class as &str) {
-                        g
-                    } else {
-                        unreachable!()
-                    }
-                }
-            };
-            let d = if let Some(d) = meta.get("dimensions") {
-                d
-            } else {
-                &Value::Null
-            };
+            let groups = self.buckets.entry(class.to_string()).or_insert_with(|| {
+                let cardinality = meta
+                    .get("cardinality")
+                    .and_then(Value::as_usize)
+                    .unwrap_or(1000);
+                Bucket::new(cardinality)
+            });
+
+            let d = meta.get("dimensions").unwrap_or(&Value::Null);
             let dimensions = serde_json::to_string(d)?;
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {
@@ -177,6 +165,7 @@ impl Operator for BucketGrouper {
                     if let Some(g) = groups.cache.get_mut(&dimensions) {
                         g
                     } else {
+                        //ALLOW: we just put this entry in. The Entry API https://github.com/jeromefroe/lru-rs/issues/30 would solve this
                         unreachable!()
                     }
                 }

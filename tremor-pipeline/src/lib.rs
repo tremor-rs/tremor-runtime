@@ -511,7 +511,8 @@ impl ExecutableGraph {
             };
             Ok(!self.stack.is_empty())
         } else {
-            unreachable!()
+            error!("next was called on an empty graph stack, this should never happen");
+            Ok(false)
         }
     }
 

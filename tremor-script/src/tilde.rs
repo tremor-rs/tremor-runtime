@@ -719,7 +719,7 @@ impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use halfbrown::hashmap;
     use simd_json::borrowed::Value;

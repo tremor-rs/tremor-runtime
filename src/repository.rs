@@ -19,7 +19,7 @@ use crate::system;
 use crate::url::TremorURL;
 use actix::prelude::*;
 use futures::future::Future;
-use hashbrown::HashMap;
+use hashbrown::{hash_map::Entry, HashMap};
 use std::default::Default;
 use std::fmt;
 use std::marker::PhantomData;
@@ -77,40 +77,34 @@ impl<A: Artefact> Repository<A> {
     }
 
     pub fn publish(&mut self, mut id: ArtefactId, system: bool, artefact: A) -> Result<&A> {
-        if self.map.contains_key(&id) {
-            id.trim_to_artefact();
-            Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into())
-        } else {
-            self.map.insert(
-                id.clone(),
-                RepoWrapper {
+        id.trim_to_artefact();
+        match self.map.entry(id.clone()) {
+            Entry::Occupied(_) => Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into()),
+            Entry::Vacant(e) => Ok(&e
+                .insert(RepoWrapper {
                     instances: Vec::new(),
                     artefact,
                     system,
-                },
-            );
-            if let Some(w) = self.find(id) {
-                Ok(&w.artefact)
-            } else {
-                unreachable!()
-            }
+                })
+                .artefact),
         }
     }
 
     pub fn unpublish(&mut self, mut id: ArtefactId) -> Result<A> {
         id.trim_to_artefact();
-        if let Some(wrapper) = self.map.get(&id) {
-            if wrapper.system {
-                Err(ErrorKind::UnpublishFailedSystemArtefact(id.to_string()).into())
-            } else if !wrapper.instances.is_empty() {
-                Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
-            } else if let Some(w) = self.map.remove(&id) {
-                Ok(w.artefact)
-            } else {
-                unreachable!()
+        match self.map.entry(id.clone()) {
+            Entry::Vacant(_) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            Entry::Occupied(e) => {
+                let wrapper = e.get();
+                if wrapper.system {
+                    Err(ErrorKind::UnpublishFailedSystemArtefact(id.to_string()).into())
+                } else if !wrapper.instances.is_empty() {
+                    Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
+                } else {
+                    let (_, w) = e.remove_entry();
+                    Ok(w.artefact)
+                }
             }
-        } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 

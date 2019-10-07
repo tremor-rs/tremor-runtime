@@ -96,33 +96,29 @@ fn onramp_loop(
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
         let mut ingest_ns = nanotime();
-        for event in events.iter() {
-            match event.token() {
-                // Our ECHOER is ready to be read from.
-                ONRAMP => loop {
-                    use std::io::ErrorKind;
-                    match socket.recv(&mut buf) {
-                        Ok(n) => {
-                            send_event(
-                                &pipelines,
-                                &mut preprocessors,
-                                &mut codec,
-                                &mut ingest_ns,
-                                id,
-                                buf[0..n].to_vec(),
-                            );
-                            id += 1;
-                        }
-                        Err(e) => {
-                            if e.kind() == ErrorKind::WouldBlock {
-                                break;
-                            } else {
-                                return Err(e.into());
-                            }
+        for _event in events.iter() {
+            loop {
+                use std::io::ErrorKind;
+                match socket.recv(&mut buf) {
+                    Ok(n) => {
+                        send_event(
+                            &pipelines,
+                            &mut preprocessors,
+                            &mut codec,
+                            &mut ingest_ns,
+                            id,
+                            buf[0..n].to_vec(),
+                        );
+                        id += 1;
+                    }
+                    Err(e) => {
+                        if e.kind() == ErrorKind::WouldBlock {
+                            break;
+                        } else {
+                            return Err(e.into());
                         }
                     }
-                },
-                _ => unreachable!(),
+                }
             }
         }
     }
