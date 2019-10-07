@@ -214,7 +214,7 @@ fn parse_fields<'input>(chars: &mut Chars) -> Result<Object<'input>> {
                 res.insert(key, val);
                 return Ok(res);
             }
-            _ => unreachable!(),
+            _ => return Err(ErrorKind::InvalidInfluxData("Failed to parse fields.".into()).into()),
         };
     }
 }

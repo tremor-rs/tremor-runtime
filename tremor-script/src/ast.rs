@@ -50,21 +50,6 @@ macro_rules! impl_expr {
 }
 
 #[macro_export]
-macro_rules! impl_expr1 {
-    ($name:ident) => {
-        impl<'script> BaseExpr for $name<'script> {
-            fn s(&self) -> Location {
-                self.start
-            }
-
-            fn e(&self) -> Location {
-                self.end
-            }
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! impl_stmt {
     ($name:ident) => {
         impl<'script> BaseStmt for $name<'script> {
@@ -254,21 +239,17 @@ impl<'script> Script1<'script> {
         if let Some(e) = exprs.pop() {
             match e.borrow() {
                 Expr::Emit(_) => exprs.push(e),
-                Expr::Imut(ImutExpr::Path(Path::Event(EventPath { segments, .. })))
-                    if segments.is_empty() =>
-                {
-                    // We need this because we can't @ out the imut expr and access
-                    // segments at the same time ... damn you rust
-                    if let Expr::Imut(i) = e {
+                Expr::Imut(ImutExpr::Path(Path::Event(p))) => {
+                    if p.segments.is_empty() {
                         let expr = EmitExpr {
-                            start: i.s(),
-                            end: i.e(),
-                            expr: i,
+                            start: p.s(),
+                            end: p.e(),
+                            expr: ImutExpr::Path(Path::Event(p.clone())),
                             port: None,
                         };
                         exprs.push(Expr::Emit(Box::new(expr)))
                     } else {
-                        unreachable!()
+                        exprs.push(e)
                     }
                 }
                 _ => exprs.push(e),
@@ -378,7 +359,7 @@ pub struct Ident<'script> {
     pub id: Cow<'script, str>,
 }
 impl_stmt1!(Ident);
-impl_expr1!(Ident);
+impl_expr!(Ident);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Field1<'script> {
@@ -415,7 +396,7 @@ pub struct Record1<'script> {
     pub end: Location,
     pub fields: Fields1<'script>,
 }
-impl_expr1!(Record1);
+impl_expr!(Record1);
 
 impl<'script> Upable<'script> for Record1<'script> {
     type Target = Record<'script>;
@@ -441,7 +422,7 @@ pub struct List1<'script> {
     pub end: Location,
     pub exprs: ImutExprs1<'script>,
 }
-impl_expr1!(List1);
+impl_expr!(List1);
 
 impl<'script> Upable<'script> for List1<'script> {
     type Target = List<'script>;
@@ -468,7 +449,7 @@ pub struct Literal<'script> {
     pub end: Location,
     pub value: Value<'script>,
 }
-impl_expr1!(Literal);
+impl_expr!(Literal);
 
 pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprs1<'script>);
 impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
@@ -477,7 +458,7 @@ impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
         es.0.reverse();
         es.1.reverse();
         let string = if es.0.len() == 1 {
-            es.0.pop().unwrap_or_else(|| unreachable!())
+            es.0.pop().unwrap_or_default()
         } else {
             let mut s = String::new();
             for e in es.0 {
@@ -691,6 +672,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                         .into_iter()
                         .map(|f| {
                             reduce2(f.name.clone()).and_then(|n| {
+                                // ALLOW: The grammer guarantees the key of a record is always a string
                                 let n = n.as_str().unwrap_or_else(|| unreachable!());
                                 reduce2(f.value).map(|v| (n.to_owned().into(), v))
                             })
@@ -745,7 +727,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
             ImutExpr1::Literal(l) => ImutExpr::Literal(l),
             ImutExpr1::Invoke(i) => {
                 if i.is_aggregate(helper) {
-                    ImutExpr::InvokeAggr(i.into_aggregate(helper).up(helper)?)
+                    ImutExpr::InvokeAggr(i.into_aggregate().up(helper)?)
                 } else {
                     let i = i.up(helper)?;
                     if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f)) {
@@ -1002,7 +984,7 @@ pub struct Invoke1<'script> {
     pub fun: String,
     pub args: ImutExprs1<'script>,
 }
-impl_expr1!(Invoke1);
+impl_expr!(Invoke1);
 
 impl<'script> Upable<'script> for Invoke1<'script> {
     type Target = Invoke<'script>;
@@ -1030,23 +1012,13 @@ impl<'script> Invoke1<'script> {
         helper.aggr_reg.find(&self.module, &self.fun).is_ok()
     }
 
-    fn into_aggregate<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> InvokeAggr1<'script> {
-        // The only path InbokeAggr can be reached is when it
-        // first was checked as a function -> aggr function
-        // so at this point we know it exists
-        if helper.aggr_reg.find(&self.module, &self.fun).is_ok() {
-            InvokeAggr1 {
-                start: self.start,
-                end: self.end,
-                module: self.module,
-                fun: self.fun,
-                args: self.args,
-            }
-        } else {
-            unreachable!()
+    fn into_aggregate<'registry>(self) -> InvokeAggr1<'script> {
+        InvokeAggr1 {
+            start: self.start,
+            end: self.end,
+            module: self.module,
+            fun: self.fun,
+            args: self.args,
         }
     }
 }
@@ -1087,7 +1059,7 @@ pub struct InvokeAggr1<'script> {
     pub fun: String,
     pub args: ImutExprs1<'script>,
 }
-impl_expr1!(InvokeAggr1);
+impl_expr!(InvokeAggr1);
 
 impl<'script> Upable<'script> for InvokeAggr1<'script> {
     type Target = InvokeAggr;
@@ -2274,6 +2246,7 @@ pub struct LocalPath1<'script> {
     pub end: Location,
     pub segments: Segments1<'script>,
 }
+impl_expr!(LocalPath1);
 
 impl<'script> Upable<'script> for LocalPath1<'script> {
     type Target = LocalPath<'script>;
@@ -2303,8 +2276,8 @@ impl<'script> Upable<'script> for LocalPath1<'script> {
                 })
             }
         } else {
-            //error!
-            unreachable!()
+            // We should never encounter this
+            error_oops(&(self.start, self.end), "Empty local path")
         }
     }
 }

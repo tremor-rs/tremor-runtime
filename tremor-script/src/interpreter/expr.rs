@@ -372,13 +372,13 @@ where
                             if let Some(l) = d {
                                 return Ok(Cow::Borrowed(&l.v));
                             } else {
-                                return error_oops(self);
+                                return error_oops(self, "Unreacable code");
                             }
                         }
                         return error_bad_key(self, lpath, &path, lpath.id.to_string(), vec![]);
                     }
 
-                    _ => return error_oops(self),
+                    _ => return error_oops(self, "Unknown local varialbe"),
                 },
                 Path::Meta(_path) => {
                     if segments.is_empty() {
@@ -410,8 +410,7 @@ where
                                         id.clone(),
                                         Value::Object(Object::with_capacity(32)),
                                     );
-                                    // NOTE this is safe because we just added this element
-                                    // to the map.
+                                    // ALLOW: this is safe because we just added this element to the map.
                                     map.get_mut(id).unwrap_or_else(|| unreachable!())
                                 }
                             }
@@ -438,8 +437,7 @@ where
                                         id.clone(),
                                         Value::Object(Object::with_capacity(32)),
                                     );
-                                    // NOTE this is safe because we just added this element
-                                    // to the map.
+                                    // ALLOW: this is safe because we just added this element to the map.
                                     map.get_mut(&id).unwrap_or_else(|| unreachable!())
                                 }
                             }
@@ -528,10 +526,10 @@ where
                     if let Some(v) = opt {
                         v.v
                     } else {
-                        return error_oops(self);
+                        return error_oops(self, "Unknown local variable");
                     }
                 } else {
-                    return error_oops(self);
+                    return error_oops(self, "Unknown local variable");
                 };
                 self.assign(
                     opts, context, aggrs, event, meta, local, consts, &path, value,

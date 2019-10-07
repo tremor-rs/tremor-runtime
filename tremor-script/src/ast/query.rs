@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::*;
-use crate::{impl_expr, impl_expr1, impl_stmt, impl_stmt1};
+use crate::{impl_expr, impl_stmt, impl_stmt1};
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(dead_code)]
 pub struct Query1<'script> {
@@ -266,7 +266,7 @@ pub struct MutSelect1<'script> {
     pub maybe_group_by: Option<GroupBy1<'script>>,
     pub maybe_window: Option<WindowDefn1>,
 }
-impl_expr1!(MutSelect1);
+impl_expr!(MutSelect1);
 impl_stmt1!(MutSelect1);
 
 impl<'script> MutSelect1<'script> {

@@ -132,7 +132,7 @@ where
                     error_bad_key(self, self, &path, id.to_string(), vec![])
                 }
 
-                _ => error_oops(self),
+                _ => error_oops(self, "Unknown local variable"),
             },
             ImutExpr::Local {
                 idx,
@@ -140,7 +140,7 @@ where
                 ..
             } => match consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
-                _ => error_oops(self),
+                _ => error_oops(self, "Unknown local variable"),
             },
             ImutExpr::Unary(ref expr) => {
                 self.unary(opts, context, aggrs, event, meta, local, consts, expr)
@@ -360,11 +360,11 @@ where
             Path::Local(path) => match local.values.get(path.idx) {
                 Some(Some(l)) => &l.v,
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
-                _ => return error_oops(self),
+                _ => return error_oops(self, "Unknown local variable"),
             },
             Path::Const(path) => match consts.get(path.idx) {
                 Some(v) => v,
-                _ => return error_oops(self),
+                _ => return error_oops(self, "Unknown constant variable"),
             },
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
@@ -614,7 +614,7 @@ where
         expr: &'script InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
-            return error_oops(self);
+            return error_oops(self, "Trying to emit aggreagate outside of emit context");
         }
 
         unsafe {

@@ -248,11 +248,11 @@ where
                 return error_bad_key(outer, lpath, &path, lpath.id.to_string(), vec![]);
             }
 
-            _ => return error_oops(outer),
+            _ => return error_oops(outer, "Use of unknown local value"),
         },
         Path::Const(lpath) => match consts.get(lpath.idx) {
             Some(v) => v,
-            _ => return error_oops(outer),
+            _ => return error_oops(outer, "Use of uninitalized constant"),
         },
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
@@ -386,7 +386,7 @@ where
                             ValueType::Array,
                         )
                     }
-                    _ => return error_oops(outer),
+                    _ => return error_oops(outer, "Bad path segments"),
                 }
             }
 
@@ -452,8 +452,7 @@ where
             let sub = unsafe { a.get_unchecked(start..end).to_vec() };
             Ok(Cow::Owned(Value::Array(sub)))
         } else {
-            // We check this when we set the subrange!
-            unreachable!();
+            return error_type_conflict(outer, outer, current.value_type(), ValueType::Array);
         }
     } else {
         Ok(Cow::Borrowed(current))
@@ -811,7 +810,7 @@ where
                         Ok(false)
                     }
                 }
-                _ => error_oops(outer),
+                _ => error_oops(outer, "Unimplemented pattern"),
             }
         }
         Pattern::Default => Ok(true),
@@ -1090,7 +1089,7 @@ where
         *d = Some(LocalValue { v });
         Ok(())
     } else {
-        error_oops(outer)
+        error_oops(outer, "Unknown local variable")
     }
 }
 

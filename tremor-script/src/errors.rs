@@ -157,7 +157,7 @@ impl ErrorKind {
             MissingModule(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             NoLocalsAllowed(outer, inner) => (Some(*outer), Some(*inner)),
             NoClauseHit(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
-            Oops(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
+            Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
             RuntimeError(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
             TypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             UnexpectedCharacter(outer, inner, _) => (Some(*outer), Some(*inner)),
@@ -248,7 +248,7 @@ impl ErrorKind {
             MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
             MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
+            Oops(_, _) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
             _ => None,
         }
     }
@@ -324,9 +324,9 @@ error_chain! {
             description("Conflicting types")
                 display("Conflicting types, got {} but expected {}", t2s(*got), choices(&expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))
         }
-        Oops(expr: Range) {
+        Oops(expr: Range, msg: String) {
             description("Something went wrong and we're not sure what it was")
-                display("Something went wrong and we're not sure what it was")
+                display("Something went wrong and we're not sure what it was: {}", msg)
         }
         /*
          * Functions
@@ -643,8 +643,8 @@ pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
     Err(ErrorKind::NoClauseHit(outer.extent()).into())
 }
 
-pub fn error_oops<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    Err(ErrorKind::Oops(outer.extent()).into())
+pub fn error_oops<T, O: BaseExpr, S: ToString>(outer: &O, msg: S) -> Result<T> {
+    Err(ErrorKind::Oops(outer.extent(), msg.to_string()).into())
 }
 
 pub fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
