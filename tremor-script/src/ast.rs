@@ -1012,7 +1012,7 @@ impl<'script> Invoke1<'script> {
         helper.aggr_reg.find(&self.module, &self.fun).is_ok()
     }
 
-    fn into_aggregate<'registry>(self) -> InvokeAggr1<'script> {
+    fn into_aggregate(self) -> InvokeAggr1<'script> {
         InvokeAggr1 {
             start: self.start,
             end: self.end,

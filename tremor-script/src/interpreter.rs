@@ -452,7 +452,7 @@ where
             let sub = unsafe { a.get_unchecked(start..end).to_vec() };
             Ok(Cow::Owned(Value::Array(sub)))
         } else {
-            return error_type_conflict(outer, outer, current.value_type(), ValueType::Array);
+            error_type_conflict(outer, outer, current.value_type(), ValueType::Array)
         }
     } else {
         Ok(Cow::Borrowed(current))
