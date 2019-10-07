@@ -38,7 +38,6 @@ use dissect::Pattern;
 use glob;
 use kv;
 use regex::Regex;
-use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use simd_json::borrowed::Value;
 use simd_json::OwnedValue;
 use std::borrow::Cow;
@@ -47,8 +46,6 @@ use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
-
-// use std::marker::PhantomData;
 
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
     let mut network_length = match itr.next()? {
@@ -181,7 +178,6 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
     IpCidr::from_str(s).ok()
 }
 
-// {"Re":{"rule":"(snot)?foo(?P<snot>.*)"}}
 #[derive(Debug, Clone, Serialize)]
 pub enum Extractor {
     Glob {
@@ -219,134 +215,6 @@ pub enum Extractor {
         #[serde(skip)]
         has_timezone: bool,
     },
-}
-
-impl<'de> Deserialize<'de> for Extractor {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        enum Field {
-            Line,
-            Column,
-            Absolute,
-        };
-
-        impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                struct FieldVisitor;
-                impl<'de> Visitor<'de> for FieldVisitor {
-                    type Value = Field;
-
-                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                        formatter.write_str("`line`, `column` or `absolute`")
-                    }
-
-                    fn visit_str<E>(self, value: &str) -> Result<Field, E>
-                    where
-                        E: de::Error,
-                    {
-                        match value {
-                            "line" => Ok(Field::Line),
-                            "column" => Ok(Field::Column),
-                            "absolute" => Ok(Field::Absolute),
-                            _ => Err(de::Error::missing_field("missing")),
-                        }
-                    }
-                }
-
-                deserializer.deserialize_identifier(FieldVisitor)
-            }
-        }
-
-        struct ExtractorVisitor;
-        impl<'de> Visitor<'de> for ExtractorVisitor {
-            type Value = Extractor;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("enum Extractor")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                match s {
-                    "Base64" => Ok(Extractor::Base64),
-                    "Influx" => Ok(Extractor::Influx),
-                    "Json" => Ok(Extractor::Json),
-                    _ => Err(de::Error::invalid_value(de::Unexpected::Str(&s), &self)),
-                }
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<Extractor, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let s: Option<(String, HashMap<String, serde_json::Value>)> = map.next_entry()?;
-
-                match s {
-                    Some((ref x, ref args)) if x.as_str() == "Glob" => {
-                        let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
-                        Ok(Extractor::new("glob", &rule).expect("should have worked"))
-                    }
-                    Some((ref x, ref args)) if x.as_str() == "Re" => {
-                        let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
-                        Ok(Extractor::new("re", &rule).expect("should have worked"))
-                    }
-                    Some((ref x, ref args)) if x.as_str() == "Dissect" => {
-                        let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
-                        Ok(Extractor::new("dissect", &rule).expect("should have worked"))
-                    }
-                    Some((ref x, ref args)) if x.as_str() == "Grok" => {
-                        let rule = args.get("rule").expect("expected a rule").to_string();
-                        let rule = rule.trim_start_matches('"').trim_end_matches('"');
-                        Ok(Extractor::new("grok", &rule).expect("should have worked"))
-                    }
-                    Some((ref x, ref _args)) if x.as_str() == "Kv" => {
-                        // let field_seps = args.get("field_separators").expect("expected a rule").foreach().map(|x| x.to_string()).collect();
-                        // let field_seps = field_seps.trim_start_matches('"').trim_end_matches('"');
-                        // let kv_seps = args.get("key_separators").expect("expected a rule").to_string();
-                        // let kv_seps = kv_seps.trim_start_matches('"').trim_end_matches('"');
-                        //dbg!(("kv", &field_seps, &kv_seps));
-                        Ok(Extractor::new("kv", "").expect("should have worked"))
-                    }
-                    Some((ref x, ref args)) if x.as_str() == "Datetime" => {
-                        let format = args.get("format").expect("expected a format").to_string();
-                        let format = format.trim_start_matches('"').trim_end_matches('"');
-                        Ok(Extractor::new("datetime", &format).expect("should have worked"))
-                    }
-                    Some((ref x, ref args)) if x.as_str() == "Cidr" => {
-                        let rules = args.get("rules").expect("expected a set of rules");
-                        let mut s = "".to_string();
-                        let a = rules.as_array().expect("it should be an array");
-                        for rule in a {
-                            let rule = rule.to_string();
-                            let rule = rule.trim_start_matches('"').trim_end_matches('"');
-                            dbg!(&rule);
-                            let _ = rule;
-                            s = format!("{}{}, ", s, rule);
-                        }
-                        s = s.to_string().trim_end_matches(", ").to_string();
-                        dbg!(("cidr", &s));
-                        Ok(Extractor::new("cidr", &s).expect("should have worked"))
-                    }
-                    Some((ref x, _)) => {
-                        Err(de::Error::invalid_value(de::Unexpected::Str(&x), &self))
-                    }
-                    _ => unreachable!(),
-                }
-            }
-        }
-
-        deserializer.deserialize_any(ExtractorVisitor)
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -982,72 +850,5 @@ mod test {
             ),
             _ => unreachable!(),
         }
-    }
-
-    #[test]
-    fn test_ser_extractor() {
-        let se = serde_json::to_string(&Extractor::Base64).expect("ser not ok for base64");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for base64");
-        assert_eq!(Extractor::Base64, de);
-        assert_eq!("\"Base64\"", se);
-
-        let se = serde_json::to_string(&Extractor::Influx).expect("ser not ok for influx");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for influx");
-        assert_eq!(Extractor::Influx, de);
-        assert_eq!("\"Influx\"", se);
-
-        let se = serde_json::to_string(&Extractor::Json).expect("ser not ok for json");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for json");
-        assert_eq!(Extractor::Json, de);
-        assert_eq!("\"Json\"", se);
-
-        let ex = Extractor::new("glob", "*").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for glob");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for glob");
-        assert_eq!(ex, de);
-        assert_eq!("{\"Glob\":{\"rule\":\"*\"}}", se);
-
-        let ex = Extractor::new("re", "(snot)?foo(?P<snot>.*)").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for re");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for re");
-        assert_eq!(ex, de);
-        assert_eq!("{\"Re\":{\"rule\":\"(snot)?foo(?P<snot>.*)\"}}", se);
-
-        let ex = Extractor::new("kv", "").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for kv");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for kv");
-        assert_eq!(ex, de);
-        assert_eq!(
-            "{\"Kv\":{\"field_seperators\":[\" \"],\"key_seperators\":[\":\"]}}",
-            se
-        );
-
-        let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for datetime");
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for datetime");
-        assert_eq!(ex, de);
-        assert_eq!("{\"Datetime\":{\"format\":\"%Y-%m-%d %H:%M:%S\"}}", se);
-
-        let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp0}|%{TIMESTAMP_ISO8601:syslog_timestamp1}) %{SYSLOGHOST:syslog_hostname}  ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-        let ex = Extractor::new("grok", pattern).expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for re");
-        //        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for re");
-        //        assert_eq!(ex, de);
-        assert_eq!("{\"Grok\":{\"rule\":\"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\\\\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp0}|%{TIMESTAMP_ISO8601:syslog_timestamp1}) %{SYSLOGHOST:syslog_hostname}  ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}\"}}", se);
-
-        let ex = Extractor::new("dissect", "*INFO*").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for grok");
-        dbg!(&se);
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for grok");
-        dbg!(&se);
-        assert_eq!(ex, de);
-        //        assert_eq!("{\"Dissect\":{\"rule\":\"*INFO*\"}}", se);
-
-        let ex = Extractor::new("cidr", "10.22.0.0/24, 10.22.1.0/24").expect("bad extractor");
-        let se = serde_json::to_string(&ex).expect("ser not ok for cidr");
-        dbg!(&se);
-        let de: Extractor = serde_json::from_str(&se).expect("deser not ok for cidr");
-        dbg!(&se);
-        assert_eq!(ex, de);
     }
 }
