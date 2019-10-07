@@ -1,0 +1,184 @@
+/*
+ * Tremor Query language
+ */
+Query ::= ( Stmts | Stmt )
+
+Stmts ::=
+    Stmt ';' Stmts
+    | Stmt ';'
+
+Stmt ::= CreateWindowDefn
+    | CreateStreamDefn
+    | CreateOperatorDefn
+    | CreateScriptDefn
+    | SelectStmt
+
+CreateStreamDefn ::= 'create' 'stream' Id
+
+CreateWindowDefn ::= 'create' WindowKind 'window' Id
+    | 'create' WindowKind 'window' Id WithParams
+
+WindowKind ::= 'tumbling' | 'sliding'
+
+WithParams ::= 'with' Params 'end'
+
+Params ::=
+    Param ',' Params
+    | Param
+
+Param ::=
+    Id '=' Expr
+
+CreateOperatorDefn ::= 'create' Id '::' Id 'operator' Id
+    | 'create' Id '::' Id 'operator' Id WithParams
+
+CreateScriptDefn ::= 'create' 'script' Id EmbeddedScript
+    | 'create' 'script' Id WithParams EmbeddedScript
+
+EmbeddedScript ::= 'script' Script 'end'
+
+SelectStmt ::= 'select' Expr FromClause WhereClause GroupByClause IntoClause HavingClause
+
+FromClause ::= 'from' Id
+    | 'from' Id '[' Id ']'
+    |
+
+WhereClause ::= 'where' Expr |
+
+GroupByClause ::= 'group' 'by' GroupByDimensions
+
+GroupByDimensions ::=
+    GroupByDimension ',' GroupByDimensions
+    | GroupByDimension
+
+GroupByDimension ::=
+    SetBasedGroup | EachBasedGroup
+
+SetBasedGroup ::=
+    'set' '(' Path ')'
+
+EachBasedGroup ::=
+    'each' '(' Path ')'
+
+IntoClause ::= 'into' Id |
+
+HavingClause ::= 'having' Expr |
+
+/**
+  * Tremor Script language
+  */
+Script ::= ( Exprs | Expr )
+
+Exprs ::=
+    Expr  ';' Exprs
+    | Expr ';'
+
+Expr ::= Expr 'or' AndExpr | AndExpr
+
+AndExpr ::= EqExpr 'and' EqExpr | EqExpr
+
+EqExpr ::= CmpExpr ( '==' | '!=' ) CmpExpr | CmpExpr
+
+CmpExpr ::= AddExpr ( '>=' | '>' | '<=' | '<' ) AddExpr | AddExpr
+
+AddExpr ::= MulExpr ( '+' | '-' ) MulExpr | MulExpr
+
+MulExpr ::= UnaryExpr ( '*' | '/' | '%' ) UnaryExpr | UnaryExpr
+
+UnaryExpr ::= ( '+' | '-' ) NotExpr
+
+NotExpr ::= 'not' PresenceExpr
+
+PresenceExpr ::= ( 'present' | 'absent' ) SimpleExpr
+
+SimpleExpr ::= Literal | '(' Expr ')' | Path | Record | Match | Patch | Merge | FnCall | For | Let | Const | Drop | Emit
+
+Literal ::=
+    'null' | Bool | INTEGER | FLOAT | String | Array
+
+Record ::= '{' Fields '}'
+
+Fields ::= Fields ',' Field | Field
+
+Field ::= STRING_LITERAL ':' Expr
+
+Array ::= '[' ArrayElements ']' | '[' ']'
+
+ArrayElements ::= Expr ',' ArrayElements | Expr
+
+Bool ::=
+    'true' | 'false'
+
+Let ::= 'let' Path '=' SimpleExpr
+
+Const ::= 'const' Path '=' SimpleExpr
+
+Emit ::= 'emit' Expr ( '=>' STRING_LITERAL )?
+
+Drop ::= 'drop' Expr
+
+Match ::= 'match' Expr 'of' MatchCaseClauses 'end'
+MatchCaseClauses ::= MatchCaseClause ',' MatchCaseClauses | MatchCaseClause
+MatchCaseClause ::= 'case' ( RecordCase | ArrayCase | ExprCase ) Guard? Effectors
+
+RecordCase ::= ( Id '=' )? RecordPattern
+RecordPattern ::= '%{' RecordPatternFields '}'
+RecordPatternFields ::= ( Id '=' )? Id '~=' ( TestExpr | RecordPattern | ArrayPattern ) | Id ( '==' | '!=' ) SimpleExpr
+
+TestExpr ::= Id TEST_LITERAL
+
+ArrayCase ::= ( Id '=' )? ArrayPattern
+ArrayPattern ::= '%[' ArrayPatternFilters '%]'
+ArrayPatternFilters ::= ArrayPatternFilters ',' ArrayPatternFilter | ArrayPatternFilter
+ArrayPatternFilter ::= '~' TestExpr | Expr | RecordPattern
+
+ExprCase ::= ( Id '=' )? Expr
+
+Guard ::= 'when' Expr
+
+Effectors ::= '=>' Block
+
+Block ::= Block ',' Expr | Block
+
+Patch ::= 'patch' Expr 'of' PatchOperations 'end'
+PatchOperations ::= PatchOperation ',' PatchOperations | PatchOperation
+PatchOperation ::= ( 'insert' | 'upsert' | 'update' | 'merge' ) Expr '=>' Expr | 'merge' '=>' Expr | 'erase' Id
+
+Merge ::= 'merge' Expr 'of' Expr 'end'
+
+For ::= 'for' Expr 'of' ForCaseClause 'end'
+ForCaseClause ::= 'case' '(' Id ',' Id ')' Expr | 'case' '(' Id ',' Id ')' 'when' Expr '=>' Expr
+
+FnCall ::= Id '::' Id '(' FnArgs ')' | Id '::' '(' ')'
+FnArgs ::= FnArgs ',' Expr | Expr
+
+Path ::= '$' QualifiedSegments | '$' | 'event' '.' QualifiedSegments | 'event' | Id LocalSegments
+
+QualifiedSegments ::= QualifiedSegments '.' PathSegment
+    | QualifiedSegments '[' ArraySegment ']'
+    | '[' ArraySegment ']'
+
+LocalSegments ::= '.' PathSegment LocalSegments
+    | '[' ArraySegment ']' LocalSegments
+    | '[' ArraySegment ']'
+    | '.' PathSegment
+
+PathSegment ::= Id
+
+ArraySegment ::= Expr ':' ArraySegment | Expr
+
+STRING_LITERAL
+         ::= '"' ( ([^#x22#x5C#xA#xD]) | STRING_ESCAPE )* '"'
+STRING_ESCAPE    ::= '\' [tbnrf\"']
+
+TEST_LITERAL
+         ::= '|' ( ([^#x22#x5C#xA#xD]) | TEST_ESCAPE )* '|'
+TEST_ESCAPE    ::= '\' [\n|\]
+
+Id ::= '`' ([^`])* '`' | [a-z][A-Z] ([a-z][A-Z][0-9]_)*
+
+INTEGER  ::= [0-9]+
+
+DECIMAL  ::= [0-9]* '.' [0-9]+
+FLOAT    ::= [0-9]+ '.' [0-9]* EXPONENT | '.' ([0-9])+ EXPONENT | ([0-9])+ EXPONENT
+EXPONENT ::= [eE] [+-]? [0-9]+

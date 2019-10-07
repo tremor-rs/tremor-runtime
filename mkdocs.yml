@@ -20,6 +20,12 @@ markdown_extensions:
 nav:
   - Home: index.md
   - 'Architecture Overview': overview.md
+  - Tremor Query:
+    - Overview: tremor-query/index.md
+    - Aggregate Function Reference:
+      - Overview: tremor-query/functions.md
+      - stats: tremor-query/functions/stats.md
+    - Recipes: tremor-query/recipes.md
   - Tremor Script:
     - Overview: tremor-script/index.md
     - Function Reference:
