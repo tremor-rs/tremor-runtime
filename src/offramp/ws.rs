@@ -87,6 +87,7 @@ impl OfframpImpl for Ws {
                             .map_err(move |e| {
                                 eat_error!(txe.send(None));
                                 error!("[WS Offramp]: {}", e);
+                                System::current().stop();
                             })
                             .map(move |(_response, framed)| {
                                 let (sink, stream) = framed.split();
@@ -101,7 +102,9 @@ impl OfframpImpl for Ws {
                                 };
                             })
                     }));
-                    sys.run()
+                    let r = sys.run();
+                    warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
+                    r
                 })?;
             Ok(Box::new(Ws {
                 addr: None,
@@ -148,6 +151,7 @@ impl Offramp for Ws {
                                     error!("[WS Offramp] Failed to set up offramp: {}.", e)
                                 };
                                 error!("[WS Offramp]: {}", e);
+                                System::current().stop();
                             })
                             .map(move |(_response, framed)| {
                                 let (sink, stream) = framed.split();
@@ -163,7 +167,9 @@ impl Offramp for Ws {
                             })
                     }));
 
-                    sys.run()
+                    let r = sys.run();
+                    warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
+                    r
                 });
         }
         if let Some(addr) = &self.addr {
@@ -232,6 +238,7 @@ impl Actor for WsOfframpWorker {
 
     fn stopped(&mut self, _: &mut Context<Self>) {
         eat_error!(self.1.send(None));
+        dbg!("system stopped");
         System::current().stop();
     }
 }
@@ -290,16 +297,15 @@ impl StreamHandler<Frame, WsProtocolError> for WsOfframpWorker {
             })))),
         };
         // Reconnect
-        dbg!("error");
         Running::Continue
     }
 
     fn started(&mut self, _ctx: &mut Context<Self>) {
-        println!("Connected");
+        info!("[WS Onramp] Connection established.");
     }
 
     fn finished(&mut self, ctx: &mut Context<Self>) {
-        println!("Server disconnected");
+        info!("[WS Onramp] Connection terminated.");
         eat_error!(self.2.write(Message::Close(None)));
         ctx.stop()
     }
