@@ -267,7 +267,7 @@ impl TremorAggrFn for Stdev {
 
 #[derive(Clone)]
 struct Hdr {
-    histo: Histogram,
+    histo: Histogram<u64>,
     percentiles: Vec<(String, f64)>,
     percentiles_set: bool,
 }
@@ -276,7 +276,7 @@ impl std::default::Default for Hdr {
     fn default() -> Self {
         Hdr {
             //ALLOW: this values have been tested so an error can never be returned
-            histo: Histogram::init(1, u64::MAX >> 1, 2).unwrap(),
+            histo: Histogram::new_with_bounds(1, u64::MAX >> 1, 2).unwrap(),
             percentiles: vec![
                 ("0.5".to_string(), 0.5),
                 ("0.9".to_string(), 0.9),
@@ -313,11 +313,16 @@ impl TremorAggrFn for Hdr {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args[0].as_i64() {
+        if let Some(v) = args[0].as_u64() {
             // if self.n == 0 {
             // FIXME error
             // }
-            self.histo.record_values(v as u64, 1);
+            self.histo
+                .record(v)
+                .map_err(|e| FunctionError::RuntimeError {
+                    mfa: mfa("stats", "hdr", 2),
+                    error: format!("failed to record value: {:?}", e),
+                })?;
         }
         Ok(())
     }
@@ -336,12 +341,12 @@ impl TremorAggrFn for Hdr {
         }
 
         Ok(Value::Object(hashmap! {
-             "count".into() => Value::I64(self.histo.total_count() as i64),
+            "count".into() => Value::I64(self.histo.len() as i64),
             "min".into() => Value::I64(self.histo.min() as i64),
             "max".into() => Value::I64(self.histo.max() as i64),
             "mean".into() => Value::F64(self.histo.mean()),
-            "stdev".into() => Value::F64(self.histo.stddev()),
-            "var".into() => Value::F64(self.histo.stddev().powf(2.0)),
+            "stdev".into() => Value::F64(self.histo.stdev()),
+            "var".into() => Value::F64(self.histo.stdev().powf(2.0)),
             "percentiles".into() => Value::Object(p),
         }))
     }

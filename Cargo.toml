@@ -1,6 +1,6 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.4"
+version = "0.6.0"
 description = "Tremor Runtime"
 authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
 edition = "2018"
@@ -33,7 +33,7 @@ actix-http = "0.2.10"
 actix-router = "0.1.5"
 actix-web = "1"
 actix-web-actors = "1.0.2"
-awc = "0.2.5"
+awc = "0.2"
 
 base64 = "0.10"
 bytes = "0.4"
@@ -41,8 +41,8 @@ byteorder = "1"
 chrono = "0.4"
 elastic = "0.20"
 error-chain="0.12"
-futures = "0.1.28"
-hashbrown = { version = "0.6.0", features = ["serde"] }
+futures = "0.1"
+hashbrown = { version = "0.6", features = ["serde"] }
 hostname = "0.1"
 libc = "0.2"
 log4rs = "0.8"
@@ -101,7 +101,7 @@ google-pubsub1 = "1"
 hyper-rustls = "0.6" # chan't update this because of google
 yup-oauth2 = "1" # can't update this because of google
 
-hyper = "0.10"
+hyper = "0.10"  # chan't update this because of google
 
 # logstash grok patterns
 grok = "1"
@@ -117,7 +117,7 @@ grok = "1"
 
 [dev-dependencies]
 matches = "0.1"
-criterion = "0.2"
+# criterion = "0.2"
 pretty_assertions = "0.6.1"
 
 [features]
