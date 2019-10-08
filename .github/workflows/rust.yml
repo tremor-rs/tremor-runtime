@@ -48,9 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install remarshal
-        run: sudo snap install remarshal
-      - name: Install rg
-        run: cargo install ripgrep
+        run: sudo snap install remarshal rg
       - uses: actions/checkout@v1
       - name: Check for unused dependencies
         run: ./dep_check.sh ${{matrix.repo}}
