@@ -27,9 +27,9 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::utils::ConfigImpl;
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
-use serde_yaml;
 use std::net::UdpSocket;
 
 /// An offramp that write a given file
@@ -49,10 +49,12 @@ pub struct Config {
     pub dst_port: u16,
 }
 
+impl ConfigImpl for Config {}
+
 impl OfframpImpl for Udp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let socket = UdpSocket::bind((config.host.as_str(), config.port))?;
             socket.connect((config.dst_host.as_str(), config.dst_port))?;
             Ok(Box::new(Udp {

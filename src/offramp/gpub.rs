@@ -28,9 +28,9 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::utils::ConfigImpl;
 use crate::{Event, OpConfig};
 use hashbrown::HashMap;
-use serde_yaml;
 use std::fmt;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +40,8 @@ pub struct Config {
     /// topic to publish to
     pub topic: String,
 }
+
+impl ConfigImpl for Config {}
 
 /// An offramp that write to GCS
 pub struct GPub {
@@ -58,7 +60,7 @@ impl fmt::Debug for GPub {
 impl OfframpImpl for GPub {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let hub = pubsub_api(&config.service_account.to_string())?;
             Ok(Box::new(GPub {
                 config,

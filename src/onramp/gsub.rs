@@ -42,10 +42,12 @@ pub struct Config {
     pub sync: bool,
 }
 
+impl ConfigImpl for Config {}
+
 impl OnrampImpl for GSub {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             Ok(Box::new(GSub { config }))
         } else {
             Err("Missing config for gsub onramp".into())
@@ -118,7 +120,14 @@ fn onramp_loop(
                     let decoded = base64::decode(&body.data.unwrap_or_default())
                         .expect("could not base64 decode");
 
-                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, decoded);
+                    send_event(
+                        &pipelines,
+                        &mut preprocessors,
+                        &mut codec,
+                        &mut ingest_ns,
+                        id,
+                        decoded,
+                    );
                     id += 1;
 
                     if ack_id != "" {

@@ -30,10 +30,10 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::utils::ConfigImpl;
 use crate::{Event, OpConfig};
 use google_storage1::Object;
 use hashbrown::HashMap;
-use serde_yaml;
 use std::io::Cursor;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,6 +53,8 @@ pub struct Config {
     pub timeout: u64,
 }
 
+impl ConfigImpl for Config {}
+
 /// An offramp that write to GCS
 pub struct GCS {
     config: Config,
@@ -71,7 +73,7 @@ impl std::fmt::Debug for GCS {
 impl OfframpImpl for GCS {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let hub = storage_api(&config.service_account.to_string())?;
             Ok(Box::new(GCS {
                 cnt: 0,

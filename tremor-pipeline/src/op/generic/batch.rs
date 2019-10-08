@@ -26,6 +26,7 @@ pub struct Config {
     #[serde(default = "dflt")]
     pub timeout: Option<u64>,
 }
+
 impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]

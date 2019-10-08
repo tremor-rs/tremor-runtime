@@ -28,13 +28,13 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::utils::ConfigImpl;
 use crate::{Event, OpConfig};
 use futures::Future;
 use halfbrown::HashMap;
 use hostname::get_hostname;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use serde_yaml;
 use std::fmt;
 use tokio_threadpool as thread_pool;
 
@@ -64,6 +64,8 @@ pub struct Config {
     pub key: Option<String>,
 }
 
+impl ConfigImpl for Config {}
+
 fn d_host() -> String {
     match get_hostname() {
         Some(h) => h,
@@ -90,7 +92,7 @@ impl fmt::Debug for Kafka {
 impl OfframpImpl for Kafka {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let mut producer_config = ClientConfig::new();
             let producer_config = producer_config
                 .set("client.id", &format!("tremor-{}-{}", config.hostname, 0))

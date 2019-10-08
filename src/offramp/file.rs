@@ -27,9 +27,9 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
+use crate::utils::ConfigImpl;
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
-use serde_yaml;
 use std::fs::File as FSFile;
 use std::io::Write;
 
@@ -46,10 +46,12 @@ pub struct Config {
     pub file: String,
 }
 
+impl ConfigImpl for Config {}
+
 impl OfframpImpl for File {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let file = FSFile::create(config.file)?;
             Ok(Box::new(File {
                 file,

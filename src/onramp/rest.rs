@@ -35,6 +35,8 @@ pub struct Config {
     pub resources: Vec<RestConfig>,
 }
 
+impl ConfigImpl for Config {}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RestConfig {
     path: String,
@@ -64,7 +66,7 @@ pub struct Rest {
 impl OnrampImpl for Rest {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             Ok(Box::new(Rest { config }))
         } else {
             Err("Missing config for REST onramp".into())
@@ -264,7 +266,14 @@ fn onramp_loop(
                 Ok(data) => {
                     let data = json!(data).to_string().into_bytes();
                     let mut ingest_ns = nanotime();
-                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, 0, data);
+                    send_event(
+                        &pipelines,
+                        &mut preprocessors,
+                        &mut codec,
+                        &mut ingest_ns,
+                        0,
+                        data,
+                    );
                     continue;
                 }
                 Err(TryRecvError::Empty) => (),

@@ -57,6 +57,8 @@ pub struct Config {
     pub rdkafka_options: Option<HashMap<String, String>>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Kafka {
     pub config: Config,
 }
@@ -64,7 +66,7 @@ pub struct Kafka {
 impl OnrampImpl for Kafka {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             Ok(Box::new(Kafka { config }))
         } else {
             Err("Missing config for blaster onramp".into())

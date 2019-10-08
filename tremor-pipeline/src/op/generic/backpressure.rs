@@ -26,8 +26,7 @@
 //! be discarded.
 
 use crate::errors::*;
-use crate::{Event, Operator};
-use serde_yaml;
+use crate::{ConfigImpl, Event, Operator};
 use simd_json::{OwnedValue, ValueTrait};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +43,8 @@ pub struct Config {
     #[serde(default = "d_outputs")]
     pub outputs: Vec<String>,
 }
+
+impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]
 struct Output {
@@ -106,7 +107,7 @@ impl Backpressure {
 
 op!(BackpressureFactory(node) {
     if let Some(map) = &node.config {
-        let config: Config = serde_yaml::from_value(map.clone())?;
+        let config: Config = Config::new(map)?;
         if config.outputs.is_empty() {
             error!("No outputs supplied for backpressure operators");
             return Err(ErrorKind::MissingOpConfig(node.id.clone()).into());

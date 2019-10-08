@@ -22,10 +22,9 @@ use crate::postprocessor::Postprocessors;
 use crate::rest::HttpC;
 use crate::system::{PipelineAddr, PipelineMsg};
 use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
+use crate::utils::{duration_to_millis, nanotime, ConfigImpl};
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
-use serde_yaml;
 use simd_json::json;
 use std::convert::From;
 use std::str;
@@ -49,6 +48,8 @@ pub struct Config {
     pub headers: HashMap<String, String>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Rest {
     client_idx: usize,
     clients: Vec<HttpC>,
@@ -62,7 +63,7 @@ pub struct Rest {
 impl OfframpImpl for Rest {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients = config
                 .endpoints
                 .iter()

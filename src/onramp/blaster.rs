@@ -32,6 +32,8 @@ pub struct Config {
     pub iters: Option<u64>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Blaster {
     pub config: Config,
     data: Vec<u8>,
@@ -40,7 +42,7 @@ pub struct Blaster {
 impl OnrampImpl for Blaster {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let mut source_data_file = File::open(&config.source)?;
             let mut data = vec![];
             let ext = Path::new(&config.source)
@@ -131,7 +133,14 @@ fn onramp_loop(
 
         if let Some(data) = acc.consuming.pop() {
             let mut ingest_ns = nanotime();
-            send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, data);
+            send_event(
+                &pipelines,
+                &mut preprocessors,
+                &mut codec,
+                &mut ingest_ns,
+                id,
+                data,
+            );
             id += 1;
         }
     }

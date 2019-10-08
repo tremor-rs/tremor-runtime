@@ -27,12 +27,11 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crate::system::PipelineAddr;
 use crate::url::TremorURL;
-use crate::utils;
+use crate::utils::{nanotime, ConfigImpl};
 use crate::{Event, OpConfig};
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
-use serde_yaml;
 use std::fmt::Display;
 use std::io::{self, stdout, Read, Write};
 use std::process;
@@ -50,6 +49,8 @@ pub struct Config {
     pub warmup_secs: u64,
 }
 
+impl ConfigImpl for Config {}
+
 /// A null offramp that records histograms
 pub struct Blackhole {
     // config: Config,
@@ -66,8 +67,8 @@ pub struct Blackhole {
 impl OfframpImpl for Blackhole {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            let now_ns = utils::nanotime();
+            let config: Config = Config::new(config)?;
+            let now_ns = nanotime();
             Ok(Box::new(Blackhole {
                 // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
@@ -99,7 +100,7 @@ impl Offramp for Blackhole {
     }
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for event in event.into_iter() {
-            let now_ns = utils::nanotime();
+            let now_ns = nanotime();
 
             if self.has_stop_limit && now_ns > self.stop_after {
                 let mut buf = Vec::new();
@@ -122,9 +123,8 @@ impl Offramp for Blackhole {
                     self.bytes += v.len();
                 };
                 if let Err(e) = self.delivered.record(delta_ns) {
-                        error!("HDR Histogram error: {:?}", e)
-                    }
-
+                    error!("HDR Histogram error: {:?}", e)
+                }
             }
         }
     }
