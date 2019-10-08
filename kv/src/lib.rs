@@ -56,12 +56,17 @@ use std::fmt;
 pub enum Error {
     InvalidPattern(usize),
     DoubleSeperator(String),
+    InvalidEscape(char),
+    UnterminatedEscape,
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::InvalidPattern(p) => write!(f, "invalid pattern at character {}", p),
             Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
+            Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
+            Error::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
+            Error::UnterminatedEscape => write!(f, "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"),
         }
     }
 }
@@ -82,6 +87,31 @@ impl std::default::Default for Pattern {
         }
     }
 }
+
+fn handle_scapes(s: &str) -> Result<String, Error> {
+    let mut res = String::with_capacity(s.len());
+    let mut cs = s.chars();
+    while let Some(c) = cs.next() {
+        match c {
+            '\\' => {
+                if let Some(c1) = cs.next() {
+                    match c1 {
+                        '\\' => res.push(c1),
+                        'n' => res.push('\n'),
+                        't' => res.push('\t'),
+                        'r' => res.push('\r'),
+                        other => return Err(Error::InvalidEscape(other)),
+                    }
+                } else {
+                    return Err(Error::UnterminatedEscape);
+                }
+            }
+            c => res.push(c),
+        }
+    }
+    Ok(res)
+}
+
 impl Pattern {
     pub fn compile(pattern: &str) -> Result<Self, Error> {
         let mut field_seperators = Vec::new();
@@ -92,7 +122,7 @@ impl Pattern {
                 i += 6;
                 if let Some(i1) = pattern[i..].find("%{val}") {
                     if i1 != 0 {
-                        key_seperators.push(pattern[i..i + i1].to_string());
+                        key_seperators.push(handle_scapes(&pattern[i..i + i1])?);
                     }
                     i += i1 + 6;
                 } else {
@@ -100,11 +130,11 @@ impl Pattern {
                 }
             } else if let Some(i1) = pattern[i..].find("%{key}") {
                 if i1 != 0 {
-                    field_seperators.push(pattern[i..i + i1].to_string());
+                    field_seperators.push(handle_scapes(&pattern[i..i + i1])?);
                 }
                 i += i1;
             } else if !pattern[i..].is_empty() {
-                field_seperators.push(pattern[i..].to_string());
+                field_seperators.push(handle_scapes(&pattern[i..])?);
 
                 break;
             } else {
@@ -209,6 +239,7 @@ mod test {
         assert_eq!(i, vec!["this=is", "a=test", "for:seperators"]);
     }
     #[test]
+
     fn simple_split() {
         let kv = Pattern::compile("%{key}=%{val}").expect("Failed to build pattern");
         let r = kv.run("this=is a=test").expect("Failed to split input");
@@ -221,6 +252,14 @@ mod test {
     fn simple_split2() {
         let kv = Pattern::compile("&%{key}=%{val}").expect("Failed to build pattern");
         let r = kv.run("this=is&a=test").expect("Failed to split input");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r["this"], "is");
+        assert_eq!(r["a"], "test");
+    }
+    #[test]
+    fn newline_simple_() {
+        let kv = Pattern::compile(r#"\n%{key}=%{val}"#).expect("Failed to build pattern");
+        let r = kv.run("this=is\na=test").expect("Failed to split input");
         assert_eq!(r.len(), 2);
         assert_eq!(r["this"], "is");
         assert_eq!(r["a"], "test");
