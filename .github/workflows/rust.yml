@@ -48,7 +48,7 @@ jobs:
           - window
     runs-on: ubuntu-latest
     steps:
-      - name: Install remarshal
+      - name: Install deps
         run: sudo snap install remarshal rg
       - uses: actions/checkout@v1
       - name: Check for unused dependencies
