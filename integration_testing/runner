@@ -223,6 +223,7 @@ do
                     PASSED_TESTS="${PASSED_TESTS}$test "
                 else
                     error "${test}: failed"
+                    diff ${gen_file}.jq ${exp_file}.jq
                     FAILED_TESTS="${FAILED_TESTS}$test "
                 fi
             else
