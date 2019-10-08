@@ -180,6 +180,7 @@
 
 use halfbrown::HashMap;
 use simd_json::value::borrowed::{Object, Value};
+use std::fmt;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 enum ExtractType {
@@ -214,11 +215,63 @@ pub enum Error {
     PaddingFollowedBySelf(usize),
     InvalidPad(usize),
     InvalidType(usize, String),
+    InvalidEscape(char),
+    UnterminatedEscape,
+}
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::ConnectedExtractors(p) => write!(
+                f,
+                "A dilimiter needs to be provided between the two patterns at {}",
+                p
+            ),
+            Error::Unterminated(p) => write!(f, "Unterminated patter at {}", p),
+            Error::PaddingFollowedBySelf(p) => write!(
+                f,
+                "The padding at {} can't be followed up by a dilimiter that begins with it",
+                p
+            ),
+            Error::InvalidPad(p) => write!(f, "Invalid padding at {}", p),
+            Error::InvalidType(p, t) => write!(f, "Invalid type '{}' at {}", p, t),
+            Error::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
+            Error::UnterminatedEscape => write!(
+                f,
+                "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"
+            ),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pattern {
     commands: Vec<Command>,
+}
+fn handle_scapes(s: &str) -> Result<String, Error> {
+    let mut res = String::with_capacity(s.len());
+    let mut cs = s.chars();
+    while let Some(c) = cs.next() {
+        match c {
+            '\\' => {
+                if let Some(c1) = cs.next() {
+                    match c1 {
+                        '\\' => res.push(c1),
+                        'n' => res.push('\n'),
+                        't' => res.push('\t'),
+                        'r' => res.push('\r'),
+                        other => return Err(Error::InvalidEscape(other)),
+                    }
+                } else {
+                    return Err(Error::UnterminatedEscape);
+                }
+            }
+            c => res.push(c),
+        }
+    }
+    Ok(res)
 }
 impl Pattern {
     pub fn compile(mut pattern: &str) -> Result<Self, Error> {
@@ -355,12 +408,12 @@ impl Pattern {
             } else {
                 was_extract = false;
                 if let Some(i) = pattern.find("%{") {
-                    commands.push(Command::Delimiter(pattern[0..i].to_owned()));
+                    commands.push(Command::Delimiter(handle_scapes(&pattern[0..i])?));
                     pattern = &pattern[i..];
                     idx += i;
                 } else {
                     // No more extractors found
-                    commands.push(Command::Delimiter(pattern.to_owned()));
+                    commands.push(Command::Delimiter(handle_scapes(pattern)?));
                     return Ok(Self { commands });
                 }
             }

@@ -290,7 +290,7 @@ impl Extractor {
             "json" => Extractor::Json,
             "dissect" => Extractor::Dissect {
                 rule: rule_text.to_string(),
-                compiled: Pattern::try_from(rule_text)
+                compiled: Pattern::compile(rule_text)
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
             "grok" => match GrokPattern::from_file(
@@ -460,7 +460,15 @@ impl Extractor {
                 }
                 Extractor::Dissect {
                     compiled: pattern, ..
-                } => Ok(Value::Object(pattern.extract(s)?.0)),
+                } => {
+                    if let Some(o) = pattern.run(s) {
+                        Ok(Value::Object(o))
+                    } else {
+                        Err(ExtractorError {
+                            msg: "No match".into(),
+                        })
+                    }
+                }
                 Extractor::Grok {
                     compiled: ref pattern,
                     ..

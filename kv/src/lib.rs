@@ -64,7 +64,6 @@ impl fmt::Display for Error {
         match self {
             Error::InvalidPattern(p) => write!(f, "invalid pattern at character {}", p),
             Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
-            Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
             Error::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
             Error::UnterminatedEscape => write!(f, "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"),
         }
