@@ -1,18 +1,22 @@
 onramp:
   - id: gelf-tcp
-    type: tcp
+    # TODO make this tcp later
+    type: tcp2
     preprocessors:
-      - decompress
-      - gelf-chunking-tcp
-      - decompress
+      - lines-null
+      - remove-empty
     codec: json
     config:
-      host: 'localhost'
+      # TODO support strings here
+      #host: 'localhost'
+      host: 127.0.0.1
       port: 12202
+      # TODO introduce config option for delimiter (null byte for gelf tcp)
 
 offramp:
   - id: console
     type: stdout
+    codec: json
     config:
       prefix: 'GELF (TCP): '
 
@@ -43,12 +47,19 @@ pipeline:
             match event of
               # if timestamp is not set by clients:
               # http://docs.graylog.org/en/latest/pages/gelf.html#gelf-payload-specification
-              # TODO ignore _id field as per spec
               case %{absent timestamp} =>
                 let event.timestamp = system::ingest_ns() / 1000000000
               default =>
                 null
             end;
+
+            # add source info to the event via pipeline variables (passed from the tcp onramp)
+            let event = patch event of
+              upsert "source_id" => $source_id,
+              upsert "source_ip" => $source_ip,
+              upsert "source_port" => $source_port
+            end;
+
             event;
     links:
       in: [ runtime ]

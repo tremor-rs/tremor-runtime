@@ -62,19 +62,19 @@ where
     T::from(1000)
 }
 
-pub fn d<T>() -> T
-where
-    T: Default,
-{
-    T::default()
-}
-
 pub fn d_none<T>() -> Option<T> {
     None
 }
 
 pub fn d_ttl() -> u32 {
     64
+}
+
+pub fn d<T>() -> T
+where
+    T: Default,
+{
+    T::default()
 }
 
 pub fn dflt<T: Default>() -> T {

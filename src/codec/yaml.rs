@@ -12,30 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Postprocessor;
+use super::Codec;
 use crate::errors::*;
+use serde_yaml;
+use simd_json;
+use tremor_script::LineValue;
 
-#[derive(Clone, Default)]
-pub struct GELF {
-    id: u64,
-}
+#[derive(Clone)]
+pub struct YAML {}
 
-fn encode_gelf(id: u64, data: &[u8]) -> Result<Vec<u8>> {
-    let mut buf: Vec<u8> = Vec::with_capacity(data.len() + 12);
-    // Serialize header
-    buf.append(&mut vec![0x1e, 0x0f]);
-    buf.append(&mut id.to_be_bytes().to_vec());
-    buf.push(0);
-    buf.push(1);
-    buf.append(&mut data.to_vec());
-
-    Ok(buf)
-}
-
-impl Postprocessor for GELF {
-    fn process(&mut self, _ingest_ns: u64, _egest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let msg = encode_gelf(self.id, data)?;
-        self.id += 1;
-        Ok(vec![msg])
+impl Codec for YAML {
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
+        LineValue::try_new(Box::new(data), |data| {
+            serde_yaml::from_slice::<simd_json::OwnedValue>(data)
+                .map(simd_json::BorrowedValue::from)
+        })
+        .map(Some)
+        .map_err(|e| e.0.into())
+    }
+    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
+        Ok(serde_yaml::to_vec(&data)?)
     }
 }

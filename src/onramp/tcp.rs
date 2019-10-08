@@ -37,7 +37,10 @@ pub struct Tcp {
 impl OnrampImpl for Tcp {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            //let config: Config = serde_yaml::from_value(config.clone())?;
+            // hacky way of getting extra info on errors here (eg: field name on type mismatches)
+            // TODO see if there's another way to achieve what we want here
+            let config: Config = serde_yaml::from_str(&serde_yaml::to_string(config)?)?;
             Ok(Box::new(Tcp { config }))
         } else {
             Err("Missing config for tcp onramp".into())
@@ -94,6 +97,7 @@ fn onramp_loop(
             }
         }
 
+        let mut ingest_ns = nanotime();
         for stream in endpoint.incoming() {
             match stream {
                 Ok(mut stream) => match stream.read(&mut buf) {
@@ -105,6 +109,7 @@ fn onramp_loop(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut ingest_ns,
                             id,
                             buf[0..len].to_vec(),
                         );

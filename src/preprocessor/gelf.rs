@@ -125,9 +125,9 @@ impl Preprocessor for GELF {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn process(&mut self, ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
-        if let Some(data) = self.enqueue(ingest_ns, msg) {
+        if let Some(data) = self.enqueue(*ingest_ns, msg) {
             let len = if self.is_tcp {
                 data.len() - 1
             } else {

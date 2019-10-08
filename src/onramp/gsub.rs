@@ -110,6 +110,7 @@ fn onramp_loop(
             Err(e) => warn!("Onramp error {:?}", e),
             Ok((_x, batch)) => {
                 // TODO extract 'ack' logic as utility function
+                let mut ingest_ns = nanotime();
                 for message in batch.received_messages.unwrap_or_default() {
                     let ack_id = message.ack_id.unwrap_or_default();
                     let body = message.message.unwrap_or_default();
@@ -117,7 +118,7 @@ fn onramp_loop(
                     let decoded = base64::decode(&body.data.unwrap_or_default())
                         .expect("could not base64 decode");
 
-                    send_event(&pipelines, &mut preprocessors, &mut codec, id, decoded);
+                    send_event(&pipelines, &mut preprocessors, &mut codec, &mut ingest_ns, id, decoded);
                     id += 1;
 
                     if ack_id != "" {

@@ -2,9 +2,9 @@
 
 The system namespace contains functions that provide information about the tremor runtime system.
 
-## system::instance()
+## system::hostname()
 
-The `instance` function returns the tremor instance identifier.
+Returns the name of the host where tremor is running.
 
 ## system::ingest_ns()
 

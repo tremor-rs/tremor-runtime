@@ -76,7 +76,7 @@ impl OfframpImpl for Blackhole {
                 has_stop_limit: config.stop_after_secs != 0,
                 delivered: Histogram::new_with_bounds(
                     1,
-                    1_000_000_000,
+                    100_000_000_000,
                     config.significant_figures as u8,
                 )?,
                 pipelines: HashMap::new(),
@@ -121,9 +121,10 @@ impl Offramp for Blackhole {
                 if let Ok(v) = codec.encode(event.value) {
                     self.bytes += v.len();
                 };
-                self.delivered
-                    .record(delta_ns)
-                    .expect("HDR Histogram error");
+                if let Err(e) = self.delivered.record(delta_ns) {
+                        error!("HDR Histogram error: {:?}", e)
+                    }
+
             }
         }
     }
