@@ -52,9 +52,9 @@ jobs:
       - name: Install deps
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
       - name: Install coyote
-        run: go get coyote
+        run: go get github.com/landoop/coyote
       - name: Install yaml2json
-        run: go get yaml2json
+        run: go get github.com/bronze1man/yaml2json
       - name: generate yaml
         run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
       - uses: actions-rs/toolchain@v1
