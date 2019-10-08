@@ -29,7 +29,6 @@ opt-level = 3
 [dependencies]
 actix = "0.8"
 actix-codec = "0.1.2"
-actix-http = "0.2.10"
 actix-router = "0.1.5"
 actix-web = "1"
 actix-web-actors = "1.0.2"
@@ -44,7 +43,6 @@ error-chain="0.12"
 futures = "0.1"
 hashbrown = { version = "0.6", features = ["serde"] }
 hostname = "0.1"
-libc = "0.2"
 log4rs = "0.8"
 mio = "0.6"
 rand = "0.7"
@@ -65,13 +63,11 @@ lazy_static = "1"
 tokio-threadpool = "0.1"
 halfbrown = "0.1"
 libflate = "0.1"
-sysinfo = "0.9"
 snap = "0.2.5"
 lz4 = "1.23.1"
 openssl = "0.10"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
-tremor-query = { path = "tremor-query" }
 http = "0.1.18"
 
 crossbeam-channel = "0.3"

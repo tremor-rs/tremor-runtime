@@ -11,30 +11,9 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-tremor-script = { path = "../tremor-script" }
-tremor-pipeline = { path = "../tremor-pipeline" }
-simd-json = "0.1"
-error-chain="0.12"
-lalrpop-util = "0.17"
-regex = "1"
-serde_json = "1"
-serde_yaml = "0.8.9"
-serde_derive = "1.0"
-serde = "1.0"
-glob = "0.3"
-hostname = "0.1"
-codespan = "0.3"
-termcolor = "1.0"
-unicode-xid = "0.2"
-halfbrown = "0.1"
-base64 = "0.10.1"
-kv = { path = "../kv" }
-dissect = { path = "../dissect" }
-distance = "0.4"
-chrono = "0.4"
 clap = "2.33.0"
-grok = "1"
-cidr-utils = "0.3"
-jumphash = "0.1"
-petgraph = "0.4"
-indexmap = { version = "1", features=["serde-1"] }
+halfbrown = "0.1"
+serde_json = "1"
+simd-json = "0.1"
+tremor-pipeline = { path = "../tremor-pipeline" }
+tremor-script = { path = "../tremor-script" }

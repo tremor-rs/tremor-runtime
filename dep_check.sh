@@ -7,6 +7,8 @@ else
     path="."
 fi
 
+cnt=0
+
 for d in $(remarshal -i $path/Cargo.toml -of json | jq -r '.dependencies | keys []')
 do
     dep=$(echo $d | sed -e 's/-/_/g')
@@ -16,9 +18,12 @@ do
         then
             if ! rg "[^a-z]$dep::" $path -trust > /dev/null
             then
+                cnt=$((cnt + 1))
                 echo "Not used: $d";
             fi
 
         fi
     fi
 done
+
+exit $cnt

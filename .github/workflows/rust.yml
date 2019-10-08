@@ -27,6 +27,29 @@ jobs:
       - uses: actions/checkout@v1
       - name: Safety cheks
         run: ./checks/safety.sh -a
+      - name: unused deps (tremor-runtime)
+        run: ./dep_check.sh
+      - name: unused deps (dissect)
+        run: ./dep_check.sh dissect
+  unused-deps:
+    strategy:
+      matrix:
+        repo:
+          - .
+          - dissect
+          - kv 
+          - tremor-pipeline
+          - tremor-script
+          - tremor-tool
+          - remor-api
+          - tremor-query
+          - tremor-server
+          - window
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Check for unused dependencies
+        run: ./dep_check.sh ${{matrix.repo}}
   format:
     runs-on: ubuntu-latest
     steps:
