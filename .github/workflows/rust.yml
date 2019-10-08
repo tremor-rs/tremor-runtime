@@ -45,6 +45,26 @@ jobs:
         run: cargo test --all --verbose
       - name: Run Integration Tests
         run: make it
+  api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install deps
+        run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Build
+        run: cargo build -p tremor-server -p tremor-tool
+      - name: Run curl tests
+        run: ./checks/api.sh -c
+      - name: Run tremor-tool tests
+        run: ./checks/api.sh -t
+      - name: Run eqc tests
+        env:
+          EQC_LICENSE: ${{secrets.EQC_LICENSE}}
+        run: ./checks/api.sh -e
   clippy_check:
     runs-on: ubuntu-latest
     steps:
