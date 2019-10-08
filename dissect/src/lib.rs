@@ -593,7 +593,7 @@ impl Pattern {
                             }
                         }
                         // We do not allow having two extractors next to each other
-                        Some(_) => unreachable!(),
+                        Some(_) => return None,
                     }
                 }
             };
