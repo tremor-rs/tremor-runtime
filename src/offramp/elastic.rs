@@ -37,7 +37,7 @@ use crate::dflt;
 use crate::errors::*;
 use crate::system::{PipelineAddr, PipelineMsg};
 use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
+use crate::utils::{duration_to_millis, nanotime, ConfigImpl};
 use crate::{Event, OpConfig};
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
@@ -47,7 +47,6 @@ use halfbrown::HashMap;
 // use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
-use serde_yaml;
 use simd_json::{json, OwnedValue};
 use std::convert::From;
 use std::str;
@@ -65,6 +64,8 @@ pub struct Config {
     #[serde(default = "dflt::d_4")]
     pub concurrency: usize,
 }
+
+impl ConfigImpl for Config {}
 
 #[derive(Clone)]
 struct Destination {
@@ -86,7 +87,7 @@ pub struct Elastic {
 impl OfframpImpl for Elastic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients: Result<Vec<Destination>> = config
                 .endpoints
                 .iter()

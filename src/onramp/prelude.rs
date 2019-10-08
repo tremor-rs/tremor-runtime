@@ -18,7 +18,7 @@ pub use crate::errors::*;
 pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
-pub use crate::utils::nanotime;
+pub use crate::utils::{nanotime, ConfigImpl};
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 pub use simd_json::OwnedValue;
 // TODO pub here too?

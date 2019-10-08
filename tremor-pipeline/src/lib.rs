@@ -46,7 +46,7 @@ mod macros;
 mod op;
 
 pub use op::runtime::tremor::TremorContext;
-pub use op::{InitializableOperator, Operator};
+pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub type MetaValue = simd_json::value::owned::Value;
 pub type MetaMap = simd_json::value::owned::Map;
 pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;

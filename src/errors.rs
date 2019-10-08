@@ -26,6 +26,7 @@ use grok;
 use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
 use rdkafka;
+use regex;
 use rental;
 use rmp_serde;
 use serde_json;
@@ -72,13 +73,19 @@ impl From<crossbeam_channel::RecvError> for Error {
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Error {
-        Error::from(format!("poison Error: {:?}", e))
+        Error::from(format!("Poison Error: {:?}", e))
+    }
+}
+
+impl From<regex::Error> for Error {
+    fn from(e: regex::Error) -> Error {
+        Error::from(format!("Regex Error: {:?}", e))
     }
 }
 
 impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
     fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Error {
-        Error::from("Ernatal Error".to_string())
+        Error::from("Rental Error".to_string())
     }
 }
 

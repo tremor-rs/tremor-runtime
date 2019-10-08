@@ -17,11 +17,17 @@
 #![allow(clippy::large_enum_variant)]
 
 use error_chain::*;
+use regex;
 use serde_yaml;
 use std;
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Error {
-        Error::from(format!("poison Error: {:?}", e))
+        Error::from(format!("Poison Error: {:?}", e))
+    }
+}
+impl From<regex::Error> for Error {
+    fn from(e: regex::Error) -> Error {
+        Error::from(format!("Regex Error: {:?}", e))
     }
 }
 

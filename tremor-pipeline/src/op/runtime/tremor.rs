@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::errors::*;
 use crate::FN_REGISTRY;
-use crate::{Event, Operator};
+use crate::{ConfigImpl, Event, Operator};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
@@ -31,7 +31,7 @@ impl tremor_script::Context for TremorContext {
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {
-        let config: Config = serde_yaml::from_value(map.clone())?;
+        let config: Config = Config::new(map)?;
 
         match tremor_script::Script::parse(&config.script, &*FN_REGISTRY.lock()?) {
             Ok(runtime) =>
@@ -59,6 +59,7 @@ op!(TremorFactory(node) {
 struct Config {
     script: String,
 }
+impl ConfigImpl for Config {}
 
 #[derive(Debug)]
 pub struct Tremor {

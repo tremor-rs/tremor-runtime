@@ -14,10 +14,10 @@
 
 use crate::config::dflt;
 use crate::errors::*;
-use crate::{Event, MetaMap, Operator};
-use serde_yaml;
+use crate::{ConfigImpl, Event, MetaMap, Operator};
 use simd_json::OwnedValue;
 use tremor_script::{LineValue, Value};
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
@@ -26,6 +26,7 @@ pub struct Config {
     #[serde(default = "dflt")]
     pub timeout: Option<u64>,
 }
+impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]
 struct Batch {
@@ -39,7 +40,7 @@ struct Batch {
 
 op!(BatchFactory(node) {
     if let Some(map) = &node.config {
-        let config: Config = serde_yaml::from_value(map.clone())?;
+        let config: Config = Config::new(map)?;
         let max_delay_ns = if let Some(max_delay_ms) = config.timeout {
             Some(max_delay_ms * 1_000_000)
         } else {
