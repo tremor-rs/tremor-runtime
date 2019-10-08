@@ -50,7 +50,6 @@ while getopts hacte opt; do
         e)
             start_tremor
             cd tremor-erl || exit 1
-            erl -noshell -eval "eqc:registration(\"${EQC_LICENSE}\")" -eval "eqc:start()" -eval "init:stop()"
             rebar3 as eqc eqc
             cd .. || exit 1
             stop_trempor

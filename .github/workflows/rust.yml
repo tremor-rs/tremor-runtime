@@ -72,8 +72,6 @@ jobs:
       - name: Run tremor-tool tests
         run: ./checks/api.sh -t
       - name: Run eqc tests
-        env:
-          EQC_LICENSE: ${{secrets.EQC_LICENSE}}
         run: ./checks/api.sh -e
   clippy_check:
     runs-on: ubuntu-latest
