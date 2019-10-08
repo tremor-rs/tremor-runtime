@@ -13,6 +13,14 @@ jobs:
         run: cargo install cargo-deny
       - name: Check dependencies
         run: cargo deny check
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Check dependencies
+        run: cargo audit
   sanity:
     runs-on: ubuntu-latest
     steps:
