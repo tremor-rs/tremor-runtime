@@ -81,7 +81,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
             .into(),
             LalrpopError::InvalidToken { location: start } => {
                 let mut end = start;
-                end.column.0 += 1;
+                end.column += 1;
                 ErrorKind::InvalidToken(
                     (start.move_up_lines(2), end.move_down_lines(2)).into(),
                     (start, end).into(),

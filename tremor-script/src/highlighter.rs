@@ -132,8 +132,8 @@ pub trait Highlighter {
         }
         for t in tokens {
             if let Ok(t) = t {
-                if t.span.start().line.0 != line {
-                    line = t.span.start().line.0;
+                if t.span.start().line != line {
+                    line = t.span.start().line;
                     if let Some(HighlighterError {
                         start,
                         end,
@@ -143,11 +143,11 @@ pub trait Highlighter {
                         token,
                     }) = &error
                     {
-                        if end.line.0 == line - 1 {
+                        if end.line == line - 1 {
                             printed_error = true;
-                            let len = std::cmp::max((end.column.0 - start.column.0) as usize, 1);
-                            let prefix = String::from(" ")
-                                .repeat(start.column.0.checked_sub(1).unwrap_or(0) as usize);
+                            let len = std::cmp::max(end.column - start.column, 1);
+                            let prefix =
+                                String::from(" ").repeat(start.column.checked_sub(1).unwrap_or(0));
                             let underline = String::from("^").repeat(len);
 
                             if let Some(token) = token {
@@ -164,8 +164,7 @@ pub trait Highlighter {
                             writeln!(self.get_writer(), "{} {}", underline, callout)?;
                             self.reset()?;
                             if let Some(hint) = hint {
-                                let prefix =
-                                    String::from(" ").repeat(start.column.0 as usize + len);
+                                let prefix = String::from(" ").repeat(start.column + len);
                                 self.set_color(ColorSpec::new().set_bold(true))?;
                                 write!(self.get_writer(), "      | {}", prefix)?;
                                 self.set_color(
@@ -277,8 +276,8 @@ pub trait Highlighter {
             token,
         }) = &error
         {
-            if !printed_error || start.line.0 == line {
-                if end.line.0 > line {
+            if !printed_error || start.line == line {
+                if end.line > line {
                     line += 1;
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     writeln!(self.get_writer(), "{:5} | ", line)?;
@@ -286,12 +285,12 @@ pub trait Highlighter {
                 }
                 printed_error = true;
 
-                let len = if end.column.0 > start.column.0 {
-                    (end.column.0 - start.column.0) as usize
+                let len = if end.column > start.column {
+                    end.column - start.column
                 } else {
                     1
                 };
-                let prefix = String::from(" ").repeat(start.column.0 as usize - 1);
+                let prefix = String::from(" ").repeat(start.column - 1);
                 let underline = String::from("^").repeat(len);
                 if let Some(token) = token {
                     write!(self.get_writer(), "{}", token)?;
@@ -306,7 +305,7 @@ pub trait Highlighter {
                 writeln!(self.get_writer(), "{} {}", underline, callout)?;
                 self.reset()?;
                 if let Some(hint) = hint {
-                    let prefix = String::from(" ").repeat(start.column.0 as usize + len);
+                    let prefix = String::from(" ").repeat(start.column + len);
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     write!(self.get_writer(), "      | {}", prefix)?;
                     self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;

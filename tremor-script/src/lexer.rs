@@ -19,11 +19,6 @@ use crate::errors::*;
 )]
 use crate::parser::grammar::__ToTriple;
 pub use crate::pos::*;
-use codespan::ByteIndex;
-use codespan::ByteOffset;
-use codespan::ColumnIndex;
-use codespan::LineIndex;
-use codespan::Span;
 use lalrpop_util;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -35,14 +30,6 @@ use unicode_xid::UnicodeXID;
 pub trait ParserSource {
     fn src(&self) -> &str;
     fn start_index(&self) -> BytePos;
-
-    fn span(&self) -> Span<BytePos> {
-        let start = self.start_index();
-        Span::new(
-            start,
-            start + ByteOffset::from(self.src().chars().count() as i64),
-        )
-    }
 }
 
 impl<'a, S> ParserSource for &'a S
@@ -66,16 +53,7 @@ impl ParserSource for str {
     }
 }
 
-impl ParserSource for codespan::FileMap {
-    fn src(&self) -> &str {
-        codespan::FileMap::src(self)
-    }
-    fn start_index(&self) -> BytePos {
-        codespan::FileMap::span(self).start()
-    }
-}
-
-pub type TokenSpan<'input> = Spanned<Token<'input>, Location>;
+pub type TokenSpan<'input> = Spanned<Token<'input>>;
 
 fn is_ws(ch: char) -> bool {
     ch.is_whitespace() && ch != '\n'
@@ -381,7 +359,7 @@ impl<'input> TokenFuns for Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>, Location>> {
+impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<
@@ -549,9 +527,9 @@ impl<'input> CharLocations<'input> {
     {
         CharLocations {
             location: Location {
-                line: Line::from(1),
-                column: Column::from(1),
-                absolute: input.start_index(),
+                line: 1,
+                column: 1,
+                absolute: input.start_index().to_usize(),
             },
             chars: input.src().chars().peekable(),
         }
@@ -572,7 +550,7 @@ impl<'input> Iterator for CharLocations<'input> {
 
 pub struct Tokenizer<'input> {
     eos: bool,
-    pos: Span<Location>,
+    pos: Span,
     iter: Peekable<Lexer<'input>>,
     //line: usize,
 }
@@ -581,14 +559,14 @@ impl<'input> Tokenizer<'input> {
     fn new(input: &'input str) -> Self {
         let lexer = Lexer::new(input);
         let start = Location {
-            line: LineIndex(0),
-            column: ColumnIndex(0),
-            absolute: ByteIndex(0),
+            line: 0,
+            column: 0,
+            absolute: 0,
         };
         let end = Location {
-            line: LineIndex(0),
-            column: ColumnIndex(0),
-            absolute: ByteIndex(0),
+            line: 0,
+            column: 0,
+            absolute: 0,
         };
         Tokenizer {
             eos: false,
@@ -663,9 +641,8 @@ impl<'input> Lexer<'input> {
 
     /// Return a slice of the source string
     fn slice(&self, start: Location, end: Location) -> Option<&'input str> {
-        let start =
-            (start.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
-        let end = (end.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
+        let start = start.absolute - self.start_index.to_usize();
+        let end = end.absolute - self.start_index.to_usize();
 
         // Our indexes are in characters as we are iterating over codepoints
         // string indexes however are in bytes and might lead to either
@@ -932,10 +909,10 @@ impl<'input> Lexer<'input> {
                     // we got to bump end by one so we claim the tailing `"`
                     let e = end;
                     let mut s = start;
-                    s.column.0 += 1;
-                    s.absolute.0 += 1;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
+                    s.column += 1;
+                    s.absolute += 1;
+                    end.column += 1;
+                    end.absolute += 1;
                     if let Some(slice) = self.slice(s, e) {
                         let token = Token::Ident(slice.into(), true);
                         return Ok(spanned2(start, end, token));
@@ -973,8 +950,8 @@ impl<'input> Lexer<'input> {
 
     fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
         let mut end = start;
-        end.column.0 += 1;
-        end.absolute.0 += 1;
+        end.column += 1;
+        end.absolute += 1;
         let q1 = spanned2(start, end, Token::DQuote);
         let mut res = vec![q1];
         let string = String::new();
@@ -1009,8 +986,8 @@ impl<'input> Lexer<'input> {
                     _ => {
                         //TODO :make slice
                         let start = end;
-                        end.column.0 += 1;
-                        end.absolute.0 += 1;
+                        end.column += 1;
+                        end.absolute += 1;
                         res.push(spanned2(start, end, Token::DQuote));
                         Ok(res)
                     }
@@ -1047,8 +1024,8 @@ impl<'input> Lexer<'input> {
                             .map(|s| s.split_at(indent).1.to_string())
                             .collect();
                         let token = Token::HereDoc(indent, strings);
-                        end.column.0 += 1;
-                        end.absolute.0 += 1;
+                        end.column += 1;
+                        end.absolute += 1;
                         return Ok(spanned2(start, end, token));
                     }
                 }
@@ -1090,8 +1067,8 @@ impl<'input> Lexer<'input> {
 
                         let e = end;
                         let mut s = start;
-                        s.column.0 += 1;
-                        s.absolute.0 += 1;
+                        s.column += 1;
+                        s.absolute += 1;
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
                             Token::StringLiteral(string.into())
@@ -1104,8 +1081,8 @@ impl<'input> Lexer<'input> {
                         res.push(spanned2(start, end, token));
                     }
                     let start = end;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
+                    end.column += 1;
+                    end.absolute += 1;
                     res.push(spanned2(start, end, Token::DQuote));
                     return Ok(res);
                 }
@@ -1117,8 +1094,8 @@ impl<'input> Lexer<'input> {
                     }
                     let e = eend;
                     let mut s = start;
-                    s.column.0 += 1;
-                    s.absolute.0 += 1;
+                    s.column += 1;
+                    s.absolute += 1;
                     if !string.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
@@ -1134,8 +1111,8 @@ impl<'input> Lexer<'input> {
                     }
                     start = eend;
                     end = eend;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
+                    end.column += 1;
+                    end.absolute += 1;
                     res.push(spanned2(start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
@@ -1219,8 +1196,8 @@ impl<'input> Lexer<'input> {
                 }
                 Some((mut end, '|')) => {
                     strings.push(string);
-                    end.absolute.0 += 1;
-                    end.column.0 += 1;
+                    end.absolute += 1;
+                    end.column += 1;
                     let indent = indentation(&strings);
                     let strings = strings
                         .iter()
@@ -1396,8 +1373,8 @@ fn i64_from_hex(hex: &str, is_positive: bool) -> Result<i64> {
 }
 
 fn inc_loc(mut l: Location) -> Location {
-    l.column.0 += 1;
-    l.absolute.0 += 1;
+    l.column += 1;
+    l.absolute += 1;
     l
 }
 

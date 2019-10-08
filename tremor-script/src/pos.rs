@@ -16,30 +16,56 @@
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
 use crate::ast::{BaseExpr, Expr};
+pub use codespan::{
+    ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
+    LineOffset,
+};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::fmt;
-
-pub use codespan::{
-    ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
-    LineOffset, Span,
-};
-
 // A location in a source file
-#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+#[derive(
+    Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
+)]
 pub struct Location {
-    pub line: Line,
-    pub column: Column,
-    pub absolute: BytePos,
+    pub line: usize,
+    pub column: usize,
+    pub absolute: usize,
 }
 
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+pub struct Span {
+    pub start: Location,
+    pub end: Location,
+}
+
+impl Span {
+    pub fn new(start: Location, end: Location) -> Self {
+        Self { start, end }
+    }
+    pub fn start(&self) -> Location {
+        self.start
+    }
+    pub fn end(&self) -> Location {
+        self.end
+    }
+}
+
+pub fn span(start: Location, end: Location) -> Span {
+    Span::new(start, end)
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub struct Spanned<T> {
+    pub span: Span,
+    pub value: T,
+}
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
 pub struct Range(pub Location, pub Location);
-
 impl Range {
-    pub fn expand_lines(&self, lines: u32) -> Self {
+    pub fn expand_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.0 = new.0.move_up_lines(lines);
         new.1 = new.1.move_down_lines(lines);
@@ -58,218 +84,41 @@ impl From<(Location, Location)> for Range {
         Range(locs.0, locs.1)
     }
 }
-
-impl Serialize for Location {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state_struct = serializer.serialize_struct("Location", 3)?;
-        state_struct.serialize_field("line", &self.line.to_usize())?;
-        state_struct.serialize_field("column", &self.column.to_usize())?;
-        state_struct.serialize_field("absolute", &self.absolute.to_usize())?;
-        state_struct.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Location {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        enum Field {
-            Line,
-            Column,
-            Absolute,
-        };
-
-        impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                struct FieldVisitor;
-                impl<'de> Visitor<'de> for FieldVisitor {
-                    type Value = Field;
-
-                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                        formatter.write_str("`line`, `column` or `absolute`")
-                    }
-
-                    fn visit_str<E>(self, value: &str) -> Result<Field, E>
-                    where
-                        E: de::Error,
-                    {
-                        match value {
-                            "line" => Ok(Field::Line),
-                            "column" => Ok(Field::Column),
-                            "absolute" => Ok(Field::Absolute),
-                            _ => Err(de::Error::unknown_field(value, LOCATION_FIELDS)),
-                        }
-                    }
-                }
-
-                deserializer.deserialize_identifier(FieldVisitor)
-            }
-        }
-
-        struct LocationVisitor;
-
-        impl<'de> Visitor<'de> for LocationVisitor {
-            type Value = Location;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct Duration")
-            }
-
-            fn visit_seq<V>(self, mut seq: V) -> Result<Location, V::Error>
-            where
-                V: SeqAccess<'de>,
-            {
-                let line = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-                let column = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-                let absolute = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-                Ok(Location::new(line, column, absolute))
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<Location, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut line = None;
-                let mut column = None;
-                let mut absolute = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Line => {
-                            if line.is_some() {
-                                return Err(de::Error::duplicate_field("line"));
-                            }
-                            line = Some(map.next_value()?);
-                        }
-                        Field::Column => {
-                            if column.is_some() {
-                                return Err(de::Error::duplicate_field("column"));
-                            }
-                            column = Some(map.next_value()?);
-                        }
-                        Field::Absolute => {
-                            if absolute.is_some() {
-                                return Err(de::Error::duplicate_field("absolute"));
-                            }
-                            absolute = Some(map.next_value()?);
-                        }
-                    }
-                }
-                let line = line.ok_or_else(|| de::Error::missing_field("line"))?;
-                let column = column.ok_or_else(|| de::Error::missing_field("column"))?;
-                let absolute = absolute.ok_or_else(|| de::Error::missing_field("absolute"))?;
-                Ok(Location::new(line, column, absolute))
-            }
-        }
-        const LOCATION_FIELDS: &[&str] = &["line", "column", "absolute"];
-        deserializer.deserialize_struct("Location", LOCATION_FIELDS, LocationVisitor)
-    }
-}
-
-impl Location {
-    pub fn new(line: u32, column: u32, absolute: u32) -> Self {
-        Self {
-            line: Line(line),
-            column: Column(column),
-            absolute: BytePos(absolute),
-        }
-    }
-
-    pub fn move_down_lines(&self, lines: u32) -> Location {
-        let mut new = *self;
-        new.line.0 += lines;
-        new
-    }
-
-    pub fn move_up_lines(&self, lines: u32) -> Location {
-        let mut new = *self;
-        new.line.0 = self.line.0.checked_sub(lines).unwrap_or(0);
-        new
-    }
-
-    pub fn shift(&mut self, ch: char) {
-        if ch == '\n' {
-            self.line += LineOffset(1);
-            self.column = Column(1);
-        } else {
-            self.column += ColumnOffset(1);
-        }
-        self.absolute += ByteOffset(1);
-    }
-}
-
-impl fmt::Display for Location {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Line: {}, Column: {}",
-            self.line.number(),
-            self.column.number()
-        )
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
-pub struct Spanned<T, Pos> {
-    pub span: Span<Pos>,
-    pub value: T,
-}
-
-impl<T, Pos> Spanned<T, Pos> {
-    pub fn map<U, F>(self, mut f: F) -> Spanned<U, Pos>
-    where
-        F: FnMut(T) -> U,
-    {
-        Spanned {
-            span: self.span,
-            value: f(self.value),
-        }
-    }
-}
-
-impl<T: fmt::Display, Pos: fmt::Display + Copy> fmt::Display for Spanned<T, Pos> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}", self.span.start(), self.value)
-    }
-}
-
-pub fn span<Pos>(start: Pos, end: Pos) -> Span<Pos>
-where
-    Pos: Ord,
-{
-    Span::new(start, end)
-}
-
-pub fn spanned<T, Pos>(span: Span<Pos>, value: T) -> Spanned<T, Pos>
-where
-    Pos: Ord,
-{
-    Spanned { span, value }
-}
-
-pub fn spanned2<T, Pos>(start: Pos, end: Pos, value: T) -> Spanned<T, Pos>
-where
-    Pos: Ord,
-{
+pub fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
     Spanned {
         span: span(start, end),
         value,
     }
 }
 
-pub trait HasSpan {
-    fn span(&self) -> Span<BytePos>;
+impl Location {
+    pub fn new(line: usize, column: usize, absolute: usize) -> Self {
+        Self {
+            line,
+            column,
+            absolute,
+        }
+    }
+
+    pub fn move_down_lines(&self, lines: usize) -> Location {
+        let mut new = *self;
+        new.line += lines;
+        new
+    }
+
+    pub fn move_up_lines(&self, lines: usize) -> Location {
+        let mut new = *self;
+        new.line = self.line.checked_sub(lines).unwrap_or(0);
+        new
+    }
+
+    pub fn shift(&mut self, ch: char) {
+        if ch == '\n' {
+            self.line += 1;
+            self.column = 1;
+        } else {
+            self.column += 1;
+        }
+        self.absolute += 1;
+    }
 }
