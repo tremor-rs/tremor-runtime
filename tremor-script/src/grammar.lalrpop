@@ -71,7 +71,7 @@ SimpleExpr: Expr1<'input> = {
     ExprImut => <>.into(),
 }
 
-/// Part of the expressions that are always imutable
+/// Part of the expressions that are always immutable
 AlwaysImutExpr: ImutExpr1<'input> = {
     <pp:Patch> => ImutExpr1::Patch(Box::new(pp)),
     <pp:Merge> => ImutExpr1::Merge(Box::new(pp)),
@@ -83,7 +83,7 @@ AlwaysImutExpr: ImutExpr1<'input> = {
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
-// Imutable exprssions are used in parts of the lgnauge that are not suposed to
+// Immutable expressions are used in parts of the language that are not supposed to
 // modify the event, locals, or metadata.
 
 /// Expression root
@@ -115,7 +115,7 @@ CmpExprImut: ImutExpr1<'input> = {
     AddExprImut => <>,
 }
 
-/// Additioan based math (+, -)
+/// Addition based math (+, -)
 AddExprImut: ImutExpr1<'input> = {
     BinOp<BinAdd, AddExprImut, MulExprImut> => <>,
     MulExprImut => <>,
@@ -123,7 +123,13 @@ AddExprImut: ImutExpr1<'input> = {
 
 /// Multiplication based math (*, /, %)
 MulExprImut: ImutExpr1<'input> = {
-    BinOp<BinMul, MulExprImut, UnaryExprImut> => <>,
+    BinOp<BinMul, MulExprImut, BitShiftExprImut> => <>,
+    BitShiftExprImut => <>,
+}
+
+/// Bit shift operators (>>, <<)
+BitShiftExprImut: ImutExpr1<'input> = {
+    BinOp<BinBitShift, BitShiftExprImut, UnaryExprImut> => <>,
     UnaryExprImut => <>,
 }
 
@@ -148,7 +154,7 @@ PresenceSimplExprImut: ImutExpr1<'input> = {
     SimpleExprImut => <>,
 }
 
-/// Imutable languag constructs that can be used without having to worry aobut
+/// Immutable language constructs that can be used without having to worry aobut
 /// sideeffects
 
 ComplexExprImut: ImutExpr1<'input> = {
@@ -640,7 +646,7 @@ Sep<L, T, D>: L = {
     <v:L> D  => v,
 }
 
-/// Generaic helper for binary operations
+/// Generic helper for binary operations
 #[inline]
 BinOp<Op, Current, Next>: ImutExpr1<'input> = {
     <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => ImutExpr1::Binary(Box::new(BinExpr1 {
@@ -676,6 +682,10 @@ BinMul: BinOpKind = {
     "*" => BinOpKind::Mul,
     "/" => BinOpKind::Div,
     "%" => BinOpKind::Mod,
+}
+BinBitShift: BinOpKind = {
+    ">>" => BinOpKind::RBitShift,
+    "<<" => BinOpKind::LBitShift,
 }
 extern {
     type Location = Location;
@@ -731,6 +741,8 @@ extern {
         ">" => lexer::Token::Gt,
         "<=" => lexer::Token::Lte,
         "<" => lexer::Token::Lt,
+        ">>" => lexer::Token::RBitShift,
+        "<<" => lexer::Token::LBitShift,
         "+" => lexer::Token::Add,
         "-" => lexer::Token::Sub,
         "*" => lexer::Token::Mul,

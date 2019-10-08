@@ -2131,6 +2131,8 @@ pub enum BinOpKind {
     Mul,
     Div,
     Mod,
+    RBitShift,
+    LBitShift,
 }
 
 impl fmt::Display for BinOpKind {
@@ -2151,6 +2153,9 @@ impl fmt::Display for BinOpKind {
             BinOpKind::Mul => write!(f, "*"),
             BinOpKind::Div => write!(f, "/"),
             BinOpKind::Mod => write!(f, "%"),
+
+            BinOpKind::RBitShift => write!(f, ">>"),
+            BinOpKind::LBitShift => write!(f, "<<"),
         }
     }
 }

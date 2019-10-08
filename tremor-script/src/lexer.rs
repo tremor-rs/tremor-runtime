@@ -192,6 +192,8 @@ pub enum Token<'input> {
     Mul,
     Div,
     Mod,
+    LBitShift,
+    RBitShift,
 
     // Symbols
     Colon,
@@ -332,6 +334,8 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Mul => true,
             Token::Div => true,
             Token::Mod => true,
+            Token::LBitShift => true,
+            Token::RBitShift => true,
             Token::Dollar => true,
             Token::Dot => true,
             _ => false,
@@ -470,6 +474,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Add => write!(f, "+"),
             Token::Sub => write!(f, "-"),
             Token::Mod => write!(f, "%"),
+            Token::LBitShift => write!(f, "<<"),
+            Token::RBitShift => write!(f, ">>"),
             Token::EndOfStream => write!(f, ""),
         }
     }
@@ -700,6 +706,8 @@ impl<'input> Lexer<'input> {
             "<=" => Ok(spanned2(start, end, Token::Lte)),
             ">" => Ok(spanned2(start, end, Token::Gt)),
             ">=" => Ok(spanned2(start, end, Token::Gte)),
+            "<<" => Ok(spanned2(start, end, Token::LBitShift)),
+            ">>" => Ok(spanned2(start, end, Token::RBitShift)),
             _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
         }
     }
@@ -1503,6 +1511,8 @@ mod tests {
         lex_ok! { " * ", " ~ " => Token::Mul, };
         lex_ok! { " / ", " ~ " => Token::Div, };
         lex_ok! { " % ", " ~ " => Token::Mod, };
+        lex_ok! { " << ", " ~ " => Token::LBitShift, };
+        lex_ok! { " >> ", " ~ " => Token::RBitShift, };
     }
 
     #[test]

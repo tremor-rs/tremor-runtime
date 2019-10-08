@@ -173,6 +173,9 @@ pub fn exec_binary<'run, 'event: 'run>(
         (Div, F64(l), I64(r)) => Some(Cow::Owned(F64(*l / (*r as f64)))),
         (Div, F64(l), F64(r)) => Some(Cow::Owned(F64(*l / *r))),
         (Mod, I64(l), I64(r)) => Some(Cow::Owned(I64(*l % *r))),
+        // TODO should we guard with r >= 0 && r < 64, to prevent overflow?
+        (RBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l >> *r))),
+        (LBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l << *r))),
         _ => None,
     }
 }
