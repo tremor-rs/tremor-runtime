@@ -55,6 +55,10 @@ jobs:
         run: go get github.com/landoop/coyote
       - name: Install yaml2json
         run: go get github.com/bronze1man/yaml2json
+      - name: install EQC
+        run: curl -O http://quviq-licencer.com/downloads/eqcR21.zip && unzip eqcR21.zip && cd Quviq* && erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+      - name: Activate EQC
+        run:  erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: generate yaml
         run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
       - uses: actions-rs/toolchain@v1
