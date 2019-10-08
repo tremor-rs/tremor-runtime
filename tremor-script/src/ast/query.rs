@@ -92,12 +92,6 @@ pub enum Stmt<'script> {
     ScriptDecl(ScriptDecl<'script>),
     SelectStmt(SelectStmt<'script>),
 }
-impl<'script> std::hash::Hash for Stmt<'script> {
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
-        // NOTE Heinz made me do it FIXHEINZ FIXME TODO BADGER
-        // .unwrap() :)
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectStmt<'script> {

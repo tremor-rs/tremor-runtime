@@ -56,7 +56,7 @@ where
         }
     }
 }
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
+#[derive(Debug, PartialEq, PartialOrd, Eq)]
 pub struct StmtRentalWrapper {
     pub stmt: Arc<rentals::Stmt>,
 }
@@ -94,13 +94,6 @@ impl PartialOrd for rentals::Stmt {
         None // NOTE Here be dragons FIXME
     }
 }
-
-impl std::hash::Hash for rentals::Stmt {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.suffix().hash(state);
-    }
-}
-
 impl<'run, 'event, 'script> StmtRentalWrapper
 where
     'script: 'event,

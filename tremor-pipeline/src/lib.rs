@@ -188,13 +188,35 @@ pub enum SignalKind {
     WindowClose(u64, u64),
 }
 
-#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, Eq)]
 pub struct NodeConfig {
     pub id: String,
     pub kind: NodeKind,
     pub _type: String,
     pub config: config::ConfigMap,
     pub stmt: Option<Arc<StmtRentalWrapper>>,
+}
+
+// We ignore stmt on equality and hasing as they're only
+// carried through for implementation purposes not part
+// if the identiy of a node
+
+impl PartialEq for NodeConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.kind == other.kind
+            && self._type == other._type
+            && self.config == other.config
+    }
+}
+
+impl std::hash::Hash for NodeConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.kind.hash(state);
+        self._type.hash(state);
+        self.config.hash(state);
+    }
 }
 
 #[derive(Debug)]
