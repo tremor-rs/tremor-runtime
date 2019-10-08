@@ -33,6 +33,7 @@ jobs:
         run: ./dep_check.sh dissect
   unused-deps:
     strategy:
+      fail-fast: false
       matrix:
         repo:
           - .
