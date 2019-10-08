@@ -38,14 +38,14 @@ while getopts hacte opt; do
             cd tremor-api || exit 1
             ~/go/bin/coyote -c tests/coyote.yml
             cd .. || exit 1
-            stop_tremor
+            stop_trempor
         ;;
         t)
             start_tremor
             cd tremor-tool || exit 1
             ~/go/bin/coyote -c tests/coyote.yml
             cd .. || exit 1
-            stop_tremor
+            stop_trempor
         ;;
         e)
             start_tremor
@@ -53,7 +53,7 @@ while getopts hacte opt; do
             erl -noshell -eval "eqc:registration(\"${EQC_LICENSE}\")" -eval "eqc:start()" -eval "init:stop()"
             rebar3 as eqc eqc
             cd .. || exit 1
-            stop_tremor
+            stop_trempor
         ;;
         *)
             help
