@@ -27,6 +27,7 @@ mod stats;
 mod string;
 mod system;
 mod r#type;
+mod win;
 
 use crate::registry::{AggrRegistry, Registry};
 
@@ -49,4 +50,5 @@ pub fn load(registry: &mut Registry) {
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
     stats::load_aggr(registry);
+    win::load_aggr(registry);
 }

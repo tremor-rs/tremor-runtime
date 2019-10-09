@@ -408,10 +408,10 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::registry::FunctionError;
+    use crate::registry::FResult as Result;
     use simd_json::json;
     #[test]
-    fn count() -> Result<(), FunctionError> {
+    fn count() -> Result<()> {
         let mut a = Count::default();
         a.init();
         a.accumulate(&[])?;
@@ -422,7 +422,7 @@ mod test {
     }
 
     #[test]
-    fn min() -> Result<(), FunctionError> {
+    fn min() -> Result<()> {
         let mut a = Min::default();
         a.init();
         let one = Value::from(1);
@@ -435,7 +435,7 @@ mod test {
         Ok(())
     }
     #[test]
-    fn max() -> Result<(), FunctionError> {
+    fn max() -> Result<()> {
         let mut a = Max::default();
         a.init();
         let one = Value::from(1);
@@ -449,7 +449,7 @@ mod test {
     }
 
     #[test]
-    fn sum() -> Result<(), FunctionError> {
+    fn sum() -> Result<()> {
         let mut a = Sum::default();
         a.init();
         let one = Value::from(1);
@@ -463,7 +463,7 @@ mod test {
     }
 
     #[test]
-    fn mean() -> Result<(), FunctionError> {
+    fn mean() -> Result<()> {
         let mut a = Mean::default();
         a.init();
         let one = Value::from(1);
@@ -477,7 +477,7 @@ mod test {
     }
 
     #[test]
-    fn variance() -> Result<(), FunctionError> {
+    fn variance() -> Result<()> {
         let mut a = Var::default();
         a.init();
         let two = Value::from(2);
@@ -491,7 +491,7 @@ mod test {
     }
 
     #[test]
-    fn stdev() -> Result<(), FunctionError> {
+    fn stdev() -> Result<()> {
         let mut a = Stdev::default();
         a.init();
         let two = Value::from(2);
@@ -505,7 +505,7 @@ mod test {
     }
 
     #[test]
-    fn hdr() -> Result<(), FunctionError> {
+    fn hdr() -> Result<()> {
         use simd_json::BorrowedValue;
 
         let mut a = Hdr::default();
@@ -535,7 +535,7 @@ mod test {
             "max": 100,
             "count": 100,
             "mean": 50.5,
-            "stdev": 28.86607004772212,
+            "stdev": 28.866_070_047_722_12,
             "var": 833.25,
             "percentiles": {
                 "0.5": 50,

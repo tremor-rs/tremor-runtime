@@ -39,7 +39,6 @@ use glob;
 use kv;
 use regex::Regex;
 use simd_json::borrowed::Value;
-use simd_json::OwnedValue;
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
@@ -393,11 +392,7 @@ impl Extractor {
                         if !result_needed {
                             return Ok(Value::Null);
                         }
-                        //FIXME: This is needed for removing the lifetimne from the result
-                        // The reason for this madness is that r might refference some
-                        // data in v and we can't guarantee that v outlifes r.
-                        let r: OwnedValue = Value::Object(r.clone()).into();
-                        Ok(r.into())
+                        Ok(Value::Object(r).into_static())
                     } else {
                         Err(ExtractorError {
                             msg: "Failed to split kv list".into(),
@@ -484,10 +479,7 @@ impl Extractor {
                     Ok(None) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
                     }),
-                    Ok(Some(x)) => {
-                        let r: OwnedValue = x.into();
-                        Ok(r.into())
-                    }
+                    Ok(Some(r)) => Ok(r.into_static()),
                     Err(_) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
                     }),

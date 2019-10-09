@@ -27,6 +27,11 @@ pub trait TremorAggrFn: Sync + Send {
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     fn emit<'event>(&mut self) -> FResult<Value<'event>>;
     fn init(&mut self);
+    fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
+        let r = self.emit()?;
+        self.init();
+        Ok(r)
+    }
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
     fn arity(&self) -> RangeInclusive<usize>;
     fn valid_arity(&self, n: usize) -> bool {

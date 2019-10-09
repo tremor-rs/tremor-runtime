@@ -209,12 +209,11 @@ impl Clone for LineValue {
         // linked lifetime.
         // An alternative would be keeping the raw data in an ARC
         // instea of a Box.
-        use simd_json::OwnedValue;
         LineValue::new(vec![], |_| {
             let v = self.suffix();
             ValueAndMeta {
-                value: Into::<OwnedValue>::into(v.value.clone()).into(),
-                meta: Into::<OwnedValue>::into(v.meta.clone()).into(),
+                value: v.value.clone_static(),
+                meta: v.meta.clone_static(),
             }
         })
     }
