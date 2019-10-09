@@ -139,6 +139,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 mod test {
     use super::*;
     use crate::registry::FResult as Result;
+    use simd_json::value::ValueTrait;
     #[test]
     fn first() -> Result<()> {
         let mut a = First::default();
@@ -169,11 +170,15 @@ mod test {
         a.accumulate(&[&one])?;
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
-        assert_eq!(a.emit_and_init()?, [1, 2, 3]);
+        let r = a.emit_and_init()?;
+        assert_eq!(r.get_idx(0).unwrap(), &1u8);
+        assert_eq!(r.get_idx(1).unwrap(), &2u8);
+        assert_eq!(r.get_idx(2).unwrap(), &3u8);
         a.accumulate(&[&four])?;
         a.accumulate(&[&three])?;
-        assert_eq!(a.emit_and_init()?, [4, 3]);
-
+        let r = a.emit_and_init()?;
+        assert_eq!(r.get_idx(0).unwrap(), &4);
+        assert_eq!(r.get_idx(1).unwrap(), &3);
         Ok(())
     }
 
