@@ -38,6 +38,9 @@
 
 use super::Codec;
 use crate::errors::*;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::borrow::Cow;
+use std::io::{Cursor, Write};
 use std::str;
 use tremor_script::{
     influx::{parse, try_to_bytes},
@@ -88,6 +91,130 @@ impl Codec for Influx {
     }
 }
 
+pub struct BInflux {}
+
+impl BInflux {
+    pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+        let mut res = Vec::with_capacity(512);
+        res.write_u16::<BigEndian>(0)?;
+        if let Some(measurement) = v.get("measurement").and_then(Value::as_str) {
+            res.write_u16::<BigEndian>(measurement.len() as u16)?;
+            res.write(measurement.as_bytes())?;
+        } else {
+            return Err(ErrorKind::InvalidInfluxData("measurement missing".into()).into());
+        }
+
+        if let Some(timestamp) = v.get("timestamp").and_then(Value::as_u64) {
+            res.write_u64::<BigEndian>(timestamp)?;
+        } else {
+            return Err(ErrorKind::InvalidInfluxData("timestamp missing".into()).into());
+        }
+        if let Some(tags) = v.get("tags").and_then(Value::as_object) {
+            res.write_u16::<BigEndian>(tags.len() as u16)?;
+            for (k, v) in tags {
+                if let Some(v) = v.as_str() {
+                    res.write_u16::<BigEndian>(k.len() as u16)?;
+                    res.write(k.as_bytes())?;
+                    res.write_u16::<BigEndian>(v.len() as u16)?;
+                    res.write(v.as_bytes())?;
+                }
+            }
+        }
+
+        if let Some(fields) = v.get("fields").and_then(Value::as_object) {
+            res.write_u16::<BigEndian>(fields.len() as u16)?;
+            for (k, v) in fields {
+                res.write_u16::<BigEndian>(k.len() as u16)?;
+                res.write(k.as_bytes())?;
+                if let Some(v) = v.as_u64() {
+                    res.write_u8(0)?;
+                    res.write_u64::<BigEndian>(v)?;
+                } else if let Some(v) = v.as_f64() {
+                    res.write_u8(1)?;
+                    res.write_f64::<BigEndian>(v)?;
+                } else if let Some(v) = v.as_str() {
+                    res.write_u8(2)?;
+                    res.write_u16::<BigEndian>(v.len() as u16)?;
+                    res.write(v.as_bytes())?;
+                }
+            }
+        }
+        Ok(res)
+    }
+
+    pub fn decode<'event>(data: &'event [u8]) -> Result<Value<'event>> {
+        fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<Cow<'event, str>> {
+            let l = c.read_u16::<BigEndian>()? as usize;
+            let p = c.position() as usize;
+            c.set_position((p + l) as u64);
+            unsafe { Ok(str::from_utf8_unchecked(&c.get_ref()[p..p + l]).into()) }
+        };
+        let mut c = Cursor::new(data);
+        let vsn = c.read_u16::<BigEndian>()?;
+        if vsn != 0 {
+            return Err(ErrorKind::InvalidInfluxData("invalid version".into()).into());
+        };
+        let measurement = Value::String(read_string(&mut c)?.into());
+        let timestamp = Value::I64(c.read_i64::<BigEndian>()?);
+        let tag_count = c.read_u16::<BigEndian>()? as usize;
+        let mut tags = Object::with_capacity(tag_count);
+        for _i in 0..tag_count {
+            let key = read_string(&mut c)?;
+            let value = read_string(&mut c)?;
+            tags.insert(key, Value::String(value));
+        }
+
+        let field_count = c.read_u16::<BigEndian>()? as usize;
+        let mut fields = Object::with_capacity(field_count);
+        for _i in 0..field_count {
+            let key = read_string(&mut c)?;
+            let kind = c.read_u8()?;
+            match kind {
+                0 => {
+                    let value = c.read_i64::<BigEndian>()?;
+                    fields.insert(key, Value::I64(value));
+                }
+                1 => {
+                    let value = c.read_f64::<BigEndian>()?;
+                    fields.insert(key, Value::F64(value));
+                }
+                2 => {
+                    let value = read_string(&mut c)?;
+                    fields.insert(key, Value::String(value));
+                }
+                _ => (),
+            }
+        }
+        let mut result = Object::with_capacity(4);
+        result.insert("measurement".into(), measurement);
+        result.insert("tags".into(), Value::Object(tags));
+        result.insert("fields".into(), Value::Object(fields));
+        result.insert("timestamp".into(), timestamp);
+
+        Ok(Value::Object(result))
+    }
+}
+
+impl Codec for BInflux {
+    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
+        let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
+            BInflux::decode(&raw[0])
+                .map(ValueAndMeta::from)
+                .map_err(RentalSnot::Error)
+        })
+        .map_err(|e| e.0);
+        match r {
+            Ok(v) => Ok(Some(v)),
+            Err(RentalSnot::Skip) => Ok(None),
+            Err(RentalSnot::Error(e)) => Err(e),
+        }
+    }
+
+    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+        BInflux::encode(data)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,6 +240,16 @@ mod tests {
         .into();
 
         assert_eq!(e, j)
+    }
+
+    #[test]
+    fn simple_bin_parse() -> Result<()> {
+        let s = "weather,location=us-midwest,name=cake temperature=82 1465839830100400200";
+        let d = parse(s, 0)?.expect("failed to parse");
+        let b = BInflux::encode(&d)?;
+        let e = BInflux::decode(&b)?;
+        assert_eq!(e, d);
+        Ok(())
     }
 
     #[test]
@@ -381,25 +518,27 @@ mod tests {
     }
 
     #[test]
-    pub fn round_trip_all_cases() {
+    pub fn round_trip_all_cases() -> Result<()> {
         let pairs = get_data_for_tests();
 
-        pairs.iter().for_each(|case| {
+        for case in &pairs {
             let mut codec = Influx {};
             let v = case.1.clone();
-            let encoded = codec.encode(&v).expect("failed to encode");
+            let encoded = codec.encode(&v)?;
 
-            let decoded = codec
-                .decode(encoded.clone(), 0)
-                .expect("failed to dencode")
-                .expect("failed to decode");
+            let decoded = codec.decode(encoded.clone(), 0)?.expect("failed to decode");
             let expected: Value = case.1.clone();
             let got = &decoded.suffix().value;
+            let bin = BInflux::encode(&expected)?;
             if got != &expected {
                 println!("{} fails while decoding", &case.2);
                 assert_eq!(got.encode(), expected.encode());
             }
-        })
+
+            let decoded_bin = BInflux::decode(&bin)?;
+            assert_eq!(decoded_bin, expected);
+        }
+        Ok(())
     }
 
     #[test]

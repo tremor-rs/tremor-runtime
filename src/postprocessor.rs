@@ -17,7 +17,7 @@ mod gelf;
 use crate::errors::*;
 use base64;
 use byteorder::{BigEndian, WriteBytesExt};
-
+use std::default::Default;
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 
 pub trait Postprocessor: Send {
@@ -35,6 +35,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "snappy" => Ok(Box::new(CompressSnappy {})),
         "lz4" => Ok(Box::new(CompressLz4 {})),
         "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
+        "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
@@ -122,6 +123,18 @@ impl Postprocessor for AttachIngresTS {
         res.write_u64::<BigEndian>(ingres_ns)?;
         res.write_all(&data)?;
 
+        Ok(vec![res])
+    }
+}
+
+#[derive(Clone, Default)]
+struct LengthPrefix {}
+impl Postprocessor for LengthPrefix {
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        use std::io::Write;
+        let mut res = Vec::with_capacity(data.len() + 8);
+        res.write_u64::<BigEndian>(data.len() as u64)?;
+        res.write_all(&data)?;
         Ok(vec![res])
     }
 }

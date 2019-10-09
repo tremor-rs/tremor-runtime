@@ -15,8 +15,9 @@
 mod gelf;
 use crate::errors::*;
 use base64;
-
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use bytes::BufMut;
+use bytes::BytesMut;
 
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {
@@ -34,6 +35,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
         "gelf-chunking-tcp" => Ok(Box::new(gelf::GELF::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
+        "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -90,13 +92,43 @@ impl Preprocessor for Lines {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct ExtractIngresTs {}
 impl Preprocessor for ExtractIngresTs {
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Cursor;
         *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
         Ok(vec![data[8..].to_vec()])
+    }
+}
+
+#[derive(Clone, Default)]
+struct LengthPrefix {
+    len: Option<usize>,
+    buffer: BytesMut,
+}
+impl Preprocessor for LengthPrefix {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.buffer.put(data);
+
+        let mut res = Vec::new();
+        loop {
+            if let Some(l) = self.len {
+                if self.buffer.len() >= l {
+                    let part = self.buffer.split_off(l).to_vec();
+                    res.push(part);
+                    self.len = None;
+                } else {
+                    break;
+                }
+            }
+            if self.buffer.len() > 8 {
+                self.len = Some(BigEndian::read_u64(&mut self.buffer) as usize);
+            } else {
+                break;
+            }
+        }
+        Ok(res)
     }
 }
 

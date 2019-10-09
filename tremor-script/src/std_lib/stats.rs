@@ -32,7 +32,7 @@ impl TremorAggrFn for Count {
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        self.0 += 1;
+        self.0 -= 1;
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -513,7 +513,7 @@ mod test {
         let mut b = Count::default();
         b.init();
         b.accumulate(&[])?;
-        b.merge(&a);
+        b.merge(&a)?;
         assert_eq!(b.emit()?, 4);
         Ok(())
     }
@@ -531,7 +531,7 @@ mod test {
         assert_eq!(a.emit()?, 1.0);
         let mut b = Min::default();
         b.init();
-        b.merge(&a);
+        b.merge(&a)?;
         assert_eq!(a.emit()?, 1.0);
         Ok(())
     }
