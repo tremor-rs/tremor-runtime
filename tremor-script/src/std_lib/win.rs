@@ -49,6 +49,16 @@ impl TremorAggrFn for First {
     fn init(&mut self) {
         self.0 = None;
     }
+    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+        // On self is earlier then other, so we don't do anything unless
+        // we had no value
+        if let Some(other) = src.downcast_ref::<Self>() {
+            if self.0.is_none() {
+                self.0 = other.0.clone();
+            }
+        }
+        Ok(())
+    }
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -58,10 +68,10 @@ impl TremorAggrFn for First {
 }
 
 #[derive(Clone, Debug, Default)]
-struct Last(Value<'static>);
+struct Last(Option<Value<'static>>);
 impl TremorAggrFn for Last {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        self.0 = args[0].clone_static();
+        self.0 = Some(args[0].clone_static());
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
@@ -69,15 +79,33 @@ impl TremorAggrFn for Last {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(self.0.clone())
+        if let Some(v) = &self.0 {
+            Ok(v.clone())
+        } else {
+            Ok(Value::Null)
+        }
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
-        let mut r = Value::Null;
+        let mut r = None;
         std::mem::swap(&mut r, &mut self.0);
-        Ok(r)
+        if let Some(r) = r {
+            Ok(r)
+        } else {
+            Ok(Value::Null)
+        }
     }
     fn init(&mut self) {
-        self.0 = Value::Null;
+        self.0 = None;
+    }
+    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+        if let Some(other) = src.downcast_ref::<Self>() {
+            // On self is earlier then other, so as long
+            // as other has a value we take it
+            if other.0.is_some() {
+                self.0 = other.0.clone()
+            }
+        }
+        Ok(())
     }
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
@@ -108,6 +136,15 @@ impl TremorAggrFn for Collect {
     }
     fn init(&mut self) {
         self.0 = Vec::with_capacity(self.0.len());
+    }
+
+    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+        if let Some(other) = src.downcast_ref::<Self>() {
+            // On self is earlier then other, so as long
+            // as other has a value we take it
+            self.0.append(&mut other.0.clone());
+        }
+        Ok(())
     }
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
@@ -171,9 +208,9 @@ mod test {
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
         let r = a.emit_and_init()?;
-        assert_eq!(r.get_idx(0).unwrap(), &1u8);
-        assert_eq!(r.get_idx(1).unwrap(), &2u8);
-        assert_eq!(r.get_idx(2).unwrap(), &3u8);
+        assert_eq!(r.get_idx(0).unwrap(), &1);
+        assert_eq!(r.get_idx(1).unwrap(), &2);
+        assert_eq!(r.get_idx(2).unwrap(), &3);
         a.accumulate(&[&four])?;
         a.accumulate(&[&three])?;
         let r = a.emit_and_init()?;

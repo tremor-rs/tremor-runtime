@@ -32,6 +32,9 @@ pub trait TremorAggrFn: Sync + Send {
         self.init();
         Ok(r)
     }
+    // PERF: keep in mind &mut dyn might give a performance boost
+    // here
+    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()>;
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
     fn arity(&self) -> RangeInclusive<usize>;
     fn valid_arity(&self, n: usize) -> bool {
