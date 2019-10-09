@@ -164,7 +164,8 @@ pub fn exec_binary<'run, 'event: 'run>(
         (Lte, F64(l), F64(r)) => Some(static_bool!(*l <= *r)),
         (Lte, String(l), String(r)) => Some(static_bool!(l <= r)),
 
-        // TODO should we guard with r >= 0 && r < 64, to prevent overflow?
+        // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
+        // and also implement >>>
         (RBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l >> *r))),
         (LBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l << *r))),
 
@@ -206,6 +207,9 @@ pub fn exec_unary<'run, 'event: 'run>(
         (Plus, F64(x)) => Some(Cow::Owned(F64(*x))),
         (Not, Bool(true)) => Some(static_bool!(false)), // This is not true
         (Not, Bool(false)) => Some(static_bool!(true)), // this is not false
+        (BitNot, I64(x)) => Some(Cow::Owned(I64(!x))),
+        (BitNot, Bool(true)) => Some(static_bool!(false)), // This is not true
+        (BitNot, Bool(false)) => Some(static_bool!(true)), // this is not false
         _ => None,
     }
 }

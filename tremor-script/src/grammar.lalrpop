@@ -159,15 +159,17 @@ UnaryExprImut: ImutExpr1<'input> = {
 }
 
 
-/// Logical unary expressions (not)
+/// Logical and bitwise unary expressions (not, !)
 UnarySimpleExprImut: ImutExpr1<'input> = {
     <start:@L> "not" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: expr, start, end })),
+    <start:@L> "!" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::BitNot, expr: expr, start, end })),
     PresenceSimplExprImut => <>,
 }
 
 /// Presence operations (present, absent)
 PresenceSimplExprImut: ImutExpr1<'input> = {
     <start:@L> "present" <path:Path> <end:@L> => ImutExpr1::Present{path, start, end},
+    /// TODO link to !?
     <start:@L> "absent" <path:Path> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: ImutExpr1::Present{path, start, end}, start, end })),
     SimpleExprImut => <>,
 }
@@ -770,6 +772,7 @@ extern {
         "<" => lexer::Token::Lt,
         ">>" => lexer::Token::RBitShift,
         "<<" => lexer::Token::LBitShift,
+        "!" => lexer::Token::BitNot,
         "|" => lexer::Token::BitOr,
         "^" => lexer::Token::BitXor,
         "&" => lexer::Token::BitAnd,

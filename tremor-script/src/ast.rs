@@ -2210,6 +2210,7 @@ pub enum UnaryOpKind {
     Plus,
     Minus,
     Not,
+    BitNot,
 }
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -2217,6 +2218,7 @@ impl fmt::Display for UnaryOpKind {
             UnaryOpKind::Plus => write!(f, "+"),
             UnaryOpKind::Minus => write!(f, "-"),
             UnaryOpKind::Not => write!(f, "not"),
+            UnaryOpKind::BitNot => write!(f, "!"),
         }
     }
 }

@@ -176,6 +176,7 @@ pub enum Token<'input> {
 
     // Op
     Not,
+    BitNot,
     And,
     Or,
     BitAnd,
@@ -321,6 +322,7 @@ impl<'input> TokenFuns for Token<'input> {
     fn is_operator(&self) -> bool {
         match *self {
             Token::Not => true,
+            Token::BitNot => true,
             Token::Or => true,
             Token::And => true,
             Token::BitOr => true,
@@ -452,6 +454,7 @@ impl<'input> fmt::Display for Token<'input> {
             //            Token::Question => write!(f, "?"),
             //            Token::Pipe => write!(f, "|"),
             Token::Not => write!(f, "not"),
+            Token::BitNot => write!(f, "!"),
             //            Token::Tilde => write!(f, "~"),
             // Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),
@@ -1398,6 +1401,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),
+                    // TODO account for bitwise not operator
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
                     ch if is_ident_start(ch) => Some(self.id(start)),
@@ -1509,6 +1513,7 @@ mod tests {
     fn operators() {
         lex_ok! { " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
+        lex_ok! { " !1", "  ~~ " => Token::BitNot, "   ~ " => Token::IntLiteral, };
 
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
