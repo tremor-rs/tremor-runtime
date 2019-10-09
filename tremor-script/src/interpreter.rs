@@ -129,11 +129,20 @@ pub fn exec_binary<'run, 'event: 'run>(
         (NotEq, Null, Null) => Some(static_bool!(false)),
         (And, Bool(l), Bool(r)) => Some(static_bool!(*l && *r)),
         (Or, Bool(l), Bool(r)) => Some(static_bool!(*l || *r)),
+
+        (BitAnd, I64(l), I64(r)) => Some(Cow::Owned(I64(*l & *r))),
+        (BitAnd, Bool(l), Bool(r)) => Some(static_bool!(*l & *r)),
+        (BitOr, I64(l), I64(r)) => Some(Cow::Owned(I64(*l | *r))),
+        (BitOr, Bool(l), Bool(r)) => Some(static_bool!(*l | *r)),
+        (BitXor, I64(l), I64(r)) => Some(Cow::Owned(I64(*l ^ *r))),
+        (BitXor, Bool(l), Bool(r)) => Some(static_bool!(*l ^ *r)),
+
         // FIXME - do we want this?
         // This is to make sure that == in a expression
         // and a record pattern behaves the same.
         (Eq, l, r) => Some(static_bool!(val_eq(l, r))),
         (NotEq, l, r) => Some(static_bool!(!val_eq(l, r))),
+
         (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
         (Gte, I64(l), F64(r)) => Some(static_bool!((*l as f64) >= *r)),
         (Gte, F64(l), I64(r)) => Some(static_bool!(*l >= (*r as f64))),

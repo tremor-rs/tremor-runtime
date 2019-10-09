@@ -2119,6 +2119,11 @@ impl<'script, Ctx: Context + Clone + 'static> PartialEq for EventPath<'script, C
 pub enum BinOpKind {
     Or,
     And,
+
+    BitOr,
+    BitXor,
+    BitAnd,
+
     Eq,
     NotEq,
 
@@ -2143,8 +2148,13 @@ impl fmt::Display for BinOpKind {
             BinOpKind::Or => write!(f, "or"),
             BinOpKind::And => write!(f, "and"),
 
+            BinOpKind::BitOr => write!(f, "|"),
+            BinOpKind::BitXor => write!(f, "^"),
+            BinOpKind::BitAnd => write!(f, "&"),
+
             BinOpKind::Eq => write!(f, "=="),
             BinOpKind::NotEq => write!(f, "!="),
+
             BinOpKind::Gte => write!(f, ">="),
             BinOpKind::Gt => write!(f, ">"),
             BinOpKind::Lte => write!(f, "<="),

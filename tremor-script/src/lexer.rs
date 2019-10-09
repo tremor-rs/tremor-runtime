@@ -178,6 +178,9 @@ pub enum Token<'input> {
     Not,
     And,
     Or,
+    BitAnd,
+    BitOr,
+    BitXor,
     Eq,
     EqEq,
     NotEq,
@@ -320,6 +323,9 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Not => true,
             Token::Or => true,
             Token::And => true,
+            Token::BitOr => true,
+            Token::BitXor => true,
+            Token::BitAnd => true,
             Token::Eq => true,
             Token::EqEq => true,
             Token::NotEq => true,
@@ -460,6 +466,9 @@ impl<'input> fmt::Display for Token<'input> {
             Token::RBracket => write!(f, "]"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
+            Token::BitAnd => write!(f, "&"),
+            Token::BitOr => write!(f, "|"),
+            Token::BitXor => write!(f, "^"),
             Token::Eq => write!(f, "="),
             Token::EqEq => write!(f, "=="),
             Token::NotEq => write!(f, "!="),
@@ -1376,6 +1385,10 @@ impl<'input> Iterator for Lexer<'input> {
                     '[' => Some(Ok(spanned2(start, start, Token::LBracket))),
                     ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
                     '/' => Some(Ok(spanned2(start, start, Token::Div))),
+                    // TODO account for extractors which use | to mark format boundaries
+                    '|' => Some(Ok(spanned2(start, start, Token::BitOr))),
+                    '^' => Some(Ok(spanned2(start, start, Token::BitXor))),
+                    '&' => Some(Ok(spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
                     '-' => Some(self.sb(start)),
                     '#' => Some(self.cx(start)),
@@ -1499,6 +1512,9 @@ mod tests {
 
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
+        lex_ok! { " & ", " ~ " => Token::BitAnd, };
+        lex_ok! { " | ", " ~ " => Token::BitOr, };
+        lex_ok! { " ^ ", " ~ " => Token::BitXor, };
         lex_ok! { " = ", " ~ " => Token::Eq, };
         lex_ok! { " == ", " ~ " => Token::EqEq, };
         lex_ok! { " != ", " ~ " => Token::NotEq, };

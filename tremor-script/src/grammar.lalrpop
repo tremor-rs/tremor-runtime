@@ -99,7 +99,25 @@ OrExprImut: ImutExpr1<'input> = {
 
 /// Logical and
 AndExprImut: ImutExpr1<'input> = {
-    BinOp<BinAnd, AndExprImut, EqExprImut> => <>,
+    BinOp<BinAnd, AndExprImut, BitOrExprImut> => <>,
+    BitOrExprImut => <>,
+}
+
+/// Bitwise or
+BitOrExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
+    BitXorExprImut => <>,
+}
+
+/// Bitwise xor
+BitXorExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitXor, BitXorExprImut, BitAndExprImut>> => <>,
+    BitAndExprImut => <>,
+}
+
+/// Bitwise and
+BitAndExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitAnd, BitAndExprImut, EqExprImut>> => <>,
     EqExprImut => <>,
 }
 
@@ -664,6 +682,15 @@ BinOr: BinOpKind = {
 BinAnd: BinOpKind = {
     "and" => BinOpKind::And,
 }
+BinBitOr: BinOpKind = {
+    "|" => BinOpKind::BitOr,
+}
+BinBitXor: BinOpKind = {
+    "^" => BinOpKind::BitXor,
+}
+BinBitAnd: BinOpKind = {
+    "&" => BinOpKind::BitAnd,
+}
 BinEq: BinOpKind = {
     "==" => BinOpKind::Eq,
     "!=" => BinOpKind::NotEq,
@@ -743,6 +770,9 @@ extern {
         "<" => lexer::Token::Lt,
         ">>" => lexer::Token::RBitShift,
         "<<" => lexer::Token::LBitShift,
+        "|" => lexer::Token::BitOr,
+        "^" => lexer::Token::BitXor,
+        "&" => lexer::Token::BitAnd,
         "+" => lexer::Token::Add,
         "-" => lexer::Token::Sub,
         "*" => lexer::Token::Mul,
