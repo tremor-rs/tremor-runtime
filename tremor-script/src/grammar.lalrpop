@@ -111,7 +111,13 @@ EqExprImut: ImutExpr1<'input> = {
 
 /// Relational compairison operators
 CmpExprImut: ImutExpr1<'input> = {
-    BinOp<BinCmp, CmpExprImut, AddExprImut> => <>,
+    BinOp<BinCmp, CmpExprImut, BitShiftExprImut> => <>,
+    BitShiftExprImut => <>,
+}
+
+/// Bit shift operators (>>, <<)
+BitShiftExprImut: ImutExpr1<'input> = {
+    BinOp<BinBitShift, BitShiftExprImut, AddExprImut> => <>,
     AddExprImut => <>,
 }
 
@@ -123,13 +129,7 @@ AddExprImut: ImutExpr1<'input> = {
 
 /// Multiplication based math (*, /, %)
 MulExprImut: ImutExpr1<'input> = {
-    BinOp<BinMul, MulExprImut, BitShiftExprImut> => <>,
-    BitShiftExprImut => <>,
-}
-
-/// Bit shift operators (>>, <<)
-BitShiftExprImut: ImutExpr1<'input> = {
-    BinOp<BinBitShift, BitShiftExprImut, UnaryExprImut> => <>,
+    BinOp<BinMul, MulExprImut, UnaryExprImut> => <>,
     UnaryExprImut => <>,
 }
 
@@ -674,6 +674,10 @@ BinCmp: BinOpKind = {
     "<=" => BinOpKind::Lte,
     "<" => BinOpKind::Lt,
 }
+BinBitShift: BinOpKind = {
+    ">>" => BinOpKind::RBitShift,
+    "<<" => BinOpKind::LBitShift,
+}
 BinAdd: BinOpKind = {
     "+" => BinOpKind::Add,
     "-" => BinOpKind::Sub,
@@ -682,10 +686,6 @@ BinMul: BinOpKind = {
     "*" => BinOpKind::Mul,
     "/" => BinOpKind::Div,
     "%" => BinOpKind::Mod,
-}
-BinBitShift: BinOpKind = {
-    ">>" => BinOpKind::RBitShift,
-    "<<" => BinOpKind::LBitShift,
 }
 extern {
     type Location = Location;

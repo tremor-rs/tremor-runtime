@@ -187,13 +187,13 @@ pub enum Token<'input> {
     Gt,
     Lte,
     Lt,
+    RBitShift,
+    LBitShift,
     Add,
     Sub,
     Mul,
     Div,
     Mod,
-    LBitShift,
-    RBitShift,
 
     // Symbols
     Colon,
@@ -329,13 +329,13 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Gt => true,
             Token::Lte => true,
             Token::Lt => true,
+            Token::RBitShift => true,
+            Token::LBitShift => true,
             Token::Add => true,
             Token::Sub => true,
             Token::Mul => true,
             Token::Div => true,
             Token::Mod => true,
-            Token::LBitShift => true,
-            Token::RBitShift => true,
             Token::Dollar => true,
             Token::Dot => true,
             _ => false,
@@ -460,22 +460,22 @@ impl<'input> fmt::Display for Token<'input> {
             Token::RBracket => write!(f, "]"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
-            Token::Gte => write!(f, ">="),
             Token::Eq => write!(f, "="),
             Token::EqEq => write!(f, "=="),
             Token::NotEq => write!(f, "!="),
             Token::TildeEq => write!(f, "~="),
             Token::Tilde => write!(f, "~"),
+            Token::Gte => write!(f, ">="),
             Token::Gt => write!(f, ">"),
             Token::Lte => write!(f, "<="),
             Token::Lt => write!(f, "<"),
+            Token::RBitShift => write!(f, ">>"),
+            Token::LBitShift => write!(f, "<<"),
             Token::Mul => write!(f, "*"),
             Token::Div => write!(f, "/"),
             Token::Add => write!(f, "+"),
             Token::Sub => write!(f, "-"),
             Token::Mod => write!(f, "%"),
-            Token::LBitShift => write!(f, "<<"),
-            Token::RBitShift => write!(f, ">>"),
             Token::EndOfStream => write!(f, ""),
         }
     }
@@ -1506,13 +1506,13 @@ mod tests {
         lex_ok! { " > ", " ~ " => Token::Gt, };
         lex_ok! { " <= ", " ~ " => Token::Lte, };
         lex_ok! { " < ", " ~ " => Token::Lt, };
+        lex_ok! { " >> ", " ~ " => Token::RBitShift, };
+        lex_ok! { " << ", " ~ " => Token::LBitShift, };
         lex_ok! { " + ", " ~ " => Token::Add, };
         lex_ok! { " - ", " ~ " => Token::Sub, };
         lex_ok! { " * ", " ~ " => Token::Mul, };
         lex_ok! { " / ", " ~ " => Token::Div, };
         lex_ok! { " % ", " ~ " => Token::Mod, };
-        lex_ok! { " << ", " ~ " => Token::LBitShift, };
-        lex_ok! { " >> ", " ~ " => Token::RBitShift, };
     }
 
     #[test]
