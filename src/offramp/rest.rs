@@ -12,18 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Offramp, OfframpImpl};
-use crate::async_sink::{AsyncSink, SinkDequeueError};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
+use crate::offramp::prelude::*;
 use crate::rest::HttpC;
-use crate::system::{PipelineAddr, PipelineMsg};
-use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, OpConfig};
 use halfbrown::HashMap;
 use serde_yaml;
 use std::convert::From;

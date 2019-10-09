@@ -31,8 +31,8 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
         "json" => Ok(Box::new(json::JSON {})),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
-        "influx" => Ok(Box::new(influx::BInflux {})),
-        "binflux" => Ok(Box::new(influx::Influx {})),
+        "influx" => Ok(Box::new(influx::Influx {})),
+        "binflux" => Ok(Box::new(influx::BInflux {})),
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(string::String {})),

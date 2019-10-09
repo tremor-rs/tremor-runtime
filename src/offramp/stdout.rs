@@ -21,14 +21,7 @@
 //!
 //! This operator takes no configuration
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 
 pub struct StdOut {

@@ -47,6 +47,12 @@ use tremor_script::{
     prelude::*,
 };
 
+const TYPE_I64: u8 = 0;
+const TYPE_F64: u8 = 1;
+const TYPE_STRING: u8 = 2;
+const TYPE_TRUE: u8 = 3;
+const TYPE_FALSE: u8 = 4;
+
 #[derive(Clone)]
 pub struct Influx {}
 
@@ -95,11 +101,16 @@ pub struct BInflux {}
 
 impl BInflux {
     pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+        fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
+            w.write_u16::<BigEndian>(s.len() as u16)?;
+            w.write(s.as_bytes())?;
+            Ok(())
+        }
+
         let mut res = Vec::with_capacity(512);
         res.write_u16::<BigEndian>(0)?;
         if let Some(measurement) = v.get("measurement").and_then(Value::as_str) {
-            res.write_u16::<BigEndian>(measurement.len() as u16)?;
-            res.write(measurement.as_bytes())?;
+            write_str(&mut res, measurement)?;
         } else {
             return Err(ErrorKind::InvalidInfluxData("measurement missing".into()).into());
         }
@@ -113,31 +124,39 @@ impl BInflux {
             res.write_u16::<BigEndian>(tags.len() as u16)?;
             for (k, v) in tags {
                 if let Some(v) = v.as_str() {
-                    res.write_u16::<BigEndian>(k.len() as u16)?;
-                    res.write(k.as_bytes())?;
-                    res.write_u16::<BigEndian>(v.len() as u16)?;
-                    res.write(v.as_bytes())?;
+                    write_str(&mut res, k)?;
+                    write_str(&mut res, v)?;
                 }
             }
+        } else {
+            res.write_u16::<BigEndian>(0 as u16)?;
         }
 
         if let Some(fields) = v.get("fields").and_then(Value::as_object) {
             res.write_u16::<BigEndian>(fields.len() as u16)?;
             for (k, v) in fields {
-                res.write_u16::<BigEndian>(k.len() as u16)?;
-                res.write(k.as_bytes())?;
-                if let Some(v) = v.as_u64() {
-                    res.write_u8(0)?;
-                    res.write_u64::<BigEndian>(v)?;
+                write_str(&mut res, k)?;
+                if let Some(v) = v.as_i64() {
+                    res.write_u8(TYPE_I64)?;
+                    res.write_i64::<BigEndian>(v)?;
                 } else if let Some(v) = v.as_f64() {
-                    res.write_u8(1)?;
+                    res.write_u8(TYPE_F64)?;
                     res.write_f64::<BigEndian>(v)?;
+                } else if let Some(v) = v.as_bool() {
+                    if v {
+                        res.write_u8(TYPE_TRUE)?;
+                    } else {
+                        res.write_u8(TYPE_TRUE)?;
+                    }
                 } else if let Some(v) = v.as_str() {
-                    res.write_u8(2)?;
-                    res.write_u16::<BigEndian>(v.len() as u16)?;
-                    res.write(v.as_bytes())?;
+                    res.write_u8(TYPE_STRING)?;
+                    write_str(&mut res, v)?;
+                } else {
+                    error!("Unknown type as influx line value: {:?}", v.value_type())
                 }
             }
+        } else {
+            res.write_u16::<BigEndian>(0 as u16)?;
         }
         Ok(res)
     }
@@ -163,26 +182,31 @@ impl BInflux {
             let value = read_string(&mut c)?;
             tags.insert(key, Value::String(value));
         }
-
         let field_count = c.read_u16::<BigEndian>()? as usize;
         let mut fields = Object::with_capacity(field_count);
         for _i in 0..field_count {
             let key = read_string(&mut c)?;
             let kind = c.read_u8()?;
             match kind {
-                0 => {
+                TYPE_I64 => {
                     let value = c.read_i64::<BigEndian>()?;
                     fields.insert(key, Value::I64(value));
                 }
-                1 => {
+                TYPE_F64 => {
                     let value = c.read_f64::<BigEndian>()?;
                     fields.insert(key, Value::F64(value));
                 }
-                2 => {
+                TYPE_STRING => {
                     let value = read_string(&mut c)?;
                     fields.insert(key, Value::String(value));
                 }
-                _ => (),
+                TYPE_TRUE => {
+                    fields.insert(key, Value::Bool(true));
+                }
+                TYPE_FALSE => {
+                    fields.insert(key, Value::Bool(false));
+                }
+                o => error!("bad field type: {}", o),
             }
         }
         let mut result = Object::with_capacity(4);

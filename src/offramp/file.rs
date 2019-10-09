@@ -20,14 +20,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use serde_yaml;
 use std::fs::File as FSFile;
@@ -38,6 +31,7 @@ pub struct File {
     file: FSFile,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
+    config: Config,
 }
 
 #[derive(Deserialize)]
@@ -50,11 +44,12 @@ impl OfframpImpl for File {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            let file = FSFile::create(config.file)?;
+            let file = FSFile::create(&config.file)?;
             Ok(Box::new(File {
                 file,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
+                config,
             }))
         } else {
             Err("Blackhole offramp requires a config".into())
@@ -67,13 +62,23 @@ impl Offramp for File {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for value in event.value_iter() {
             if let Ok(ref raw) = codec.encode(value) {
-                //TODO: Error handling
-                if let Err(e) = self
-                    .file
-                    .write_all(&raw)
-                    .and_then(|_| self.file.write_all(b"\n"))
-                {
-                    error!("Failed wo write to stdout file: {}", e)
+                match postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec()) {
+                    Ok(packets) => {
+                        for packet in packets {
+                            //TODO: Error handling
+                            if let Err(e) = self
+                                .file
+                                .write_all(&packet)
+                                .and_then(|_| self.file.write_all(b"\n"))
+                            {
+                                error!("Failed wo write to stdout file: {}", e)
+                            }
+                        }
+                    }
+                    Err(e) => error!(
+                        "Failed to postprocess before writing to file {}: {}",
+                        self.config.file, e
+                    ),
                 }
             }
         }

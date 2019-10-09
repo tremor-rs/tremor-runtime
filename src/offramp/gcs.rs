@@ -21,16 +21,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::google::{self, storage_api, GcsHub};
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::google::{self, *};
+use crate::offramp::prelude::*;
 use google_storage1::Object;
 use hashbrown::HashMap;
 use serde_yaml;

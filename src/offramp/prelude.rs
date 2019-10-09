@@ -13,13 +13,14 @@
 // limitations under the License.
 
 pub use super::{Offramp, OfframpAddr, OfframpImpl};
+pub use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub use crate::codec::{self, Codec};
-pub use crate::dflt::*;
+pub use crate::dflt::{self, *};
 pub use crate::errors::*;
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
-use crate::utils::nanotime;
+pub use crate::utils::{duration_to_millis, nanotime};
 pub use crate::{Event, OpConfig};
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 use std::mem;

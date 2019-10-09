@@ -90,7 +90,7 @@ pub fn send_event(
                     }
                 }
                 Ok(None) => (),
-                Err(e) => error!("{}", e),
+                Err(e) => error!("[Codec] {}", e),
             }
         }
     };

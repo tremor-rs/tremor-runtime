@@ -30,15 +30,7 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use super::{Offramp, OfframpImpl};
-use crate::async_sink::{AsyncSink, SinkDequeueError};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::system::{PipelineAddr, PipelineMsg};
-use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};

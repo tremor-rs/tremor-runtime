@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::dflt;
 use crate::onramp::prelude::*;
 use serde_yaml::Value;
 use std::fs::File;
@@ -30,6 +31,8 @@ pub struct Config {
     pub interval: Option<u64>,
     /// Number of iterations to stop after
     pub iters: Option<u64>,
+    #[serde(default = "dflt::d_false")]
+    pub base64: bool,
 }
 
 pub struct Blaster {
@@ -79,7 +82,13 @@ fn onramp_loop(
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
         .lines()
-        .map(|e| -> Result<Vec<u8>> { Ok(e?.as_bytes().to_vec()) })
+        .map(|e| -> Result<Vec<u8>> {
+            if config.base64 {
+                Ok(base64::decode(&e?.as_bytes())?)
+            } else {
+                Ok(e?.as_bytes().to_vec())
+            }
+        })
         .collect();
     acc.elements = elements?;
     acc.consuming = acc.elements.clone();

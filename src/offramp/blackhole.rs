@@ -20,15 +20,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::utils;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
@@ -67,7 +59,7 @@ impl OfframpImpl for Blackhole {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            let now_ns = utils::nanotime();
+            let now_ns = nanotime();
             Ok(Box::new(Blackhole {
                 // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
@@ -99,7 +91,7 @@ impl Offramp for Blackhole {
     }
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for value in event.value_iter() {
-            let now_ns = utils::nanotime();
+            let now_ns = nanotime();
 
             if self.has_stop_limit && now_ns > self.stop_after {
                 let mut buf = Vec::new();
