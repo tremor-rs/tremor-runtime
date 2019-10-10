@@ -18,6 +18,7 @@ use base64;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::BufMut;
 use bytes::BytesMut;
+use std::fmt::Debug;
 
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {
@@ -64,7 +65,7 @@ impl SliceTrim for [u8] {
 }
 
 #[derive(Default, Debug, Clone)]
-struct FilterEmpty {}
+pub(crate) struct FilterEmpty {}
 
 impl Preprocessor for FilterEmpty {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -76,24 +77,24 @@ impl Preprocessor for FilterEmpty {
     }
 }
 
-#[derive(Clone)]
-struct Nulls {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct Nulls {}
 impl Preprocessor for Nulls {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
 }
 
-#[derive(Clone)]
-struct Lines {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct Lines {}
 impl Preprocessor for Lines {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
     }
 }
 
-#[derive(Clone, Default)]
-struct ExtractIngresTs {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct ExtractIngresTs {}
 impl Preprocessor for ExtractIngresTs {
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Cursor;
@@ -102,46 +103,16 @@ impl Preprocessor for ExtractIngresTs {
     }
 }
 
-#[derive(Clone, Default)]
-struct LengthPrefix {
-    len: Option<usize>,
-    buffer: BytesMut,
-}
-impl Preprocessor for LengthPrefix {
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.buffer.put(data);
-
-        let mut res = Vec::new();
-        loop {
-            if let Some(l) = self.len {
-                if self.buffer.len() >= l {
-                    let part = self.buffer.split_off(l).to_vec();
-                    res.push(part);
-                    self.len = None;
-                } else {
-                    break;
-                }
-            }
-            if self.buffer.len() > 8 {
-                self.len = Some(BigEndian::read_u64(&mut self.buffer) as usize);
-            } else {
-                break;
-            }
-        }
-        Ok(res)
-    }
-}
-
-#[derive(Clone)]
-struct Base64 {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct Base64 {}
 impl Preprocessor for Base64 {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::decode(&data)?])
     }
 }
 
-#[derive(Clone)]
-struct Gzip {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct Gzip {}
 impl Preprocessor for Gzip {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
@@ -153,8 +124,8 @@ impl Preprocessor for Gzip {
     }
 }
 
-#[derive(Clone)]
-struct Decompress {}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct Decompress {}
 impl Preprocessor for Decompress {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Read;
@@ -200,5 +171,59 @@ impl Preprocessor for Decompress {
             _ => data.to_vec(),
         };
         Ok(vec![r])
+    }
+}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct LengthPrefix {
+    len: Option<usize>,
+    buffer: BytesMut,
+}
+impl Preprocessor for LengthPrefix {
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.buffer.put(data);
+
+        let mut res = Vec::new();
+        loop {
+            if let Some(l) = self.len {
+                if self.buffer.len() >= l {
+                    let mut part = self.buffer.split_off(l);
+                    std::mem::swap(&mut part, &mut self.buffer);
+                    res.push(part.to_vec());
+                    self.len = None;
+                } else {
+                    break;
+                }
+            }
+            if self.buffer.len() > 8 {
+                self.len = Some(BigEndian::read_u64(&self.buffer) as usize);
+                self.buffer.advance(8);
+            } else {
+                break;
+            }
+        }
+        Ok(res)
+    }
+}
+#[cfg(test)]
+mod test {
+    use crate::errors::*;
+    use crate::postprocessor::{self as post, Postprocessor};
+    use crate::preprocessor::{self as pre, Preprocessor};
+
+    #[test]
+    fn length_prefix() -> Result<()> {
+        let mut it = 0;
+
+        let mut pre_p = pre::LengthPrefix::default();
+        let mut post_p = post::LengthPrefix::default();
+
+        let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let wire = post_p.process(0, 0, &data)?;
+        let (start, end) = wire[0].split_at(7);
+        let recv = pre_p.process(&mut it, start)?;
+        assert!(recv.is_empty());
+        let recv = pre_p.process(&mut it, end)?;
+        assert_eq!(recv[0], data);
+        Ok(())
     }
 }
