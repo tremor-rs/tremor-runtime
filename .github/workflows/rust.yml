@@ -135,7 +135,7 @@ jobs:
       - name: install tarpaulin
         run: cargo install cargo-tarpaulin -f
       - name: run tarpaulin
-        run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/* --all
+        run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/* --all -- --test-threads=1
       - uses: codecov/codecov-action@v1.0.2
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
