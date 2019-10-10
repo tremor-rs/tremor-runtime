@@ -57,6 +57,7 @@ const TYPE_FALSE: u8 = 4;
 pub struct Influx {}
 
 // This is ugly but we need to handle comments, thanks rental!
+#[allow(clippy::large_enum_variant)]
 enum RentalSnot {
     Error(Error),
     Skip,
@@ -103,7 +104,7 @@ impl BInflux {
     pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(s.len() as u16)?;
-            w.write(s.as_bytes())?;
+            w.write_all(s.as_bytes())?;
             Ok(())
         }
 
@@ -146,7 +147,7 @@ impl BInflux {
                     if v {
                         res.write_u8(TYPE_TRUE)?;
                     } else {
-                        res.write_u8(TYPE_TRUE)?;
+                        res.write_u8(TYPE_FALSE)?;
                     }
                 } else if let Some(v) = v.as_str() {
                     res.write_u8(TYPE_STRING)?;
@@ -173,7 +174,7 @@ impl BInflux {
         if vsn != 0 {
             return Err(ErrorKind::InvalidInfluxData("invalid version".into()).into());
         };
-        let measurement = Value::String(read_string(&mut c)?.into());
+        let measurement = Value::String(read_string(&mut c)?);
         let timestamp = Value::I64(c.read_i64::<BigEndian>()?);
         let tag_count = c.read_u16::<BigEndian>()? as usize;
         let mut tags = Object::with_capacity(tag_count);

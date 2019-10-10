@@ -490,6 +490,8 @@ fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
     }
 }
 
+// This is compile time only we don't care
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Expr1<'script> {
     Const {
