@@ -42,10 +42,13 @@ impl TremorAggrFn for Count {
         self.0 = 0;
     }
     fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+        dbg!("merge");
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
             self.0 += other.0;
+        } else {
+            dbg!(src.type_id());
         }
         Ok(())
     }

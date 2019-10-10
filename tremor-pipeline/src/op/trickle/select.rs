@@ -213,6 +213,7 @@ impl TrickleSelect {
             }
         };
 
+        // FIXME - ensure that windows are sensilbe (i.e. they are ever growing multiples of each other ) unwrap()
         let windows = windows
             .into_iter()
             .map(|window_impl| Window {
@@ -314,12 +315,18 @@ impl Operator for TrickleSelect {
                             .or_insert_with(|| (group_val.clone(), aggregates.clone()));
                         for (i, aggr) in aggrs.iter().enumerate() {
                             // I HATE YOU RUST WHY DO I HAVE TO TRANSMUTE HERE!?!?
-                            let aggr_static: &Aggrs<'static> = unsafe { std::mem::transmute(aggr) };
-                            next_aggrs[i].invocable.merge(aggr_static).map_err(|e| {
-                                // FIXME nice error
-                                let r: Option<&Registry> = None;
-                                e.into_err(aggr, aggr, r)
-                            })?;
+                            let aggr_static: &InvokeAggrFn<'static> =
+                                unsafe { std::mem::transmute(aggr) };
+                            dbg!(&aggr, &next_aggrs[i]);
+                            next_aggrs[i]
+                                .invocable
+                                .merge(&aggr_static.invocable)
+                                .map_err(|e| {
+                                    // FIXME nice error
+                                    let r: Option<&Registry> = None;
+                                    e.into_err(aggr, aggr, r)
+                                })?;
+                            dbg!(&next_aggrs[i]);
                         }
                     }
                 }
@@ -346,6 +353,7 @@ impl Operator for TrickleSelect {
                         &local_stack,
                         &consts,
                     )?;
+                    dbg!(&value);
 
                     *unwind_event = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
@@ -541,18 +549,45 @@ mod test {
 
     fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
         let groups = SelectDims::from_query(stmt.stmt.clone());
-        let windows = vec![TumblingWindowOnEventTime {
-            size: 15_000_000_000,
-            next_window: None,
-        }
-        .into()];
+        let windows = vec![
+            TumblingWindowOnEventTime {
+                size: 15_000_000_000,
+                next_window: None,
+            }
+            .into(),
+            TumblingWindowOnEventTime {
+                size: 30_000_000_000,
+                next_window: None,
+            }
+            .into(),
+        ];
         let id = "select".to_string();
         TrickleSelect::with_stmt(id, groups, windows, stmt)
     }
 
     fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(String, Event)>> {
         let mut action = op.on_event("in", event)?;
-        Ok(action.pop())
+        let first = action.pop();
+        if action.is_empty() {
+            Ok(first)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn try_enqueue_two(
+        op: &mut TrickleSelect,
+        event: Event,
+    ) -> Result<Option<[(String, Event); 2]>> {
+        let mut action = op.on_event("in", event)?;
+        let r = action
+            .pop()
+            .and_then(|second| Some([action.pop()?, second]));
+        if action.is_empty() {
+            Ok(r)
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_query(query: &str) -> Result<crate::op::trickle::select::TrickleSelect> {
@@ -591,6 +626,24 @@ mod test {
         assert_eq!("out", out);
 
         assert_eq!(event.data.suffix().value, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn count_tilt() -> Result<()> {
+        let mut op = parse_query("select stats::count() from in into out;")?;
+        assert!(try_enqueue(&mut op, test_event(0))?.is_none());
+        assert!(try_enqueue(&mut op, test_event(1))?.is_none());
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
+        assert!(try_enqueue(&mut op, test_event(16))?.is_none());
+        let [(out1, event1), (out2, event2)] =
+            try_enqueue_two(&mut op, test_event(30))?.expect("no event");
+        assert_eq!("out", out1);
+        assert_eq!("out", out2);
+        assert_eq!(event1.data.suffix().value, 2);
+        assert_eq!(event2.data.suffix().value, 4);
         Ok(())
     }
 

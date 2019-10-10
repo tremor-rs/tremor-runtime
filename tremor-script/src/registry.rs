@@ -532,8 +532,9 @@ impl TremorAggrFnWrapper {
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
-    pub fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
-        self.fun.merge(src)
+    pub fn merge(&mut self, src: &Self) -> FResult<()> {
+        let fun: &Box<dyn std::any::Any> = unsafe { std::mem::transmute(&src.fun) };
+        self.fun.merge(&fun)
     }
 }
 
