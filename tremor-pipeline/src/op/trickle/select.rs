@@ -37,7 +37,7 @@ rental! {
         #[rental(covariant,debug)]
         pub struct Dims {
             query: Arc<StmtRental>,
-            groups: HashMap<String, Aggrs<'query>>,
+            groups: HashMap<String, (Value<'static>, Aggrs<'query>)>,
         }
 
         #[rental(covariant,debug)]
@@ -59,7 +59,7 @@ impl SelectDims {
 pub struct TrickleSelect {
     pub id: String,
     pub select: rentals::Select,
-    pub window: Option<Window>,
+    pub windows: Vec<Window>,
 }
 
 pub trait WindowTrait: std::fmt::Debug {
@@ -200,7 +200,7 @@ impl TrickleSelect {
     pub fn with_stmt(
         id: String,
         dims: SelectDims,
-        window_def: Option<WindowImpl>,
+        window_impl: Option<WindowImpl>,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
@@ -213,10 +213,13 @@ impl TrickleSelect {
             }
         };
 
-        let window = window_def.map(|window_impl| Window { dims, window_impl });
+        let mut windows = Vec::with_capacity(1);
+        if let Some(window_impl) = window_impl {
+            windows.push(Window { dims, window_impl })
+        };
         Ok(Self {
             id,
-            window,
+            windows,
             select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
                 std::mem::transmute(select)
             }),
@@ -274,48 +277,62 @@ impl Operator for TrickleSelect {
         }
 
         let mut events = vec![];
-        if let Some(window) = &mut self.window {
-            let mut group_values = vec![];
-            {
-                let (unwind_event, event_meta) = event.data.parts();
-                if let Some(group_by) = &stmt.maybe_group_by {
-                    group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
-                };
-            }
-            if group_values.is_empty() {
-                group_values.push(vec![Value::Null])
+
+        let mut group_values = vec![];
+        {
+            let data = event.data.suffix();
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            #[allow(mutable_transmutes)]
+            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            #[allow(mutable_transmutes)]
+            let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            if let Some(group_by) = &stmt.maybe_group_by {
+                group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
             };
-            let window_event = window.on_event(&event);
-            for group in group_values {
-                let group = Value::Array(group);
-                let event = event.clone();
-                let data = event.data.suffix();
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                #[allow(mutable_transmutes)]
-                let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                #[allow(mutable_transmutes)]
-                let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
-                if let Some(meta) = event_meta.as_object_mut() {
-                    meta.insert("group".into(), group.clone());
-                }
-                let groups: &mut HashMap<String, Aggrs> =
-                    unsafe { std::mem::transmute(window.dims.suffix()) };
-                let aggrs = groups
-                    .entry(group.encode())
-                    .or_insert_with(|| aggregates.clone());
-                if window_event.open {
-                    for aggr in aggrs.iter_mut() {
-                        let invocable = &mut aggr.invocable;
-                        invocable.init();
+        }
+        if group_values.is_empty() {
+            group_values.push(vec![Value::Null])
+        };
+
+        let mut itr = self.windows.iter_mut().peekable();
+        while let Some(this) = itr.next() {
+            let window_event = this.on_event(&event);
+            let groups: &mut HashMap<String, (Value, Aggrs)> =
+                unsafe { std::mem::transmute(this.dims.suffix()) };
+            if window_event.emit {
+                // If we would emit first merge the data to the next window (if there is any)
+                if let Some(next) = itr.peek() {
+                    for (group, (group_val, aggrs)) in groups.iter() {
+                        let next_groups: &mut HashMap<String, (Value, Aggrs)> =
+                            unsafe { std::mem::transmute(next.dims.suffix()) };
+                        let (_, next_aggrs) = next_groups
+                            .entry(group.clone())
+                            .or_insert_with(|| (group_val.clone(), aggregates.clone()));
+                        for (i, aggr) in aggrs.iter().enumerate() {
+                            // I HATE YOU RUST WHY DO I HAVE TO TRANSMUTE HERE!?!?
+                            let aggr_static: &Aggrs<'static> = unsafe { std::mem::transmute(aggr) };
+                            next_aggrs[i].invocable.merge(aggr_static).map_err(|e| {
+                                // FIXME nice error
+                                let r: Option<&Registry> = None;
+                                e.into_err(aggr, aggr, r)
+                            })?;
+                        }
                     }
                 }
 
-                let maybe_value = if window_event.emit {
-                    // After having has been applied to any emissions causal on this
-                    // event, we prepare the target expression synthetic event and
-                    // return it for downstream processing
-                    //
+                for (_group, (group, aggrs)) in groups.iter() {
+                    let event = event.clone();
+                    let data = event.data.suffix();
+                    #[allow(clippy::transmute_ptr_to_ptr)]
+                    #[allow(mutable_transmutes)]
+                    let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+                    #[allow(clippy::transmute_ptr_to_ptr)]
+                    #[allow(mutable_transmutes)]
+                    let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                    if let Some(meta) = event_meta.as_object_mut() {
+                        meta.insert("group".into(), group.clone());
+                    }
 
                     let value = stmt.target.run(
                         opts,
@@ -327,11 +344,55 @@ impl Operator for TrickleSelect {
                         &consts,
                     )?;
 
-                    Some(value.into_owned())
-                } else {
-                    None
-                };
+                    *unwind_event = value.into_owned();
+                    if let Some(guard) = &stmt.maybe_having {
+                        let test = guard.run(
+                            opts,
+                            &ctx,
+                            &aggrs,
+                            unwind_event,
+                            &Value::Null,
+                            &local_stack,
+                            &consts,
+                        )?;
+                        match test.borrow() {
+                            Value::Bool(true) => (),
+                            Value::Bool(false) => {
+                                return Ok(vec![]);
+                            }
+                            other => {
+                                return tremor_script::errors::query_guard_not_bool(
+                                    stmt.borrow(),
+                                    guard,
+                                    &other,
+                                )?;
+                            }
+                        };
+                    }
+                    events.push(("out".to_string(), event));
+                }
+            }
+            if window_event.open {
+                // When we close the window we clear all the aggregates
+                groups.clear()
+            }
+        }
 
+        if let Some(this) = self.windows.first() {
+            let groups: &mut HashMap<String, (Value, Aggrs)> =
+                unsafe { std::mem::transmute(this.dims.suffix()) };
+            let data = event.data.suffix();
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            #[allow(mutable_transmutes)]
+            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            #[allow(mutable_transmutes)]
+            let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            for group in group_values {
+                let group = Value::Array(group);
+                let (_, aggrs) = groups
+                    .entry(group.encode())
+                    .or_insert_with(|| (group.clone_static(), aggregates.clone()));
                 for aggr in aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
@@ -358,35 +419,6 @@ impl Operator for TrickleSelect {
                         let r: Option<&Registry> = None;
                         e.into_err(aggr, aggr, r)
                     })?;
-                }
-
-                if let Some(value) = maybe_value {
-                    *unwind_event = value;
-                    if let Some(guard) = &stmt.maybe_having {
-                        let test = guard.run(
-                            opts,
-                            &ctx,
-                            &aggrs,
-                            unwind_event,
-                            &Value::Null,
-                            &local_stack,
-                            &consts,
-                        )?;
-                        match test.into_owned() {
-                            Value::Bool(true) => (),
-                            Value::Bool(false) => {
-                                return Ok(vec![]);
-                            }
-                            other => {
-                                return tremor_script::errors::query_guard_not_bool(
-                                    stmt.borrow(),
-                                    guard,
-                                    &other,
-                                )?;
-                            }
-                        };
-                    }
-                    events.push(("out".to_string(), event));
                 }
             }
         } else {
