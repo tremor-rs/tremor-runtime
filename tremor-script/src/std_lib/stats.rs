@@ -291,7 +291,6 @@ impl TremorAggrFn for Var {
     }
     fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
-            // .unwrap() ensure this is numerically correct
             self.n += other.n;
             self.k += other.k;
             self.ex += other.ex;
@@ -500,6 +499,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 mod test {
     use super::*;
     use crate::registry::FResult as Result;
+    use float_cmp::approx_eq;
     use simd_json::json;
     #[test]
     fn count() -> Result<()> {
@@ -584,10 +584,33 @@ mod test {
         let two = Value::from(2);
         let four = Value::from(4);
         let nineteen = Value::from(19);
+        let nine = Value::from(9);
         a.accumulate(&[&two])?;
         a.accumulate(&[&four])?;
         a.accumulate(&[&nineteen])?;
-        assert!((a.emit()?.cast_f64().expect("screw it") - 259.0 / 3.0) < 0.001);
+        a.accumulate(&[&nine])?;
+        let r = a.emit()?.cast_f64().expect("screw it");
+        assert!(approx_eq!(f64, dbg!(r), 173.0 / 3.0));
+
+        let mut b = Var::default();
+        b.init();
+        b.accumulate(&[&two])?;
+        b.accumulate(&[&four])?;
+        b.merge(&a)?;
+        let r = b.emit()?.cast_f64().expect("screw it");
+        assert!(approx_eq!(f64, dbg!(r), 43.066_666_666_666_67));
+
+        let mut c = Var::default();
+        c.init();
+        c.accumulate(&[&two])?;
+        c.accumulate(&[&four])?;
+        let r = c.emit()?.cast_f64().expect("screw it");
+        assert!(approx_eq!(f64, dbg!(r), 2.0));
+
+        b.merge(&c)?;
+        let r = b.emit()?.cast_f64().expect("screw it");
+        assert!(approx_eq!(f64, dbg!(r), 33.928_571_428_571_43));
+
         Ok(())
     }
 

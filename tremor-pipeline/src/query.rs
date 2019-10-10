@@ -75,7 +75,7 @@ fn resolve_output_port(port: String) -> Result<OutputPort> {
 fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     use op::trickle::select::*;
     match &d.kind {
-        WindowKind::Sliding => unimplemented!(),
+        WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let interval = d
                 .params

@@ -58,6 +58,13 @@ impl PartialEq for Error {
 type ParserError<'screw_lalrpop> =
     lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, errors::Error>;
 
+/* waiting for try_trait
+impl From<std::option::NoneError> for Error {
+    fn from(error: std::option::NoneError) -> Self {
+        ErrorKind::NotFound.into()
+    }
+}
+*/
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {
@@ -173,6 +180,7 @@ impl ErrorKind {
             NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | NotFound
             | Grok(_)
             | InvalidInfluxData(_)
             | Io(_)
@@ -327,6 +335,10 @@ error_chain! {
         Oops(expr: Range, msg: String) {
             description("Something went wrong and we're not sure what it was")
                 display("Something went wrong and we're not sure what it was: {}", msg)
+        }
+        NotFound {
+            description("Something wasn't found, aka NoneError.")
+                display("Something wasn't found, aka NoneError.")
         }
         /*
          * Functions

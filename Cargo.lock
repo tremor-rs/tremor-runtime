@@ -3839,6 +3839,7 @@ dependencies = [
  "dissect 0.1.0",
  "distance 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "float-cmp 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "grok 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "halfbrown 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
