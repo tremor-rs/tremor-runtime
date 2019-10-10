@@ -37,7 +37,7 @@ rental! {
         #[rental(covariant,debug)]
         pub struct Dims {
             query: Arc<StmtRental>,
-            groups: HashMap<String, Window<'query>>,
+            groups: HashMap<String, Aggrs<'query>>,
         }
 
         #[rental(covariant,debug)]
@@ -59,30 +59,31 @@ impl SelectDims {
 pub struct TrickleSelect {
     pub id: String,
     pub select: rentals::Select,
-    pub groups: SelectDims,
-    pub window: Option<WindowImpl>,
+    pub window: Option<Window>,
 }
 
-pub trait WindowTrait: std::fmt::Debug + Clone {
+pub trait WindowTrait: std::fmt::Debug {
     fn on_event(&mut self, event: &Event) -> WindowEvent;
 }
 
-#[derive(Debug, Clone)]
-pub struct Window<'query> {
+#[derive(Debug)]
+pub struct Window {
     window_impl: WindowImpl,
-    aggregates: Aggrs<'query>,
+    dims: SelectDims,
 }
 
-impl<'query> Window<'query> {
+impl Window {
+    /*
     fn from_aggregates(aggregates: Aggrs<'query>, window_impl: WindowImpl) -> Window<'query> {
         Window {
             aggregates,
             window_impl,
         }
     }
+    */
 }
 
-impl<'query> WindowTrait for Window<'query> {
+impl WindowTrait for Window {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
         self.window_impl.on_event(event)
     }
@@ -198,8 +199,8 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 impl TrickleSelect {
     pub fn with_stmt(
         id: String,
-        groups: SelectDims,
-        window: Option<WindowImpl>,
+        dims: SelectDims,
+        window_def: Option<WindowImpl>,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
@@ -212,9 +213,9 @@ impl TrickleSelect {
             }
         };
 
+        let window = window_def.map(|window_impl| Window { dims, window_impl });
         Ok(Self {
             id,
-            groups,
             window,
             select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
                 std::mem::transmute(select)
@@ -273,7 +274,7 @@ impl Operator for TrickleSelect {
         }
 
         let mut events = vec![];
-        if let Some(window) = &self.window {
+        if let Some(window) = &mut self.window {
             let mut group_values = vec![];
             {
                 let (unwind_event, event_meta) = event.data.parts();
@@ -284,6 +285,7 @@ impl Operator for TrickleSelect {
             if group_values.is_empty() {
                 group_values.push(vec![Value::Null])
             };
+            let window_event = window.on_event(&event);
             for group in group_values {
                 let group = Value::Array(group);
                 let event = event.clone();
@@ -297,14 +299,13 @@ impl Operator for TrickleSelect {
                 if let Some(meta) = event_meta.as_object_mut() {
                     meta.insert("group".into(), group.clone());
                 }
-                let groups: &mut HashMap<String, Window> =
-                    unsafe { std::mem::transmute(self.groups.suffix()) };
-                let w = groups
+                let groups: &mut HashMap<String, Aggrs> =
+                    unsafe { std::mem::transmute(window.dims.suffix()) };
+                let aggrs = groups
                     .entry(group.encode())
-                    .or_insert_with(|| Window::from_aggregates(aggregates.clone(), window.clone()));
-                let window_event = w.on_event(&event);
+                    .or_insert_with(|| aggregates.clone());
                 if window_event.open {
-                    for aggr in w.aggregates.iter_mut() {
+                    for aggr in aggrs.iter_mut() {
                         let invocable = &mut aggr.invocable;
                         invocable.init();
                     }
@@ -319,7 +320,7 @@ impl Operator for TrickleSelect {
                     let value = stmt.target.run(
                         opts,
                         &ctx,
-                        &w.aggregates,
+                        &aggrs,
                         unwind_event,
                         &event_meta,
                         &local_stack,
@@ -331,7 +332,7 @@ impl Operator for TrickleSelect {
                     None
                 };
 
-                for aggr in w.aggregates.iter_mut() {
+                for aggr in aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
@@ -365,7 +366,7 @@ impl Operator for TrickleSelect {
                         let test = guard.run(
                             opts,
                             &ctx,
-                            &w.aggregates,
+                            &aggrs,
                             unwind_event,
                             &Value::Null,
                             &local_stack,
