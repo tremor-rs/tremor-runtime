@@ -258,7 +258,7 @@ pub struct MutSelect1<'script> {
     pub maybe_where: Option<ImutExpr1<'script>>,
     pub maybe_having: Option<ImutExpr1<'script>>,
     pub maybe_group_by: Option<GroupBy1<'script>>,
-    pub maybe_window: Option<WindowDefn1>,
+    pub windows: Vec<WindowDefn1>,
 }
 impl_expr!(MutSelect1);
 impl_stmt1!(MutSelect1);
@@ -301,7 +301,7 @@ impl<'script> MutSelect1<'script> {
             maybe_where,
             maybe_having,
             maybe_group_by,
-            maybe_window: self.maybe_window,
+            windows: self.windows,
         })
     }
 }
@@ -316,7 +316,7 @@ pub struct MutSelect<'script> {
     pub maybe_where: Option<ImutExpr<'script>>,
     pub maybe_having: Option<ImutExpr<'script>>,
     pub maybe_group_by: Option<GroupBy<'script>>,
-    pub maybe_window: Option<WindowDefn1>,
+    pub windows: Vec<WindowDefn1>,
 }
 impl_expr!(MutSelect);
 impl_stmt!(MutSelect);

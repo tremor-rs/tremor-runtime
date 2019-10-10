@@ -34,7 +34,7 @@ rental! {
         use halfbrown::HashMap;
         use super::*;
 
-        #[rental(covariant,debug)]
+        #[rental(covariant,debug,clone)]
         pub struct Dims {
             query: Arc<StmtRental>,
             groups: HashMap<String, (Value<'static>, Aggrs<'query>)>,
@@ -200,7 +200,7 @@ impl TrickleSelect {
     pub fn with_stmt(
         id: String,
         dims: SelectDims,
-        window_impl: Option<WindowImpl>,
+        windows: Vec<WindowImpl>,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
@@ -213,10 +213,13 @@ impl TrickleSelect {
             }
         };
 
-        let mut windows = Vec::with_capacity(1);
-        if let Some(window_impl) = window_impl {
-            windows.push(Window { dims, window_impl })
-        };
+        let windows = windows
+            .into_iter()
+            .map(|window_impl| Window {
+                dims: dims.clone(),
+                window_impl,
+            })
+            .collect();
         Ok(Self {
             id,
             windows,
@@ -509,7 +512,7 @@ mod test {
                 end: Location::default(),
                 value: Value::Bool(true),
             })),
-            maybe_window: None,
+            windows: vec![],
             maybe_group_by: None,
             maybe_having: None,
         }
@@ -538,15 +541,13 @@ mod test {
 
     fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
         let groups = SelectDims::from_query(stmt.stmt.clone());
-        let window = Some(
-            TumblingWindowOnEventTime {
-                size: 15_000_000_000,
-                next_window: None,
-            }
-            .into(),
-        );
+        let windows = vec![TumblingWindowOnEventTime {
+            size: 15_000_000_000,
+            next_window: None,
+        }
+        .into()];
         let id = "select".to_string();
-        TrickleSelect::with_stmt(id, groups, window, stmt)
+        TrickleSelect::with_stmt(id, groups, windows, stmt)
     }
 
     fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(String, Event)>> {

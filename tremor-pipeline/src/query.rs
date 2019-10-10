@@ -614,26 +614,27 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            let window = if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
-                if let Some(w) = &s.stmt.maybe_window {
-                    Some(
-                        windows
-                            .get(&w.id)
-                            .ok_or_else(|| {
-                                ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
-                            })?
-                            .clone(),
-                    )
+            let windows: Result<Vec<WindowImpl>> =
+                if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
+                    s.stmt
+                        .windows
+                        .iter()
+                        .map(|w| {
+                            Ok(windows
+                                .get(&w.id)
+                                .ok_or_else(|| {
+                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
+                                })?
+                                .clone())
+                        })
+                        .collect()
                 } else {
-                    None
-                }
-            } else {
-                return Err("Declared as select but isn't a select".into());
-            };
+                    Err("Declared as select but isn't a select".into())
+                };
             Box::new(TrickleSelect::with_stmt(
                 node.id.clone(),
                 groups,
-                window,
+                windows?,
                 stmt,
             )?)
         }

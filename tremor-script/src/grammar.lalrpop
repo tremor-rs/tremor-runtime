@@ -49,11 +49,21 @@ Stmt: Stmt1<'input> = {
     <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_window:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, maybe_window, maybe_group_by})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:Windows> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows: vec![], maybe_group_by})),
 }
 
 WindowClause: Option<WindowDefn1> = {
     (<WindowDefn>)? => <>,
+}
+
+Windows: Vec<WindowDefn1> = {
+    <item:WindowDefn> <list:Windows> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    <item:WindowDefn> => vec![item],
 }
 
 WindowDefn: WindowDefn1  = {
