@@ -15,6 +15,7 @@
 use crate::ast::BaseExpr;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
+use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
 use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
@@ -22,7 +23,7 @@ use std::default::Default;
 use std::fmt;
 use std::ops::RangeInclusive;
 
-pub trait TremorAggrFn: Sync + Send {
+pub trait TremorAggrFn: DowncastSync + Sync + Send {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     fn emit<'event>(&mut self) -> FResult<Value<'event>>;
@@ -34,13 +35,14 @@ pub trait TremorAggrFn: Sync + Send {
     }
     // PERF: keep in mind &mut dyn might give a performance boost
     // here
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()>;
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()>;
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
     fn arity(&self) -> RangeInclusive<usize>;
     fn valid_arity(&self, n: usize) -> bool {
         self.arity().contains(&n)
     }
 }
+impl_downcast!(sync TremorAggrFn);
 
 pub trait TremorFn: Sync + Send {
     fn invoke<'event>(&self, ctx: &EventContext, args: &[&Value<'event>])
@@ -533,8 +535,8 @@ impl TremorAggrFnWrapper {
         self.fun.arity()
     }
     pub fn merge(&mut self, src: &Self) -> FResult<()> {
-        let fun: &Box<dyn std::any::Any> = unsafe { std::mem::transmute(&src.fun) };
-        self.fun.merge(&fun)
+        use std::borrow::Borrow;
+        self.fun.merge(src.fun.borrow())
     }
 }
 

@@ -41,14 +41,11 @@ impl TremorAggrFn for Count {
     fn init(&mut self) {
         self.0 = 0;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
-        dbg!("merge");
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
             self.0 += other.0;
-        } else {
-            dbg!(src.type_id());
         }
         Ok(())
     }
@@ -85,7 +82,7 @@ impl TremorAggrFn for Sum {
     fn init(&mut self) {
         self.0 = 0.0;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
@@ -133,7 +130,7 @@ impl TremorAggrFn for Mean {
         self.0 = 0;
         self.1 = 0.0;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
@@ -187,7 +184,7 @@ impl TremorAggrFn for Min {
     fn init(&mut self) {
         self.0 = None;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
@@ -228,7 +225,7 @@ impl TremorAggrFn for Max {
     fn init(&mut self) {
         self.0 = None;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
@@ -292,7 +289,7 @@ impl TremorAggrFn for Var {
         self.ex = 0.0;
         self.ex2 = 0.0;
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             self.n += other.n;
             self.k += other.k;
@@ -328,7 +325,7 @@ impl TremorAggrFn for Stdev {
     fn init(&mut self) {
         self.0.init()
     }
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
@@ -406,7 +403,7 @@ impl TremorAggrFn for Hdr {
         Ok(())
     }
 
-    fn merge(&mut self, src: &dyn std::any::Any) -> FResult<()> {
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it

@@ -317,7 +317,6 @@ impl Operator for TrickleSelect {
                             // I HATE YOU RUST WHY DO I HAVE TO TRANSMUTE HERE!?!?
                             let aggr_static: &InvokeAggrFn<'static> =
                                 unsafe { std::mem::transmute(aggr) };
-                            dbg!(&aggr, &next_aggrs[i]);
                             next_aggrs[i]
                                 .invocable
                                 .merge(&aggr_static.invocable)
@@ -326,7 +325,6 @@ impl Operator for TrickleSelect {
                                     let r: Option<&Registry> = None;
                                     e.into_err(aggr, aggr, r)
                                 })?;
-                            dbg!(&next_aggrs[i]);
                         }
                     }
                 }
@@ -353,7 +351,6 @@ impl Operator for TrickleSelect {
                         &local_stack,
                         &consts,
                     )?;
-                    dbg!(&value);
 
                     *unwind_event = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {

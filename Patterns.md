@@ -39,3 +39,16 @@ if let Some(count) = self.metrics[*idx].outputs.get_mut(in_port) {
   self.metrics[*idx].outputs.insert(in_port.clone(), 1);
 }
 ```
+
+### Getting rid of dyn any
+
+https://docs.rs/downcast-rs/1.1.0/downcast_rs/ allows downcasting on traits. An example can be found in `TremorAggrFn`.
+
+```rust
+pub trait TremorAggrFn: DowncastSync + Sync + Send {
+  //...
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()>;
+  //...
+}
+impl_downcast!(sync TremorAggrFn);
+
