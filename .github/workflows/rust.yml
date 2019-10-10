@@ -13,13 +13,6 @@ jobs:
         run: cargo install cargo-deny
       - name: Check dependencies
         run: cargo deny check
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-      - uses: actions-rs/audit-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
   sanity:
     runs-on: ubuntu-latest
     steps:
