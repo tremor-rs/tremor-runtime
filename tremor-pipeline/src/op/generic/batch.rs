@@ -207,7 +207,6 @@ mod test {
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
-        dbg!(&event);
         assert_eq!("out", out);
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(

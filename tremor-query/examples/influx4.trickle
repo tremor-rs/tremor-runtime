@@ -14,7 +14,7 @@ select {
 from in[`10secs`]
 group by set(event.measurement, event.tags, each(record::keys(event.fields)))
 into normalize
-having event.stats.count > 100; # discard if no stats/counts <3
+having event.stats.count > 10; # discard if no stats/counts <3
 
 create stream normalize;
 

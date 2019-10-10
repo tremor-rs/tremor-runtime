@@ -147,11 +147,9 @@ mod test {
         let config = Config {
             script: r#"match this is invalid code so no match case"#.to_string(),
         };
-        let runtime = Script::parse(
+        let _runtime = Script::parse(
             &config.script,
             &*FN_REGISTRY.lock().expect("could not claim lock"),
         );
-
-        dbg!(&runtime);
     }
 }

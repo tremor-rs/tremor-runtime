@@ -136,7 +136,6 @@ where
         e: &Error,
     ) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        //dbg!(&tokens);
         match e.context() {
             (Some(Range(start, end)), _) => {
                 h.highlight_runtime_error(tokens, start, end, Some(e.into()))

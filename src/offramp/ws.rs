@@ -37,7 +37,7 @@ use std::time::Duration;
 macro_rules! eat_error {
     ($e:expr) => {
         if let Err(e) = $e {
-            error!("[WS Offramp] {}", dbg!(e))
+            error!("[WS Offramp] {}", e)
         }
     };
 }
@@ -238,7 +238,7 @@ impl Actor for WsOfframpWorker {
 
     fn stopped(&mut self, _: &mut Context<Self>) {
         eat_error!(self.1.send(None));
-        dbg!("system stopped");
+        info!("system stopped");
         System::current().stop();
     }
 }

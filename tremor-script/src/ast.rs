@@ -733,7 +733,6 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                 } else {
                     let i = i.up(helper)?;
                     if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f)) {
-                        dbg!("const");
                         let args: Result<Vec<Value<'script>>> =
                             i.args.into_iter().map(reduce2).collect();
                         let args = args?;

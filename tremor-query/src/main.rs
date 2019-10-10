@@ -133,7 +133,7 @@ fn main() -> Result<()> {
         Err(e) => {
             let mut h = TermHighlighter::new();
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                dbg!(e);
+                eprintln!("Error: {}", e);
             };
             std::process::exit(1);
         }
@@ -171,6 +171,7 @@ fn main() -> Result<()> {
 
     let mut inputs = Vec::new();
     let events = if let Some(influx_file) = matches.value_of("replay-influx") {
+        eprint!("Preloading messages ...");
         let mut r = Vec::new();
         let input = File::open(&influx_file)?;
         let buff_input = BufReader::new(input);
@@ -184,6 +185,7 @@ fn main() -> Result<()> {
                 r.push(i);
             }
         }
+        eprintln!("loaded {} messages", r.len());
         r
     } else if let Some(event_files) = matches.values_of("event") {
         let mut r = Vec::new();
@@ -222,7 +224,6 @@ fn main() -> Result<()> {
         let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
         // FIXME todo exercise graph with event / MRP
-        //                dbg!(&execable);
         let mut continuation: tremor_pipeline::Returns = vec![];
 
         let mut id = 0;

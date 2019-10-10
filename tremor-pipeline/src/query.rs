@@ -234,7 +234,6 @@ impl Query {
                 }
                 Stmt::OperatorDecl(o) => {
                     let name = o.id.clone().to_string();
-                    dbg!((&name, &o));
                     let _op_in = resolve_input_port(name.clone())?;
                     let _op_out = resolve_output_port(name.clone())?;
 
@@ -253,7 +252,6 @@ impl Query {
                 }
                 Stmt::ScriptDecl(o) => {
                     let name = o.id.clone().to_string();
-                    dbg!((&name, &o));
                     let _op_in = resolve_input_port(name.clone())?;
                     let _op_out = resolve_output_port(name.clone())?;
 
@@ -321,8 +319,6 @@ impl Query {
             // Nodes that handle signals
             let mut signalflow = Vec::new();
             let mut i = 0;
-            dbg!(&pipe_graph);
-            dbg!(&pipe_ops);
             for nx in pipe_graph.node_indices() {
                 match pipe_ops.remove(&nx) {
                     Some(op) => {
@@ -337,7 +333,6 @@ impl Query {
                         i += 1;
                     }
                     _ => {
-                        dbg!(&nx, "That is not good");
                         return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
                     }
                 }

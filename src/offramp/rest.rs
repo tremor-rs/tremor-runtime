@@ -164,10 +164,7 @@ impl Offramp for Rest {
                         error!("Contant is not valid utf8")
                     }
                 }
-                Err(e) => {
-                    dbg!(&e);
-                    error!("Event data needs to be raw")
-                }
+                Err(e) => error!("Event data needs to be raw: {}", e),
             }
         }
         let _ = self.maybe_enque(payload);

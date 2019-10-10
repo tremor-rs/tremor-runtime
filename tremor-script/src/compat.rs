@@ -59,7 +59,7 @@ pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len:
             }
         }
         Err(e) => {
-            dbg!(e);
+            eprintln!("ERROR: {}", e);
             1
         }
     }

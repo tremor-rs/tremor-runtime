@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     pub fn millisecond_returns_the_ms() {
-        let input = 1559655782_987_654_321u64;
+        let input = 1_559_655_782_987_654_321u64;
         let output = _millisecond(input);
         assert_eq!(output, 987u32);
     }
@@ -323,7 +323,7 @@ mod tests {
     pub fn to_next_millisecond_rounds_it() {
         let input = 1_559_655_782_123_456_789u64;
         let output = _to_nearest_millisecond(input);
-        assert_eq!(output, 1559655782_123_000_000u64);
+        assert_eq!(output, 1_559_655_782_123_000_000u64);
         assert_eq!(_to_nearest_millisecond(123_789_654u64), 124_000_000);
     }
 
@@ -331,7 +331,7 @@ mod tests {
     pub fn to_nearest_microsecond_rounds_it() {
         assert_eq!(
             _to_nearest_microsecond(1_559_655_782_123_456_789u64),
-            1559655782_123_457_000
+            1_559_655_782_123_457_000
         );
         assert_eq!(_to_nearest_microsecond(123_456_123u64), 123_456_000);
     }
@@ -340,12 +340,12 @@ mod tests {
     pub fn to_next_second_rounds_it() {
         let input = 1_559_655_782_123_456_789u64;
         let output = _to_nearest_second(input);
-        assert_eq!(output, 1559655782_000_000_000);
+        assert_eq!(output, 1_559_655_782_000_000_000);
     }
 
     #[test]
     pub fn day_month_and_year_works() {
-        let input = 1555767782_123_456_789u64;
+        let input = 1_555_767_782_123_456_789u64;
         assert_eq!(_day(input), 20);
         assert_eq!(_month(input), 4);
         assert_eq!(_year(input), 2019);
@@ -357,7 +357,7 @@ mod tests {
         assert_eq!(_from_human_format("59 seconds"), Some(59_000_000_000));
         assert_eq!(
             _from_human_format("21 days 3 minutes 5 seconds"),
-            Some(1814585_000_000_000)
+            Some(1_814_585_000_000_000)
         );
         assert_eq!(_from_human_format("3"), None);
         assert_eq!(_from_human_format("1 nanosecond"), Some(1));

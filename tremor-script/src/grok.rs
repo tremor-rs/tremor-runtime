@@ -39,7 +39,6 @@ impl GrokPattern {
 
         let mut result = Grok::default();
 
-        let mut error_count = 0;
         for (_num, line) in input.lines().enumerate() {
             let l = line?;
             if l.is_empty() || l.starts_with('#') {
@@ -60,14 +59,9 @@ impl GrokPattern {
                     }
                 }
                 None => {
-                    dbg!(("error in pattern on line", _num, &l));
-                    error_count += 1
+                    return Err(format!("{}: {:?}", "Error in pattern on line", (_num, &l)).into());
                 }
             }
-        }
-
-        if error_count > 0 {
-            return Err("Bad patterns file".into());
         }
 
         Ok(GrokPattern {

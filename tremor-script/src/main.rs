@@ -256,7 +256,7 @@ fn main() -> Result<()> {
         Err(e) => {
             let mut h = TermHighlighter::new();
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                dbg!(e);
+                eprintln!("Error: {}", e);
             };
             std::process::exit(1);
         }
