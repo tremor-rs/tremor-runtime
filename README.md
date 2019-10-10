@@ -1,4 +1,4 @@
-# Tremor ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Rust/badge.svg)
+# Tremor ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Rust/badge.svg) ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Security%20audit/badge.svg)
 
 This tool allows configuring a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
 
