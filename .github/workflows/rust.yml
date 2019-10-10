@@ -17,10 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-      - name: Check dependencies
-        run: cargo audit
+      - uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
   sanity:
     runs-on: ubuntu-latest
     steps:
