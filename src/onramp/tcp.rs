@@ -63,9 +63,6 @@ fn onramp_loop(
         .set_nonblocking(config.is_non_blocking)
         // ALLOW: this is going to be deprecated w/ the 0.5.5 TCP onramp
         .expect("cannot set non-blocking");
-    // if config.ttl > 0 {
-    //    endpoint.set_ttl(config.ttl).expect("cannot set ttl");
-    // }
 
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
