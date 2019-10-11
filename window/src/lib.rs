@@ -24,9 +24,6 @@
     )
 )]
 
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
 extern crate chrono;
 use chrono::Timelike;
 use chrono::Utc;
