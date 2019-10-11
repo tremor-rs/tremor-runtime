@@ -13,11 +13,16 @@
 // limitations under the License.
 
 #![forbid(warnings)]
-#![warn(unused_extern_crates)]
 #![recursion_limit = "1024"]
 #![cfg_attr(
     feature = "cargo-clippy",
-    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
 )]
 
 #[macro_use]

@@ -14,7 +14,16 @@
 
 #![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
 
 #[macro_use]
 extern crate serde_derive;
