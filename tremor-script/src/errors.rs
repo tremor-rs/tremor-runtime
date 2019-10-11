@@ -163,6 +163,7 @@ impl ErrorKind {
             MissingFunction(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
             MissingModule(outer, inner, _, _) => (Some(*outer), Some(*inner)),
             NoLocalsAllowed(outer, inner) => (Some(*outer), Some(*inner)),
+            NoConstsAllowed(outer, inner) => (Some(*outer), Some(*inner)),
             NoClauseHit(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
             Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
             RuntimeError(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
@@ -563,6 +564,10 @@ error_chain! {
             description("Local variables are not allowed here")
                 display("Local variables are not allowed here")
         }
+        NoConstsAllowed(stmt: Range, inner: Range) {
+            description("Local variables are not allowed here")
+                display("Local variables are not allowed here")
+        }
     }
 }
 
@@ -607,6 +612,10 @@ pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
 
 pub fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
     Err(ErrorKind::NoLocalsAllowed(outer.extent(), inner.extent()).into())
+}
+
+pub fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::NoConstsAllowed(outer.extent(), inner.extent()).into())
 }
 
 pub fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(

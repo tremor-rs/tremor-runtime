@@ -177,7 +177,7 @@ impl<'value> Iterator for ValueIter<'value> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum SignalKind {
     // Lifecycle
     Init,
@@ -186,7 +186,6 @@ pub enum SignalKind {
     // Resume, TODO debug trace
     // Step, TODO ( into, over, to next breakpoint )
     Control,
-    WindowClose(u64, u64),
 }
 
 #[derive(Debug, Clone, PartialOrd, Eq)]

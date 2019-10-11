@@ -172,12 +172,12 @@ impl Query {
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
                         let arse = query_stream_not_defined(&s, &s.from, from)?;
-                        let _ = tremor_script::query::Query::format_error_from_script(
+                        tremor_script::query::Query::format_error_from_script(
                             &self.0.source,
                             &mut h,
                             &arse,
-                        );
-                        std::process::exit(0);
+                        )?;
+                        return Err("Missing node".into());
                     }
                     let into = s.into.id.clone().to_string();
 
@@ -487,12 +487,12 @@ impl Query {
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
                         let arse = query_stream_not_defined(&s, &s.from, from)?;
-                        let _ = tremor_script::query::Query::format_error_from_script(
+                        tremor_script::query::Query::format_error_from_script(
                             &self.0.source,
                             &mut h,
                             &arse,
-                        );
-                        std::process::exit(0);
+                        )?;
+                        return Err("Invalid graph node".into());
                     }
                     let into = s.into.id.clone().to_string();
 
@@ -575,7 +575,7 @@ impl Query {
                     };
                 }
                 not_yet_implemented => {
-                    dbg!(("not yet implemented", &not_yet_implemented));
+                    return Err(format!("not yet implemented: {:?}", not_yet_implemented).into());
                 }
             };
         }
@@ -673,18 +673,18 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            let windows: Result<Vec<WindowImpl>> =
-                if let tremor_script::ast::Stmt::SelectStmt(s) = node.stmt.suffix() {
+            let windows: Result<Vec<(String, WindowImpl)>> =
+                if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
                     s.stmt
                         .windows
                         .iter()
                         .map(|w| {
                             Ok(windows
                                 .get(&w.id)
+                                .map(|imp| (w.id.to_string(), imp.clone()))
                                 .ok_or_else(|| {
                                     ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
-                                })?
-                                .clone())
+                                })?)
                         })
                         .collect()
                 } else {

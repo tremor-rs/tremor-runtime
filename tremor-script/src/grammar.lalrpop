@@ -379,7 +379,7 @@ Path: Path1<'input> = {
     MetaPath => <>,
     EventPath => <>,
     LocalPath => <>,
-    GroupPath => <>
+    AggrPath => <>
 }
 
 /// A metadata path
@@ -397,13 +397,19 @@ MetaPath: Path1<'input> = {
 }
 
 /// A metadata path
-GroupPath: Path1<'input> = {
+AggrPath: Path1<'input> = {
     <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
         segments.insert(0, Segment1::from_str("group", start, mid));
-        Path1::Meta(MetadataPath1 { segments, start, end })
+        Path1::Local(LocalPath1 { segments, start, end })
     },
-    <start:@L> "group" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![Segment1::from_str("group", start, end)], start, end }),
+    <start:@L> "group" <end:@L> => Path1::Local(LocalPath1 { segments: vec![Segment1::from_str("group", start, end)], start, end }),
+    <start:@L> "window" <mid:@L> <segments:PathSegments> <end:@L> => {
+        let mut segments = segments;
+        segments.insert(0, Segment1::from_str("window", start, mid));
+        Path1::Local(LocalPath1 { segments, start, end })
+    },
+    <start:@L> "window" <end:@L> => Path1::Local(LocalPath1 { segments: vec![Segment1::from_str("window", start, end)], start, end }),
 }
 
 /// Local path

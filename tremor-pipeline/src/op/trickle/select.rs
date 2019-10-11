@@ -21,13 +21,13 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt},
+    ast::{InvokeAggrFn, SelectStmt, GROUP_CONST_ID, WINDOW_CONST_ID},
     prelude::*,
     query::rentals::Stmt as StmtRental,
 };
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
-
+type Groups<'groups> = HashMap<String, (Value<'static>, Aggrs<'groups>)>;
 rental! {
     pub mod rentals {
         use std::sync::Arc;
@@ -37,7 +37,7 @@ rental! {
         #[rental(covariant,debug,clone)]
         pub struct Dims {
             query: Arc<StmtRental>,
-            groups: HashMap<String, (Value<'static>, Aggrs<'query>)>,
+            groups: Groups<'query>,
         }
 
         #[rental(covariant,debug)]
@@ -69,6 +69,7 @@ pub trait WindowTrait: std::fmt::Debug {
 #[derive(Debug)]
 pub struct Window {
     window_impl: WindowImpl,
+    name: String,
     dims: SelectDims,
 }
 
@@ -182,7 +183,7 @@ impl WindowTrait for TumblingWindowOnEventTime {
             Some(next_window) if next_window <= event.ingest_ns => {
                 self.next_window = Some(event.ingest_ns + self.size);
                 WindowEvent {
-                    open: false,
+                    open: true,
                     emit: true,
                 }
             }
@@ -200,7 +201,7 @@ impl TrickleSelect {
     pub fn with_stmt(
         id: String,
         dims: SelectDims,
-        windows: Vec<WindowImpl>,
+        windows: Vec<(String, WindowImpl)>,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
@@ -216,8 +217,9 @@ impl TrickleSelect {
         // FIXME - ensure that windows are sensilbe (i.e. they are ever growing multiples of each other ) unwrap()
         let windows = windows
             .into_iter()
-            .map(|window_impl| Window {
+            .map(|(name, window_impl)| Window {
                 dims: dims.clone(),
+                name,
                 window_impl,
             })
             .collect();
@@ -251,7 +253,8 @@ impl Operator for TrickleSelect {
             aggregates,
             consts,
         }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
-
+        consts[WINDOW_CONST_ID] = Value::Null;
+        consts[GROUP_CONST_ID] = Value::Null;
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
 
         //
@@ -265,7 +268,7 @@ impl Operator for TrickleSelect {
                 &ctx,
                 &NO_AGGRS,
                 unwind_event,
-                &event_meta,
+                event_meta,
                 &local_stack,
                 &consts,
             )?;
@@ -287,28 +290,26 @@ impl Operator for TrickleSelect {
             let data = event.data.suffix();
             #[allow(clippy::transmute_ptr_to_ptr)]
             #[allow(mutable_transmutes)]
-            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+            let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
             #[allow(clippy::transmute_ptr_to_ptr)]
             #[allow(mutable_transmutes)]
-            let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(&ctx, unwind_event, &event_meta, &mut group_values)?
+                group_by.generate_groups(&ctx, &unwind_event, &event_meta, &mut group_values)?
             };
         }
         if group_values.is_empty() {
             group_values.push(vec![Value::Null])
         };
-
         let mut itr = self.windows.iter_mut().peekable();
         while let Some(this) = itr.next() {
             let window_event = this.on_event(&event);
-            let groups: &mut HashMap<String, (Value, Aggrs)> =
-                unsafe { std::mem::transmute(this.dims.suffix()) };
+            let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
             if window_event.emit {
                 // If we would emit first merge the data to the next window (if there is any)
                 if let Some(next) = itr.peek() {
                     for (group, (group_val, aggrs)) in groups.iter() {
-                        let next_groups: &mut HashMap<String, (Value, Aggrs)> =
+                        let next_groups: &mut Groups =
                             unsafe { std::mem::transmute(next.dims.suffix()) };
                         let (_, next_aggrs) = next_groups
                             .entry(group.clone())
@@ -328,37 +329,33 @@ impl Operator for TrickleSelect {
                         }
                     }
                 }
+                consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
 
                 for (_group, (group, aggrs)) in groups.iter() {
-                    let event = event.clone();
                     let data = event.data.suffix();
                     #[allow(clippy::transmute_ptr_to_ptr)]
-                    #[allow(mutable_transmutes)]
-                    let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+                    let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
                     #[allow(clippy::transmute_ptr_to_ptr)]
-                    #[allow(mutable_transmutes)]
-                    let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
-                    if let Some(meta) = event_meta.as_object_mut() {
-                        meta.insert("group".into(), group.clone());
-                    }
+                    let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                    consts[GROUP_CONST_ID] = group.clone_static();
 
                     let value = stmt.target.run(
                         opts,
                         &ctx,
                         &aggrs,
                         unwind_event,
-                        &event_meta,
+                        event_meta,
                         &local_stack,
                         &consts,
                     )?;
 
-                    *unwind_event = value.into_owned();
+                    let result = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
                         let test = guard.run(
                             opts,
                             &ctx,
                             &aggrs,
-                            unwind_event,
+                            &result,
                             &Value::Null,
                             &local_stack,
                             &consts,
@@ -366,7 +363,7 @@ impl Operator for TrickleSelect {
                         match test.borrow() {
                             Value::Bool(true) => (),
                             Value::Bool(false) => {
-                                return Ok(vec![]);
+                                continue;
                             }
                             other => {
                                 return tremor_script::errors::query_guard_not_bool(
@@ -377,7 +374,16 @@ impl Operator for TrickleSelect {
                             }
                         };
                     }
-                    events.push(("out".to_string(), event));
+                    events.push((
+                        "out".to_string(),
+                        Event {
+                            id: event.id,
+                            ingest_ns: event.ingest_ns,
+                            is_batch: event.is_batch,
+                            kind: event.kind,
+                            data: (result, event_meta.clone()).into(),
+                        },
+                    ));
                 }
             }
             if window_event.open {
@@ -387,8 +393,7 @@ impl Operator for TrickleSelect {
         }
 
         if let Some(this) = self.windows.first() {
-            let groups: &mut HashMap<String, (Value, Aggrs)> =
-                unsafe { std::mem::transmute(this.dims.suffix()) };
+            let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
             let data = event.data.suffix();
             #[allow(clippy::transmute_ptr_to_ptr)]
             #[allow(mutable_transmutes)]
@@ -396,11 +401,13 @@ impl Operator for TrickleSelect {
             #[allow(clippy::transmute_ptr_to_ptr)]
             #[allow(mutable_transmutes)]
             let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
             for group in group_values {
                 let group = Value::Array(group);
                 let (_, aggrs) = groups
                     .entry(group.encode())
                     .or_insert_with(|| (group.clone_static(), aggregates.clone()));
+                consts[GROUP_CONST_ID] = group.clone_static();
                 for aggr in aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
@@ -547,16 +554,22 @@ mod test {
     fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
         let groups = SelectDims::from_query(stmt.stmt.clone());
         let windows = vec![
-            TumblingWindowOnEventTime {
-                size: 15_000_000_000,
-                next_window: None,
-            }
-            .into(),
-            TumblingWindowOnEventTime {
-                size: 30_000_000_000,
-                next_window: None,
-            }
-            .into(),
+            (
+                "15s".into(),
+                TumblingWindowOnEventTime {
+                    size: 15_000_000_000,
+                    next_window: None,
+                }
+                .into(),
+            ),
+            (
+                "30s".into(),
+                TumblingWindowOnEventTime {
+                    size: 30_000_000_000,
+                    next_window: None,
+                }
+                .into(),
+            ),
         ];
         let id = "select".to_string();
         TrickleSelect::with_stmt(id, groups, windows, stmt)
@@ -902,7 +915,7 @@ mod test {
         ast::Stmt::SelectStmt(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
-            consts: vec![],
+            consts: vec![Value::Null, Value::Null],
         })
     }
     #[test]

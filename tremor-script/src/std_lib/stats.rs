@@ -407,6 +407,10 @@ impl TremorAggrFn for Hdr {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
+            if !self.percentiles_set {
+                self.percentiles = other.percentiles.clone();
+                self.percentiles_set = true;
+            };
             self.histo
                 .add(&other.histo)
                 .map_err(|e| FunctionError::RuntimeError {

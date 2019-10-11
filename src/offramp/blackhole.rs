@@ -108,6 +108,7 @@ impl Offramp for Blackhole {
                 } else {
                     eprintln!("Failed to serialize histogram");
                 }
+                // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
                 process::exit(0);
             };
 

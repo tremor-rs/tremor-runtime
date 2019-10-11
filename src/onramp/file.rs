@@ -107,6 +107,7 @@ fn onramp_loop(
     //TODO: This is super gugly:
     if config.close_on_done {
         thread::sleep(Duration::from_millis(500));
+        // ALLOW: This is on purpose, close when done tells the onramp to terminate when it's done with sending it's data - this is for one off's
         process::exit(0);
     }
     Ok(())

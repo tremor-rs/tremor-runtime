@@ -142,7 +142,7 @@ where
             }
 
             _other => {
-                let _ = write!(h.get_writer(), "Error: {}", e);
+                write!(h.get_writer(), "Error: {}", e)?;
                 h.finalize()
             }
         }

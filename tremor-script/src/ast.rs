@@ -593,6 +593,45 @@ pub enum ImutExpr1<'script> {
     String(StringLit1<'script>),
 }
 
+impl<'script> BaseExpr for ImutExpr1<'script> {
+    fn s(&self) -> Location {
+        match self {
+            ImutExpr1::String(e) => e.start,
+            ImutExpr1::Binary(e) => e.start,
+            ImutExpr1::Comprehension(e) => e.start,
+            ImutExpr1::Invoke(e) => e.s(),
+            ImutExpr1::InvokeAggr(e) => e.s(),
+            ImutExpr1::List(e) => e.s(),
+            ImutExpr1::Literal(e) => e.s(),
+            ImutExpr1::Match(e) => e.start,
+            ImutExpr1::Merge(e) => e.start,
+            ImutExpr1::Patch(e) => e.start,
+            ImutExpr1::Path(e) => e.s(),
+            ImutExpr1::Present { start, .. } => *start,
+            ImutExpr1::Record(e) => e.s(),
+            ImutExpr1::Unary(e) => e.start,
+        }
+    }
+    fn e(&self) -> Location {
+        match self {
+            ImutExpr1::String(e) => e.end,
+            ImutExpr1::Binary(e) => e.end,
+            ImutExpr1::Comprehension(e) => e.end,
+            ImutExpr1::Invoke(e) => e.e(),
+            ImutExpr1::InvokeAggr(e) => e.e(),
+            ImutExpr1::List(e) => e.e(),
+            ImutExpr1::Literal(e) => e.e(),
+            ImutExpr1::Match(e) => e.end,
+            ImutExpr1::Merge(e) => e.end,
+            ImutExpr1::Patch(e) => e.end,
+            ImutExpr1::Path(e) => e.e(),
+            ImutExpr1::Present { end, .. } => *end,
+            ImutExpr1::Record(e) => e.e(),
+            ImutExpr1::Unary(e) => e.end,
+        }
+    }
+}
+
 impl<'script> Upable<'script> for ImutExpr1<'script> {
     type Target = ImutExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -2004,6 +2043,7 @@ impl<'script> Upable<'script> for AssignPattern1<'script> {
         })
     }
 }
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AssignPattern<'script> {
     pub id: Cow<'script, str>,
@@ -2016,6 +2056,23 @@ pub enum Path1<'script> {
     Local(LocalPath1<'script>),
     Event(EventPath1<'script>),
     Meta(MetadataPath1<'script>),
+}
+
+impl<'script> BaseExpr for Path1<'script> {
+    fn s(&self) -> Location {
+        match self {
+            Path1::Local(e) => e.s(),
+            Path1::Meta(e) => e.start,
+            Path1::Event(e) => e.start,
+        }
+    }
+    fn e(&self) -> Location {
+        match self {
+            Path1::Local(e) => e.e(),
+            Path1::Meta(e) => e.end,
+            Path1::Event(e) => e.end,
+        }
+    }
 }
 
 impl<'script> Upable<'script> for Path1<'script> {

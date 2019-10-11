@@ -11,8 +11,11 @@ code sanity checker
   -i         check for unimplemented
   -r         check for unreachable
   -p         check for panic
+  -l         check for let _
   -e         check for expect
-  -b         bracket access
+  -d         check for dbg!
+  -x         check for std::process::exit
+  -b         check for bracket access
 EOF
 }
 
@@ -20,21 +23,21 @@ EOF
 
 files=$(find . -name '*.rs' | grep -v -f .checkignore)
 
-while getopts hauipreb opt; do
+while getopts hauiprebldx opt; do
     case $opt in
         h)
             help
             exit 0
             ;;
         a)
-            exec "$0" -uirpe
+            exec "$0" -uirpeldx
             ;;
         u)
             for file in $files
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unwrap()' > /dev/null
                 then
-                    echo "##[error] unwrap found in $file"
+                    echo "##[error] unwrap found in $file, don't unwrap it panics."
                     count=$((count + 1))
                 fi
             done
@@ -44,8 +47,19 @@ while getopts hauipreb opt; do
             do
                 if sed -e '/mod test.*/,$d'  "$file" | grep 'unimplemented!' > /dev/null
                 then
-                    echo "##[error] unimplemented! found in $file"
+                    echo "##[error] unimplemented! found in $file, please implement."
                     grep -nH 'unimplemented!' "$file"
+                    count=$((count + 1))
+                fi
+            done
+            ;;
+        l)
+            for file in $files
+            do
+                if sed -e '/mod test.*/,$d'  "$file" | grep 'let _' > /dev/null
+                then
+                    echo "##[error] 'let _' found in $file, please use error handling."
+                    grep -nH 'let _' "$file"
                     count=$((count + 1))
                 fi
             done
@@ -55,18 +69,41 @@ while getopts hauipreb opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unreachable!' > /dev/null
                 then
-                    echo "##[error] unreachable! found in $file"
+                    echo "##[error] unreachable! found in $file, please don't."
                     grep -nH 'unreachable!' "$file"
                     count=$((count + 1))
                 fi
             done
-            ;;        
+            ;;  
+        d)
+            for file in $files
+            do
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'dbg!' > /dev/null
+                then
+                    echo "##[error] dbg! found in $file, please use error!, info! etc instead."
+                    grep -nH 'dbg!' "$file"
+                    count=$((count + 1))
+                fi
+            done
+            ;;  
+
+        x)
+            for file in $files
+            do
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'exit(' > /dev/null
+                then
+                    echo "##[error] exit(_) found in $file, please don't ever do that."
+                    grep -nH 'exit(' "$file"
+                    count=$((count + 1))
+                fi
+            done
+            ;;                  
         p)
             for file in $files
             do
                 if sed -e '/mod test.*/,$d' "$file" | grep 'panic!(' > /dev/null
                 then
-                    echo "##[error] panic found in $file"
+                    echo "##[error] panic found in $file, no, just no!"
                     grep -nH 'panic!(' "$file"
                     count=$((count + 1))
                 fi
@@ -75,9 +112,9 @@ while getopts hauipreb opt; do
         e)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'expect(' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | gsrep 'expect(' > /dev/null
                 then
-                    echo "##[error] expect found in $file"
+                    echo "##[error] expect found in $file, try hygenic errors, this panics!"
                     count=$((count + 1))
                 fi
             done
@@ -87,7 +124,7 @@ while getopts hauipreb opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep '[a-z]\[' > /dev/null
                 then
-                    echo "##[error] array access ([...]) found in $file"
+                    echo "##[error] array access ([...]) found in $file, that could go wrong, array access can panic."
                     count=$((count + 1))
                 fi
             done

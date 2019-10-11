@@ -51,4 +51,6 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
   //...
 }
 impl_downcast!(sync TremorAggrFn);
+```
 
+With `impl_downcast` we can can pass src as `dyn TremorAggrFn` instead of `dyn Any` locking down 

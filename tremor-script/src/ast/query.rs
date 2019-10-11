@@ -20,6 +20,9 @@ pub struct Query1<'script> {
     pub stmts: Stmts1<'script>,
 }
 
+pub const WINDOW_CONST_ID: usize = 0;
+pub const GROUP_CONST_ID: usize = 1;
+
 impl<'script> Query1<'script> {
     #[allow(dead_code)]
     pub fn up_script<'registry>(
@@ -64,8 +67,9 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                 helper.swap(&mut aggregates, &mut consts);
                 let stmt: MutSelect<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut consts);
-                // FIXME: iou a const
-                let consts = Vec::new();
+                // We know that select statements have exactly two consts
+                let consts = vec![Value::Null, Value::Null];
+
                 Ok(Stmt::SelectStmt(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
@@ -365,19 +369,33 @@ impl<'script> MutSelect1<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<MutSelect<'script>> {
+        if !helper.consts.is_empty() {
+            return error_no_consts(&(self.start, self.end), &self.target);
+        }
+        helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
+        helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
         let target = self.target.up(helper)?;
+
         if !helper.locals.is_empty() {
             return error_no_locals(&(self.start, self.end), &target);
         };
-        let maybe_where = self.maybe_where.up(helper)?;
-        if !helper.locals.is_empty() {
-            if let Some(definitely) = maybe_where {
-                return error_no_locals(&(self.start, self.end), &definitely);
-            }
-        };
+
         let maybe_having = self.maybe_having.up(helper)?;
         if !helper.locals.is_empty() {
             if let Some(definitely) = maybe_having {
+                return error_no_locals(&(self.start, self.end), &definitely);
+            }
+        };
+        if helper.consts.remove("window") != Some(WINDOW_CONST_ID)
+            || helper.consts.remove("group") != Some(GROUP_CONST_ID)
+            || !helper.consts.is_empty()
+        {
+            return error_no_consts(&(self.start, self.end), &target);
+        }
+
+        let maybe_where = self.maybe_where.up(helper)?;
+        if !helper.locals.is_empty() {
+            if let Some(definitely) = maybe_where {
                 return error_no_locals(&(self.start, self.end), &definitely);
             }
         };
@@ -388,6 +406,10 @@ impl<'script> MutSelect1<'script> {
             }
         };
 
+        // We need to reverse them from parsing to put them in the right order
+        let mut windows = self.windows;
+        windows.reverse();
+
         Ok(MutSelect {
             start: self.start,
             end: self.end,
@@ -397,7 +419,7 @@ impl<'script> MutSelect1<'script> {
             maybe_where,
             maybe_having,
             maybe_group_by,
-            windows: self.windows,
+            windows,
         })
     }
 }

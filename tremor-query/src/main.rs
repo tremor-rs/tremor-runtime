@@ -23,9 +23,9 @@ use crate::query::Query; // {Query, Return};
 use clap::{App, Arg};
 // use halfbrown::hashmap;
 pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
+use chrono::{Timelike, Utc};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
-use simd_json::value::ValueTrait;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -33,6 +33,14 @@ use std::iter::FromIterator;
 use tremor_pipeline::errors::*;
 use tremor_script::highlighter::{Highlighter, TermHighlighter};
 use tremor_script::*;
+
+pub fn nanotime() -> u64 {
+    let now = Utc::now();
+    let seconds: u64 = now.timestamp() as u64;
+    let nanoseconds: u64 = u64::from(now.nanosecond());
+
+    (seconds * 1_000_000_000) + nanoseconds
+}
 
 fn main() -> Result<()> {
     let matches = App::new("tremor-query")
@@ -227,7 +235,6 @@ fn main() -> Result<()> {
         let mut continuation: tremor_pipeline::Returns = vec![];
 
         let mut id = 0;
-        let mut last = 0;
         loop {
             for event in &events {
                 let value = LineValue::new(vec![], |_| unsafe {
@@ -237,7 +244,9 @@ fn main() -> Result<()> {
                     })
                 });
                 continuation.clear();
-                let ingest_ns = if matches.value_of("replay-influx").is_some() {
+                let ingest_ns = nanotime();
+                /*
+                if matches.value_of("replay-influx").is_some() {
                     let this = event
                         .get("timestamp")
                         .and_then(Value::as_u64)
@@ -251,7 +260,8 @@ fn main() -> Result<()> {
                 } else {
                     id * 1_000_000_000
                 };
-                let _ = execable.enqueue(
+                */
+                execable.enqueue(
                     "in",
                     tremor_pipeline::Event {
                         id,
@@ -261,7 +271,7 @@ fn main() -> Result<()> {
                         data: value.clone(),
                     },
                     &mut continuation,
-                );
+                )?;
 
                 for (output, event) in continuation.drain(..) {
                     let event = &event.data.suffix().value;
