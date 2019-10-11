@@ -262,7 +262,7 @@ impl Operator for OperatorNode {
 pub fn buildin_ops(
     node: &NodeConfig,
     _defn: Option<StmtRentalWrapper>,
-    _node: Option<StmtRentalWrapper>,
+    _nobody_knows: Option<StmtRentalWrapper>,
     _windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     // Resolve from registry

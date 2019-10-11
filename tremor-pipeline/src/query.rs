@@ -674,7 +674,7 @@ pub fn supported_operators(
                 .into());
             };
             let windows: Result<Vec<(String, WindowImpl)>> =
-                if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
+                if let tremor_script::ast::Stmt::SelectStmt(s) = node.stmt.suffix() {
                     s.stmt
                         .windows
                         .iter()

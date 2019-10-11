@@ -35,6 +35,7 @@ impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
     }
 }
 
+#[allow(clippy::implicit_hasher)]
 impl<'script, K, U: Upable<'script>> Upable<'script> for HashMap<K, U>
 where
     K: std::cmp::Eq + std::hash::Hash,
