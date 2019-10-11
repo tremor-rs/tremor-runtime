@@ -15,6 +15,7 @@
 use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
 use crate::tremor_const_fn;
 use crate::EventContext;
+use simd_json::value::ValueTrait;
 use simd_json::BorrowedValue as Value;
 
 macro_rules! map_function {
@@ -39,38 +40,34 @@ pub fn load(registry: &mut Registry) {
             args: &[&Value<'event>],
         ) -> FResult<Value<'event>> {
             let this_mfa = || mfa("string", "format", args.len());
+            if args.is_empty() {
+                return Err(FunctionError::BadArity {
+                    mfa: this_mfa(),
+                    calling_a: args.len(),
+                });
+            }
+            if let Some(format) = args[0].as_str() {
+                let mut arg_stack = if args.is_empty() {
+                    vec![]
+                } else {
+                    args[1..].to_vec()
+                };
+                arg_stack.reverse();
 
-            match args.len() {
-            0 => Err(FunctionError::BadArity {
-                mfa: this_mfa(), calling_a: args.len()
-            }),
-            _ => {
-                match &args[0] {
-                    Value::String(format) => {
-                        let mut arg_stack = if args.is_empty() {
-                            vec![]
-                        } else {
-                            args[1..].to_vec()
-                        };
-                        arg_stack.reverse();
-
-                        let mut out = String::new();
-                        let mut iter = format.chars().enumerate();
-                        while let Some(char) = iter.next() {
-                            match char {
-                        (pos, '{')  => match iter.next() {
-                            Some((_, '}')) => {
-                                let arg = match arg_stack.pop() {
-                                    Some(a) => a,
-                                    None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)}),
-                                };
-
-                                if let Value::String(s) = arg {
-                                    out.push_str(&s)
+                let mut out = String::with_capacity(format.len());
+                let mut iter = format.chars().enumerate();
+                while let Some((pos, char)) = iter.next() {
+                    match char {
+                        '{'  => match iter.next() {
+                            Some((_, '}')) => if let Some(arg) = arg_stack.pop() {
+                                if let Some(s) = arg.as_str() {
+                                    out.push_str(&s);
                                 } else {
                                     out.push_str(arg.encode().as_str());
-                                }
-                            }
+                                };
+                            } else {
+                                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)});
+                            },
                             Some((_, '{')) => {
                                 out.push('{');
                             }
@@ -78,29 +75,22 @@ pub fn load(registry: &mut Registry) {
                                 return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
                             }
                         },
-                        (pos, '}') => match iter.next() {
-                            Some((_, '}')) => out.push('}'),
-                            _ => {
-                                return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
-                            }
-                        },
-                        (_, c) => out.push(c),
-                    }
-                        }
-
-                        if arg_stack.is_empty() {
-                            Ok(Value::from(out))
+                        '}' => if let Some((_, '}')) =  iter.next() {
+                            out.push('}')
                         } else {
-                            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()})
-                        }
-                    }
-                    _ => {
-                        Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()})
-
+                            return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
+                        },
+                        c => out.push(c),
                     }
                 }
+                if arg_stack.is_empty() {
+                    Ok(Value::from(out))
+                } else {
+                    Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()})
+                }
+            } else {
+                Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()})
             }
-        }
         }
 
         fn snot_clone(&self) -> Box<dyn TremorFn> {
