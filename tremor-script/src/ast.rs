@@ -99,7 +99,7 @@ where
     aggr_reg: &'registry AggrRegistry,
     is_in_aggr: bool,
     operators: Vec<OperatorDecl<'script>>,
-    scripts: Vec <ScriptDecl<'script>>,
+    scripts: Vec<ScriptDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     warnings: Vec<Warning>,
     local_idx: usize,

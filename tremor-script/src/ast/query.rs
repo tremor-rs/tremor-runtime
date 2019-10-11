@@ -78,7 +78,7 @@ impl<'script> Upable<'script> for Stmt1<'script> {
             Stmt1::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::ScriptDecl(stmt))
-            },
+            }
             Stmt1::ScriptStmt(stmt) => Ok(Stmt::ScriptStmt(stmt.up(helper)?)),
             Stmt1::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
@@ -179,7 +179,6 @@ impl<'script> Upable<'script> for OperatorStmt1<'script> {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDecl<'script> {
     pub start: Location,
@@ -272,7 +271,6 @@ impl<'script> ScriptStmt1<'script> {
         })
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl<'script> {

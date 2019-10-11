@@ -208,7 +208,8 @@ impl Query {
                         node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
+                    let op =
+                        node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
@@ -227,8 +228,12 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
-                        let op =
-                            node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
+                        let op = node.to_op(
+                            supported_operators,
+                            None,
+                            Some(that),
+                            Some(windows.clone()),
+                        )?;
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
@@ -257,10 +262,14 @@ impl Query {
                         node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let stmt_rental = tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
-                        let stmt: tremor_script::ast::Stmt = (*operators.get(&target).expect("not found")).clone();
-                        std::mem::transmute(stmt)
-                    });
+                    let stmt_rental = tremor_script::query::rentals::Stmt::new(
+                        Arc::new(self.0.clone()),
+                        |_| unsafe {
+                            let stmt: tremor_script::ast::Stmt =
+                                (*operators.get(&target).expect("not found")).clone();
+                            std::mem::transmute(stmt)
+                        },
+                    );
 
                     let that = tremor_script::query::StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
@@ -281,10 +290,14 @@ impl Query {
                     let _op_in = resolve_input_port(name.clone())?;
                     let _op_out = resolve_output_port(name.clone())?;
 
-                    let stmt_rental = tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
-                        let stmt: tremor_script::ast::Stmt = (*scripts.get(&target).expect("not found")).clone();
-                        std::mem::transmute(stmt)
-                    });
+                    let stmt_rental = tremor_script::query::rentals::Stmt::new(
+                        Arc::new(self.0.clone()),
+                        |_| unsafe {
+                            let stmt: tremor_script::ast::Stmt =
+                                (*scripts.get(&target).expect("not found")).clone();
+                            std::mem::transmute(stmt)
+                        },
+                    );
 
                     let that_defn = tremor_script::query::StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
@@ -300,7 +313,12 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let op = node.to_op(supported_operators, Some(that), Some(that_defn.clone()), None)?;
+                    let op = node.to_op(
+                        supported_operators,
+                        Some(that),
+                        Some(that_defn.clone()),
+                        None,
+                    )?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
@@ -638,8 +656,8 @@ pub fn supported_operators(
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
-            let node= if let Some(node) = node {
-                node 
+            let node = if let Some(node) = node {
+                node
             } else {
                 return Err(ErrorKind::MissingOpConfig(
                     "trickle operators require a statement".into(),
@@ -699,7 +717,11 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            Box::new(TrickleScript::with_stmt(config.id.clone(), defn.expect(""), node)?)
+            Box::new(TrickleScript::with_stmt(
+                config.id.clone(),
+                defn.expect(""),
+                node,
+            )?)
         }
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();
