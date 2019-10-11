@@ -15,8 +15,8 @@
 pub mod base_expr;
 
 pub mod base_stmt;
-mod query;
-mod upable;
+pub mod query;
+pub mod upable;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
@@ -98,6 +98,8 @@ where
     reg: &'registry Registry,
     aggr_reg: &'registry AggrRegistry,
     is_in_aggr: bool,
+    operators: Vec<OperatorDecl<'script>>,
+    scripts: Vec <ScriptDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     warnings: Vec<Warning>,
     local_idx: usize,
@@ -124,6 +126,8 @@ where
             reg,
             aggr_reg,
             is_in_aggr: false,
+            operators: Vec::new(),
+            scripts: Vec::new(),
             aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
@@ -483,7 +487,7 @@ pub struct StringLit1<'script> {
     pub exprs: ImutExprs1<'script>,
 }
 
-fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
+pub fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
     match expr {
         ImutExpr::Literal(Literal { value: v, .. }) => Ok(v),
         other => Err(ErrorKind::NotConstant(other.extent(), other.extent().expand_lines(2)).into()),

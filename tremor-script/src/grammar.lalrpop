@@ -45,10 +45,12 @@ WindowKind: WindowKind = {
 }
 
 Stmt: Stmt1<'input> = {
-    <start:@L> "create" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
-    <start:@L> "create" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
-    <start:@L> "create" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamDecl(StreamDecl { start, end, id: id.id.to_string() }),
+    <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
+    <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
+    <start:@L> "define" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamStmt(StreamStmt { start, end, id: id.id.to_string() }),
+    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorStmt(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::ScriptStmt(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
     <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:Windows> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
     <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows: vec![], maybe_group_by})),
 }
@@ -913,6 +915,7 @@ extern {
         "having" => Token::Having,
         "group" => Token::Group,
         "by" => Token::By,
+        "define" => Token::Define,
 
         "set" => Token::Set,
         "each" => Token::Each,

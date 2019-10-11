@@ -46,9 +46,11 @@ pub struct Query<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt1<'script> {
     WindowDecl(WindowDecl1<'script>),
-    StreamDecl(StreamDecl),
     OperatorDecl(OperatorDecl1<'script>),
     ScriptDecl(ScriptDecl1<'script>),
+    StreamStmt(StreamStmt),
+    OperatorStmt(OperatorStmt1<'script>),
+    ScriptStmt(ScriptStmt1<'script>),
     SelectStmt(Box<MutSelect1<'script>>),
 }
 
@@ -70,12 +72,14 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                     consts,
                 }))
             }
-            Stmt1::StreamDecl(stmt) => Ok(Stmt::StreamDecl(stmt)),
+            Stmt1::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt)),
             Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
+            Stmt1::OperatorStmt(stmt) => Ok(Stmt::OperatorStmt(stmt.up(helper)?)),
             Stmt1::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::ScriptDecl(stmt))
-            }
+            },
+            Stmt1::ScriptStmt(stmt) => Ok(Stmt::ScriptStmt(stmt.up(helper)?)),
             Stmt1::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::WindowDecl(stmt))
@@ -87,9 +91,11 @@ impl<'script> Upable<'script> for Stmt1<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt<'script> {
     WindowDecl(WindowDecl<'script>),
-    StreamDecl(StreamDecl),
+    StreamStmt(StreamStmt),
     OperatorDecl(OperatorDecl<'script>),
     ScriptDecl(ScriptDecl<'script>),
+    OperatorStmt(OperatorStmt<'script>),
+    ScriptStmt(ScriptStmt<'script>),
     SelectStmt(SelectStmt<'script>),
 }
 
@@ -120,7 +126,7 @@ pub struct OperatorDecl1<'script> {
 impl<'script> Upable<'script> for OperatorDecl1<'script> {
     type Target = OperatorDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(OperatorDecl {
+        let operator_decl = OperatorDecl {
             start: self.start,
             end: self.end,
             id: self.id,
@@ -135,9 +141,44 @@ impl<'script> Upable<'script> for OperatorDecl1<'script> {
                 }
                 None => None,
             },
+        };
+        helper.operators.push(operator_decl.clone());
+        Ok(operator_decl)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OperatorStmt1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub id: String,
+    pub target: String,
+    pub params: Option<WithExprs1<'script>>,
+}
+impl_stmt1!(OperatorStmt1);
+
+impl<'script> Upable<'script> for OperatorStmt1<'script> {
+    type Target = OperatorStmt<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        Ok(OperatorStmt {
+            start: self.start,
+            end: self.end,
+            id: self.id,
+            target: self.target,
+            params: match self.params {
+                Some(p) => {
+                    let mut pup = HashMap::new();
+                    for (name, value) in p.into_iter() {
+                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
+                    }
+                    Some(pup)
+                }
+                None => None,
+            },
         })
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDecl<'script> {
@@ -147,6 +188,16 @@ pub struct OperatorDecl<'script> {
     pub id: String,
     pub params: Option<HashMap<String, Value<'script>>>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OperatorStmt<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub id: String,
+    pub target: String,
+    pub params: Option<HashMap<String, Value<'script>>>,
+}
+impl_stmt!(OperatorStmt);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl1<'script> {
@@ -165,7 +216,7 @@ impl<'script> ScriptDecl1<'script> {
     ) -> Result<ScriptDecl<'script>> {
         let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         helper.warnings.append(&mut warnings);
-        Ok(ScriptDecl {
+        let script_decl = ScriptDecl {
             start: self.start,
             end: self.end,
             id: self.id,
@@ -180,9 +231,48 @@ impl<'script> ScriptDecl1<'script> {
                 None => None,
             },
             script,
+        };
+        helper.scripts.push(script_decl.clone());
+        Ok(script_decl)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ScriptStmt1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub id: String,
+    pub target: String,
+    pub params: Option<WithExprs1<'script>>,
+}
+
+impl<'script> ScriptStmt1<'script> {
+    #[allow(dead_code)]
+    pub fn up<'registry>(
+        self,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<ScriptStmt<'script>> {
+        // let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
+        // helper.warnings.append(&mut warnings);
+        Ok(ScriptStmt {
+            start: self.start,
+            end: self.end,
+            id: self.id,
+            params: match self.params {
+                Some(p) => {
+                    let mut pup = HashMap::new();
+                    for (name, value) in p.into_iter() {
+                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
+                    }
+                    Some(pup)
+                }
+                None => None,
+            },
+            target: self.target,
         })
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl<'script> {
@@ -191,6 +281,14 @@ pub struct ScriptDecl<'script> {
     pub id: String,
     pub params: Option<HashMap<String, Value<'script>>>,
     pub script: Script<'script>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ScriptStmt<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub id: String,
+    pub target: String,
+    pub params: Option<HashMap<String, Value<'script>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -399,7 +497,7 @@ impl<'script> BaseExpr for GroupBy<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct StreamDecl {
+pub struct StreamStmt {
     pub start: Location,
     pub end: Location,
     pub id: String,

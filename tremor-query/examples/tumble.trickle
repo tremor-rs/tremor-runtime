@@ -1,23 +1,17 @@
 # 15 seconds
-create tumbling window `15secs`
+define tumbling window `15secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(15),
-   interval = 15000000000
+   interval = datetime::with_seconds(15),
 end;
 
-create tumbling window `10secs`
+define tumbling window `10secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(10),
-   interval = 10000000000
+   interval = datetime::with_seconds(10),
 end;
 
-create tumbling window `5secs`
+define tumbling window `5secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(5),
-   interval = 5000000000
+   interval = datetime::with_seconds(5),
 end;
 
 select {
@@ -28,5 +22,5 @@ select {
     "stdev": stats::stdev(event.value),
     "var": stats::var(event.value),
 }
-from in[`5secs`]
+from in[`15secs`]
 into out;

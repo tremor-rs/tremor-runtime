@@ -18,7 +18,6 @@ use base64;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::BufMut;
 use bytes::BytesMut;
-use std::fmt::Debug;
 
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 pub trait Preprocessor: Sync + Send {

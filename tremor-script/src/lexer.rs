@@ -208,6 +208,7 @@ pub enum Token<'input> {
     Script,
     Set,
     Each,
+    Define,
 }
 
 pub trait TokenFuns {
@@ -277,6 +278,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Script => true,
             Token::Set => true,
             Token::Each => true,
+            Token::Define => true,
             Token::Operator => true,
             _ => false,
         }
@@ -511,6 +513,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Script => write!(f, "script"),
             Token::Set => write!(f, "set"),
             Token::Each => write!(f, "each"),
+            Token::Define => write!(f, "define"),
         }
     }
 }
@@ -833,6 +836,7 @@ impl<'input> Lexer<'input> {
             "script" => Token::Script,
             "set" => Token::Set,
             "each" => Token::Each,
+            "define" => Token::Define,
             src => Token::Ident(src.into(), false),
         };
 

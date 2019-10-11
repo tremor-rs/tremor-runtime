@@ -1,10 +1,10 @@
 # to be run with metrics_dev_5.txt.xz
-create tumbling window `1secs`
+define tumbling window `1secs`
  with
    interval = datetime::with_seconds(1),
 end;
 
-create tumbling window `10secs`
+define tumbling window `10secs`
  with
    interval = datetime::with_seconds(10),
 end;

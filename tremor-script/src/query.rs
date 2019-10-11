@@ -56,7 +56,7 @@ where
         }
     }
 }
-#[derive(Debug, PartialEq, PartialOrd, Eq)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
 pub struct StmtRentalWrapper {
     pub stmt: Arc<rentals::Stmt>,
 }

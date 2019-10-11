@@ -60,8 +60,9 @@ pub type MetaMap = simd_json::value::owned::Object;
 pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
 pub type NodeLookupFn = fn(
-    node: &NodeConfig,
-    stmt: Option<StmtRentalWrapper>,
+    config: &NodeConfig,
+    defn: Option<StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
 pub type NodeMap = HashMap<String, NodeIndex>;
@@ -194,7 +195,8 @@ pub struct NodeConfig {
     pub kind: NodeKind,
     pub _type: String,
     pub config: config::ConfigMap,
-    pub stmt: Option<Arc<StmtRentalWrapper>>,
+    pub defn: Option<Arc<StmtRentalWrapper>>,
+    pub node: Option<Arc<StmtRentalWrapper>>,
 }
 
 // We ignore stmt on equality and hasing as they're only
@@ -260,7 +262,8 @@ impl Operator for OperatorNode {
 #[allow(clippy::implicit_hasher)]
 pub fn buildin_ops(
     node: &NodeConfig,
-    _stmt: Option<StmtRentalWrapper>,
+    _defn: Option<StmtRentalWrapper>,
+    _node: Option<StmtRentalWrapper>,
     _windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     // Resolve from registry
@@ -295,10 +298,11 @@ impl NodeConfig {
     pub fn to_op(
         &self,
         resolver: NodeLookupFn,
-        stmt: Option<StmtRentalWrapper>,
+        defn: Option<StmtRentalWrapper>,
+        node: Option<StmtRentalWrapper>,
         window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
-        resolver(&self, stmt, window)
+        resolver(&self, defn, node, window)
     }
 }
 
@@ -326,7 +330,8 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Input,
             _type: "passthrough".to_string(),
             config: None, // passthrough has no config
-            stmt: None,   // FIXME
+            defn: None,
+            node: None,
         });
         nodes.insert(stream.clone(), id);
         inputs.insert(stream.clone(), id);
@@ -339,7 +344,8 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Operator,
             _type: node.node_type.clone(),
             config: node.config.clone(),
-            stmt: None, // FIXME
+            defn: None,
+            node: None,
         });
         nodes.insert(node_id, id);
     }
@@ -350,7 +356,8 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             kind: NodeKind::Output,
             _type: "passthrough".to_string(),
             config: None, // passthrough has no config
-            stmt: None,   // FIXME
+            defn: None,
+            node: None,
         });
         nodes.insert(stream.clone(), id);
         outputs.push(id);
@@ -362,7 +369,8 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         kind: NodeKind::Output,
         _type: "passthrough".to_string(),
         config: None, // passthrough has no config
-        stmt: None,   // FIXME
+        defn: None,
+        node: None,
     });
     nodes.insert("metrics".to_string(), id);
     outputs.push(id);
@@ -502,8 +510,8 @@ impl ExecutableGraph {
     #[inline]
     fn next(&mut self, returns: &mut Returns) -> Result<bool> {
         if let Some((idx, port, event)) = self.stack.pop() {
-            // If we have emitted a singal event we got to handle it as a singal flow
-            // the singal flow will
+            // If we have emitted a signal event we got to handle it as a signal flow
+            // the signal flow will
             if event.kind.is_some() {
                 self.signalflow(event)?;
                 return Ok(!self.stack.is_empty());
@@ -669,7 +677,6 @@ impl Pipeline {
         res
     }
 
-    // FIXME no explicit ref to EventContext for lookup ...
     pub fn to_executable_graph(&self, resolver: NodeLookupFn) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();
@@ -679,7 +686,7 @@ impl Pipeline {
         let mut signalflow = Vec::new();
         for (i, nx) in self.graph.node_indices().enumerate() {
             i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(resolver, None, None)?;
+            let op = self.graph[nx].to_op(resolver, None, None, None)?;
             if op.handles_contraflow() {
                 contraflow.push(i);
             }

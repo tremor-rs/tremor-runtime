@@ -126,10 +126,11 @@ impl Query {
             kind: NodeKind::Input,
             _type: "passthrough".to_string(),
             config: None,
-            stmt: None,
+            defn: None,
+            node: None,
         });
         nodes.insert(_in.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
+        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         inputs.insert(_in, id);
 
@@ -140,16 +141,19 @@ impl Query {
             kind: NodeKind::Output,
             _type: "passthrough".to_string(),
             config: None,
-            stmt: None,
+            defn: None,
+            node: None,
         });
         nodes.insert(out.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
+        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
         let mut port_indexes: PortIndexMap = HashMap::new();
 
         let mut windows = HashMap::new();
+        let mut operators = HashMap::new();
+        let mut scripts = HashMap::new();
 
         for stmt in &script.stmts {
             let stmt_rental =
@@ -200,16 +204,16 @@ impl Query {
                         kind: NodeKind::Operator,
                         _type: "trickle::select".to_string(),
                         config: None,
-                        stmt: None, // FIXME
+                        defn: None,
+                        node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    // FIXME
-                    let op = node.to_op(supported_operators, Some(that), Some(windows.clone()))?;
+                    let op = node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                 }
-                Stmt::StreamDecl(s) => {
+                Stmt::StreamStmt(s) => {
                     let name = s.id.clone().to_string();
                     let src = resolve_output_port(name.clone())?;
                     if !nodes.contains_key(&src.id) {
@@ -218,12 +222,13 @@ impl Query {
                             kind: NodeKind::Operator,
                             _type: "passthrough".to_string(),
                             config: None,
-                            stmt: None,
+                            defn: None,
+                            node: None,
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
                         let op =
-                            node.to_op(supported_operators, Some(that), Some(windows.clone()))?;
+                            node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
@@ -234,6 +239,12 @@ impl Query {
                 }
                 Stmt::OperatorDecl(o) => {
                     let name = o.id.clone().to_string();
+                    operators.insert(name, Stmt::OperatorDecl(o.clone()));
+                }
+                Stmt::OperatorStmt(o) => {
+                    let name = o.id.clone().to_string();
+                    let target = o.target.clone().to_string();
+
                     let _op_in = resolve_input_port(name.clone())?;
                     let _op_out = resolve_output_port(name.clone())?;
 
@@ -242,28 +253,54 @@ impl Query {
                         kind: NodeKind::Operator,
                         _type: "trickle::operator".to_string(),
                         config: None,
-                        stmt: None, // FIXME
+                        defn: None,
+                        node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, Some(that), None)?;
+                    let stmt_rental = tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
+                        let stmt: tremor_script::ast::Stmt = (*operators.get(&target).expect("not found")).clone();
+                        std::mem::transmute(stmt)
+                    });
+
+                    let that = tremor_script::query::StmtRentalWrapper {
+                        stmt: std::sync::Arc::new(stmt_rental),
+                    };
+                    let op = node.to_op(supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
                 }
-                Stmt::ScriptDecl(o) => {
+                Stmt::ScriptDecl(s) => {
+                    let name = s.id.clone().to_string();
+                    scripts.insert(name, Stmt::ScriptDecl(s.clone()));
+                }
+                Stmt::ScriptStmt(o) => {
                     let name = o.id.clone().to_string();
+                    let target = o.target.clone().to_string();
+
                     let _op_in = resolve_input_port(name.clone())?;
                     let _op_out = resolve_output_port(name.clone())?;
+
+                    let stmt_rental = tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
+                        let stmt: tremor_script::ast::Stmt = (*scripts.get(&target).expect("not found")).clone();
+                        std::mem::transmute(stmt)
+                    });
+
+                    let that_defn = tremor_script::query::StmtRentalWrapper {
+                        stmt: std::sync::Arc::new(stmt_rental),
+                    };
 
                     let node = NodeConfig {
                         id: name.to_string(),
                         kind: NodeKind::Operator,
                         _type: "trickle::script".to_string(),
                         config: None,
-                        stmt: None, // FIXME
+                        defn: Some(std::sync::Arc::new(that_defn.clone())),
+                        node: Some(std::sync::Arc::new(that.clone())),
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(supported_operators, Some(that), None)?;
+
+                    let op = node.to_op(supported_operators, Some(that), Some(that_defn.clone()), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
@@ -277,10 +314,11 @@ impl Query {
             kind: NodeKind::Output,
             _type: "passthrough".to_string(),
             config: None,
-            stmt: None,
+            defn: None,
+            node: None,
         });
         nodes.insert("metrics".to_string(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None)?;
+        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
@@ -402,7 +440,8 @@ impl Query {
                 kind: NodeKind::Input,
                 _type: "passthrough".to_string(),
                 config: None,
-                stmt: None,
+                defn: None,
+                node: None,
             });
             nodes.insert(stream.clone(), id);
             inputs.insert(stream.clone(), id);
@@ -414,7 +453,8 @@ impl Query {
                 kind: NodeKind::Output,
                 _type: "passthrough".to_string(),
                 config: None,
-                stmt: None,
+                defn: None,
+                node: None,
             });
             nodes.insert(stream.clone(), id);
             outputs.push(id);
@@ -461,13 +501,14 @@ impl Query {
                         kind: NodeKind::Operator,
                         _type: "trickle::select".to_string(),
                         config: None,
-                        stmt: None, // FIXME
+                        defn: None,
+                        node: None,
                     });
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                     // };
                 }
-                Stmt::StreamDecl(s) => {
+                Stmt::StreamStmt(s) => {
                     let name = s.id.clone().to_string();
                     let src = resolve_output_port(name.clone())?;
                     if !nodes.contains_key(&src.id) {
@@ -476,7 +517,8 @@ impl Query {
                             kind: NodeKind::Operator,
                             _type: "passthrough".to_string(),
                             config: None,
-                            stmt: None, // FIXME
+                            defn: None,
+                            node: None,
                         });
                         nodes.insert(name.clone(), id);
                         outputs.push(id);
@@ -491,7 +533,8 @@ impl Query {
                             kind: NodeKind::Operator,
                             _type: "fake.window".to_string(),
                             config: None,
-                            stmt: None, // FIXME
+                            defn: None,
+                            node: None,
                         });
                         nodes.insert(name.clone(), id);
                         outputs.push(id);
@@ -506,7 +549,8 @@ impl Query {
                             kind: NodeKind::Operator,
                             _type: "fake.operator".to_string(),
                             config: None,
-                            stmt: None, // FIXME
+                            defn: None,
+                            node: None,
                         });
                         nodes.insert(name.clone(), id);
                         outputs.push(id);
@@ -524,7 +568,8 @@ impl Query {
             kind: NodeKind::Output,
             _type: "passthrough".to_string(),
             config: None,
-            stmt: None,
+            defn: None,
+            node: None,
         });
         nodes.insert("metrics".to_string(), id);
         outputs.push(id);
@@ -577,8 +622,9 @@ impl Query {
 
 #[allow(clippy::implicit_hasher)]
 pub fn supported_operators(
-    node: &NodeConfig,
-    stmt: Option<tremor_script::query::StmtRentalWrapper>,
+    config: &NodeConfig,
+    defn: Option<tremor_script::query::StmtRentalWrapper>,
+    node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     //    use op::grouper::BucketGrouperFactory;
@@ -588,19 +634,19 @@ pub fn supported_operators(
     use op::trickle::script::TrickleScript;
     use op::trickle::select::{SelectDims, TrickleSelect};
 
-    let name_parts: Vec<&str> = node._type.split("::").collect();
+    let name_parts: Vec<&str> = config._type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
-            let stmt = if let Some(stmt) = stmt {
-                stmt
+            let node= if let Some(node) = node {
+                node 
             } else {
                 return Err(ErrorKind::MissingOpConfig(
                     "trickle operators require a statement".into(),
                 )
                 .into());
             };
-            let groups = SelectDims::from_query(stmt.stmt.clone());
+            let groups = SelectDims::from_query(node.stmt.clone());
             let windows = if let Some(windows) = windows {
                 windows
             } else {
@@ -610,7 +656,7 @@ pub fn supported_operators(
                 .into());
             };
             let windows: Result<Vec<WindowImpl>> =
-                if let tremor_script::ast::Stmt::SelectStmt(s) = stmt.stmt.suffix() {
+                if let tremor_script::ast::Stmt::SelectStmt(s) = node.stmt.suffix() {
                     s.stmt
                         .windows
                         .iter()
@@ -627,37 +673,37 @@ pub fn supported_operators(
                     Err("Declared as select but isn't a select".into())
                 };
             Box::new(TrickleSelect::with_stmt(
-                node.id.clone(),
+                config.id.clone(),
                 groups,
                 windows?,
-                stmt,
+                node,
             )?)
         }
         ["trickle", "operator"] => {
-            let stmt = if let Some(stmt) = stmt {
-                stmt
+            let node = if let Some(node) = node {
+                node
             } else {
                 return Err(ErrorKind::MissingOpConfig(
                     "trickle operators require a statement".into(),
                 )
                 .into());
             };
-            Box::new(TrickleOperator::with_stmt(node.id.clone(), stmt)?)
+            Box::new(TrickleOperator::with_stmt(config.id.clone(), node)?)
         }
         ["trickle", "script"] => {
-            let stmt = if let Some(stmt) = stmt {
-                stmt
+            let node = if let Some(node) = node {
+                node
             } else {
                 return Err(ErrorKind::MissingOpConfig(
                     "trickle operators require a statement".into(),
                 )
                 .into());
             };
-            Box::new(TrickleScript::with_stmt(node.id.clone(), stmt)?)
+            Box::new(TrickleScript::with_stmt(config.id.clone(), defn.expect(""), node)?)
         }
         ["passthrough"] => {
             let op = PassthroughFactory::new_boxed();
-            op.from_node(node)?
+            op.from_node(config)?
         }
         // ["debug", "history"] => EventHistoryFactory::new_boxed(),
         // ["runtime", "tremor"] => TremorFactory::new_boxed(),
@@ -667,12 +713,12 @@ pub fn supported_operators(
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }
-        _ => return Err(ErrorKind::UnknownNamespace(node._type.clone()).into()),
+        _ => return Err(ErrorKind::UnknownNamespace(config._type.clone()).into()),
     };
     Ok(OperatorNode {
-        id: node.id.clone(),
-        kind: node.kind,
-        _type: node._type.clone(),
+        id: config.id.clone(),
+        kind: config.kind,
+        _type: config._type.clone(),
         op,
     })
 }

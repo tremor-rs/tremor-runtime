@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::hashmap;
@@ -36,16 +37,18 @@ rental! {
 #[derive(Debug)]
 pub struct TrickleScript {
     pub id: String,
-    pub stmt: Arc<tremor_script::query::rentals::Stmt>,
+    pub defn: Arc<tremor_script::query::rentals::Stmt>,
+    pub node: Arc<tremor_script::query::rentals::Stmt>,
     script: rentals::Script,
 }
 
 impl TrickleScript {
     pub fn with_stmt(
         id: String,
-        stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
+        defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
+        node_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<TrickleScript> {
-        let script = match stmt_rentwrapped.stmt.suffix() {
+        let script = match node_rentwrapped.stmt.suffix() {
             tremor_script::ast::Stmt::ScriptDecl(ref script) => script.clone(),
             _ => {
                 return Err(ErrorKind::PipelineError(
@@ -57,8 +60,9 @@ impl TrickleScript {
 
         Ok(TrickleScript {
             id,
-            stmt: stmt_rentwrapped.stmt.clone(),
-            script: rentals::Script::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
+            defn: defn_rentwrapped.stmt.clone(),
+            node: node_rentwrapped.stmt.clone(),
+            script: rentals::Script::new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
                 std::mem::transmute(script)
             }),
         })
@@ -78,6 +82,28 @@ impl Operator for TrickleScript {
         #[allow(mutable_transmutes)]
         let mut event_meta: &mut tremor_script::Value<'_> =
             unsafe { std::mem::transmute(&data.meta) };
+
+        // PERF This should be a compile time AST transform const'ing params and/or introducing arguments keyword [ DISCUSS ]
+        // For now we disabuse $metadata but undesired side-effect is it pollutes the metadata value-space along causal flow lines
+        if let tremor_script::Value::Object(o) = event_meta {
+            if let Some(p) = &self.script.suffix().params {
+                // Set params from decl as meta vars
+                for (name, value) in p {
+                    o.insert(name.into(), value.clone());
+                }
+                // Set params from instance as meta vars ( eg: upsert ~= override + add )
+                if let tremor_script::ast::query::Stmt::ScriptStmt(instance) = &*self.defn.suffix() {
+                    if let Some(map) = &instance.params {
+                        for (name, value) in map {
+                            o.insert(name.into(), value.clone());
+                        }
+                    }
+                } else {
+                    dbg!("stmt not set");
+                }
+            }
+        }
+
         let value = self.script.suffix().script.run(
             &context,
             AggrType::Emit,
@@ -96,7 +122,7 @@ impl Operator for TrickleScript {
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
                 let mut o = Value::Object(hashmap! {
-                    "error".into() => Value::String(self.stmt.head().format_error(e).into()),
+                    "error".into() => Value::String(self.node.head().format_error(e).into()),
                 });
                 std::mem::swap(&mut o, unwind_event);
                 if let Some(error) = unwind_event.as_object_mut() {

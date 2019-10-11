@@ -1,8 +1,16 @@
-create tumbling window `10secs`
+define tumbling window `10secs`
  with
-   #IOU constant functions
-   #interval = datetime::with_seconds(10),
-   interval = 20000000000
+   interval = datetime::with_seconds(10),
+end;
+
+define tumbling window `15secs`
+ with
+   interval = datetime::with_seconds(15),
+end;
+
+define tumbling window `30secs`
+ with
+   interval = datetime::with_seconds(30),
 end;
 
 select {

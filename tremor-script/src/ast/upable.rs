@@ -16,7 +16,7 @@ use super::Helper;
 use crate::errors::*;
 use halfbrown::HashMap;
 
-pub(crate) trait Upable<'script> {
+pub trait Upable<'script> {
     type Target;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
 }
