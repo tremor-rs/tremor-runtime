@@ -86,8 +86,8 @@ pub fn registry() -> Registry {
 }
 
 #[allow(unused_variables)]
-pub fn aggr_registry() -> AggrRegistry {
-    let mut registry = AggrRegistry::default();
+pub fn aggr() -> Aggr {
+    let mut registry = Aggr::default();
     crate::std_lib::load_aggr(&mut registry);
     registry
 }
@@ -552,19 +552,19 @@ impl PartialEq for TremorAggrFnWrapper {
 }
 
 #[derive(Debug, Clone)]
-pub struct AggrRegistry {
+pub struct Aggr {
     functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
 }
 
-impl Default for AggrRegistry {
+impl Default for Aggr {
     fn default() -> Self {
-        AggrRegistry {
+        Aggr {
             functions: HashMap::new(),
         }
     }
 }
 
-impl AggrRegistry {
+impl Aggr {
     pub fn find(&self, module: &str, function: &str) -> FResult<&TremorAggrFnWrapper> {
         if let Some(functions) = self.functions.get(module) {
             if let Some(rf) = functions.get(function) {
@@ -585,7 +585,7 @@ impl AggrRegistry {
         }
     }
 
-    pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut AggrRegistry {
+    pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut Aggr {
         match self.functions.get_mut(&function.module) {
             Some(module) => {
                 module.insert(function.name.clone(), function);

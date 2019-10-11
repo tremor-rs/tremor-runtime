@@ -399,7 +399,7 @@ where
         for segment in segments {
             unsafe {
                 match segment {
-                    Segment::IdSelector { id, .. } => {
+                    Segment::Id { id, .. } => {
                         if let Value::Object(ref mut map) =
                             mem::transmute::<&Value, &mut Value>(current)
                         {
@@ -423,7 +423,7 @@ where
                             );
                         }
                     }
-                    Segment::ElementSelector { expr, .. } => {
+                    Segment::Element { expr, .. } => {
                         let id =
                             stry!(expr
                                 .eval_to_string(opts, context, aggrs, event, meta, local, consts));
@@ -450,8 +450,8 @@ where
                             );
                         }
                     }
-                    Segment::IdxSelector { .. } => return error_assign_array(self, segment),
-                    Segment::RangeSelector { .. } => return error_assign_array(self, segment),
+                    Segment::Idx { .. } => return error_assign_array(self, segment),
+                    Segment::Range { .. } => return error_assign_array(self, segment),
                 }
             }
         }

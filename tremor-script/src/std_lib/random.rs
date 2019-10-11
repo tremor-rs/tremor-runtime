@@ -49,7 +49,7 @@ pub fn load(registry: &mut Registry) {
                         // random integer between low and high (not including high)
                         rng.gen_range(low, high),
                     )),
-                    (Value::I64(_low), Value::I64(_high)) => Err(FunctionError::RuntimeError {
+                    (Value::I64(_), Value::I64(_)) => Err(FunctionError::RuntimeError {
                         mfa: this_mfa(),
                         error:
                             "Invalid arguments. First argument must be lower than second argument"
@@ -65,7 +65,7 @@ pub fn load(registry: &mut Registry) {
                             // random integer between 0 and input (not including input)
                             rng.gen_range(0, input),
                         )),
-                        Value::I64(_input) => Err(FunctionError::RuntimeError {
+                        Value::I64(_) => Err(FunctionError::RuntimeError {
                             mfa: this_mfa(),
                             error: "Invalid argument. Must be greater than 0".to_string(),
                         }),
@@ -111,7 +111,7 @@ pub fn load(registry: &mut Registry) {
                         // random float between low and high (not including high)
                         rng.gen_range(low, high),
                     )),
-                    (Value::F64(_low), Value::F64(_high)) => Err(FunctionError::RuntimeError {
+                    (Value::F64(_), Value::F64(_)) => Err(FunctionError::RuntimeError {
                         mfa: this_mfa(),
                         error:
                             "Invalid arguments. First argument must be lower than second argument"
@@ -127,7 +127,7 @@ pub fn load(registry: &mut Registry) {
                             // random float between 0 and input (not including input)
                             rng.gen_range(0.0, input),
                         )),
-                        Value::F64(_input) => Err(FunctionError::RuntimeError {
+                        Value::F64(_) => Err(FunctionError::RuntimeError {
                             mfa: this_mfa(),
                             error: "Invalid argument. Must be greater than 0.0".to_string(),
                         }),

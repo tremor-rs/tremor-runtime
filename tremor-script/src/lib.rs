@@ -66,8 +66,8 @@ pub use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
 
 pub use crate::registry::{
-    aggr_registry, registry, AggrRegistry, Registry, TremorAggrFn, TremorAggrFnWrapper, TremorFn,
-    TremorFnWrapper,
+    aggr as aggr_registry, registry, Aggr as AggrRegistry, Registry, TremorAggrFn,
+    TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
 
@@ -122,7 +122,7 @@ impl rentals::Value {
             (unwind_event, event_meta)
         }
     }
-    pub fn consume<E, F>(&mut self, other: LineValue, join_f: F) -> Result<(), E>
+    pub fn consume<E, F>(&mut self, other: Self, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
@@ -165,7 +165,7 @@ impl rentals::Value {
 
 impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
-        rentals::Value::new(vec![], |_| ValueAndMeta {
+        Self::new(vec![], |_| ValueAndMeta {
             value: v,
             meta: Value::Object(Object::new()),
         })
@@ -184,7 +184,7 @@ impl
             simd_json::BorrowedValue<'static>,
         ),
     ) -> Self {
-        rentals::Value::new(vec![], |_| ValueAndMeta {
+        Self::new(vec![], |_| ValueAndMeta {
             value: v.0,
             meta: v.1,
         })
@@ -203,7 +203,7 @@ impl
             simd_json::value::borrowed::Object<'static>,
         ),
     ) -> Self {
-        rentals::Value::new(vec![], |_| ValueAndMeta {
+        Self::new(vec![], |_| ValueAndMeta {
             value: v.0,
             meta: Value::Object(v.1),
         })
@@ -219,7 +219,7 @@ impl Clone for LineValue {
         // linked lifetime.
         // An alternative would be keeping the raw data in an ARC
         // instea of a Box.
-        LineValue::new(vec![], |_| {
+        Self::new(vec![], |_| {
             let v = self.suffix();
             ValueAndMeta {
                 value: v.value.clone_static(),
@@ -244,7 +244,7 @@ pub enum LineValueDeserError {
 }
 
 impl<'de> Deserialize<'de> for LineValue {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<LineValue, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -266,7 +266,7 @@ impl<'de> Deserialize<'de> for LineValue {
         } else {
             return Err(D::Error::custom("meta field missing"));
         };
-        Ok(LineValue::new(vec![], |_| ValueAndMeta {
+        Ok(Self::new(vec![], |_| ValueAndMeta {
             value: value.clone().into(),
             meta: meta.clone().into(),
         }))
@@ -274,7 +274,7 @@ impl<'de> Deserialize<'de> for LineValue {
 }
 
 impl PartialEq for LineValue {
-    fn eq(&self, other: &LineValue) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.rent(|s| other.rent(|o| s == o))
     }
 }

@@ -24,13 +24,13 @@ const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
 #[derive(Debug)]
-pub struct GrokPattern {
+pub struct Pattern {
     pub definition: String,
     pub pattern: grok::Pattern,
 }
 
-impl GrokPattern {
-    pub fn from_file(file_path: String, definition: String) -> Result<GrokPattern> {
+impl Pattern {
+    pub fn from_file(file_path: String, definition: String) -> Result<Pattern> {
         let file = File::open(file_path.clone())?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
@@ -64,7 +64,7 @@ impl GrokPattern {
             }
         }
 
-        Ok(GrokPattern {
+        Ok(Pattern {
             definition: format!("{}{}", "file://", file_path),
             pattern: result.compile(&definition, true)?,
         })
@@ -73,7 +73,7 @@ impl GrokPattern {
     pub fn new(definition: String) -> Result<Self> {
         let mut grok = Grok::default();
         if let Ok(pattern) = grok.compile(&definition, true) {
-            Ok(GrokPattern {
+            Ok(Pattern {
                 definition,
                 pattern,
             })
@@ -97,7 +97,7 @@ impl GrokPattern {
     }
 }
 
-impl std::clone::Clone for GrokPattern {
+impl std::clone::Clone for Pattern {
     fn clone(&self) -> Self {
         Self {
             definition: self.definition.to_owned(),
@@ -117,7 +117,7 @@ mod tests {
             let raw: String = $raw.to_string();
             dbg!(pat.clone());
             dbg!(raw.clone());
-            let codec = GrokPattern::new(pat).expect("bad pattern");
+            let codec = Pattern::new(pat).expect("bad pattern");
             let decoded = codec.matches(raw.as_bytes().to_vec());
             dbg!(&decoded);
             match decoded {
@@ -134,7 +134,7 @@ mod tests {
             let raw: String = $raw.to_string();
             dbg!(pat.clone());
             dbg!(raw.clone());
-            let codec = GrokPattern::new(pat).expect("bad pattern");
+            let codec = Pattern::new(pat).expect("bad pattern");
             let decoded = codec.matches(raw.as_bytes().to_vec());
             match decoded {
                 Err(decoded) => assert_eq!($expr, decoded.description()),

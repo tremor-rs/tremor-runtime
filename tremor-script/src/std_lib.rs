@@ -29,7 +29,7 @@ mod system;
 mod r#type;
 mod win;
 
-use crate::registry::{AggrRegistry, Registry};
+use crate::registry::{Aggr as AggrRegistry, Registry};
 
 pub fn load(registry: &mut Registry) {
     array::load(registry);

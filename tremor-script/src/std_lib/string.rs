@@ -79,7 +79,7 @@ pub fn load(registry: &mut Registry) {
                             }
                         },
                         (pos, '}') => match iter.next() {
-                            Some((_pos, '}')) => out.push('}'),
+                            Some((_, '}')) => out.push('}'),
                             _ => {
                                 return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
                             }
@@ -107,7 +107,7 @@ pub fn load(registry: &mut Registry) {
             Box::new(self.clone())
         }
         fn arity(&self) -> std::ops::RangeInclusive<usize> {
-            1usize..=std::usize::MAX
+            1_usize..=std::usize::MAX
         }
         fn is_const(&self) -> bool {
             true

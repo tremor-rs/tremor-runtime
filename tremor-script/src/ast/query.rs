@@ -16,6 +16,7 @@ use super::*;
 use crate::{impl_expr, impl_stmt, impl_stmt1};
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(dead_code)]
+#[allow(clippy::module_name_repetitions)]
 pub struct Query1<'script> {
     pub stmts: Stmts1<'script>,
 }
@@ -51,17 +52,17 @@ pub enum Stmt1<'script> {
     WindowDecl(WindowDecl1<'script>),
     OperatorDecl(OperatorDecl1<'script>),
     ScriptDecl(ScriptDecl1<'script>),
-    StreamStmt(StreamStmt),
-    OperatorStmt(OperatorStmt1<'script>),
-    ScriptStmt(ScriptStmt1<'script>),
-    SelectStmt(Box<MutSelect1<'script>>),
+    Stream(StreamStmt),
+    Operator(OperatorStmt1<'script>),
+    Script(ScriptStmt1<'script>),
+    Select(Box<MutSelect1<'script>>),
 }
 
 impl<'script> Upable<'script> for Stmt1<'script> {
     type Target = Stmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            Stmt1::SelectStmt(stmt) => {
+            Stmt1::Select(stmt) => {
                 let mut aggregates = Vec::new();
                 let mut consts = HashMap::new();
                 helper.swap(&mut aggregates, &mut consts);
@@ -70,20 +71,20 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                 // We know that select statements have exactly two consts
                 let consts = vec![Value::Null, Value::Null];
 
-                Ok(Stmt::SelectStmt(SelectStmt {
+                Ok(Stmt::Select(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
                     consts,
                 }))
             }
-            Stmt1::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt)),
+            Stmt1::Stream(stmt) => Ok(Stmt::Stream(stmt)),
             Stmt1::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
-            Stmt1::OperatorStmt(stmt) => Ok(Stmt::OperatorStmt(stmt.up(helper)?)),
+            Stmt1::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),
             Stmt1::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::ScriptDecl(stmt))
             }
-            Stmt1::ScriptStmt(stmt) => Ok(Stmt::ScriptStmt(stmt.up(helper)?)),
+            Stmt1::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             Stmt1::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::WindowDecl(stmt))
@@ -95,12 +96,12 @@ impl<'script> Upable<'script> for Stmt1<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt<'script> {
     WindowDecl(WindowDecl<'script>),
-    StreamStmt(StreamStmt),
+    Stream(StreamStmt),
     OperatorDecl(OperatorDecl<'script>),
     ScriptDecl(ScriptDecl<'script>),
-    OperatorStmt(OperatorStmt<'script>),
-    ScriptStmt(ScriptStmt<'script>),
-    SelectStmt(SelectStmt<'script>),
+    Operator(OperatorStmt<'script>),
+    Script(ScriptStmt<'script>),
+    Select(SelectStmt<'script>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

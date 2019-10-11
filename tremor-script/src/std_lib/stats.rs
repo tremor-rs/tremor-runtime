@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::registry::{
-    mfa, AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
+    mfa, Aggr as AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
 };
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;

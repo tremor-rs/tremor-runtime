@@ -95,8 +95,8 @@ pub enum Token<'input> {
     NewLine,
     SingleLineComment(&'input str),
     DocComment(&'input str),
-    BadToken(String), // Mark bad tokens in lexical stream
-    LineToken(usize),
+    Bad(String), // Mark bad tokens in lexical stream
+    Line(usize),
 
     // Path
     Ident(Cow<'input, str>, bool),
@@ -230,7 +230,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::SingleLineComment(_) => true,
             Token::Whitespace(_) => true,
             Token::NewLine => true,
-            Token::LineToken(_) => true,
+            Token::Line(_) => true,
             _ => false,
         }
     }
@@ -388,7 +388,7 @@ impl<'input> fmt::Display for Token<'input> {
         match self {
             Token::Whitespace(ref ws) => write!(f, "{}", ws),
             Token::NewLine => writeln!(f),
-            Token::LineToken(n) => write!(f, "{}: ", n),
+            Token::Line(n) => write!(f, "{}: ", n),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
@@ -427,7 +427,7 @@ impl<'input> fmt::Display for Token<'input> {
             }
 
             Token::BoolLiteral(value) => write!(f, "{}", value),
-            Token::BadToken(value) => write!(f, "{}", value),
+            Token::Bad(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),
             Token::Match => write!(f, "match"),
@@ -721,7 +721,7 @@ impl<'input> Lexer<'input> {
         match lexeme {
             "::" => Ok(spanned2(start, end, Token::ColonColon)),
             ":" => Ok(spanned2(start, end, Token::Colon)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -730,7 +730,7 @@ impl<'input> Lexer<'input> {
 
         match lexeme {
             "-" => Ok(spanned2(start, end, Token::Sub)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -744,7 +744,7 @@ impl<'input> Lexer<'input> {
             "<=" => Ok(spanned2(start, end, Token::Lte)),
             ">" => Ok(spanned2(start, end, Token::Gt)),
             ">=" => Ok(spanned2(start, end, Token::Gte)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -769,7 +769,7 @@ impl<'input> Lexer<'input> {
                 self.bump();
                 Ok(spanned2(start, end, Token::NotEq))
             }
-            Some((end, ch)) => Ok(spanned2(start, end, Token::BadToken(format!("!{}", ch)))),
+            Some((end, ch)) => Ok(spanned2(start, end, Token::Bad(format!("!{}", ch)))),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -969,7 +969,7 @@ impl<'input> Lexer<'input> {
                         self.bump();
                         // We don't allow anything tailing the initial `"""`
                         match self.bump() {
-                            Some((_end, '\n')) => self.hd(start).map(|e| vec![e]),
+                            Some((_, '\n')) => self.hd(start).map(|e| vec![e]),
                             Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
                                 Range::from((start, end)).expand_lines(2),
                                 Range::from((start, end)),
@@ -1090,13 +1090,13 @@ impl<'input> Lexer<'input> {
                     res.push(spanned2(start, end, Token::DQuote));
                     return Ok(res);
                 }
-                Some((eend, '{')) => {
+                Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
                         string.push('}');
                         end = e;
                         continue;
                     }
-                    let e = eend;
+                    let e = end_inner;
                     let mut s = start;
                     s.column += 1;
                     s.absolute += 1;
@@ -1110,11 +1110,11 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(string.into())
                         };
-                        res.push(spanned2(start, eend, token));
+                        res.push(spanned2(start, end_inner, token));
                         string = String::new();
                     }
-                    start = eend;
-                    end = eend;
+                    start = end_inner;
+                    end = end_inner;
                     end.column += 1;
                     end.absolute += 1;
                     res.push(spanned2(start, end, Token::LBrace));
@@ -1438,7 +1438,7 @@ impl<'input> Iterator for Lexer<'input> {
                     ch if ch.is_whitespace() => Some(self.ws(start)),
                     _ => {
                         let str = format!("{}", ch);
-                        Some(Ok(spanned2(start, start, Token::BadToken(str))))
+                        Some(Ok(spanned2(start, start, Token::Bad(str))))
                     }
                 }
             }

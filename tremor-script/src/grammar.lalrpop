@@ -48,11 +48,11 @@ Stmt: Stmt1<'input> = {
     <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
     <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "define" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::StreamStmt(StreamStmt { start, end, id: id.id.to_string() }),
-    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorStmt(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
-    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::ScriptStmt(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:Windows> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::SelectStmt(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows: vec![], maybe_group_by})),
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::Stream(StreamStmt { start, end, id: id.id.to_string() }),
+    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Operator(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Script(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:Windows> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows: vec![], maybe_group_by})),
 }
 
 WindowClause: Option<WindowDefn1> = {
@@ -454,8 +454,8 @@ PathSegment: Segment1<'input> = {
 
 /// A path selector aka [...]
 Selector: Segment1<'input> = {
-    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => Segment1::RangeSelector{range_start, range_end, start_lower, end_lower, start_upper, end_upper},
-    <start:@L> <expr:ComplexExprImut> <end:@L>  => Segment1::ElementSelector{expr, start, end},
+    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => Segment1::Range{range_start, range_end, start_lower, end_lower, start_upper, end_upper},
+    <start:@L> <expr:ComplexExprImut> <end:@L>  => Segment1::Element{expr, start, end},
 }
 
 
@@ -903,7 +903,7 @@ extern {
         "heredoc" => Token::HereDoc(_, <Vec<String>>),
         "test" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
-        "<error>" => Token::BadToken(<String>),
+        "<error>" => Token::Bad(<String>),
         "<end-of-stream>" => Token::EndOfStream,
 
         "select" => Token::Select,

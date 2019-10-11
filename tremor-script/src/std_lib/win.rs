@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
+use crate::registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 
 use simd_json::BorrowedValue as Value;
 use std::ops::RangeInclusive;

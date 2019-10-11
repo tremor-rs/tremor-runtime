@@ -27,7 +27,7 @@ use base64;
 use halfbrown::{hashmap, HashMap};
 
 use crate::datetime;
-use crate::grok::*;
+use crate::grok::Pattern as GrokPattern;
 use crate::influx;
 use crate::EventContext;
 use cidr_utils::{

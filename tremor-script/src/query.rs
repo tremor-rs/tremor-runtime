@@ -14,7 +14,7 @@
 
 use crate::ast::Warning;
 use crate::errors::*;
-use crate::highlighter::{DumbHighlighter, Highlighter};
+use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
 use crate::pos::Range;

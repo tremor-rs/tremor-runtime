@@ -372,7 +372,7 @@ where
 
         for segment in path.segments() {
             match segment {
-                Segment::IdSelector { id, .. } => {
+                Segment::Id { id, .. } => {
                     if let Some(o) = current.as_object() {
                         if let Some(c) = o.get(id) {
                             current = c;
@@ -385,7 +385,7 @@ where
                         return Ok(Cow::Borrowed(&FALSE));
                     }
                 }
-                Segment::IdxSelector { idx, .. } => {
+                Segment::Idx { idx, .. } => {
                     if let Some(a) = current.as_array() {
                         let (start, end) = if let Some((start, end)) = subrange {
                             // We check range on setting the subrange!
@@ -410,7 +410,7 @@ where
                     }
                 }
 
-                Segment::ElementSelector { expr, .. } => {
+                Segment::Element { expr, .. } => {
                     let next = match (
                         current,
                         stry!(expr.run(opts, context, aggrs, event, meta, local, consts)).borrow(),
@@ -440,7 +440,7 @@ where
                         return Ok(Cow::Borrowed(&FALSE));
                     }
                 }
-                Segment::RangeSelector {
+                Segment::Range {
                     range_start,
                     range_end,
                     ..

@@ -28,7 +28,7 @@ use tremor_script::ast::Stmt;
 use tremor_script::ast::{WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::DumbHighlighter;
-use tremor_script::{AggrRegistry, Registry, Value};
+use tremor_script::{Aggr as AggrRegistry, Registry, Value};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
     let v: Vec<&str> = port.split('/').collect();

@@ -15,13 +15,13 @@
 use crate::ast::Warning;
 use crate::ctx::EventContext;
 use crate::errors::*;
-use crate::highlighter::{DumbHighlighter, Highlighter};
+use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
 use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
 use crate::parser::grammar;
 use crate::pos::Range;
-use crate::registry::{AggrRegistry, Registry};
+use crate::registry::{Aggr as AggrRegistry, Registry};
 use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;

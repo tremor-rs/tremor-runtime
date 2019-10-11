@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::ast::Warning;
-use crate::errors::*;
+use crate::errors::{Error as ScriptError, *};
 use crate::lexer::{Token, TokenFuns, TokenSpan};
 use crate::pos::*;
 use lalrpop_util::ParseError;
@@ -37,7 +37,7 @@ impl ErrorLevel {
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HighlighterError {
+pub struct Error {
     pub start: Location,
     pub end: Location,
     pub callout: String,
@@ -46,8 +46,8 @@ pub struct HighlighterError {
     pub token: Option<String>,
 }
 
-impl From<&Error> for HighlighterError {
-    fn from(error: &Error) -> Self {
+impl From<&ScriptError> for Error {
+    fn from(error: &ScriptError) -> Self {
         let (start, end) = match error.context() {
             (_, Some(inner)) => (inner.0, inner.1),
             _ => (Location::default(), Location::default()),
@@ -63,7 +63,7 @@ impl From<&Error> for HighlighterError {
     }
 }
 
-impl From<&Warning> for HighlighterError {
+impl From<&Warning> for Error {
     fn from(warning: &Warning) -> Self {
         Self {
             start: warning.inner.0,
@@ -102,7 +102,7 @@ pub trait Highlighter {
         tokens: Vec<Result<TokenSpan>>,
         expr_start: Location,
         expr_end: Location,
-        error: Option<HighlighterError>,
+        error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
         self.highlight_errors(extracted, error)
@@ -111,20 +111,20 @@ pub trait Highlighter {
     fn highlight_errors(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
-        error: Option<HighlighterError>,
+        error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let mut printed_error = false;
         let mut line = 0;
         match error {
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Error,
                 ..
             }) => writeln!(self.get_writer(), "Error: ")?,
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Warning,
                 ..
             }) => writeln!(self.get_writer(), "Warning: ")?,
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Hint,
                 ..
             }) => writeln!(self.get_writer(), "Hint: ")?,
@@ -134,7 +134,7 @@ pub trait Highlighter {
             if let Ok(t) = t {
                 if t.span.start().line != line {
                     line = t.span.start().line;
-                    if let Some(HighlighterError {
+                    if let Some(Error {
                         start,
                         end,
                         callout,
@@ -209,7 +209,7 @@ pub trait Highlighter {
                     Token::StringLiteral(_) => {
                         c.set_intense(true).set_fg(Some(Color::Magenta));
                     }
-                    Token::BadToken(_) => {
+                    Token::Bad(_) => {
                         c.set_bold(true)
                             .set_intense(true)
                             .set_bg(Some(Color::Red))
@@ -267,7 +267,7 @@ pub trait Highlighter {
                 self.reset()?;
             };
         }
-        if let Some(HighlighterError {
+        if let Some(Error {
             start,
             end,
             callout,
@@ -324,44 +324,44 @@ pub trait Highlighter {
 /// Highlights data to allow extracting it as a plain,
 /// unhighlighted string.
 #[derive(Default)]
-pub struct DumbHighlighter {
+pub struct Dumb {
     buff: Vec<u8>,
 }
-impl DumbHighlighter {
+impl Dumb {
     pub fn new() -> Self {
-        DumbHighlighter::default()
+        Dumb::default()
     }
 }
 
-impl Highlighter for DumbHighlighter {
+impl Highlighter for Dumb {
     type W = Vec<u8>;
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
     }
 }
 
-impl ToString for DumbHighlighter {
+impl ToString for Dumb {
     fn to_string(&self) -> String {
         String::from_utf8_lossy(&self.buff).to_string()
     }
 }
 
 /// Highlights data colorized and directly to the terminal
-pub struct TermHighlighter {
+pub struct Term {
     bufwtr: BufferWriter,
     buff: Buffer,
 }
 
 #[allow(clippy::new_without_default)]
-impl TermHighlighter {
+impl Term {
     pub fn new() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
         let buff = bufwtr.buffer();
-        TermHighlighter { bufwtr, buff }
+        Term { bufwtr, buff }
     }
 }
 
-impl Highlighter for TermHighlighter {
+impl Highlighter for Term {
     type W = Buffer;
     fn set_color(&mut self, spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
         self.buff.set_color(spec)

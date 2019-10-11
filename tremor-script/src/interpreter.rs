@@ -158,7 +158,12 @@ pub fn exec_binary<'run, 'event: 'run>(
         // This is to make sure that == in a expression
         // and a record pattern behaves the same.
         (Eq, l, r) => Some(static_bool!(val_eq(l, r))),
-        (NotEq, l, r) => Some(static_bool!(!val_eq(l, r))),
+
+        (NotEq, l, r) =>
+        {
+            #[allow(clippy::if_not_else)]
+            Some(static_bool!(!val_eq(l, r)))
+        }
         (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
         (Gte, I64(l), F64(r)) => Some(static_bool!((*l as f64) >= *r)),
         (Gte, F64(l), I64(r)) => Some(static_bool!(*l >= (*r as f64))),
@@ -260,7 +265,7 @@ where
 
     for segment in path.segments() {
         match segment {
-            Segment::IdSelector { id, .. } => {
+            Segment::Id { id, .. } => {
                 if let Some(o) = current.as_object() {
                     if let Some(c) = o.get(id) {
                         current = c;
@@ -284,7 +289,7 @@ where
                     );
                 }
             }
-            Segment::IdxSelector { idx, .. } => {
+            Segment::Idx { idx, .. } => {
                 if let Some(a) = current.as_array() {
                     let (start, end) = if let Some((start, end)) = subrange {
                         // We check range on setting the subrange!
@@ -314,7 +319,7 @@ where
                     );
                 }
             }
-            Segment::ElementSelector { expr, .. } => {
+            Segment::Element { expr, .. } => {
                 let key = stry!(expr.run(opts, context, aggrs, event, meta, local, consts));
 
                 match (current, key.borrow()) {
@@ -390,7 +395,7 @@ where
                 }
             }
 
-            Segment::RangeSelector {
+            Segment::Range {
                 range_start,
                 range_end,
                 ..
@@ -901,10 +906,10 @@ where
             },
             PredicatePattern::FieldAbsent { .. } => match target.as_object() {
                 Some(ref o) => {
-                    if !o.contains_key(&key) {
-                        continue;
-                    } else {
+                    if o.contains_key(&key) {
                         return Ok(None);
+                    } else {
+                        continue;
                     }
                 }
                 _ => return Ok(None),

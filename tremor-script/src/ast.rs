@@ -20,7 +20,7 @@ pub mod upable;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
-use crate::registry::{AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
+use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
@@ -2133,12 +2133,12 @@ impl<'script> BaseExpr for Path<'script> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Segment1<'script> {
-    ElementSelector {
+    Element {
         expr: ImutExpr1<'script>,
         start: Location,
         end: Location,
     },
-    RangeSelector {
+    Range {
         start_lower: Location,
         range_start: ImutExpr1<'script>,
         end_lower: Location,
@@ -2153,17 +2153,17 @@ impl<'script> Upable<'script> for Segment1<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use Segment1::*;
         Ok(match self {
-            ElementSelector { expr, start, end } => {
+            Element { expr, start, end } => {
                 let expr = expr.up(helper)?;
-                let r: Range = expr.extent();
+                let r = expr.extent();
                 match expr {
                     ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l))? {
-                        Value::String(id) => Segment::IdSelector {
+                        Value::String(id) => Segment::Id {
                             id: id.clone(),
                             start,
                             end,
                         },
-                        Value::I64(idx) if idx >= 0 => Segment::IdxSelector {
+                        Value::I64(idx) if idx >= 0 => Segment::Idx {
                             idx: idx as usize,
                             start,
                             end,
@@ -2178,17 +2178,17 @@ impl<'script> Upable<'script> for Segment1<'script> {
                             .into());
                         }
                     },
-                    expr => Segment::ElementSelector { start, end, expr },
+                    expr => Segment::Element { start, end, expr },
                 }
             }
-            RangeSelector {
+            Range {
                 start_lower,
                 range_start,
                 end_lower,
                 start_upper,
                 range_end,
                 end_upper,
-            } => Segment::RangeSelector {
+            } => Segment::Range {
                 start_lower,
                 range_start: Box::new(range_start.up(helper)?),
                 end_lower,
@@ -2202,7 +2202,7 @@ impl<'script> Upable<'script> for Segment1<'script> {
 
 impl<'script> Segment1<'script> {
     pub fn from_id(id: Ident<'script>) -> Self {
-        Segment1::ElementSelector {
+        Segment1::Element {
             start: id.start,
             end: id.end,
             expr: ImutExpr1::Literal(Literal {
@@ -2213,7 +2213,7 @@ impl<'script> Segment1<'script> {
         }
     }
     pub fn from_str(id: &'script str, start: Location, end: Location) -> Self {
-        Segment1::ElementSelector {
+        Segment1::Element {
             start,
             end,
             expr: ImutExpr1::Literal(Literal {
@@ -2233,22 +2233,22 @@ impl<'script> From<ImutExpr1<'script>> for Expr1<'script> {
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Segment<'script> {
-    IdSelector {
+    Id {
         id: Cow<'script, str>,
         start: Location,
         end: Location,
     },
-    IdxSelector {
+    Idx {
         idx: usize,
         start: Location,
         end: Location,
     },
-    ElementSelector {
+    Element {
         expr: ImutExpr<'script>,
         start: Location,
         end: Location,
     },
-    RangeSelector {
+    Range {
         start_lower: Location,
         range_start: Box<ImutExpr<'script>>,
         end_lower: Location,
@@ -2262,18 +2262,16 @@ impl<'script> PartialEq for Segment<'script> {
     fn eq(&self, other: &Self) -> bool {
         use Segment::*;
         match (self, other) {
-            (IdSelector { id: id1, .. }, IdSelector { id: id2, .. }) => id1 == id2,
-            (IdxSelector { idx: idx1, .. }, IdxSelector { idx: idx2, .. }) => idx1 == idx2,
-            (ElementSelector { expr: expr1, .. }, ElementSelector { expr: expr2, .. }) => {
-                expr1 == expr2
-            }
+            (Id { id: id1, .. }, Id { id: id2, .. }) => id1 == id2,
+            (Idx { idx: idx1, .. }, Idx { idx: idx2, .. }) => idx1 == idx2,
+            (Element { expr: expr1, .. }, Element { expr: expr2, .. }) => expr1 == expr2,
             (
-                RangeSelector {
+                Range {
                     range_start: start1,
                     range_end: end1,
                     ..
                 },
-                RangeSelector {
+                Range {
                     range_start: start2,
                     range_end: end2,
                     ..
@@ -2287,18 +2285,18 @@ impl<'script> PartialEq for Segment<'script> {
 impl<'script> BaseExpr for Segment<'script> {
     fn s(&self) -> Location {
         match self {
-            Segment::IdSelector { start, .. } => *start,
-            Segment::IdxSelector { start, .. } => *start,
-            Segment::ElementSelector { start, .. } => *start,
-            Segment::RangeSelector { start_lower, .. } => *start_lower,
+            Segment::Id { start, .. } => *start,
+            Segment::Idx { start, .. } => *start,
+            Segment::Element { start, .. } => *start,
+            Segment::Range { start_lower, .. } => *start_lower,
         }
     }
     fn e(&self) -> Location {
         match self {
-            Segment::IdSelector { end, .. } => *end,
-            Segment::IdxSelector { end, .. } => *end,
-            Segment::ElementSelector { end, .. } => *end,
-            Segment::RangeSelector { end_upper, .. } => *end_upper,
+            Segment::Id { end, .. } => *end,
+            Segment::Idx { end, .. } => *end,
+            Segment::Element { end, .. } => *end,
+            Segment::Range { end_upper, .. } => *end_upper,
         }
     }
 }
@@ -2315,7 +2313,7 @@ impl<'script> Upable<'script> for LocalPath1<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
-        if let Some(Segment::IdSelector { id, .. }) = segments.next() {
+        if let Some(Segment::Id { id, .. }) = segments.next() {
             let segments = segments.collect();
             if let Some(idx) = helper.is_const(&id) {
                 Ok(LocalPath {
