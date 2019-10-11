@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(warnings)]
+#![recursion_limit = "1024"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
 use actix_web::{error, web, App, Error, HttpResponse, HttpServer};
 use bytes::BytesMut;
 use futures::{Future, Stream};

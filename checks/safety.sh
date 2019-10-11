@@ -16,6 +16,7 @@ code sanity checker
   -d         check for dbg!
   -x         check for std::process::exit
   -b         check for bracket access
+  -c         check if pedantic mode for clippy is enabled
 EOF
 }
 
@@ -23,14 +24,14 @@ EOF
 
 files=$(find . -name '*.rs' | grep -v -f .checkignore)
 
-while getopts hauiprebldx opt; do
+while getopts hauiprebldxc opt; do
     case $opt in
         h)
             help
             exit 0
             ;;
         a)
-            exec "$0" -uirpeldx
+            exec "$0" -uirpeldxc
             ;;
         u)
             for file in $files
@@ -125,6 +126,17 @@ while getopts hauiprebldx opt; do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep '[a-z]\[' > /dev/null
                 then
                     echo "##[error] array access ([...]) found in $file, that could go wrong, array access can panic."
+                    count=$((count + 1))
+                fi
+            done
+            ;;
+        c)
+            files=$(find . -name 'lib.rs' -or -name 'main.rs' | grep -v -f .checkignore)
+            for file in $files
+            do
+                if  ! grep 'clippy::pedantic' "$file" > /dev/null
+                then
+                    echo "##[error] $file, does not enforce clippy pedantic."
                     count=$((count + 1))
                 fi
             done
