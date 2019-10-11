@@ -176,8 +176,18 @@
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```
-//!
 
+#![forbid(warnings)]
+#![recursion_limit = "1024"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
 use halfbrown::HashMap;
 use simd_json::value::borrowed::{Object, Value};
 use std::fmt;
@@ -191,7 +201,7 @@ enum ExtractType {
 
 impl std::default::Default for ExtractType {
     fn default() -> Self {
-        ExtractType::String
+        Self::String
     }
 }
 
@@ -224,21 +234,21 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::ConnectedExtractors(p) => write!(
+            Self::ConnectedExtractors(p) => write!(
                 f,
                 "A dilimiter needs to be provided between the two patterns at {}",
                 p
             ),
-            Error::Unterminated(p) => write!(f, "Unterminated patter at {}", p),
-            Error::PaddingFollowedBySelf(p) => write!(
+            Self::Unterminated(p) => write!(f, "Unterminated patter at {}", p),
+            Self::PaddingFollowedBySelf(p) => write!(
                 f,
                 "The padding at {} can't be followed up by a dilimiter that begins with it",
                 p
             ),
-            Error::InvalidPad(p) => write!(f, "Invalid padding at {}", p),
-            Error::InvalidType(p, t) => write!(f, "Invalid type '{}' at {}", p, t),
-            Error::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
-            Error::UnterminatedEscape => write!(
+            Self::InvalidPad(p) => write!(f, "Invalid padding at {}", p),
+            Self::InvalidType(p, t) => write!(f, "Invalid type '{}' at {}", p, t),
+            Self::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
+            Self::UnterminatedEscape => write!(
                 f,
                 "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"
             ),
@@ -386,19 +396,16 @@ impl Pattern {
                     let p = parse_extractor(&pattern[2..i], idx)?;
                     // Padding doesn't count as an extractor
                     pattern = &pattern[i + 1..];
-                    was_extract = match &p {
-                        Command::Padding(pad) => {
-                            if pattern.starts_with(pad) {
-                                return Err(Error::PaddingFollowedBySelf(idx));
-                            };
-                            false
-                        }
-                        _ => {
-                            if was_extract {
-                                return Err(Error::ConnectedExtractors(idx));
-                            };
-                            true
-                        }
+                    was_extract = if let Command::Padding(pad) = &p {
+                        if pattern.starts_with(pad) {
+                            return Err(Error::PaddingFollowedBySelf(idx));
+                        };
+                        false
+                    } else {
+                        if was_extract {
+                            return Err(Error::ConnectedExtractors(idx));
+                        };
+                        true
                     };
                     commands.push(p);
                     idx += i + 1;
@@ -421,12 +428,6 @@ impl Pattern {
     }
 
     pub fn run(&self, mut data: &str) -> Option<Object<'static>> {
-        let mut r = Object::new();
-        let mut ignored: HashMap<String, String> = HashMap::new();
-        let mut last_sep = String::from(" ");
-        // reverse so we 'pop from the front'
-        //TODO: Fix and iterrate over commands instead of poping
-
         #[allow(clippy::too_many_arguments)]
         fn insert(
             r: &mut Object<'static>,
@@ -461,6 +462,10 @@ impl Pattern {
             }
             Some(())
         }
+
+        let mut r = Object::new();
+        let mut ignored: HashMap<String, String> = HashMap::new();
+        let mut last_sep = String::from(" ");
         let mut t = 0;
         loop {
             match self.commands.get(t) {
