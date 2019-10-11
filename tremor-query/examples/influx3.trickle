@@ -1,4 +1,4 @@
-create tumbling window `10secs`
+define tumbling window `10secs`
  with
    interval = datetime::with_seconds(10),
 end;
