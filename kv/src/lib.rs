@@ -47,6 +47,17 @@
 // | value_split            | supported, array of strings                             | Yes       |
 // | value_split_pattern    | not supported                                           | No        |
 // | whitespace             | we always run in 'lenient mode' as is the default of LS | No        |
+#![forbid(warnings)]
+#![recursion_limit = "1024"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
 
 use serde::{Deserialize, Serialize};
 use simd_json::value::borrowed::{Object, Value};
@@ -62,10 +73,10 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::InvalidPattern(p) => write!(f, "invalid pattern at character {}", p),
-            Error::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
-            Error::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
-            Error::UnterminatedEscape => write!(f, "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"),
+            Self::InvalidPattern(p) => write!(f, "invalid pattern at character {}", p),
+            Self::DoubleSeperator(s) => write!(f, "The seperator '{}' is used for both key value seperation as well as pair seperation.", s),
+            Self::InvalidEscape(s) => write!(f, "Invalid escape sequence \\'{}' is not valid.", s),
+            Self::UnterminatedEscape => write!(f, "Unterminated escape at the end of line or of a delimiter %{{ can't be escaped"),
         }
     }
 }
@@ -132,11 +143,10 @@ impl Pattern {
                     field_seperators.push(handle_scapes(&pattern[i..i + i1])?);
                 }
                 i += i1;
-            } else if !pattern[i..].is_empty() {
-                field_seperators.push(handle_scapes(&pattern[i..])?);
-
+            } else if pattern[i..].is_empty() {
                 break;
             } else {
+                field_seperators.push(handle_scapes(&pattern[i..])?);
                 break;
             }
         }
