@@ -52,9 +52,7 @@ where
             Cont::EmitEvent(_p) => {
                 Err(ErrorKind::InvalidEmit(outer.extent(), inner.extent()).into())
             }
-            Cont::Emit(_v, _p) => {
-                Err(ErrorKind::InvalidEmit(outer.extent(), inner.extent()).into())
-            }
+            Cont::Emit(_v, _p) => Err(ErrorKind::InvalidEmit(outer.extent(), inner.extent()).into()),
             Cont::Drop => Err(ErrorKind::InvalidDrop(outer.extent(), inner.extent()).into()),
         }
     }

@@ -341,7 +341,7 @@ macro_rules! tremor_fn_ {
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
-            const ARGC: usize = {0usize $(+ replace_expr!($arg 1usize))*};
+            const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
