@@ -17,6 +17,7 @@ use crate::tremor_const_fn;
 use crate::EventContext;
 use simd_json::value::ValueTrait;
 use simd_json::BorrowedValue as Value;
+use std::convert::TryInto;
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
@@ -47,11 +48,7 @@ pub fn load(registry: &mut Registry) {
                 });
             }
             if let Some(format) = args[0].as_str() {
-                let mut arg_stack = if args.is_empty() {
-                    vec![]
-                } else {
-                    args[1..].to_vec()
-                };
+                let mut arg_stack = args[1..].to_vec();
                 arg_stack.reverse();
 
                 let mut out = String::with_capacity(format.len());
@@ -138,13 +135,19 @@ pub fn load(registry: &mut Registry) {
         }))
         .insert(
             tremor_const_fn!(string::substr(_context, _input: String, _start: I64, _end: I64) {
+                let start: usize = (*_start).try_into().map_err(|_|
+                    FunctionError::BadType{mfa: this_mfa()}
+                )?;
+                let end: usize = (*_end).try_into().map_err(|_|
+                    FunctionError::BadType{mfa: this_mfa()}
+                )?;
                 // Since rust doens't handle UTF8 indexes we have to translate this
                 // _input.char_indices() - get an iterator over codepoint indexes
                 //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple 
                 //   .map(|v| v.0) - map to the first argument (byte index)
                 //   .unwrap_or_else(|| 0) - since this is an option we need to safely extract the value so we default it to 0 for start or len for end
-                let start = _input.char_indices().nth(*_start as usize).map(|v| v.0).unwrap_or_else(|| 0);
-                let end = _input.char_indices().nth(*_end as usize).map(|v| v.0).unwrap_or_else(|| _input.len());
+                let start = _input.char_indices().nth(start).map_or_else(|| 0, |v| v.0);
+                let end = _input.char_indices().nth(end).map_or_else(|| _input.len(), |v| v.0);
 
                 Ok(Value::from((&_input[start..end]).to_string()))
             }),

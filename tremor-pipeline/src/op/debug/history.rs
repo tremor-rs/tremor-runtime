@@ -38,6 +38,7 @@ op!(EventHistoryFactory(node) {
     }});
 
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct EventHistory {
     pub config: Config,
     pub id: String,

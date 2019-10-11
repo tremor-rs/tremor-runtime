@@ -119,6 +119,7 @@ pub fn dflt<T: Default>() -> T {
 }
 
 pub type LinkMap = IndexMap<String, String>;
+#[allow(clippy::module_name_repetitions)]
 pub type ConfigMap = Option<serde_yaml::Value>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

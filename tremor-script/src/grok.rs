@@ -99,6 +99,7 @@ impl Pattern {
 
 impl std::clone::Clone for Pattern {
     fn clone(&self) -> Self {
+        #[allow(clippy::result_unwrap_used)]
         Self {
             definition: self.definition.to_owned(),
             //ALLOW: since we clone we know this exists

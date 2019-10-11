@@ -35,6 +35,7 @@ rental! {
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct TrickleScript {
     pub id: String,
     pub defn: Arc<tremor_script::query::rentals::Stmt>,
@@ -92,8 +93,7 @@ impl Operator for TrickleScript {
                     o.insert(name.into(), value.clone());
                 }
                 // Set params from instance as meta vars ( eg: upsert ~= override + add )
-                if let tremor_script::ast::query::Stmt::ScriptStmt(instance) = &*self.defn.suffix()
-                {
+                if let tremor_script::ast::query::Stmt::Script(instance) = &*self.defn.suffix() {
                     if let Some(map) = &instance.params {
                         for (name, value) in map {
                             o.insert(name.into(), value.clone());

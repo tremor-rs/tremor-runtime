@@ -250,10 +250,10 @@ impl PartialEq for SnotCombiner {
 
 impl Clone for SnotCombiner {
     fn clone(&self) -> Self {
-        if let Ok(clone) = SnotCombiner::from_rules(self.rules.clone()) {
+        if let Ok(clone) = Self::from_rules(self.rules.clone()) {
             clone
         } else {
-            SnotCombiner {
+            Self {
                 combiner: IpCidrCombiner::new(),
                 rules: vec![],
             }
@@ -273,37 +273,38 @@ impl fmt::Display for ExtractorError {
 }
 
 impl Extractor {
-    pub fn new(id: &str, rule_text: &str) -> Result<Extractor, ExtractorError> {
+    pub fn new(id: &str, rule_text: &str) -> Result<Self, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
-            "glob" => Extractor::Glob {
+            "glob" => Self::Glob {
                 compiled: glob::Pattern::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "re" => Extractor::Re {
+            "re" => Self::Re {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "base64" => Extractor::Base64,
-            "kv" => Extractor::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
-            "json" => Extractor::Json,
-            "dissect" => Extractor::Dissect {
+            "base64" => Self::Base64,
+            "kv" => Self::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
+            "json" => Self::Json,
+            "dissect" => Self::Dissect {
                 rule: rule_text.to_string(),
                 compiled: Pattern::compile(rule_text)
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
-            "grok" => match GrokPattern::from_file(
-                crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
-                rule_text.to_string(),
-            ) {
-                Ok(pat) => Extractor::Grok {
-                    rule: rule_text.to_string(),
-                    compiled: pat,
-                },
-                Err(_) => {
+            "grok" => {
+                if let Ok(pat) = GrokPattern::from_file(
+                    crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
+                    rule_text.to_string(),
+                ) {
+                    Self::Grok {
+                        rule: rule_text.to_string(),
+                        compiled: pat,
+                    }
+                } else {
                     let mut grok = grok::Grok::default();
                     let pat = grok.compile(&rule_text, true)?;
-                    Extractor::Grok {
+                    Self::Grok {
                         rule: rule_text.to_string(),
                         compiled: GrokPattern {
                             definition: rule_text.to_string(),
@@ -311,10 +312,10 @@ impl Extractor {
                         },
                     }
                 }
-            },
+            }
             "cidr" => {
                 if rule_text.is_empty() {
-                    Extractor::Cidr {
+                    Self::Cidr {
                         range: None,
                         rules: vec![],
                     }
@@ -323,15 +324,15 @@ impl Extractor {
                         .split(',')
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
-                    Extractor::Cidr {
+                    Self::Cidr {
                         range: Some(SnotCombiner::from_rules(rules.clone())?),
                         rules,
                     }
                 }
             }
 
-            "influx" => Extractor::Influx,
-            "datetime" => Extractor::Datetime {
+            "influx" => Self::Influx,
+            "datetime" => Self::Datetime {
                 format: rule_text.to_string(),
                 has_timezone: datetime::has_tz(rule_text),
             },
@@ -356,7 +357,7 @@ impl Extractor {
     {
         match v {
             Value::String(ref s) => match self {
-                Extractor::Re { compiled: re, .. } => {
+                Self::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
                         if !result_needed {
                             return Ok(Value::Null);
@@ -378,7 +379,7 @@ impl Extractor {
                         })
                     }
                 }
-                Extractor::Glob { compiled: glob, .. } => {
+                Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
                         Ok(Value::Bool(true))
                     } else {
@@ -387,7 +388,7 @@ impl Extractor {
                         })
                     }
                 }
-                Extractor::Kv(kv) => {
+                Self::Kv(kv) => {
                     if let Some(r) = kv.run(s) {
                         if !result_needed {
                             return Ok(Value::Null);
@@ -399,7 +400,7 @@ impl Extractor {
                         })
                     }
                 }
-                Extractor::Base64 => {
+                Self::Base64 => {
                     let encoded = s.to_string().clone();
                     let decoded = base64::decode(&encoded)?;
                     if !result_needed {
@@ -414,7 +415,7 @@ impl Extractor {
                             .into(),
                     ))
                 }
-                Extractor::Json => {
+                Self::Json => {
                     let mut s = s.to_string();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded: &mut [u8] = unsafe { s.as_bytes_mut() };
@@ -427,7 +428,7 @@ impl Extractor {
                     }
                     Ok(decoded.into())
                 }
-                Extractor::Cidr {
+                Self::Cidr {
                     range: Some(combiner),
                     ..
                 } => {
@@ -446,14 +447,14 @@ impl Extractor {
                         })
                     }
                 }
-                Extractor::Cidr { range: None, .. } => {
+                Self::Cidr { range: None, .. } => {
                     let c = Cidr::from_str(s)?;
                     if !result_needed {
                         return Ok(Value::Null);
                     };
                     Ok(Value::Object(c.into()))
                 }
-                Extractor::Dissect {
+                Self::Dissect {
                     compiled: pattern, ..
                 } => {
                     if let Some(o) = pattern.run(s) {
@@ -464,7 +465,7 @@ impl Extractor {
                         })
                     }
                 }
-                Extractor::Grok {
+                Self::Grok {
                     compiled: ref pattern,
                     ..
                 } => {
@@ -474,17 +475,14 @@ impl Extractor {
                     };
                     Ok(o.into())
                 }
-                Extractor::Influx => match influx::parse(s, ctx.ingest_ns()) {
+                Self::Influx => match influx::parse(s, ctx.ingest_ns()) {
                     Ok(ref _x) if !result_needed => Ok(Value::Null),
-                    Ok(None) => Err(ExtractorError {
-                        msg: "The input is invalid".into(),
-                    }),
                     Ok(Some(r)) => Ok(r.into_static()),
-                    Err(_) => Err(ExtractorError {
+                    Ok(None) | Err(_) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
                     }),
                 },
-                Extractor::Datetime {
+                Self::Datetime {
                     ref format,
                     has_timezone,
                 } => {
@@ -506,41 +504,31 @@ impl Extractor {
 }
 
 impl<T: std::error::Error> From<T> for ExtractorError {
-    fn from(x: T) -> ExtractorError {
-        ExtractorError { msg: x.to_string() }
+    fn from(x: T) -> Self {
+        Self { msg: x.to_string() }
     }
 }
 
 impl PartialEq<Extractor> for Extractor {
-    fn eq(&self, other: &Extractor) -> bool {
+    #[allow(clippy::match_same_arms)]
+    fn eq(&self, other: &Self) -> bool {
         match (&self, other) {
-            (Extractor::Base64, Extractor::Base64) => true,
-            (Extractor::Kv(l), Extractor::Kv(r)) => l == r,
-            (Extractor::Json, Extractor::Json) => true,
-            (Extractor::Re { rule: rule_l, .. }, Extractor::Re { rule: rule_r, .. }) => {
+            (Self::Base64, Self::Base64)
+            | (Self::Json, Self::Json)
+            | (Self::Influx, Self::Influx) => true,
+            (Self::Kv(rule_l), Self::Kv(rule_r)) => rule_l == rule_r,
+            (Self::Re { rule: rule_l, .. }, Self::Re { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Glob { rule: rule_l, .. }, Self::Glob { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Dissect { rule: rule_l, .. }, Self::Dissect { rule: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Glob { rule: rule_l, .. }, Extractor::Glob { rule: rule_r, .. }) => {
+            (Self::Grok { rule: rule_l, .. }, Self::Grok { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Cidr { range: rule_l, .. }, Self::Cidr { range: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Dissect { rule: rule_l, .. }, Extractor::Dissect { rule: rule_r, .. }) => {
+            (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Grok { rule: rule_l, .. }, Extractor::Grok { rule: rule_r, .. }) => {
-                rule_l == rule_r
-            }
-            (Extractor::Cidr { range: range_l, .. }, Extractor::Cidr { range: range_r, .. }) => {
-                range_l == range_r
-            }
-            (Extractor::Influx, Extractor::Influx) => true,
-            (
-                Extractor::Datetime {
-                    format: format_l, ..
-                },
-                Extractor::Datetime {
-                    format: format_r, ..
-                },
-            ) => format_l == format_r,
             _ => false,
         }
     }
@@ -550,9 +538,9 @@ impl PartialEq<Extractor> for Extractor {
 pub struct Cidr(pub IpCidr);
 
 impl Cidr {
-    pub fn from_str(s: &str) -> Result<Cidr, ExtractorError> {
+    pub fn from_str(s: &str) -> Result<Self, ExtractorError> {
         if let Some(cidr) = parse_ipv4_fast(s) {
-            Ok(Cidr(cidr))
+            Ok(Self(cidr))
         } else {
             Err(ExtractorError {
                 msg: format!("Invalid CIDR: '{}'", s),
@@ -569,10 +557,10 @@ impl std::ops::Deref for Cidr {
     }
 }
 
-#[allow(clippy::implicit_hasher)]
+#[allow(clippy::implicit_hasher, clippy::use_self)]
 // ^ we will not be using this with custom hashers, so we do not need to generalise the function over all hashers
 impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
-    fn from(x: Cidr) -> HashMap<Cow<'cidr, str>, Value<'cidr>> {
+    fn from(x: Cidr) -> Self {
         match x.0 {
             IpCidr::V4(y) => hashmap!(
                        "prefix".into() => Value::from(y.get_prefix_as_u8_array().to_vec()),

@@ -455,7 +455,7 @@ macro_rules! tremor_fn_ {
 
 impl Default for Registry {
     fn default() -> Self {
-        Registry {
+        Self {
             functions: HashMap::new(),
         }
     }
@@ -483,17 +483,13 @@ impl Registry {
     }
 
     pub fn insert(&mut self, function: TremorFnWrapper) -> &mut Registry {
-        match self.functions.get_mut(&function.module) {
-            Some(module) => {
-                module.insert(function.name.clone(), function);
-            }
-
-            None => {
-                let mut module = HashMap::new();
-                let module_name = function.module.clone();
-                module.insert(function.name.clone(), function);
-                self.functions.insert(module_name, module);
-            }
+        if let Some(module) = self.functions.get_mut(&function.module) {
+            module.insert(function.name.clone(), function);
+        } else {
+            let mut module = HashMap::new();
+            let module_name = function.module.clone();
+            module.insert(function.name.clone(), function);
+            self.functions.insert(module_name, module);
         }
         self
     }
@@ -507,7 +503,7 @@ pub struct TremorAggrFnWrapper {
 
 impl Clone for TremorAggrFnWrapper {
     fn clone(&self) -> Self {
-        TremorAggrFnWrapper {
+        Self {
             module: self.module.clone(),
             name: self.name.clone(),
             fun: self.fun.snot_clone(),

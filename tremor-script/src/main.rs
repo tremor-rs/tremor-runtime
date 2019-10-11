@@ -47,7 +47,7 @@ mod tilde;
 extern crate rental;
 
 use crate::errors::*;
-use crate::highlighter::{Highlighter, TermHighlighter};
+use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
 pub use ctx::EventContext;
@@ -171,7 +171,7 @@ fn main() -> Result<()> {
                     .map(|s| s.map(String::into_bytes))
                     .collect();
                 inputs = lines?;
-                for i in inputs.iter() {
+                for i in &inputs {
                     if let Some(i) = influx::parse(std::str::from_utf8(i)?, 0)? {
                         r.push(i);
                     }
@@ -185,7 +185,7 @@ fn main() -> Result<()> {
                     input.read_to_end(&mut bytes)?;
                     inputs.push(bytes);
                 }
-                for i in inputs.iter_mut() {
+                for i in &mut inputs {
                     r.push(simd_json::to_borrowed_value(i)?)
                 }
                 r
@@ -201,7 +201,6 @@ fn main() -> Result<()> {
             };
 
             let mut global_map = Value::Object(hashmap! {});
-            let _expr = Value::Null;
             let mut event = events
                 .pop()
                 .expect("At least one event needs to be specified");

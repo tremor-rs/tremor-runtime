@@ -350,6 +350,7 @@ struct Hdr {
 
 impl std::default::Default for Hdr {
     fn default() -> Self {
+        #[allow(clippy::result_unwrap_used)]
         Hdr {
             //ALLOW: this values have been tested so an error can never be returned
             histo: Histogram::new_with_bounds(1, u64::MAX >> 1, 2).unwrap(),

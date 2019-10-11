@@ -27,8 +27,8 @@ use std::sync::Arc;
 use tremor_script::ast::Stmt;
 use tremor_script::ast::{WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
-use tremor_script::highlighter::DumbHighlighter;
-use tremor_script::{Aggr as AggrRegistry, Registry, Value};
+use tremor_script::highlighter::Dumb as DumbHighlighter;
+use tremor_script::{AggrRegistry, Registry, Value};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
     let v: Vec<&str> = port.split('/').collect();
@@ -166,7 +166,7 @@ impl Query {
             };
 
             match stmt {
-                Stmt::SelectStmt(ref select) => {
+                Stmt::Select(ref select) => {
                     let s = &select.stmt;
                     let from = s.from.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
@@ -185,10 +185,7 @@ impl Query {
                     let select_in = resolve_input_port(from.id.clone() + "_select")?;
                     let select_out = resolve_output_port(from.id.clone() + "_select")?;
                     let into = resolve_input_port(into)?;
-                    if !links.contains_key(&from) {
-                        links.insert(from, vec![select_in.clone()]);
-                        links.insert(select_out, vec![into]);
-                    } else {
+                    if links.contains_key(&from) {
                         match links.get_mut(&from) {
                             Some(x) => x.push(select_in.clone()),
                             None => return Err("should never get here - link should be ok".into()),
@@ -197,6 +194,9 @@ impl Query {
                             Some(x) => x.push(into),
                             None => return Err("should never get here - link should be ok".into()),
                         }
+                    } else {
+                        links.insert(from, vec![select_in.clone()]);
+                        links.insert(select_out, vec![into]);
                     }
 
                     let node = NodeConfig {
@@ -214,7 +214,7 @@ impl Query {
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                 }
-                Stmt::StreamStmt(s) => {
+                Stmt::Stream(s) => {
                     let name = s.id.clone().to_string();
                     let src = resolve_output_port(name.clone())?;
                     if !nodes.contains_key(&src.id) {
@@ -246,7 +246,7 @@ impl Query {
                     let name = o.id.clone().to_string();
                     operators.insert(name, Stmt::OperatorDecl(o.clone()));
                 }
-                Stmt::OperatorStmt(o) => {
+                Stmt::Operator(o) => {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
 
@@ -283,7 +283,7 @@ impl Query {
                     let name = s.id.clone().to_string();
                     scripts.insert(name, Stmt::ScriptDecl(s.clone()));
                 }
-                Stmt::ScriptStmt(o) => {
+                Stmt::Script(o) => {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
 
@@ -481,7 +481,7 @@ impl Query {
 
         for stmt in stmts {
             match stmt {
-                Stmt::SelectStmt(select) => {
+                Stmt::Select(select) => {
                     let s = &select.stmt;
                     let from = s.from.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
@@ -500,10 +500,7 @@ impl Query {
                     let select_in = resolve_input_port(from.id.clone() + "_select")?;
                     let select_out = resolve_output_port(from.id.clone() + "_select")?;
                     let into = resolve_input_port(into)?;
-                    if !config.links.contains_key(&from) {
-                        config.links.insert(from, vec![select_in.clone()]);
-                        config.links.insert(select_out, vec![into]);
-                    } else {
+                    if config.links.contains_key(&from) {
                         match config.links.get_mut(&from) {
                             Some(x) => x.push(select_in.clone()),
                             None => return Err("should never get here - link should be ok".into()),
@@ -512,6 +509,9 @@ impl Query {
                             Some(x) => x.push(into),
                             None => return Err("should never get here - link should be ok".into()),
                         }
+                    } else {
+                        config.links.insert(from, vec![select_in.clone()]);
+                        config.links.insert(select_out, vec![into]);
                     }
 
                     let id = graph.add_node(NodeConfig {
@@ -526,7 +526,7 @@ impl Query {
                     outputs.push(id);
                     // };
                 }
-                Stmt::StreamStmt(s) => {
+                Stmt::Stream(s) => {
                     let name = s.id.clone().to_string();
                     let src = resolve_output_port(name.clone())?;
                     if !nodes.contains_key(&src.id) {
@@ -674,7 +674,7 @@ pub fn supported_operators(
                 .into());
             };
             let windows: Result<Vec<(String, WindowImpl)>> =
-                if let tremor_script::ast::Stmt::SelectStmt(s) = node.stmt.suffix() {
+                if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
                     s.stmt
                         .windows
                         .iter()

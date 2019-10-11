@@ -71,7 +71,7 @@ use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
     if node.config.is_none() {
-        Ok(Box::new(BucketGrouper {
+        Ok(Box::new(Grouper {
             buckets: HashMap::new(),
             _id: node.id.clone(),
         }))
@@ -122,18 +122,18 @@ impl Bucket {
     }
 }
 
-pub struct BucketGrouper {
+pub struct Grouper {
     pub _id: String,
     pub buckets: HashMap<String, Bucket>,
 }
 
-impl std::fmt::Debug for BucketGrouper {
+impl std::fmt::Debug for Grouper {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Bucketgrouper")
     }
 }
 
-impl Operator for BucketGrouper {
+impl Operator for Grouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let meta = &event.data.suffix().meta;
         if let Some(class) = meta.get("class").and_then(Value::as_str) {

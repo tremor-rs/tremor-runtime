@@ -17,7 +17,7 @@ use crate::{Event, Operator};
 use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
-use tremor_script::highlighter::DumbHighlighter;
+use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::{self, interpreter::AggrType, EventContext, Return, Script};
 
 op!(TremorFactory(node) {

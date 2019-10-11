@@ -55,6 +55,7 @@ impl SelectDims {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
@@ -205,7 +206,7 @@ impl TrickleSelect {
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
-            tremor_script::ast::Stmt::SelectStmt(ref select) => select.clone(),
+            tremor_script::ast::Stmt::Select(ref select) => select.clone(),
             _ => {
                 return Err(ErrorKind::PipelineError(
                     "Trying to turn a non select into a select operator".into(),
@@ -912,7 +913,7 @@ mod test {
     }
 
     fn test_select_stmt(stmt: tremor_script::ast::MutSelect) -> tremor_script::ast::Stmt {
-        ast::Stmt::SelectStmt(SelectStmt {
+        ast::Stmt::Select(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
             consts: vec![Value::Null, Value::Null],

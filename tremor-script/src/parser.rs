@@ -17,7 +17,7 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[cfg_attr(
         feature = "cargo-clippy",
-        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap, clippy::pedantic, clippy::option_unwrap_used)
     )]
 
     pub grammar

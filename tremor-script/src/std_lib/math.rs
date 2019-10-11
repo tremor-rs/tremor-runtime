@@ -15,6 +15,8 @@
 use crate::registry::Registry;
 use crate::tremor_const_fn;
 
+// ALLOW: Until we have u64 support in clippy
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_const_fn! (math::floor(_context, _input) {

@@ -64,10 +64,8 @@ impl StrSuffix {
         }
     }
 
-    #[inline(always)]
     fn is_char_boundary_byte(b: u8) -> bool {
-        // This is bit magic equivalent to: b < 128 || b >= 192
-        (b as i8) >= -0x40
+        b < 128 || b >= 192
     }
 
     fn is_char_boundary(&self, index: usize) -> bool {

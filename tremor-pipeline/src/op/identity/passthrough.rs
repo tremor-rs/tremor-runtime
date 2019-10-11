@@ -16,14 +16,14 @@ use crate::errors::*;
 use crate::{Event, Operator};
 
 #[derive(Debug, Clone, Hash)]
-pub struct PassthroughOperator {}
+pub struct Passthrough {}
 
 op!(PassthroughFactory (_node) {
-    Ok(Box::new(PassthroughOperator{}))
+    Ok(Box::new(Passthrough{}))
 });
 
 #[allow(unused_mut)]
-impl Operator for PassthroughOperator {
+impl Operator for Passthrough {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         Ok(vec![("out".into(), event)])
     }

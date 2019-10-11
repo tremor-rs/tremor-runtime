@@ -18,6 +18,7 @@ use tremor_script::prelude::*;
 
 use tremor_script::{self};
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct TrickleOperator {
     pub id: String,
@@ -111,7 +112,7 @@ impl TrickleOperator {
                     }
                     ("grouper", "bucket") => {
                         use halfbrown::HashMap;
-                        Box::new(op::grouper::bucket::BucketGrouper {
+                        Box::new(op::grouper::bucket::Grouper {
                             buckets: HashMap::new(),
                             _id: op.id.clone(),
                         })

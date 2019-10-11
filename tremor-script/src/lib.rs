@@ -20,7 +20,7 @@
         clippy::result_unwrap_used,
         clippy::option_unwrap_used,
         clippy::unnecessary_unwrap,
-        clippy::pedantic
+        //clippy::pedantic
     )
 )]
 

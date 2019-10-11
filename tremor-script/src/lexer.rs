@@ -226,11 +226,11 @@ impl<'input> TokenFuns for Token<'input> {
     ///
     fn is_ignorable(&self) -> bool {
         match *self {
-            Token::DocComment(_) => true,
-            Token::SingleLineComment(_) => true,
-            Token::Whitespace(_) => true,
-            Token::NewLine => true,
-            Token::Line(_) => true,
+            Token::DocComment(_)
+            | Token::SingleLineComment(_)
+            | Token::Whitespace(_)
+            | Token::NewLine
+            | Token::Line(_) => true,
             _ => false,
         }
     }
@@ -238,48 +238,48 @@ impl<'input> TokenFuns for Token<'input> {
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
     fn is_keyword(&self) -> bool {
         match *self {
-            Token::Match => true,
-            Token::End => true,
-            Token::Fun => true,
-            Token::Let => true,
-            Token::Const => true,
-            Token::Case => true,
-            Token::Of => true,
-            Token::When => true,
-            Token::Drop => true,
-            Token::Emit => true,
-            Token::Default => true,
-            Token::Patch => true,
-            Token::Insert => true,
-            Token::Upsert => true,
-            Token::Update => true,
-            Token::Erase => true,
-            Token::Move => true,
-            Token::Copy => true,
-            Token::Merge => true,
-            Token::For => true,
-            Token::Event => true,
-            Token::Present => true,
-            Token::Absent => true,
-            Token::Stream => true,
-            Token::Select => true,
-            Token::From => true,
-            Token::Where => true,
-            Token::With => true,
-            Token::Order => true,
-            Token::Group => true,
-            Token::By => true,
-            Token::Having => true,
-            Token::Into => true,
-            Token::Create => true,
-            Token::Tumbling => true,
-            Token::Sliding => true,
-            Token::Window => true,
-            Token::Script => true,
-            Token::Set => true,
-            Token::Each => true,
-            Token::Define => true,
-            Token::Operator => true,
+            Token::Match
+            | Token::End
+            | Token::Fun
+            | Token::Let
+            | Token::Const
+            | Token::Case
+            | Token::Of
+            | Token::When
+            | Token::Drop
+            | Token::Emit
+            | Token::Default
+            | Token::Patch
+            | Token::Insert
+            | Token::Upsert
+            | Token::Update
+            | Token::Erase
+            | Token::Move
+            | Token::Copy
+            | Token::Merge
+            | Token::For
+            | Token::Event
+            | Token::Present
+            | Token::Absent
+            | Token::Stream
+            | Token::Select
+            | Token::From
+            | Token::Where
+            | Token::With
+            | Token::Order
+            | Token::Group
+            | Token::By
+            | Token::Having
+            | Token::Into
+            | Token::Create
+            | Token::Tumbling
+            | Token::Sliding
+            | Token::Window
+            | Token::Script
+            | Token::Set
+            | Token::Each
+            | Token::Define
+            | Token::Operator => true,
             _ => false,
         }
     }
@@ -288,10 +288,10 @@ impl<'input> TokenFuns for Token<'input> {
     fn is_literal(&self) -> bool {
         match *self {
             // Token::DontCare => true,
-            Token::Nil => true,
-            Token::BoolLiteral(_) => true,
-            Token::IntLiteral(_) => true,
-            Token::FloatLiteral(_, _) => true,
+            Token::Nil
+            | Token::BoolLiteral(_)
+            | Token::IntLiteral(_)
+            | Token::FloatLiteral(_, _) => true,
             _ => false,
         }
     }
@@ -299,10 +299,10 @@ impl<'input> TokenFuns for Token<'input> {
     // It's text-like or string-like notation such as String, char, regex ...
     fn is_string_like(&self) -> bool {
         match *self {
-            Token::StringLiteral(_) => true,
-            Token::DQuote => true,
-            Token::TestLiteral(_, _) => true,
-            Token::HereDoc(_, _) => true,
+            Token::StringLiteral(_)
+            | Token::DQuote
+            | Token::TestLiteral(_, _)
+            | Token::HereDoc(_, _) => true,
             _ => false,
         }
     }
@@ -310,20 +310,20 @@ impl<'input> TokenFuns for Token<'input> {
     // Is the token a builtin delimiter symbol
     fn is_symbol(&self) -> bool {
         match *self {
-            Token::Colon => true,
-            Token::ColonColon => true,
-            Token::EqArrow => true,
-            Token::Semi => true,
-            Token::LParen => true,
-            Token::RParen => true,
-            Token::LPatBrace => true,
-            Token::LBrace => true,
-            Token::RBrace => true,
-            Token::LBracket => true,
-            Token::LPatBracket => true,
-            Token::RBracket => true,
-            Token::BSlash => true,
-            Token::Comma => true,
+            Token::Colon
+            | Token::ColonColon
+            | Token::EqArrow
+            | Token::Semi
+            | Token::LParen
+            | Token::RParen
+            | Token::LPatBrace
+            | Token::LBrace
+            | Token::RBrace
+            | Token::LBracket
+            | Token::LPatBracket
+            | Token::RBracket
+            | Token::BSlash
+            | Token::Comma => true,
             //            Token::Pipe => true,
             //            Token::Tilde => true,
             //            Token::DotDotDot => true,
@@ -336,25 +336,25 @@ impl<'input> TokenFuns for Token<'input> {
     // Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
     fn is_operator(&self) -> bool {
         match *self {
-            Token::Not => true,
-            Token::Or => true,
-            Token::And => true,
-            Token::Eq => true,
-            Token::EqEq => true,
-            Token::NotEq => true,
-            Token::TildeEq => true,
-            Token::Tilde => true,
-            Token::Gte => true,
-            Token::Gt => true,
-            Token::Lte => true,
-            Token::Lt => true,
-            Token::Add => true,
-            Token::Sub => true,
-            Token::Mul => true,
-            Token::Div => true,
-            Token::Mod => true,
-            Token::Dollar => true,
-            Token::Dot => true,
+            Token::Not
+            | Token::Or
+            | Token::And
+            | Token::Eq
+            | Token::EqEq
+            | Token::NotEq
+            | Token::TildeEq
+            | Token::Tilde
+            | Token::Gte
+            | Token::Gt
+            | Token::Lte
+            | Token::Lt
+            | Token::Add
+            | Token::Sub
+            | Token::Mul
+            | Token::Div
+            | Token::Mod
+            | Token::Dollar
+            | Token::Dot => true,
             _ => false,
         }
     }
