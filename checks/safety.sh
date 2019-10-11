@@ -112,7 +112,7 @@ while getopts hauiprebldx opt; do
         e)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | gsrep 'expect(' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'expect(' > /dev/null
                 then
                     echo "##[error] expect found in $file, try hygenic errors, this panics!"
                     count=$((count + 1))

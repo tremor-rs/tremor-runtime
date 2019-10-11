@@ -214,7 +214,7 @@ impl TrickleSelect {
             }
         };
 
-        // FIXME - ensure that windows are sensilbe (i.e. they are ever growing multiples of each other ) unwrap()
+        // FIXME - ensure that windows are sensilbe (i.e. they are ever growing multiples of each other  unwrap()
         let windows = windows
             .into_iter()
             .map(|(name, window_impl)| Window {
