@@ -132,15 +132,18 @@ impl Preprocessor for Lines {
                             &self.buffer[self.message_fragment_length..total_fragment_length]
                         )
                     );
-
-                    self.message_fragment_length = total_fragment_length;
                 } else {
                     warn!(
-                        "Discarded message fragment of length {} since it exceeds maximum allowed line length of {}",
-                        self.message_fragment_length,
+                        "Discarded message fragment of length {} since total length of {} exceeds maximum allowed line length of {}",
+                        total_fragment_length - self.message_fragment_length,
+                        total_fragment_length,
                         self.max_length
                     );
+                    // TODO clear the buffer now that we don't need it (not strictly necessary though...)
                 }
+
+                // keep track of the partial message length so far
+                self.message_fragment_length = total_fragment_length;
             }
         }
 
