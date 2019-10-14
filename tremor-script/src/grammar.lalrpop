@@ -51,25 +51,32 @@ Stmt: Stmt1<'input> = {
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::Stream(StreamStmt { start, end, id: id.id.to_string() }),
     <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Operator(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
     <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Script(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:Windows> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
-    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows: vec![], maybe_group_by})),
+    <start:@L> "select" <target:ExprImut> "from" <from:Ident> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:Ident> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 
-WindowClause: Option<WindowDefn1> = {
+WindowClause: Option<Vec<WindowDefn1>> = {
     (<WindowDefn>)? => <>,
 }
 
-Windows: Vec<WindowDefn1> = {
-    <item:WindowDefn> <list:Windows> => {
-        let mut list = list;
-        list.push(item);
-        list
-    },
-    <item:WindowDefn> => vec![item],
+Window: WindowDefn1 = {
+    <start:@L> <id:Ident> <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() },
 }
 
-WindowDefn: WindowDefn1  = {
-  <start:@L> "[" <id:Ident> "]" <end:@L> => WindowDefn1 { start, end, id: id.id.to_string() }
+Windows: Vec<WindowDefn1> = {
+    <fields:Windows_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
+    },
+}
+
+Windows_: Vec<WindowDefn1> = {
+    <Sep<Windows_, Window, ",">> => <>
+}
+
+
+WindowDefn: Vec<WindowDefn1>  = {
+    "[" <windows:Windows> "]" => windows
 }
 
 WhereClause: Option<ImutExpr1<'input>> = {
@@ -91,26 +98,37 @@ GroupDef: GroupBy1<'input> = {
     <start:@L> "each" "("<expr:ExprImut>")" <end:@L> => GroupBy1::Each{start, expr, end},
 }
 
+
 GroupDefs: Vec<GroupBy1<'input>> = {
-    <item:GroupDef> "," <list:GroupDefs> => {
-        let mut list = list;
-        list.push(item);
-        list
+    <fields:GroupDefs_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
     },
-    <item:GroupDef> ","? => vec![item],
 }
+
+GroupDefs_: Vec<GroupBy1<'input>> = {
+    <Sep<GroupDefs_, GroupDef, ",">> => <>
+}
+
+
+
 
 WithClause: Option<WithExprs1<'input>> = {
     ("with" <WithExprs> "end")? => <>,
 }
 
+
 WithExprs: WithExprs1<'input> = {
-    <item:WithExpr> "," <list:WithExprs> => {
-       let mut list = list;
-       list.push(item);
-       list
+    <fields:WithExprs_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
     },
-    <item:WithExpr> ","? => vec![item],
+}
+
+WithExprs_: WithExprs1<'input> = {
+    <Sep<WithExprs_, WithExpr, ",">> => <>
 }
 
 WithExpr: (Ident<'input>, ImutExpr1<'input>) = {
@@ -347,14 +365,16 @@ List: List1<'input> = {
     <start:@L> "[" "]" <end:@L> => List1{start, end, exprs: vec![]},
 }
 
-/// List elements
 ListElements: ImutExprs1<'input> = {
-    <list:ListElements> "," <item:ComplexExprImut> => {
-        let mut list = list;
-        list.push(item);
-        list
+    <fields:ListElements_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
     },
-    ComplexExprImut => vec![<>],
+}
+
+ListElements_: ImutExprs1<'input> = {
+    <Sep<ListElements_, ComplexExprImut, ",">> => <>,
 }
 
 /// A semi literal record
@@ -474,14 +494,16 @@ Invoke: Invoke1<'input> = {
     <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => Invoke1 { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![], start, end },
 }
 
-/// Arguments for function calls
 InvokeArgs: ImutExprs1<'input> = {
-    <list:InvokeArgs> "," <item:ComplexExprImut> => {
-        let mut list = list;
-        list.push(item);
-        list
+    <fields:InvokeArgs_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
     },
-    ComplexExprImut => vec![<>],
+}
+
+InvokeArgs_: ImutExprs1<'input> = {
+    <Sep<InvokeArgs_, ComplexExprImut, ",">> => <>,
 }
 
 ////////////////////////////// Terminal expressions //////////////////////////////
@@ -767,12 +789,29 @@ ArrayPredicatePatterns: ArrayPredicatePatterns1<'input> = {
 
 
 PatternFields: PatternFields1<'input> = {
-    <fields:Sep<PatternFields, PredicateFieldPattern, ",">> => fields,
+    <fields:PatternFields_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
+    },
 }
 
-#[inline]
+PatternFields_: PatternFields1<'input> = {
+    <fields:Sep<PatternFields_, PredicateFieldPattern, ",">> => fields,
+}
+
+
 Fields: Fields1<'input> = {
-    <fields:Sep<Fields, Field, ",">> => fields,
+    <fields:Fields_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
+    },
+}
+
+
+Fields_: Fields1<'input> = {
+    <fields:Sep<Fields_, Field, ",">> => fields,
 }
 
 #[inline]
@@ -786,13 +825,12 @@ TestLiteral: String = {
 }
 
 Sep<L, T, D>: L = {
-    <e:T> => vec![e],
-    <v:L> D <e:T> => {
-        let mut v = v;
-        v.push(e);
-        v
+    <item:T> D <list:L> => {
+        let mut list = list;
+        list.push(item);
+        list
     },
-    <v:L> D  => v,
+    <item:T> D? => vec![item],
 }
 
 /// Generaic helper for binary operations

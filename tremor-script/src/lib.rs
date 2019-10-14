@@ -438,6 +438,10 @@ mod tests {
             "true;\"hello\";[1,2,3,4,5];",
             Value::Array(vec![I64(1), I64(2), I64(3), I64(4), I64(5)])
         );
+        eval!(
+            "true;\"hello\";[1,2,3,4,5,];",
+            Value::Array(vec![I64(1), I64(2), I64(3), I64(4), I64(5)])
+        );
     }
 
     #[test]
@@ -468,7 +472,7 @@ mod tests {
     fn test_present() {
         eval!(r#"let t = {}; present t"#, Value::Bool(true));
         eval!(
-            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a"#,
+            r#"let t = {"a":{"b": {"c": ["d", "e"],}}}; present t.a"#,
             Value::Bool(true)
         );
         eval!(
@@ -476,7 +480,7 @@ mod tests {
             Value::Bool(true)
         );
         eval!(
-            r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c"#,
+            r#"let t = {"a":{"b": {"c": ["d", "e"]},}}; present t.a.b.c"#,
             Value::Bool(true)
         );
         eval!(

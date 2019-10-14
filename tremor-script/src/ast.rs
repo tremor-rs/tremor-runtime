@@ -458,9 +458,6 @@ impl_expr!(Literal);
 pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprs1<'script>);
 impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
     fn from(mut es: StrLitElements<'script>) -> StringLit1<'script> {
-        // We need to reverse them since the grammer creates them in backwards order.
-        es.0.reverse();
-        es.1.reverse();
         let string = if es.0.len() == 1 {
             es.0.pop().unwrap_or_default()
         } else {

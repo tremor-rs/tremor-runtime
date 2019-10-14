@@ -359,7 +359,7 @@ pub struct MutSelect1<'script> {
     pub maybe_where: Option<ImutExpr1<'script>>,
     pub maybe_having: Option<ImutExpr1<'script>>,
     pub maybe_group_by: Option<GroupBy1<'script>>,
-    pub windows: Vec<WindowDefn1>,
+    pub windows: Option<Vec<WindowDefn1>>,
 }
 impl_expr!(MutSelect1);
 impl_stmt1!(MutSelect1);
@@ -407,9 +407,7 @@ impl<'script> MutSelect1<'script> {
             }
         };
 
-        // We need to reverse them from parsing to put them in the right order
-        let mut windows = self.windows;
-        windows.reverse();
+        let windows = self.windows.unwrap_or_default();
 
         Ok(MutSelect {
             start: self.start,
@@ -474,8 +472,7 @@ impl<'script> Upable<'script> for GroupBy1<'script> {
                 expr: expr.up(helper)?,
             },
             GroupBy1::Set { start, end, items } => {
-                let mut items = items.up(helper)?;
-                items.reverse();
+                let items = items.up(helper)?;
                 GroupBy::Set { start, end, items }
             }
         })
