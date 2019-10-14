@@ -115,7 +115,7 @@ impl Query {
         let mut pipe_graph = ConfigGraph::new();
         let mut pipe_ops = HashMap::new();
         let mut nodes = HashMap::new();
-        let mut links = IndexMap::new();
+        let mut links: IndexMap<_, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
 
