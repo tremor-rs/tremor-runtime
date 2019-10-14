@@ -128,7 +128,3 @@ ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
-
-[patch.crates-io]
-simd-json = {git = "https://github.com/simd-lite/simdjson-rs" }
-
