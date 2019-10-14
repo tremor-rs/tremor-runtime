@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::onramp::prelude::*;
-use halfbrown::HashMap;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde_yaml::Value;
@@ -59,6 +58,18 @@ impl OnrampImpl for Tcp {
     }
 }
 
+struct TremorTcpConnection {
+    stream: TcpStream,
+    preprocessors: Preprocessors,
+}
+
+impl TremorTcpConnection {
+    fn register(&self, poll: &Poll, token: Token) -> std::io::Result<()> {
+        // register the socket w/ poll
+        poll.register(&self.stream, token, Ready::readable(), PollOpt::edge())
+    }
+}
+
 fn onramp_loop(
     rx: Receiver<OnrampMsg>,
     config: Config,
@@ -66,10 +77,6 @@ fn onramp_loop(
     codec: String,
 ) -> Result<()> {
     let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
-    let mut buffer = [0; BUFFER_SIZE_BYTES];
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
 
@@ -81,11 +88,15 @@ fn onramp_loop(
     let listener = TcpListener::bind(&server_addr)?;
     poll.register(&listener, ONRAMP, Ready::readable(), PollOpt::edge())?;
 
-    // TODO use slab instead of hashmap here
-    let mut connections: HashMap<Token, TcpStream> = HashMap::new();
+    // temporary buffer to keep data read from the tcp socket
+    let mut buffer = [0; BUFFER_SIZE_BYTES];
 
-    // initialize the token to keep track of each incoming connection.
-    let mut connection_token_number = ONRAMP.0;
+    // initializing with a single None entry, since we match the indices of this
+    // vector with mio event tokens and we use 0 for the ONRAMP token
+    let mut connections: Vec<Option<TremorTcpConnection>> = vec![None];
+
+    // to keep track of tokens that are returned for re-use (after connection is terminated)
+    let mut returned_tokens: Vec<usize> = vec![];
 
     let mut events = Events::with_capacity(1024);
     loop {
@@ -123,16 +134,26 @@ fn onramp_loop(
                         Ok((stream, client_addr)) => {
                             debug!("Accepted connection from client: {}", client_addr);
 
-                            // make a new token for the socket to keep track of the connection
-                            connection_token_number += 1;
-                            let token = Token(connection_token_number);
+                            let tcp_connection = TremorTcpConnection {
+                                stream,
+                                preprocessors: make_preprocessors(&preprocessors)?,
+                            };
 
-                            // register the new socket with poll
-                            poll.register(&stream, token, Ready::readable(), PollOpt::edge())?;
-
-                            connections.insert(token, stream);
-
-                            // TODO create actors for each connection
+                            // if there are any returned tokens, use it to keep track of the
+                            // connection. otherwise create a new one.
+                            if let Some(token_num) = returned_tokens.pop() {
+                                trace!(
+                                    "Tracking connection with returned token number: {}",
+                                    token_num
+                                );
+                                tcp_connection.register(&poll, Token(token_num))?;
+                                connections[token_num] = Some(tcp_connection);
+                            } else {
+                                let token_num = connections.len();
+                                trace!("Tracking connection with new token number: {}", token_num);
+                                tcp_connection.register(&poll, Token(token_num))?;
+                                connections.push(Some(tcp_connection));
+                            };
                         }
                         Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful accept
                         Err(e) => {
@@ -142,7 +163,12 @@ fn onramp_loop(
                     }
                 },
                 token => {
-                    if let Some(stream) = connections.get_mut(&token) {
+                    //if let Some(stream) = connections.get_mut(&token) {
+                    if let Some(TremorTcpConnection {
+                        ref mut stream,
+                        ref mut preprocessors,
+                    }) = connections[token.0]
+                    {
                         // TODO test re-connections
                         let client_addr = stream.peer_addr()?;
 
@@ -190,7 +216,13 @@ fn onramp_loop(
                                         "Connection closed by client: {}",
                                         client_addr.to_string()
                                     );
-                                    connections.remove(&token);
+                                    connections[token.0] = None;
+
+                                    // release the token for re-use. ensures that we don't run out of
+                                    // tokens (eg: if we were to just keep incrementing the token number)
+                                    returned_tokens.push(token.0);
+                                    println!("Returned token number for reuse: {}", token.0);
+
                                     break;
                                 }
                                 Ok(n) => {
@@ -213,7 +245,7 @@ fn onramp_loop(
                                     // TODO remove later. temp code for testing
                                     send_event2(
                                         &pipelines,
-                                        &mut preprocessors,
+                                        preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
                                         &mut meta,
