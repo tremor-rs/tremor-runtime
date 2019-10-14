@@ -47,6 +47,7 @@ mod std_lib;
 mod str_suffix;
 mod tilde;
 pub use ctx::EventContext;
+pub mod fast_get;
 pub mod prelude;
 
 #[cfg(test)]

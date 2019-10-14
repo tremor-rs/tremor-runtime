@@ -138,7 +138,7 @@ fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
         .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
 
     // FIXME: We should have them constanted
-    let aggr_reg = tremor_script::registry::aggr_registry();
+    let aggr_reg = tremor_script::registry::aggr();
 
     let query = Query::parse(&raw, &*FN_REGISTRY.lock()?, &aggr_reg)?;
 

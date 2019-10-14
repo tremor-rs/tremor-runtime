@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #![forbid(warnings)]
+#![allow(dead_code)]
 #![recursion_limit = "1024"]
 #![cfg_attr(
     feature = "cargo-clippy",

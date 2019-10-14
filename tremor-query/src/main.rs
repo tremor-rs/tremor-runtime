@@ -36,7 +36,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::iter::FromIterator;
 use tremor_pipeline::errors::*;
-use tremor_script::highlighter::{Highlighter, TermHighlighter};
+use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::*;
 
 pub fn nanotime() -> u64 {
@@ -139,7 +139,7 @@ fn main() -> Result<()> {
 
     let reg: Registry = registry::registry();
 
-    let aggr_reg = registry::aggr_registry();
+    let aggr_reg = registry::aggr();
 
     let runnable = match Query::parse(&raw, &reg, &aggr_reg) {
         Ok(runnable) => runnable,

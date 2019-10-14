@@ -2159,6 +2159,7 @@ impl<'script> Upable<'script> for Segment1<'script> {
                 match expr {
                     ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l))? {
                         Value::String(id) => Segment::Id {
+                            //                            fast_get: FastGet::from(id.clone()),
                             id: id.clone(),
                             start,
                             end,
@@ -2235,6 +2236,8 @@ impl<'script> From<ImutExpr1<'script>> for Expr1<'script> {
 pub enum Segment<'script> {
     Id {
         id: Cow<'script, str>,
+        //        #[serde(skip)]
+        //        fast_get: FastGet<'script>,
         start: Location,
         end: Location,
     },

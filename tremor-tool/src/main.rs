@@ -300,9 +300,9 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
     };
 
     let grok = if cmd.is_present("patterns") {
-        grok::GrokPattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
+        grok::Pattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
     } else {
-        grok::GrokPattern::new(test_pattern.to_string())?
+        grok::Pattern::new(test_pattern.to_string())?
     };
     for (num, line) in input.lines().enumerate() {
         let l = line?;

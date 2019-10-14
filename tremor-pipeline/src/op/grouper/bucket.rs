@@ -137,13 +137,17 @@ impl Operator for Grouper {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let meta = &event.data.suffix().meta;
         if let Some(class) = meta.get("class").and_then(Value::as_str) {
-            let groups = self.buckets.entry(class.to_string()).or_insert_with(|| {
-                let cardinality = meta
-                    .get("cardinality")
-                    .and_then(Value::as_usize)
-                    .unwrap_or(1000);
-                Bucket::new(cardinality)
-            });
+            let (_, groups) = self
+                .buckets
+                .raw_entry_mut()
+                .from_key(class)
+                .or_insert_with(|| {
+                    let cardinality = meta
+                        .get("cardinality")
+                        .and_then(Value::as_usize)
+                        .unwrap_or(1000);
+                    (class.to_string(), Bucket::new(cardinality))
+                });
 
             let d = meta.get("dimensions").unwrap_or(&Value::Null);
             let dimensions = serde_json::to_string(d)?;
