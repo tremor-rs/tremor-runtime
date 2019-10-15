@@ -100,12 +100,6 @@ fn main() -> Result<()> {
                 .takes_value(false)
                 .help("Prints the ast with no highlighting."),
         )
-        .arg(
-            Arg::with_name("print-pipeline-config")
-                .short("c")
-                .takes_value(false)
-                .help("Prints the trickle script as a Pipeline configuration."),
-        )
         // .arg(
         //     Arg::with_name("print-pipeline-dot")
         //         .short("d")
@@ -230,9 +224,6 @@ fn main() -> Result<()> {
         // FIXME will never fire as this ( dev-only, transient ) facility has been removed
         //                let expr = runnable.to_pipe(&ctx, &mut global_map);
         //                println!("{}", &expr.expect("").0.to_dot());
-    } else if matches.is_present("print-pipeline-config") {
-        let expr = runnable.to_config()?; // (&ctx, &mut global_map)?;
-        println!("{}", serde_json::to_string_pretty(&expr)?);
     } else {
         let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 

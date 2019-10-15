@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{self, InputPort, OutputPort};
+use crate::config::{InputPort, OutputPort};
 use crate::errors::*;
 use crate::op;
 use crate::op::trickle::select::WindowImpl;
@@ -187,7 +187,7 @@ impl Query {
                     let into = resolve_input_port(into)?;
                     if links.contains_key(&from) {
                         match links.get_mut(&from) {
-                            Some(x) => x.push(select_in.clone()),
+                            Some(x) => if !x.contains(&select_in) { x.push(select_in.clone()) },
                             None => return Err("should never get here - link should be ok".into()),
                         }
                         match links.get_mut(&select_out) {
@@ -311,6 +311,7 @@ impl Query {
                         defn: Some(std::sync::Arc::new(that_defn.clone())),
                         node: Some(std::sync::Arc::new(that.clone())),
                     };
+
                     let id = pipe_graph.add_node(node.clone());
 
                     let op = node.to_op(
@@ -359,6 +360,10 @@ impl Query {
                 pipe_graph.add_edge(from_idx, to_idx, ());
             }
         }
+
+        println!("{:?}", petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel]));
+            
+
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
@@ -413,6 +418,7 @@ impl Query {
                 inputs2.insert(k.clone(), i2pos[idx]);
             }
 
+
             let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
             let exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
@@ -431,209 +437,6 @@ impl Query {
             };
 
             Ok(exec)
-        }
-    }
-
-    pub fn to_config(&self) -> Result<config::Pipeline> {
-        let script = self.0.query.suffix();
-        let stmts = script.stmts.iter();
-
-        let mut config = config::Pipeline {
-            id: "generated".to_string(), // FIXME derive from some other ctx
-            description: "Generated from <generated.trickle>".to_string(),
-            links: IndexMap::new(), // FIXME compute below
-            interface: config::Interfaces {
-                inputs: vec!["in".to_string()],
-                outputs: vec!["out".to_string()],
-            }, // FIXME compute below
-            nodes: Vec::new(),
-            metrics_interval_s: Some(10),
-        };
-        let mut graph = ConfigGraph::new();
-        let mut nodes = HashMap::new();
-        let mut inputs = HashMap::new();
-        for stream in config.interface.inputs.clone() {
-            let id = graph.add_node(NodeConfig {
-                id: stream.to_string(),
-                kind: NodeKind::Input,
-                _type: "passthrough".to_string(),
-                config: None,
-                defn: None,
-                node: None,
-            });
-            nodes.insert(stream.clone(), id);
-            inputs.insert(stream.clone(), id);
-        }
-        let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-        for stream in config.interface.outputs.clone() {
-            let id = graph.add_node(NodeConfig {
-                id: stream.to_string(),
-                kind: NodeKind::Output,
-                _type: "passthrough".to_string(),
-                config: None,
-                defn: None,
-                node: None,
-            });
-            nodes.insert(stream.clone(), id);
-            outputs.push(id);
-        }
-        let mut port_indexes: PortIndexMap = HashMap::new();
-
-        for stmt in stmts {
-            match stmt {
-                Stmt::Select(select) => {
-                    let s = &select.stmt;
-                    let from = s.from.id.clone().to_string();
-                    if !nodes.contains_key(&from.clone()) {
-                        let mut h = DumbHighlighter::default();
-                        let arse = query_stream_not_defined(&s, &s.from, from)?;
-                        tremor_script::query::Query::format_error_from_script(
-                            &self.0.source,
-                            &mut h,
-                            &arse,
-                        )?;
-                        return Err("Invalid graph node".into());
-                    }
-                    let into = s.into.id.clone().to_string();
-
-                    let from = resolve_output_port(from)?;
-                    let select_in = resolve_input_port(from.id.clone() + "_select")?;
-                    let select_out = resolve_output_port(from.id.clone() + "_select")?;
-                    let into = resolve_input_port(into)?;
-                    if config.links.contains_key(&from) {
-                        match config.links.get_mut(&from) {
-                            Some(x) => x.push(select_in.clone()),
-                            None => return Err("should never get here - link should be ok".into()),
-                        }
-                        match config.links.get_mut(&select_out) {
-                            Some(x) => x.push(into),
-                            None => return Err("should never get here - link should be ok".into()),
-                        }
-                    } else {
-                        config.links.insert(from, vec![select_in.clone()]);
-                        config.links.insert(select_out, vec![into]);
-                    }
-
-                    let id = graph.add_node(NodeConfig {
-                        id: select_in.id.to_string(),
-                        kind: NodeKind::Operator,
-                        _type: "trickle::select".to_string(),
-                        config: None,
-                        defn: None,
-                        node: None,
-                    });
-                    nodes.insert(select_in.id.clone(), id);
-                    outputs.push(id);
-                    // };
-                }
-                Stmt::Stream(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "passthrough".to_string(),
-                            config: None,
-                            defn: None,
-                            node: None,
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                Stmt::WindowDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "fake.window".to_string(),
-                            config: None,
-                            defn: None,
-                            node: None,
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                Stmt::OperatorDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
-                        let id = graph.add_node(NodeConfig {
-                            id: src.id.to_string(),
-                            kind: NodeKind::Operator,
-                            _type: "fake.operator".to_string(),
-                            config: None,
-                            defn: None,
-                            node: None,
-                        });
-                        nodes.insert(name.clone(), id);
-                        outputs.push(id);
-                    };
-                }
-                not_yet_implemented => {
-                    return Err(format!("not yet implemented: {:?}", not_yet_implemented).into());
-                }
-            };
-        }
-
-        // Add metrics output port
-        let id = graph.add_node(NodeConfig {
-            id: "_metrics".to_string(),
-            kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
-            config: None,
-            defn: None,
-            node: None,
-        });
-        nodes.insert("metrics".to_string(), id);
-        outputs.push(id);
-
-        // Link graph edges
-        for (from, tos) in &config.links {
-            for to in tos {
-                let from_idx = nodes[&from.id];
-                let to_idx = nodes[&to.id];
-
-                let from_tpl = (from_idx, from.port.clone());
-                let to_tpl = (to_idx, to.port.clone());
-                match port_indexes.get_mut(&from_tpl) {
-                    None => {
-                        port_indexes.insert(from_tpl, vec![to_tpl]);
-                    }
-                    Some(ports) => {
-                        ports.push(to_tpl);
-                    }
-                }
-                graph.add_edge(from_idx, to_idx, ());
-            }
-        }
-
-        // iff cycles, fail and bail
-        if is_cyclic_directed(&graph) {
-            Err(ErrorKind::CyclicGraphError(format!(
-                "{:?}",
-                Dot::with_config(&graph, &[Config::EdgeNoLabel])
-            ))
-            .into())
-        } else {
-            config.nodes = graph
-                .node_indices()
-                .map(|i| {
-                    let nc = &graph[i];
-                    crate::config::Node {
-                        id: nc.id.clone(),
-                        node_type: nc._type.clone(),
-                        description: "generated".to_string(),
-                        config: nc.config.clone(),
-                    }
-                })
-                .collect();
-
-            Ok(config)
         }
     }
 }
