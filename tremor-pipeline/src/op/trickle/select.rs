@@ -917,7 +917,7 @@ mod test {
         ast::Stmt::Select(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
-            consts: vec![Value::Null, Value::Null],
+            consts: vec![Value::Null, Value::Null, Value::Null],
         })
     }
     #[test]
