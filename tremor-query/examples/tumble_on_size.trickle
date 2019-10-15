@@ -1,0 +1,30 @@
+# pairs
+define tumbling window pairs
+with
+   size = 2,
+end;
+
+define tumbling window triples
+with
+   size = 3,
+end;
+
+define tumbling window quads
+with
+   size = 4,
+end;
+
+
+select {
+    "count": stats::count(),
+    "sum": stats::count(),
+    "min": stats::min(event.value),
+    "max": stats::max(event.value),
+    "mean": stats::mean(event.value),
+    "stdev": stats::stdev(event.value),
+    "var": stats::var(event.value),
+    "window": window,
+    "data": win::collect(event.value),
+}
+from in[pairs,triples,quads]
+into out;

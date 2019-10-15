@@ -93,7 +93,8 @@ impl WindowTrait for Window {
 
 #[derive(Debug, Clone)]
 pub enum WindowImpl {
-    Tumbling(TumblingWindowOnEventTime),
+    TumblingTimeBased(TumblingWindowOnEventTime),
+    TumblingCountBased(TumblingWindowOnEventNumber),
     No(NoWindow),
 }
 
@@ -110,7 +111,8 @@ impl std::default::Default for WindowImpl {
 impl WindowTrait for WindowImpl {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
         match self {
-            WindowImpl::Tumbling(w) => w.on_event(event),
+            WindowImpl::TumblingTimeBased(w) => w.on_event(event),
+            WindowImpl::TumblingCountBased(w) => w.on_event(event),
             WindowImpl::No(w) => w.on_event(event),
         }
     }
@@ -124,7 +126,13 @@ impl From<NoWindow> for WindowImpl {
 
 impl From<TumblingWindowOnEventTime> for WindowImpl {
     fn from(w: TumblingWindowOnEventTime) -> Self {
-        WindowImpl::Tumbling(w)
+        WindowImpl::TumblingTimeBased(w)
+    }
+}
+
+impl From<TumblingWindowOnEventNumber> for WindowImpl {
+    fn from(w: TumblingWindowOnEventNumber) -> Self {
+        WindowImpl::TumblingCountBased(w)
     }
 }
 
@@ -191,6 +199,44 @@ impl WindowTrait for TumblingWindowOnEventTime {
             Some(_) => WindowEvent {
                 open: false,
                 emit: false,
+            },
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct TumblingWindowOnEventNumber {
+    pub next_window: Option<u64>,
+    pub size: u64,
+}
+
+impl WindowTrait for TumblingWindowOnEventNumber {
+    fn on_event(&mut self, _event: &Event) -> WindowEvent {
+        match self.next_window {
+            None => {
+                self.next_window = Some(0);
+                WindowEvent {
+                    open: true,
+                    emit: false,
+                }
+            }
+            Some(next_window) if next_window < (self.size - 1) => {
+                self.next_window = Some(next_window + 1);
+                WindowEvent {
+                    open: false,
+                    emit: false,
+                }
+            }
+            Some(next_window) if next_window >= (self.size - 1) => {
+                self.next_window = Some(0);
+                WindowEvent {
+                    open: true,
+                    emit: true,
+                }
+            }
+            Some(_) => WindowEvent { // FIXME should never occur in practice
+                 open: false,
+                 emit: false,
             },
         }
     }

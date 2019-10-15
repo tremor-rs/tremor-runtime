@@ -77,17 +77,40 @@ fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
-            let interval = d
-                .params
-                .as_ref()
-                .and_then(|p| p.get("interval"))
-                .and_then(Value::as_u64)
-                .ok_or_else(|| error_missing_config("interval"))?;
-            Ok(TumblingWindowOnEventTime {
-                size: interval,
-                next_window: None,
+            match d.params.as_ref() {
+                Some(params) => {
+                    if params.contains_key("interval") {
+                        let interval = params.get("interval")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| error_missing_config("interval"))?;
+                        return Ok(TumblingWindowOnEventTime {
+                            size: interval,
+                            next_window: None,
+                        }
+                        .into());
+                    }
+
+                    if params.contains_key("size") {
+                        let size = params.get("size")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| error_missing_config("size"))?;
+                        return Ok(TumblingWindowOnEventNumber {
+                            size,
+                            next_window: None,
+                        }
+                        .into());
+                    }
+
+                    // FIXME add a suitable error
+                    unreachable!(); // bad parameters to window defn
+
+                }
+                _ => {
+                    // FIXME add a suitable error
+                    unreachable!(); // bad parameters to window defn
+
+                }
             }
-            .into())
         }
     }
 }
