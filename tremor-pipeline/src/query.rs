@@ -315,8 +315,8 @@ impl Query {
 
                     let op = node.to_op(
                         supported_operators,
+                        Some(that_defn),
                         Some(that),
-                        Some(that_defn.clone()),
                         None,
                     )?;
                     pipe_ops.insert(id, op);

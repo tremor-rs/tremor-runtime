@@ -399,7 +399,8 @@ Path: Path1<'input> = {
     MetaPath => <>,
     EventPath => <>,
     LocalPath => <>,
-    AggrPath => <>
+    AggrPath => <>,
+    ArgsPath => <>,
 }
 
 /// A metadata path
@@ -416,7 +417,7 @@ MetaPath: Path1<'input> = {
     <start:@L> "$" <end:@L> => Path1::Meta(MetadataPath1 { segments: vec![], start, end }),
 }
 
-/// A metadata path
+/// A window/group path
 AggrPath: Path1<'input> = {
     <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
@@ -430,6 +431,16 @@ AggrPath: Path1<'input> = {
         Path1::Local(LocalPath1 { segments, start, end })
     },
     <start:@L> "window" <end:@L> => Path1::Local(LocalPath1 { segments: vec![Segment1::from_str("window", start, end)], start, end }),
+}
+
+/// Arguments to a script or function
+ArgsPath: Path1<'input> = {
+    <start:@L> "args" <mid:@L> <segments:PathSegments> <end:@L> => {
+        let mut segments = segments;
+        segments.insert(0, Segment1::from_str("args", start, mid));
+        Path1::Local(LocalPath1 { segments, start, end })
+    },
+    <start:@L> "args" <end:@L> => Path1::Local(LocalPath1 { segments: vec![Segment1::from_str("args", start, end)], start, end }),
 }
 
 /// Local path
@@ -960,6 +971,7 @@ extern {
         "group" => Token::Group,
         "by" => Token::By,
         "define" => Token::Define,
+        "args" => Token::Args,
 
         "set" => Token::Set,
         "each" => Token::Each,

@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt, GROUP_CONST_ID, WINDOW_CONST_ID},
+    ast::{InvokeAggrFn, SelectStmt, GROUP_CONST_ID, WINDOW_CONST_ID, ARGS_CONST_ID},
     prelude::*,
     query::rentals::Stmt as StmtRental,
 };
@@ -256,6 +256,7 @@ impl Operator for TrickleSelect {
         }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
         consts[WINDOW_CONST_ID] = Value::Null;
         consts[GROUP_CONST_ID] = Value::Null;
+        consts[ARGS_CONST_ID] = Value::Null;
         let ctx = EventContext::from_ingest_ns(event.ingest_ns);
 
         //

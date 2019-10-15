@@ -23,6 +23,7 @@ pub struct Query1<'script> {
 
 pub const WINDOW_CONST_ID: usize = 0;
 pub const GROUP_CONST_ID: usize = 1;
+pub const ARGS_CONST_ID: usize = 2;
 
 impl<'script> Query1<'script> {
     #[allow(dead_code)]
@@ -68,8 +69,8 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                 helper.swap(&mut aggregates, &mut consts);
                 let stmt: MutSelect<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut consts);
-                // We know that select statements have exactly two consts
-                let consts = vec![Value::Null, Value::Null];
+                // We know that select statements have exactly three consts
+                let consts = vec![Value::Null, Value::Null, Value::Null];
 
                 Ok(Stmt::Select(SelectStmt {
                     stmt: Box::new(stmt),
@@ -218,6 +219,7 @@ impl<'script> ScriptDecl1<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<ScriptDecl<'script>> {
+        // Inject consts
         let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         helper.warnings.append(&mut warnings);
         let script_decl = ScriptDecl {
@@ -373,8 +375,10 @@ impl<'script> MutSelect1<'script> {
         if !helper.consts.is_empty() {
             return error_no_consts(&(self.start, self.end), &self.target);
         }
+        // reserve const ids for builtin const
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
+        helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
         let target = self.target.up(helper)?;
 
         if !helper.locals.is_empty() {
@@ -389,6 +393,7 @@ impl<'script> MutSelect1<'script> {
         };
         if helper.consts.remove("window") != Some(WINDOW_CONST_ID)
             || helper.consts.remove("group") != Some(GROUP_CONST_ID)
+            || helper.consts.remove("args") != Some(ARGS_CONST_ID)
             || !helper.consts.is_empty()
         {
             return error_no_consts(&(self.start, self.end), &target);

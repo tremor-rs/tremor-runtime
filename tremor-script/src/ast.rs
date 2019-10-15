@@ -200,7 +200,12 @@ impl<'script> Script1<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
-        let mut consts: Vec<Value> = vec![];
+        
+        let mut consts: Vec<Value> = vec![Value::Null, Value::Null, Value::Null];
+        helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
+        helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
+        helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
+
         let mut exprs = vec![];
         let len = self.exprs.len();
         for (i, e) in self.exprs.into_iter().enumerate() {
