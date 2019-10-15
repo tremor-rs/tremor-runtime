@@ -29,7 +29,7 @@ use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 use simd_json::value::{borrowed, ValueTrait};
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 use upable::Upable;
@@ -200,7 +200,6 @@ impl<'script> Script1<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
-        
         let mut consts: Vec<Value> = vec![Value::Null, Value::Null, Value::Null];
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
@@ -1884,24 +1883,34 @@ impl<'script> Upable<'script> for PredicatePattern1<'script> {
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
                 assign,
+                key: KnownKey::from(lhs.clone()),
                 lhs,
                 test: Box::new(test.up(helper)?),
             },
             Eq { lhs, rhs, not } => PredicatePattern::Eq {
+                key: KnownKey::from(lhs.clone()),
                 lhs,
                 rhs: rhs.up(helper)?,
                 not,
             },
             RecordPatternEq { lhs, pattern } => PredicatePattern::RecordPatternEq {
+                key: KnownKey::from(lhs.clone()),
                 lhs,
                 pattern: pattern.up(helper)?,
             },
             ArrayPatternEq { lhs, pattern } => PredicatePattern::ArrayPatternEq {
+                key: KnownKey::from(lhs.clone()),
                 lhs,
                 pattern: pattern.up(helper)?,
             },
-            FieldPresent { lhs } => PredicatePattern::FieldPresent { lhs },
-            FieldAbsent { lhs } => PredicatePattern::FieldAbsent { lhs },
+            FieldPresent { lhs } => PredicatePattern::FieldPresent {
+                key: KnownKey::from(lhs.clone()),
+                lhs,
+            },
+            FieldAbsent { lhs } => PredicatePattern::FieldAbsent {
+                key: KnownKey::from(lhs.clone()),
+                lhs,
+            },
         })
     }
 }
@@ -1911,30 +1920,53 @@ pub enum PredicatePattern<'script> {
     TildeEq {
         assign: Cow<'script, str>,
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
         test: Box<TestExpr>,
     },
     Eq {
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
         rhs: ImutExpr<'script>,
         not: bool,
     },
     RecordPatternEq {
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
         pattern: RecordPattern<'script>,
     },
     ArrayPatternEq {
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
         pattern: ArrayPattern<'script>,
     },
     FieldPresent {
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
     },
     FieldAbsent {
         lhs: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
     },
 }
 
 impl<'script> PredicatePattern<'script> {
+    pub fn key(&self) -> &KnownKey<'script> {
+        use PredicatePattern::*;
+        match self {
+            TildeEq { key, .. } => &key,
+            Eq { key, .. } => &key,
+            RecordPatternEq { key, .. } => &key,
+            ArrayPatternEq { key, .. } => &key,
+            FieldPresent { key, .. } => &key,
+            FieldAbsent { key, .. } => &key,
+        }
+    }
     pub fn lhs(&self) -> &str {
         use PredicatePattern::*;
         match self {
@@ -1942,8 +1974,8 @@ impl<'script> PredicatePattern<'script> {
             Eq { lhs, .. } => &lhs,
             RecordPatternEq { lhs, .. } => &lhs,
             ArrayPatternEq { lhs, .. } => &lhs,
-            FieldPresent { lhs } => &lhs,
-            FieldAbsent { lhs } => &lhs,
+            FieldPresent { lhs, .. } => &lhs,
+            FieldAbsent { lhs, .. } => &lhs,
         }
     }
 }
@@ -2161,6 +2193,7 @@ impl<'script> Upable<'script> for Segment1<'script> {
                 match expr {
                     ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l))? {
                         Value::String(id) => Segment::Id {
+                            key: KnownKey::from(id.clone()),
                             id: id.clone(),
                             start,
                             end,
@@ -2237,6 +2270,8 @@ impl<'script> From<ImutExpr1<'script>> for Expr1<'script> {
 pub enum Segment<'script> {
     Id {
         id: Cow<'script, str>,
+        #[serde(skip)]
+        key: KnownKey<'script>,
         start: Location,
         end: Location,
     },

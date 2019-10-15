@@ -65,6 +65,7 @@ impl From<std::option::NoneError> for Error {
     }
 }
 */
+
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {
@@ -181,6 +182,7 @@ impl ErrorKind {
             NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | NoObjectError(_)
             | NotFound
             | Grok(_)
             | InvalidInfluxData(_)
@@ -301,6 +303,7 @@ error_chain! {
         ParseIntError(num::ParseIntError);
         SerdeJSONError(serde_json::Error);
         Utf8Error(std::str::Utf8Error);
+        NoObjectError(simd_json::KnownKeyError);
     }
     errors {
         /*

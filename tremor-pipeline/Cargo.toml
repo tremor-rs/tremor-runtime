@@ -9,7 +9,7 @@ license = "Apache-2.0"
 downcast-rs = "1.1"
 serde = "1"
 serde_derive = "1"
-simd-json = "0.1"
+simd-json = {version = "0.1", features = ["known-key"] }
 serde_yaml = "0.8"
 petgraph = "0.4"
 error-chain="0.12"
@@ -27,7 +27,3 @@ rental = "0.5"
 criterion = "0.3.0"
 xz2 = "0.1"
 base64 = "0.10"
-
-#[[bench]]
-#name = "distsys"
-#harness = false

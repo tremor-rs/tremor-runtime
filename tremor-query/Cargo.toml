@@ -14,7 +14,7 @@ test = false
 clap = "2.33.0"
 halfbrown = "0.1"
 serde_json = "1"
-simd-json = "0.1"
+simd-json = {version = "0.1", features = ["known-key"]}
 chrono = "0.4"
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-script = { path = "../tremor-script" }

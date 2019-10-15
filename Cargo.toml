@@ -52,7 +52,7 @@ rmp-serde = "0.14.0"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-simd-json = "0.1"
+simd-json = {version = "0.1", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "1.7" # we can't update because of deps ...
@@ -128,3 +128,6 @@ ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
+
+[patch.crates-io]
+simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = "known-key" }

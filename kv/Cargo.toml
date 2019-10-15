@@ -5,5 +5,5 @@ authors = ["Heinz Gies <hgies@wayfair.com>"]
 edition = "2018"
 
 [dependencies]
-simd-json = "0.1"
+simd-json = {version = "0.1", features = ["known-key"]}
 serde = "1"

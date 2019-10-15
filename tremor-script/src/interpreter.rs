@@ -36,8 +36,7 @@ use crate::errors::*;
 use crate::stry;
 use crate::EventContext;
 use halfbrown::hashmap;
-use halfbrown::HashMap;
-use simd_json::borrowed::Value;
+use simd_json::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -265,13 +264,13 @@ where
 
     for segment in path.segments() {
         match segment {
-            Segment::Id { id, .. } => {
-                if let Some(o) = current.as_object() {
-                    if let Some(c) = o.get(id) {
-                        current = c;
-                        subrange = None;
-                        continue;
-                    } else {
+            Segment::Id { id, key, .. } => {
+                if let Some(c) = key.lookup(current) {
+                    current = c;
+                    subrange = None;
+                    continue;
+                } else {
+                    if let Some(o) = current.as_object() {
                         return error_bad_key(
                             outer,
                             segment, //&Expr::dummy(*start, *end),
@@ -279,14 +278,14 @@ where
                             id.to_string(),
                             o.keys().map(|v| v.to_string()).collect(),
                         );
+                    } else {
+                        return error_type_conflict(
+                            outer,
+                            segment,
+                            current.value_type(),
+                            ValueType::Object,
+                        );
                     }
-                } else {
-                    return error_type_conflict(
-                        outer,
-                        segment,
-                        current.value_type(),
-                        ValueType::Object,
-                    );
                 }
             }
             Segment::Idx { idx, .. } => {
@@ -841,45 +840,53 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut acc = HashMap::with_capacity(if opts.result_needed {
+    let mut acc = Value::Object(Object::with_capacity(if opts.result_needed {
         rp.fields.len()
     } else {
         0
-    });
+    }));
     for pp in &rp.fields {
-        let key: Cow<str> = pp.lhs().into();
+        let known_key = pp.key();
 
         match pp {
-            PredicatePattern::TildeEq { test, .. } => {
-                let testee = match target.as_object() {
-                    Some(ref o) => {
-                        if let Some(v) = o.get(&key) {
-                            v
-                        } else {
-                            return Ok(None);
-                        }
+            PredicatePattern::FieldPresent { .. } => {
+                if let Some(v) = known_key.lookup(target) {
+                    if opts.result_needed {
+                        known_key.insert(&mut acc, v.clone())?;
                     }
-                    _ => return Ok(None),
+                    continue;
+                } else {
+                    return Ok(None);
+                }
+            }
+            PredicatePattern::FieldAbsent { .. } => {
+                if known_key.lookup(target).is_some() {
+                    return Ok(None);
+                } else {
+                    continue;
+                }
+            }
+            PredicatePattern::TildeEq { test, .. } => {
+                let testee = if let Some(v) = known_key.lookup(target) {
+                    v
+                } else {
+                    return Ok(None);
                 };
                 if let Ok(x) = test.extractor.extract(opts.result_needed, &testee, context) {
                     if opts.result_needed {
-                        acc.insert(key, x);
+                        known_key.insert(&mut acc, x)?;
                     }
                 } else {
                     return Ok(None);
                 }
             }
             PredicatePattern::Eq { rhs, not, .. } => {
-                let testee = match target.as_object() {
-                    Some(ref o) => {
-                        if let Some(v) = o.get(&key) {
-                            v
-                        } else {
-                            return Ok(None);
-                        }
-                    }
-                    _ => return Ok(None),
+                let testee = if let Some(v) = known_key.lookup(target) {
+                    v
+                } else {
+                    return Ok(None);
                 };
+
                 let rhs = stry!(rhs.run(opts, context, aggrs, event, meta, local, consts));
                 let vb: &Value = rhs.borrow();
                 let r = val_eq(testee, vb);
@@ -891,47 +898,20 @@ where
                     return Ok(None);
                 }
             }
-            PredicatePattern::FieldPresent { .. } => match target.as_object() {
-                Some(ref o) => {
-                    if let Some(v) = o.get(&key) {
-                        if opts.result_needed {
-                            acc.insert(key, v.clone());
-                        }
-                        continue;
-                    } else {
-                        return Ok(None);
-                    }
-                }
-                _ => return Ok(None),
-            },
-            PredicatePattern::FieldAbsent { .. } => match target.as_object() {
-                Some(ref o) => {
-                    if o.contains_key(&key) {
-                        return Ok(None);
-                    } else {
-                        continue;
-                    }
-                }
-                _ => return Ok(None),
-            },
             PredicatePattern::RecordPatternEq { pattern, .. } => {
-                let testee = match target.as_object() {
-                    Some(ref o) => {
-                        if let Some(v) = o.get(&key) {
-                            v
-                        } else {
-                            return Ok(None);
-                        }
-                    }
-                    _ => return Ok(None),
+                let testee = if let Some(v) = known_key.lookup(target) {
+                    v
+                } else {
+                    return Ok(None);
                 };
+
                 if testee.is_object() {
                     match stry!(match_rp_expr(
                         outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
                         Some(m) => {
                             if opts.result_needed {
-                                acc.insert(key, m);
+                                known_key.insert(&mut acc, m)?;
                             }
                             continue;
                         }
@@ -944,23 +924,19 @@ where
                 }
             }
             PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                let testee = match target.as_object() {
-                    Some(ref o) => {
-                        if let Some(v) = o.get(&key) {
-                            v
-                        } else {
-                            return Ok(None);
-                        }
-                    }
-                    _ => return Ok(None),
+                let testee = if let Some(v) = known_key.lookup(target) {
+                    v
+                } else {
+                    return Ok(None);
                 };
+
                 if testee.is_array() {
                     match stry!(match_ap_expr(
                         outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
                         Some(r) => {
                             if opts.result_needed {
-                                acc.insert(key, r);
+                                known_key.insert(&mut acc, r)?;
                             }
 
                             continue;
@@ -976,7 +952,7 @@ where
         }
     }
 
-    Ok(Some(Value::Object(acc)))
+    Ok(Some(acc))
 }
 
 #[inline]

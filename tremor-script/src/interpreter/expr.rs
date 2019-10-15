@@ -399,21 +399,12 @@ where
         for segment in segments {
             unsafe {
                 match segment {
-                    Segment::Id { id, .. } => {
-                        if let Value::Object(ref mut map) =
-                            mem::transmute::<&Value, &mut Value>(current)
-                        {
-                            current = match map.get_mut(id) {
-                                Some(v) => v,
-                                None => {
-                                    map.insert(
-                                        id.clone(),
-                                        Value::Object(Object::with_capacity(32)),
-                                    );
-                                    // ALLOW: this is safe because we just added this element to the map.
-                                    map.get_mut(id).unwrap_or_else(|| unreachable!())
-                                }
-                            }
+                    Segment::Id { key, .. } => {
+                        current = if let Ok(next) = key.lookup_or_insert_mut(
+                            mem::transmute::<&Value, &mut Value>(current),
+                            || Value::Object(Object::with_capacity(halfbrown::VEC_LIMIT_UPPER)),
+                        ) {
+                            next
                         } else {
                             return error_type_conflict(
                                 self,
@@ -421,7 +412,7 @@ where
                                 current.value_type(),
                                 ValueType::Object,
                             );
-                        }
+                        };
                     }
                     Segment::Element { expr, .. } => {
                         let id =
