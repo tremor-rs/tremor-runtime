@@ -25,27 +25,28 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all
-  code-coverage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install deps
-        run: sudo apt-get install -y libssl1.0-dev libssl1.0
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --no-fail-fast --all
-        env:
-          'CARGO_INCREMENTAL': '0'
-          'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
-      - uses: actions-rs/grcov@v0.1
-      - name: Coveralls upload
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ${{ steps.coverage.outputs.report }}
+  # TODO for later
+  #code-coverage:
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - uses: actions/checkout@v1
+  #    - name: Install deps
+  #      run: sudo apt-get install -y libssl1.0-dev libssl1.0
+  #    - uses: actions-rs/toolchain@v1
+  #      with:
+  #        toolchain: nightly
+  #        override: true
+  #    - uses: actions-rs/cargo@v1
+  #      with:
+  #        command: test
+  #        args: --no-fail-fast --all
+  #      env:
+  #        'CARGO_INCREMENTAL': '0'
+  #        'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+  #    - uses: actions-rs/grcov@v0.1
+  #    - name: Coveralls upload
+  #      uses: coverallsapp/github-action@master
+  #      with:
+  #        github-token: ${{ secrets.GITHUB_TOKEN }}
+  #        path-to-lcov: ${{ steps.coverage.outputs.report }}
 
