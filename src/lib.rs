@@ -89,7 +89,7 @@ pub struct Todo {
 pub fn incarnate(config: config::Config) -> Result<Todo> {
     let onramps = incarnate_onramps(config.onramp.clone());
     let offramps = incarnate_offramps(config.offramp.clone());
-    let bindings = incarnate_links(config.binding);
+    let bindings = incarnate_links(&config.binding);
     let pipes = incarnate_pipes(config.pipeline)?;
     // validate links ...
     // ... registry
@@ -113,8 +113,8 @@ fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
     config.into_iter().map(|d| d).collect()
 }
 
-fn incarnate_links(config: config::BindingVec) -> BindingVec {
-    config.clone()
+fn incarnate_links(config: &[Binding]) -> BindingVec {
+    config.to_owned()
 }
 
 pub fn incarnate_pipes(config: config::PipelineVec) -> Result<PipelineVec> {

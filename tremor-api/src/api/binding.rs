@@ -44,7 +44,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     let binding: tremor_runtime::config::Binding = decode(&req, &data_raw)?;
     let url = build_url(&["binding", &binding.id])?;
     let res = data.world.repo.publish_binding(
-        url,
+        &url,
         false,
         BindingArtefact {
             binding,
@@ -58,7 +58,7 @@ pub fn unpublish_artefact(
     (req, data, id): (HttpRequest, Data<State>, Path<(String)>),
 ) -> ApiResult {
     let url = build_url(&["binding", &id])?;
-    let res = data.world.repo.unpublish_binding(url);
+    let res = data.world.repo.unpublish_binding(&url);
     reply(req, data, res.map(|a| a.binding), true, 200)
 }
 
@@ -67,7 +67,7 @@ pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -
     let res = data
         .world
         .repo
-        .find_binding(url)
+        .find_binding(&url)
         .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
     match res {
         Some(res) => {
@@ -89,7 +89,7 @@ pub fn get_servant(
     (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
 ) -> ApiResult {
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res0 = data.world.reg.find_binding(url);
+    let res0 = data.world.reg.find_binding(&url);
     match res0 {
         Ok(res) => match res {
             Some(res) => reply(req, data, Ok(res.binding), false, 200),
@@ -109,7 +109,7 @@ pub fn link_servant(
 ) -> ApiResult {
     let decoded_data: HashMap<String, String> = decode(&req, &data_raw)?;
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res = data.world.link_binding(url, decoded_data);
+    let res = data.world.link_binding(&url, decoded_data);
     reply(req, data, res.map(|a| a.binding), true, 201)
 }
 
@@ -118,6 +118,6 @@ pub fn unlink_servant(
     (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
 ) -> ApiResult {
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res = data.world.unlink_binding(url, HashMap::new());
+    let res = data.world.unlink_binding(&url, HashMap::new());
     reply(req, data, res.map(|a| a.binding), true, 200)
 }

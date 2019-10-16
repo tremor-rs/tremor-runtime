@@ -74,10 +74,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
         // process websocket messages
         match msg {
             ws::Message::Ping(msg) => {
-                //FIXME: Once we get 'propper' websockets
+                //FIXME: Once we get 'proper' websockets
                 ctx.pong(&msg);
             }
-            ws::Message::Pong(_msg) => {}
+            ws::Message::Pong(_) => {}
             ws::Message::Text(bin) => {
                 #[cfg(feature = "ws-echo")]
                 ctx.text(&bin);

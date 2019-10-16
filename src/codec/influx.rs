@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # InfluxDB line protocol parser
+//! # `InfluxDB` line protocol parser
 //!
-//! Parses the InfluxDB Line protocol into a nested data structure.
+//! Parses the `InfluxDB` Line protocol into a nested data structure.
 //!
 //!
 //! The line
@@ -98,6 +98,8 @@ impl Codec for Influx {
     }
 }
 
+// This is a pun
+#[allow(clippy::module_name_repetitions)]
 pub struct BInflux {}
 
 impl BInflux {

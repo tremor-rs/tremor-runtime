@@ -116,8 +116,9 @@ impl offramp::Impl for Elastic {
 impl Elastic {
     fn flush(client: &Client<SyncSender>, payload: &str) -> Result<u64> {
         let start = Instant::now();
-        let req = BulkRequest::new(payload.to_owned());
-        let res = client.request(req).send()?;
+        let res = client
+            .request(BulkRequest::new(payload.to_owned()))
+            .send()?;
         for item in res.into_response::<BulkErrorsResponse>()? {
             error!("Elastic Search item error: {:?}", item);
         }

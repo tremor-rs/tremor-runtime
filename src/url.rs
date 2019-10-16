@@ -55,10 +55,10 @@ fn decode_type(t: &str) -> Result<ResourceType> {
 impl fmt::Display for ResourceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ResourceType::Pipeline => write!(f, "pipeline"),
-            ResourceType::Onramp => write!(f, "onramp"),
-            ResourceType::Offramp => write!(f, "offramp"),
-            ResourceType::Binding => write!(f, "binding"),
+            Self::Pipeline => write!(f, "pipeline"),
+            Self::Onramp => write!(f, "onramp"),
+            Self::Offramp => write!(f, "offramp"),
+            Self::Binding => write!(f, "binding"),
         }
     }
 }
@@ -84,7 +84,7 @@ impl fmt::Display for TremorURL {
 
 impl TremorURL {
     pub fn from_onramp_id(id: &str) -> Result<Self> {
-        TremorURL::parse(&format!("/onramp/{}", id))
+        Self::parse(&format!("/onramp/{}", id))
     }
 
     pub fn parse(url: &str) -> Result<Self> {
@@ -163,7 +163,7 @@ impl TremorURL {
                 "localhost".to_owned()
             };
 
-            Ok(TremorURL {
+            Ok(Self {
                 host,
                 scope,
                 resource_type,
@@ -230,13 +230,13 @@ impl TremorURL {
 }
 
 impl<'de> Deserialize<'de> for TremorURL {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<TremorURL, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         use serde::de::Error;
         let s = String::deserialize(deserializer)?;
-        TremorURL::parse(&s).map_err(|err| Error::custom(err.to_string()))
+        Self::parse(&s).map_err(|err| Error::custom(err.to_string()))
     }
 }
 

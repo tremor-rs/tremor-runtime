@@ -84,7 +84,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     for o in config.offramps {
         let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_offramp(id, false, o)?;
+        world.repo.publish_offramp(&id, false, o)?;
         count += 1;
     }
     for pipeline in config.pipes {
@@ -92,20 +92,20 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         info!("Loading {} from file.", id);
         world
             .repo
-            .publish_pipeline(id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
+            .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
         count += 1;
     }
     for o in config.onramps {
         let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_onramp(id, false, o)?;
+        world.repo.publish_onramp(&id, false, o)?;
         count += 1;
     }
     for binding in config.bindings {
         let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
         info!("Loading {} from file.", id);
         world.repo.publish_binding(
-            id,
+            &id,
             false,
             BindingArtefact {
                 binding,
@@ -115,7 +115,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         count += 1;
     }
     for (binding, mapping) in config.mappings {
-        world.link_binding(binding, mapping)?;
+        world.link_binding(&binding, mapping)?;
         count += 1;
     }
     Ok(count)
@@ -146,7 +146,7 @@ fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading {} from file.", id);
     world
         .repo
-        .publish_pipeline(id, false, PipelineArtefact::Query(query))?;
+        .publish_pipeline(&id, false, PipelineArtefact::Query(query))?;
 
     Ok(1)
 }

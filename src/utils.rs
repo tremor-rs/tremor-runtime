@@ -19,6 +19,7 @@ pub fn duration_to_millis(at: Duration) -> u64 {
     (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
 }
 
+#[allow(clippy::cast_sign_loss)]
 pub fn nanotime() -> u64 {
     let now = Utc::now();
     let seconds: u64 = now.timestamp() as u64;

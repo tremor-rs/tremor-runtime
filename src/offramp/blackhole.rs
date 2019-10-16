@@ -138,6 +138,22 @@ fn quantiles<R: Read, W: Write>(
     quantile_precision: usize,
     ticks_per_half: u32,
 ) -> Result<()> {
+    fn write_extra_data<T1: Display, T2: Display, W: Write>(
+        writer: &mut W,
+        label1: &str,
+        data1: T1,
+        label2: &str,
+        data2: T2,
+    ) -> result::Result<(), io::Error> {
+        writer.write_all(
+            format!(
+                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
+                label1, data1, label2, data2
+            )
+            .as_ref(),
+        )
+    }
+
     let hist: Histogram<u64> = Deserializer::new().deserialize(&mut reader)?;
 
     writer.write_all(
@@ -185,23 +201,6 @@ fn quantiles<R: Read, W: Write>(
             )?;
         }
     }
-
-    fn write_extra_data<T1: Display, T2: Display, W: Write>(
-        writer: &mut W,
-        label1: &str,
-        data1: T1,
-        label2: &str,
-        data2: T2,
-    ) -> result::Result<(), io::Error> {
-        writer.write_all(
-            format!(
-                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
-                label1, data1, label2, data2
-            )
-            .as_ref(),
-        )
-    }
-
     write_extra_data(
         &mut writer,
         "Mean",

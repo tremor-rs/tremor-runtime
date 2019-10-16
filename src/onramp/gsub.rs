@@ -102,11 +102,11 @@ fn onramp_loop(
             }
         };
 
-        let sub = projects
+        let subscription = projects
             .subscriptions_pull(request, &subscription_name)
             .doit();
 
-        match sub {
+        match subscription {
             Err(e) => warn!("Onramp error {:?}", e),
             Ok((_x, batch)) => {
                 // TODO extract 'ack' logic as utility function

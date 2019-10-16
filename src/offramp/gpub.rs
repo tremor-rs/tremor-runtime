@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Google PubSub Publication Offramp
+//! # Google `PubSub` Publication Offramp
 //!
-//! The `Gpub` offramp writes events to a Google PubSub topic.
+//! The `Gpub` offramp writes events to a Google `PubSub` topic.
 //!
 //! ## Configuration
 //!

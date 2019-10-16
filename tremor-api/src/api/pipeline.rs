@@ -44,7 +44,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     let res = data
         .world
         .repo
-        .publish_pipeline(url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
+        .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
         .map(|res| match res {
             PipelineArtefact::Pipeline(p) => p.config,
             //ALLOW:  We publish a pipeline we can't ever get anything else back
@@ -60,7 +60,7 @@ pub fn unpublish_artefact(
     let res = data
         .world
         .repo
-        .unpublish_pipeline(url)
+        .unpublish_pipeline(&url)
         .and_then(|res| match res {
             PipelineArtefact::Pipeline(p) => Ok(p.config),
             _ => Err("This is a query".into()), // FIXME
@@ -73,7 +73,7 @@ pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -
     let res = data
         .world
         .repo
-        .find_pipeline(url)
+        .find_pipeline(&url)
         .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
     match res {
         Some(res) => match res.artefact {
