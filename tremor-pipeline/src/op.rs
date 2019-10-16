@@ -54,8 +54,6 @@ pub trait InitializableOperator {
     fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
-// duplicated trait from main tremor-runtime utils (used for onramp/offramp configs there)
-// TODO remove from here once the runtime utils is part of its own crate
 pub trait ConfigImpl {
     fn new(config: &Value) -> Result<Self>
     where
