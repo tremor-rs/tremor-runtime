@@ -47,7 +47,7 @@ WindowKind: WindowKind = {
 Stmt: Stmt1<'input> = {
     <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params: params.0, script: params.1 }),
     <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
-    <start:@L> "define" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
+    <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::Stream(StreamStmt { start, end, id: id.id.to_string() }),
     <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Operator(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
     <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Script(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
@@ -131,7 +131,11 @@ WithScriptClause: (WithExprs1<'input>, Option<Script1<'input>>) = {
 
 
 WithClause: Option<WithExprs1<'input>> = {
-    ("with" <WithExprs> "end")? => <>,
+    (<ScriptWithClause> "end")? => <>?,
+}
+
+ScriptWithClause: Option<WithExprs1<'input>> = {
+    ("with" <WithExprs> )? => <>,
 }
 
 

@@ -633,16 +633,30 @@ mod test {
         tremor_script::ast::MutSelect {
             start: Location::default(),
             end: Location::default(),
-            from: ast::Ident {
-                start: Location::default(),
-                end: Location::default(),
-                id: "in".into(),
-            },
-            into: ast::Ident {
-                start: Location::default(),
-                end: Location::default(),
-                id: "out".into(),
-            },
+            from: (
+                ast::Ident {
+                    start: Location::default(),
+                    end: Location::default(),
+                    id: "in".into(),
+                },
+                ast::Ident {
+                    start: Location::default(),
+                    end: Location::default(),
+                    id: "out".into(),
+                },
+            ),
+            into: (
+                ast::Ident {
+                    start: Location::default(),
+                    end: Location::default(),
+                    id: "out".into(),
+                },
+                ast::Ident {
+                    start: Location::default(),
+                    end: Location::default(),
+                    id: "in".into(),
+                },
+            ),
             target,
             maybe_where: Some(ast::ImutExpr::Literal(ast::Literal {
                 start: Location::default(),
@@ -769,14 +783,28 @@ mod test {
     #[test]
     fn count_tilt() -> Result<()> {
         let mut op = parse_query("select stats::count() from in into out;")?;
+        // Insert two events prior to 15
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
-        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
+        // Add one event at 15, this flushes the prior two and set this to one.
+        // This is the first time the second frame sees an event so it's timer
+        // starts at 15.
+        let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event 1");
         assert_eq!("out", out);
         assert_eq!(event.data.suffix().value, 2);
+        // Add another event prior to 30
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
+        // add one at thirty, this is the second event the second frame sees but it's
+        // timer is at 15 only so it doens't emit yet. However the first window emits
+        let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
+        // Add another event prior to 45 to the first window
+        assert!(try_enqueue(&mut op, test_event(31))?.is_none());
+        // Emit at 45, this is 30 seconds into the second frame so we see
+        // two emits here.
         let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(30))?.expect("no event");
+            try_enqueue_two(&mut op, test_event(45))?.expect("no event 2");
         assert_eq!("out", out1);
         assert_eq!("out", out2);
         assert_eq!(event1.data.suffix().value, 2);
