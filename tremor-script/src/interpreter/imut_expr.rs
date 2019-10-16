@@ -31,7 +31,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    #[inline(always)]
+    #[inline]
     pub fn eval_to_string(
         &'script self,
         opts: ExecOpts,
@@ -48,7 +48,7 @@ where
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn run(
         &'script self,
         opts: ExecOpts,
@@ -415,19 +415,23 @@ where
                         current,
                         stry!(expr.run(opts, context, aggrs, event, meta, local, consts)).borrow(),
                     ) {
-                        (Value::Array(a), Value::I64(idx)) => {
-                            let (start, end) = if let Some((start, end)) = subrange {
-                                // We check range on setting the subrange!
-                                (start, end)
+                        (Value::Array(a), idx) => {
+                            if let Some(idx) = idx.as_usize() {
+                                let (start, end) = if let Some((start, end)) = subrange {
+                                    // We check range on setting the subrange!
+                                    (start, end)
+                                } else {
+                                    (0, a.len())
+                                };
+                                let idx = idx + start;
+                                if idx >= end {
+                                    // We exceed the sub range
+                                    return Ok(Cow::Borrowed(&FALSE));
+                                }
+                                a.get(idx)
                             } else {
-                                (0, a.len())
-                            };
-                            let idx = *idx as usize + start;
-                            if idx >= end {
-                                // We exceed the sub range
                                 return Ok(Cow::Borrowed(&FALSE));
                             }
-                            a.get(idx)
                         }
                         (Value::Object(o), Value::String(id)) => o.get(id),
                         _other => return Ok(Cow::Borrowed(&FALSE)),
@@ -589,7 +593,7 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         let mut argv: Vec<Cow<'run, Value<'event>>> = Vec::with_capacity(expr.args.len());
         let mut argv1: Vec<&Value> = Vec::with_capacity(expr.args.len());
-        for arg in expr.args.iter() {
+        for arg in &expr.args {
             let result = stry!(arg.run(opts, context, aggrs, event, meta, local, consts));
             argv.push(result);
         }

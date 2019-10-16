@@ -48,17 +48,17 @@ pub trait Onramp: Send {
     fn default_codec(&self) -> &str;
 }
 
-pub fn lookup(name: String, config: Option<Value>) -> Result<Box<dyn Onramp>> {
-    match name.as_str() {
-        "blaster" => blaster::Blaster::from_config(&config),
-        "file" => file::File::from_config(&config),
-        "gsub" => gsub::GSub::from_config(&config),
-        "kafka" => kafka::Kafka::from_config(&config),
-        "metronome" => metronome::Metronome::from_config(&config),
-        "udp" => udp::Udp::from_config(&config),
-        "tcp" => tcp::Tcp::from_config(&config),
-        "rest" => rest::Rest::from_config(&config),
-        "ws" => ws::Ws::from_config(&config),
+pub fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    match name {
+        "blaster" => blaster::Blaster::from_config(config),
+        "file" => file::File::from_config(config),
+        "gsub" => gsub::GSub::from_config(config),
+        "kafka" => kafka::Kafka::from_config(config),
+        "metronome" => metronome::Metronome::from_config(config),
+        "udp" => udp::Udp::from_config(config),
+        "tcp" => tcp::Tcp::from_config(config),
+        "rest" => rest::Rest::from_config(config),
+        "ws" => ws::Ws::from_config(config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }
 }

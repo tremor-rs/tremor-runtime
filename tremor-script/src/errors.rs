@@ -134,52 +134,51 @@ impl ErrorKind {
     pub fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
-            QueryStreamNotDefined(outer, inner, _) => (Some(*outer), Some(*inner)),
-            ArrayOutOfRange(outer, inner, _) => (Some(*outer), Some(*inner)),
-            AssignIntoArray(outer, inner) => (Some(*outer), Some(*inner)),
-            BadAccessInEvent(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadAccessInGlobal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadAccessInLocal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadArity(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
-            BadType(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            BinaryDrop(outer, inner) => (Some(*outer), Some(*inner)),
-            BinaryEmit(outer, inner) => (Some(*outer), Some(*inner)),
-            ExtraToken(outer, inner, _) => (Some(*outer), Some(*inner)),
-            PatchKeyExists(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InvalidAssign(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidBinary(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            InvalidDrop(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidEmit(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidConst(outer, inner) => (Some(*outer), Some(*inner)),
-            AssignToConst(outer, inner, _) => (Some(*outer), Some(*inner)),
-            DoubleConst(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InvalidExtractor(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            InvalidFloatLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidHexLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidIntLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidToken(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidUnary(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            MergeTypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            MissingEffectors(outer, inner) => (Some(*outer), Some(*inner)),
-            MissingFunction(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            MissingModule(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            NoLocalsAllowed(outer, inner) => (Some(*outer), Some(*inner)),
-            NoConstsAllowed(outer, inner) => (Some(*outer), Some(*inner)),
-            NoClauseHit(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
-            Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
-            RuntimeError(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
-            TypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnexpectedCharacter(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnexpectedEscapeCode(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnrecognizedToken(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnterminatedExtractor(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedIdentLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedStringLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedHereDoc(outer, inner, _) => (Some(*outer), Some(*inner)),
-            TailingHereDoc(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            AggrInAggr(outer, inner) => (Some(*outer), Some(*inner)),
-            NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
+            NoClauseHit(outer) | Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
+            QueryStreamNotDefined(outer, inner, _)
+            | ArrayOutOfRange(outer, inner, _)
+            | AssignIntoArray(outer, inner)
+            | BadAccessInEvent(outer, inner, _, _)
+            | BadAccessInGlobal(outer, inner, _, _)
+            | BadAccessInLocal(outer, inner, _, _)
+            | BadArity(outer, inner, _, _, _, _)
+            | BadType(outer, inner, _, _, _)
+            | BinaryDrop(outer, inner)
+            | BinaryEmit(outer, inner)
+            | ExtraToken(outer, inner, _)
+            | PatchKeyExists(outer, inner, _)
+            | InvalidAssign(outer, inner)
+            | InvalidBinary(outer, inner, _, _, _)
+            | InvalidDrop(outer, inner)
+            | InvalidEmit(outer, inner)
+            | InvalidConst(outer, inner)
+            | AssignToConst(outer, inner, _)
+            | DoubleConst(outer, inner, _)
+            | InvalidExtractor(outer, inner, _, _, _)
+            | InvalidFloatLiteral(outer, inner)
+            | InvalidHexLiteral(outer, inner)
+            | InvalidIntLiteral(outer, inner)
+            | InvalidToken(outer, inner)
+            | InvalidUnary(outer, inner, _, _)
+            | MergeTypeConflict(outer, inner, _, _)
+            | MissingEffectors(outer, inner)
+            | MissingFunction(outer, inner, _, _, _)
+            | MissingModule(outer, inner, _, _)
+            | NoLocalsAllowed(outer, inner)
+            | NoConstsAllowed(outer, inner)
+            | RuntimeError(outer, inner, _, _, _, _)
+            | TypeConflict(outer, inner, _, _)
+            | UnexpectedCharacter(outer, inner, _)
+            | UnexpectedEscapeCode(outer, inner, _, _)
+            | UnrecognizedToken(outer, inner, _, _)
+            | UnterminatedExtractor(outer, inner, _)
+            | UnterminatedIdentLiteral(outer, inner, _)
+            | UnterminatedStringLiteral(outer, inner, _)
+            | UpdateKeyMissing(outer, inner, _)
+            | UnterminatedHereDoc(outer, inner, _)
+            | TailingHereDoc(outer, inner, _, _)
+            | AggrInAggr(outer, inner)
+            | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | NoObjectError(_)
@@ -193,17 +192,17 @@ impl ErrorKind {
             | ParserError(_)
             | SerdeJSONError(_)
             | UnexpectedEndOfStream
-            | Utf8Error(_) => (Some(Range::default()), None),
-            ErrorKind::__Nonexhaustive { .. } => (Some(Range::default()), None),
+            | Utf8Error(_)
+            | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
         }
     }
     pub fn token(&self) -> Option<String> {
         use ErrorKind::*;
         match self {
-            UnterminatedExtractor(_, _, token) => Some(token.to_string()),
-            UnterminatedStringLiteral(_, _, token) => Some(token.to_string()),
-            UnterminatedIdentLiteral(_, _, token) => Some(token.to_string()),
-            UnexpectedEscapeCode(_, _, s, _) => Some(s.to_string()),
+            UnterminatedExtractor(_, _, token)
+            | UnterminatedStringLiteral(_, _, token)
+            | UnterminatedIdentLiteral(_, _, token)
+            | UnexpectedEscapeCode(_, _, token, _) => Some(token.to_string()),
             _ => None,
         }
     }
@@ -236,13 +235,7 @@ impl ErrorKind {
                 }
             }
 
-            BadAccessInEvent(_, _, key, options) => {
-                match best_hint(&key, &options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
-                    _ => None
-                }
-            }
-            BadAccessInGlobal(_, _, key, options) => {
+            BadAccessInEvent(_, _, key, options) |BadAccessInGlobal(_, _, key, options) => {
                 match best_hint(&key, &options, 2) {
                     Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
                     _ => None
@@ -256,8 +249,8 @@ impl ErrorKind {
                 _ => None
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
-            MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
-            MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
+            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
+
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, _) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
             _ => None,
@@ -667,7 +660,7 @@ pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
     Err(ErrorKind::NoClauseHit(outer.extent()).into())
 }
 
-pub fn error_oops<T, O: BaseExpr, S: ToString>(outer: &O, msg: S) -> Result<T> {
+pub fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(outer: &O, msg: &S) -> Result<T> {
     Err(ErrorKind::Oops(outer.extent(), msg.to_string()).into())
 }
 

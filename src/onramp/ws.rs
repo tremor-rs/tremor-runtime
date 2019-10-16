@@ -40,7 +40,7 @@ impl onramp::Impl for Ws {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Ws { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -77,7 +77,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                 //FIXME: Once we get 'proper' websockets
                 ctx.pong(&msg);
             }
-            ws::Message::Pong(_) => {}
+            ws::Message::Pong(_) | ws::Message::Nop => {}
             ws::Message::Text(bin) => {
                 #[cfg(feature = "ws-echo")]
                 ctx.text(&bin);
@@ -118,7 +118,6 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                 ctx.close(None);
                 ctx.stop();
             }
-            ws::Message::Nop => {}
         }
     }
 }
@@ -146,7 +145,7 @@ fn onramp_loop(
     rx: Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
-    codec: String,
+    codec: &str,
 ) -> Result<()> {
     let (main_tx, main_rx) = bounded(10);
 
@@ -211,7 +210,7 @@ impl Onramp for Ws {
         thread::Builder::new()
             .name(format!("onramp-udp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(rx, config, preprocessors, &codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

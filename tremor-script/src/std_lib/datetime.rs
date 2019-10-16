@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Dylans code ...
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use crate::datetime::*;
 use crate::registry::Registry;
@@ -218,7 +224,7 @@ pub fn _from_human_format(human: &str) -> Option<u64> {
             (Some(1), &"year") => acc + _with_years(1),
             (Some(1), &"week") => acc + _with_weeks(1),
             (Some(1), &"day") => acc + _with_days(1),
-            (Some(1), &"minute") => acc + _with_days(1),
+            (Some(1), &"minute") => acc + _with_minutes(1),
             (Some(1), &"second") => acc + _with_seconds(1),
             (Some(1), &"millisecond") => acc + _with_milliseconds(1),
             (Some(1), &"microsecond") => acc + _with_microseconds(1),

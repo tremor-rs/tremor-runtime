@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::cast_precision_loss)]
 
 use crate::registry::{
     mfa, Aggr as AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
@@ -351,9 +352,9 @@ struct Hdr {
 impl std::default::Default for Hdr {
     fn default() -> Self {
         #[allow(clippy::result_unwrap_used)]
-        Hdr {
+        Self {
             //ALLOW: this values have been tested so an error can never be returned
-            histo: Histogram::new_with_bounds(1, u64::MAX >> 1, 2).unwrap(),
+            histo: Histogram::new_with_bounds(1, u64::max_value() >> 1, 2).unwrap(),
             percentiles: vec![
                 ("0.5".to_string(), 0.5),
                 ("0.9".to_string(), 0.9),
@@ -428,17 +429,17 @@ impl TremorAggrFn for Hdr {
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         let mut p = hashmap! {};
-        for (pcn, percentile) in self.percentiles.iter() {
+        for (pcn, percentile) in &self.percentiles {
             p.insert(
                 pcn.clone().into(),
-                Value::I64(self.histo.value_at_percentile(percentile * 100.0) as i64),
+                Value::from(self.histo.value_at_percentile(percentile * 100.0)),
             );
         }
 
         Ok(Value::Object(hashmap! {
-            "count".into() => Value::I64(self.histo.len() as i64),
-            "min".into() => Value::I64(self.histo.min() as i64),
-            "max".into() => Value::I64(self.histo.max() as i64),
+            "count".into() => Value::from(self.histo.len()),
+            "min".into() => Value::from(self.histo.min()),
+            "max".into() => Value::from(self.histo.max()),
             "mean".into() => Value::F64(self.histo.mean()),
             "stdev".into() => Value::F64(self.histo.stdev()),
             "var".into() => Value::F64(self.histo.stdev().powf(2.0)),

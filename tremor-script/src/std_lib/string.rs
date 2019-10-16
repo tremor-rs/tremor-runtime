@@ -94,7 +94,7 @@ pub fn load(registry: &mut Registry) {
             Box::new(self.clone())
         }
         fn arity(&self) -> std::ops::RangeInclusive<usize> {
-            1_usize..=std::usize::MAX
+            1_usize..=usize::max_value()
         }
         fn is_const(&self) -> bool {
             true

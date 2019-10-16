@@ -246,7 +246,6 @@ impl<'script> Script1<'script> {
         // take advantage of the `emit event` optiisation
         if let Some(e) = exprs.pop() {
             match e.borrow() {
-                Expr::Emit(_) => exprs.push(e),
                 Expr::Imut(ImutExpr::Path(Path::Event(p))) => {
                     if p.segments.is_empty() {
                         let expr = EmitExpr {
@@ -917,19 +916,18 @@ impl<'script> BaseExpr for ImutExpr<'script> {
         match self {
             ImutExpr::Binary(e) => e.s(),
             ImutExpr::Comprehension(e) => e.s(),
-            ImutExpr::Invoke(e) => e.s(),
-            ImutExpr::Invoke1(e) => e.s(),
-            ImutExpr::Invoke2(e) => e.s(),
-            ImutExpr::Invoke3(e) => e.s(),
+            ImutExpr::Invoke(e)
+            | ImutExpr::Invoke1(e)
+            | ImutExpr::Invoke2(e)
+            | ImutExpr::Invoke3(e) => e.s(),
             ImutExpr::InvokeAggr(e) => e.s(),
             ImutExpr::List(e) => e.s(),
             ImutExpr::Literal(e) => e.s(),
-            ImutExpr::Local { start, .. } => *start,
+            ImutExpr::Local { start, .. } | ImutExpr::Present { start, .. } => *start,
             ImutExpr::Match(e) => e.s(),
             ImutExpr::Merge(e) => e.s(),
             ImutExpr::Patch(e) => e.s(),
             ImutExpr::Path(e) => e.s(),
-            ImutExpr::Present { start, .. } => *start,
             ImutExpr::Record(e) => e.s(),
             ImutExpr::Unary(e) => e.s(),
         }
@@ -938,19 +936,18 @@ impl<'script> BaseExpr for ImutExpr<'script> {
         match self {
             ImutExpr::Binary(e) => e.e(),
             ImutExpr::Comprehension(e) => e.e(),
-            ImutExpr::Invoke(e) => e.e(),
-            ImutExpr::Invoke1(e) => e.e(),
-            ImutExpr::Invoke2(e) => e.e(),
-            ImutExpr::Invoke3(e) => e.e(),
+            ImutExpr::Invoke(e)
+            | ImutExpr::Invoke1(e)
+            | ImutExpr::Invoke2(e)
+            | ImutExpr::Invoke3(e) => e.e(),
             ImutExpr::InvokeAggr(e) => e.e(),
             ImutExpr::List(e) => e.e(),
             ImutExpr::Literal(e) => e.e(),
-            ImutExpr::Local { end, .. } => *end,
             ImutExpr::Match(e) => e.e(),
             ImutExpr::Merge(e) => e.e(),
             ImutExpr::Patch(e) => e.e(),
             ImutExpr::Path(e) => e.e(),
-            ImutExpr::Present { end, .. } => *end,
+            ImutExpr::Local { end, .. } | ImutExpr::Present { end, .. } => *end,
             ImutExpr::Record(e) => e.e(),
             ImutExpr::Unary(e) => e.e(),
         }
@@ -959,10 +956,10 @@ impl<'script> BaseExpr for ImutExpr<'script> {
 impl<'script> BaseExpr for Expr<'script> {
     fn s(&self) -> Location {
         match self {
-            Expr::Assign { start, .. } => *start,
-            Expr::AssignMoveLocal { start, .. } => *start,
+            Expr::Assign { start, .. }
+            | Expr::AssignMoveLocal { start, .. }
+            | Expr::Drop { start, .. } => *start,
             Expr::Comprehension(e) => e.s(),
-            Expr::Drop { start, .. } => *start,
             Expr::Emit(e) => e.s(),
             Expr::Imut(e) => e.s(),
             Expr::Match(e) => e.s(),
@@ -972,10 +969,10 @@ impl<'script> BaseExpr for Expr<'script> {
     }
     fn e(&self) -> Location {
         match self {
-            Expr::Assign { end, .. } => *end,
-            Expr::AssignMoveLocal { end, .. } => *end,
+            Expr::Assign { end, .. }
+            | Expr::AssignMoveLocal { end, .. }
+            | Expr::Drop { end, .. } => *end,
             Expr::Comprehension(e) => e.e(),
-            Expr::Drop { end, .. } => *end,
             Expr::Emit(e) => e.e(),
             Expr::Imut(e) => e.e(),
             Expr::Match(e) => e.e(),
@@ -1966,23 +1963,23 @@ impl<'script> PredicatePattern<'script> {
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::*;
         match self {
-            TildeEq { key, .. } => &key,
-            Eq { key, .. } => &key,
-            RecordPatternEq { key, .. } => &key,
-            ArrayPatternEq { key, .. } => &key,
-            FieldPresent { key, .. } => &key,
-            FieldAbsent { key, .. } => &key,
+            TildeEq { key, .. }
+            | Eq { key, .. }
+            | RecordPatternEq { key, .. }
+            | ArrayPatternEq { key, .. }
+            | FieldPresent { key, .. }
+            | FieldAbsent { key, .. } => &key,
         }
     }
     pub fn lhs(&self) -> &str {
         use PredicatePattern::*;
         match self {
-            TildeEq { lhs, .. } => &lhs,
-            Eq { lhs, .. } => &lhs,
-            RecordPatternEq { lhs, .. } => &lhs,
-            ArrayPatternEq { lhs, .. } => &lhs,
-            FieldPresent { lhs, .. } => &lhs,
-            FieldAbsent { lhs, .. } => &lhs,
+            TildeEq { lhs, .. }
+            | Eq { lhs, .. }
+            | RecordPatternEq { lhs, .. }
+            | ArrayPatternEq { lhs, .. }
+            | FieldPresent { lhs, .. }
+            | FieldAbsent { lhs, .. } => &lhs,
         }
     }
 }
@@ -2146,8 +2143,7 @@ pub enum Path<'script> {
 impl<'script> Path<'script> {
     pub fn segments(&self) -> &[Segment] {
         match self {
-            Path::Const(path) => &path.segments,
-            Path::Local(path) => &path.segments,
+            Path::Const(path) | Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
         }
@@ -2156,16 +2152,14 @@ impl<'script> Path<'script> {
 impl<'script> BaseExpr for Path<'script> {
     fn s(&self) -> Location {
         match self {
-            Path::Const(e) => e.s(),
-            Path::Local(e) => e.s(),
+            Path::Const(e) | Path::Local(e) => e.s(),
             Path::Meta(e) => e.s(),
             Path::Event(e) => e.s(),
         }
     }
     fn e(&self) -> Location {
         match self {
-            Path::Const(e) => e.e(),
-            Path::Local(e) => e.e(),
+            Path::Const(e) | Path::Local(e) => e.e(),
             Path::Meta(e) => e.e(),
             Path::Event(e) => e.e(),
         }
@@ -2205,6 +2199,7 @@ impl<'script> Upable<'script> for Segment1<'script> {
                             start,
                             end,
                         },
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         Value::I64(idx) if idx >= 0 => Segment::Idx {
                             idx: idx as usize,
                             start,
@@ -2329,18 +2324,16 @@ impl<'script> PartialEq for Segment<'script> {
 impl<'script> BaseExpr for Segment<'script> {
     fn s(&self) -> Location {
         match self {
-            Segment::Id { start, .. } => *start,
-            Segment::Idx { start, .. } => *start,
-            Segment::Element { start, .. } => *start,
-            Segment::Range { start_lower, .. } => *start_lower,
+            Self::Id { start, .. } | Self::Idx { start, .. } | Self::Element { start, .. } => {
+                *start
+            }
+            Self::Range { start_lower, .. } => *start_lower,
         }
     }
     fn e(&self) -> Location {
         match self {
-            Segment::Id { end, .. } => *end,
-            Segment::Idx { end, .. } => *end,
-            Segment::Element { end, .. } => *end,
-            Segment::Range { end_upper, .. } => *end_upper,
+            Self::Id { end, .. } | Self::Idx { end, .. } | Self::Element { end, .. } => *end,
+            Self::Range { end_upper, .. } => *end_upper,
         }
     }
 }
@@ -2488,21 +2481,19 @@ pub enum BinOpKind {
 impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            BinOpKind::Or => write!(f, "or"),
-            BinOpKind::And => write!(f, "and"),
-
-            BinOpKind::Eq => write!(f, "=="),
-            BinOpKind::NotEq => write!(f, "!="),
-            BinOpKind::Gte => write!(f, ">="),
-            BinOpKind::Gt => write!(f, ">"),
-            BinOpKind::Lte => write!(f, "<="),
-            BinOpKind::Lt => write!(f, "<"),
-
-            BinOpKind::Add => write!(f, "+"),
-            BinOpKind::Sub => write!(f, "-"),
-            BinOpKind::Mul => write!(f, "*"),
-            BinOpKind::Div => write!(f, "/"),
-            BinOpKind::Mod => write!(f, "%"),
+            Self::Or => write!(f, "or"),
+            Self::And => write!(f, "and"),
+            Self::Eq => write!(f, "=="),
+            Self::NotEq => write!(f, "!="),
+            Self::Gte => write!(f, ">="),
+            Self::Gt => write!(f, ">"),
+            Self::Lte => write!(f, "<="),
+            Self::Lt => write!(f, "<"),
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Mod => write!(f, "%"),
         }
     }
 }
@@ -2549,9 +2540,9 @@ pub enum UnaryOpKind {
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            UnaryOpKind::Plus => write!(f, "+"),
-            UnaryOpKind::Minus => write!(f, "-"),
-            UnaryOpKind::Not => write!(f, "not"),
+            Self::Plus => write!(f, "+"),
+            Self::Minus => write!(f, "-"),
+            Self::Not => write!(f, "not"),
         }
     }
 }

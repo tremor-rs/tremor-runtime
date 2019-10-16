@@ -39,6 +39,7 @@ use tremor_pipeline::errors::*;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::*;
 
+#[allow(clippy::cast_sign_loss)]
 pub fn nanotime() -> u64 {
     let now = Utc::now();
     let seconds: u64 = now.timestamp() as u64;
@@ -187,7 +188,7 @@ fn main() -> Result<()> {
             .map(|s| s.map(String::into_bytes))
             .collect();
         inputs = lines?;
-        for i in inputs.iter() {
+        for i in &inputs {
             if let Some(i) = influx::parse(std::str::from_utf8(i)?, 0)? {
                 r.push(i);
             }
@@ -202,7 +203,7 @@ fn main() -> Result<()> {
             input?.read_to_end(&mut bytes)?;
             inputs.push(bytes);
         }
-        for i in inputs.iter_mut() {
+        for i in &mut inputs {
             r.push(simd_json::to_borrowed_value(i)?)
         }
         r
@@ -236,7 +237,7 @@ fn main() -> Result<()> {
                 let value = LineValue::new(vec![], |_| unsafe {
                     std::mem::transmute(ValueAndMeta {
                         value: event.clone(),
-                        ..Default::default()
+                        ..ValueAndMeta::default()
                     })
                 });
                 continuation.clear();

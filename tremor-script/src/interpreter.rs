@@ -111,6 +111,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     //
     use Value::*;
     let error = std::f64::EPSILON;
+    #[allow(clippy::cast_precision_loss)]
     match (lhs, rhs) {
         (Object(l), Object(r)) => {
             if l.len() == r.len() {
@@ -148,6 +149,7 @@ pub fn exec_binary<'run, 'event: 'run>(
     // - snot badger - Darach
     use BinOpKind::*;
     use Value::*;
+    #[allow(clippy::cast_precision_loss)]
     match (&op, lhs, rhs) {
         (Eq, Null, Null) => Some(static_bool!(true)),
         (NotEq, Null, Null) => Some(static_bool!(false)),
@@ -275,7 +277,7 @@ where
                         segment, //&Expr::dummy(*start, *end),
                         &path,
                         id.to_string(),
-                        o.keys().map(|v| v.to_string()).collect(),
+                        o.keys().map(ToString::to_string).collect(),
                     );
                 } else {
                     return error_type_conflict(
@@ -331,7 +333,7 @@ where
                                 segment,
                                 &path,
                                 id.to_string(),
-                                o.keys().map(|v| v.to_string()).collect(),
+                                o.keys().map(ToString::to_string).collect(),
                             );
                         }
                     }
@@ -343,34 +345,35 @@ where
                             ValueType::String,
                         )
                     }
-                    (Value::Array(a), Value::I64(idx)) => {
-                        let (start, end) = if let Some((start, end)) = subrange {
-                            // We check range on setting the subrange!
-                            (start, end)
-                        } else {
-                            (0, a.len())
-                        };
-                        let idx = *idx as usize + start;
-                        if idx >= end {
-                            // We exceed the sub range
-                            return Ok(Cow::Borrowed(&FALSE));
-                        }
+                    (Value::Array(a), idx) => {
+                        if let Some(idx) = idx.as_usize() {
+                            let (start, end) = if let Some((start, end)) = subrange {
+                                // We check range on setting the subrange!
+                                (start, end)
+                            } else {
+                                (0, a.len())
+                            };
+                            let idx = idx + start;
+                            if idx >= end {
+                                // We exceed the sub range
+                                return Ok(Cow::Borrowed(&FALSE));
+                            }
 
-                        if let Some(v) = a.get(idx) {
-                            current = v;
-                            subrange = None;
-                            continue;
+                            if let Some(v) = a.get(idx) {
+                                current = v;
+                                subrange = None;
+                                continue;
+                            } else {
+                                return error_array_out_of_bound(outer, segment, &path, idx..idx);
+                            }
                         } else {
-                            return error_array_out_of_bound(outer, segment, &path, idx..idx);
+                            return error_type_conflict(
+                                outer,
+                                segment,
+                                idx.value_type(),
+                                ValueType::I64,
+                            );
                         }
-                    }
-                    (Value::Array(_), other) => {
-                        return error_type_conflict(
-                            outer,
-                            segment,
-                            other.value_type(),
-                            ValueType::I64,
-                        )
                     }
                     (other, Value::String(_)) => {
                         return error_type_conflict(
@@ -490,14 +493,11 @@ where
                     for (k, v) in rep {
                         if v.is_null() {
                             map.remove(k);
+                        } else if let Some(k) = map.get_mut(k) {
+                            stry!(merge_values(outer, inner, k, v))
                         } else {
-                            match map.get_mut(k) {
-                                Some(k) => stry!(merge_values(outer, inner, k, v)),
-                                None => {
-                                    //NOTE: We got to clone here since we're duplicating values
-                                    map.insert(k.clone(), v.clone());
-                                }
-                            }
+                            //NOTE: We got to clone here since we're duplicating values
+                            map.insert(k.clone(), v.clone());
                         }
                     }
                 }
@@ -904,18 +904,15 @@ where
                 };
 
                 if testee.is_object() {
-                    match stry!(match_rp_expr(
+                    if let Some(m) = stry!(match_rp_expr(
                         outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
-                        Some(m) => {
-                            if opts.result_needed {
-                                known_key.insert(&mut acc, m)?;
-                            }
-                            continue;
+                        if opts.result_needed {
+                            known_key.insert(&mut acc, m)?;
                         }
-                        _ => {
-                            return Ok(None);
-                        }
+                        continue;
+                    } else {
+                        return Ok(None);
                     }
                 } else {
                     return Ok(None);
@@ -929,19 +926,16 @@ where
                 };
 
                 if testee.is_array() {
-                    match stry!(match_ap_expr(
+                    if let Some(r) = stry!(match_ap_expr(
                         outer, opts, context, aggrs, event, meta, local, consts, testee, pattern,
                     )) {
-                        Some(r) => {
-                            if opts.result_needed {
-                                known_key.insert(&mut acc, r)?;
-                            }
+                        if opts.result_needed {
+                            known_key.insert(&mut acc, r)?;
+                        }
 
-                            continue;
-                        }
-                        None => {
-                            return Ok(None);
-                        }
+                        continue;
+                    } else {
+                        return Ok(None);
                     }
                 } else {
                     return Ok(None);

@@ -421,16 +421,12 @@ where
                         if let Value::Object(ref mut map) =
                             mem::transmute::<&Value, &mut Value>(current)
                         {
-                            current = match map.get_mut(&id) {
-                                Some(v) => v,
-                                None => {
-                                    map.insert(
-                                        id.clone(),
-                                        Value::Object(Object::with_capacity(32)),
-                                    );
-                                    // ALLOW: this is safe because we just added this element to the map.
-                                    map.get_mut(&id).unwrap_or_else(|| unreachable!())
-                                }
+                            current = if let Some(v) = map.get_mut(&id) {
+                                v
+                            } else {
+                                map.insert(id.clone(), Value::Object(Object::with_capacity(32)));
+                                // ALLOW: this is safe because we just added this element to the map.
+                                map.get_mut(&id).unwrap_or_else(|| unreachable!())
                             }
                         } else {
                             return error_type_conflict(
@@ -441,8 +437,9 @@ where
                             );
                         }
                     }
-                    Segment::Idx { .. } => return error_assign_array(self, segment),
-                    Segment::Range { .. } => return error_assign_array(self, segment),
+                    Segment::Idx { .. } | Segment::Range { .. } => {
+                        return error_assign_array(self, segment)
+                    }
                 }
             }
         }
@@ -457,7 +454,7 @@ where
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn run(
         &'script self,
         opts: ExecOpts,

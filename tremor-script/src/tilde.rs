@@ -293,10 +293,9 @@ impl Extractor {
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
             "grok" => {
-                if let Ok(pat) = GrokPattern::from_file(
-                    crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
-                    rule_text.to_string(),
-                ) {
+                if let Ok(pat) =
+                    GrokPattern::from_file(crate::grok::PATTERNS_FILE_DEFAULT_PATH, rule_text)
+                {
                     Self::Grok {
                         rule: rule_text.to_string(),
                         compiled: pat,
@@ -469,7 +468,7 @@ impl Extractor {
                     compiled: ref pattern,
                     ..
                 } => {
-                    let o = pattern.matches(s.as_bytes().to_vec())?;
+                    let o = pattern.matches(s.as_bytes())?;
                     if !result_needed {
                         return Ok(Value::Null);
                     };

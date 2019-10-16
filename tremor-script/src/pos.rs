@@ -74,14 +74,14 @@ impl Range {
 }
 
 impl<'script> From<Expr<'script>> for Range {
-    fn from(expr: Expr<'script>) -> Range {
+    fn from(expr: Expr<'script>) -> Self {
         expr.extent()
     }
 }
 
 impl From<(Location, Location)> for Range {
-    fn from(locs: (Location, Location)) -> Range {
-        Range(locs.0, locs.1)
+    fn from(locs: (Location, Location)) -> Self {
+        Self(locs.0, locs.1)
     }
 }
 pub fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
@@ -100,13 +100,13 @@ impl Location {
         }
     }
 
-    pub fn move_down_lines(&self, lines: usize) -> Location {
+    pub fn move_down_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.line += lines;
         new
     }
 
-    pub fn move_up_lines(&self, lines: usize) -> Location {
+    pub fn move_up_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.line = self.line.checked_sub(lines).unwrap_or(0);
         new

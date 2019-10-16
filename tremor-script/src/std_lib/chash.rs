@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use crate::registry::Registry;
 use crate::tremor_const_fn;
 use jumphash;

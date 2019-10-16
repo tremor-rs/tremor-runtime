@@ -300,7 +300,7 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
     };
 
     let grok = if cmd.is_present("patterns") {
-        grok::Pattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
+        grok::Pattern::from_file(patterns_file, test_pattern)?
     } else {
         grok::Pattern::new(test_pattern.to_string())?
     };
@@ -309,7 +309,7 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
         if l.is_empty() || l.starts_with('#') {
             continue;
         }
-        let result = grok.matches(l.as_bytes().to_vec());
+        let result = grok.matches(l.as_bytes());
 
         match result {
             Ok(j) => {
@@ -531,7 +531,7 @@ fn conductor_pipeline_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -542,7 +542,7 @@ fn conductor_pipeline_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -550,7 +550,7 @@ fn conductor_pipeline_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "pipeline".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -562,7 +562,7 @@ fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
     let ser = ser(&app, &json)?;
     let endpoint = "pipeline";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -580,7 +580,7 @@ fn conductor_pipeline_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("pipeline/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -615,7 +615,7 @@ fn conductor_binding_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -626,7 +626,7 @@ fn conductor_binding_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -634,7 +634,7 @@ fn conductor_binding_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "binding".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -646,7 +646,7 @@ fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let ser = ser(&app, &json)?;
     let endpoint = "binding";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -664,7 +664,7 @@ fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -682,7 +682,7 @@ fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
     let json = load(path_to_file.to_string())?;
     let ser = ser(&app, &json)?;
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -700,7 +700,7 @@ fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -731,7 +731,7 @@ fn conductor_offramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -742,7 +742,7 @@ fn conductor_offramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -750,7 +750,7 @@ fn conductor_offramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "offramp".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -762,7 +762,7 @@ fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let ser = ser(&app, &json)?;
     let endpoint = "offramp";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -780,7 +780,7 @@ fn conductor_offramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("offramp/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -811,7 +811,7 @@ fn conductor_onramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -822,7 +822,7 @@ fn conductor_onramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -830,7 +830,7 @@ fn conductor_onramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "onramp".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -842,7 +842,7 @@ fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
     let ser = ser(&app, &json)?;
     let endpoint = "onramp";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -860,7 +860,7 @@ fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("onramp/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 

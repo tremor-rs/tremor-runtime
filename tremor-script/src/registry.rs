@@ -78,6 +78,7 @@ pub fn registry() -> Registry {
 
     registry.insert(tremor_fn!(system::ingest_ns(_context) {
         let now = Utc::now();
+        #[allow(clippy::cast_sign_loss)]
         let seconds: u64 = now.timestamp() as u64;
         let nanoseconds: u64 = u64::from(now.nanosecond());
 
@@ -201,7 +202,7 @@ impl TremorFnWrapper {
 
 impl Clone for TremorFnWrapper {
     fn clone(&self) -> Self {
-        TremorFnWrapper {
+        Self {
             module: self.module.clone(),
             name: self.name.clone(),
             fun: self.fun.snot_clone(),
@@ -214,7 +215,7 @@ impl fmt::Debug for TremorFnWrapper {
     }
 }
 impl PartialEq for TremorFnWrapper {
-    fn eq(&self, other: &TremorFnWrapper) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
     }
 }
@@ -485,7 +486,7 @@ impl Registry {
         }
     }
 
-    pub fn insert(&mut self, function: TremorFnWrapper) -> &mut Registry {
+    pub fn insert(&mut self, function: TremorFnWrapper) -> &mut Self {
         if let Some(module) = self.functions.get_mut(&function.module) {
             module.insert(function.name.clone(), function);
         } else {
@@ -548,7 +549,7 @@ impl fmt::Debug for TremorAggrFnWrapper {
     }
 }
 impl PartialEq for TremorAggrFnWrapper {
-    fn eq(&self, other: &TremorAggrFnWrapper) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
     }
 }
@@ -560,7 +561,7 @@ pub struct Aggr {
 
 impl Default for Aggr {
     fn default() -> Self {
-        Aggr {
+        Self {
             functions: HashMap::new(),
         }
     }
@@ -587,18 +588,14 @@ impl Aggr {
         }
     }
 
-    pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut Aggr {
-        match self.functions.get_mut(&function.module) {
-            Some(module) => {
-                module.insert(function.name.clone(), function);
-            }
-
-            None => {
-                let mut module = HashMap::new();
-                let module_name = function.module.clone();
-                module.insert(function.name.clone(), function);
-                self.functions.insert(module_name, module);
-            }
+    pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut Self {
+        if let Some(module) = self.functions.get_mut(&function.module) {
+            module.insert(function.name.clone(), function);
+        } else {
+            let mut module = HashMap::new();
+            let module_name = function.module.clone();
+            module.insert(function.name.clone(), function);
+            self.functions.insert(module_name, module);
         }
         self
     }

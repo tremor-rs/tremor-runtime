@@ -17,7 +17,7 @@ use crate::tremor_fn;
 use crate::EventContext;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, ValueTrait};
 
 pub fn load(registry: &mut Registry) {
     // The random number generator used for these functions is ThreadRng, which
@@ -160,16 +160,13 @@ pub fn load(registry: &mut Registry) {
         }))
         // TODO support specifying range of characters as a second (optional) arg
         .insert(tremor_fn! (random::string(_context, _length) {
-            match _length {
-                Value::I64(n) if *n >= 0 => Ok(Value::String(
-                    // random string with chars uniformly distributed over ASCII letters and numbers
-                    rand::thread_rng().sample_iter(&Alphanumeric).take(*n as usize).collect()
-                )),
-                Value::I64(_) => Err(FunctionError::RuntimeError {
-                    mfa: this_mfa(),
-                    error: "Invalid argument. Must be greater than or equal to 0".to_string(),
-                }),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+            if let Some(n) = _length.as_usize() {
+                // random string with chars uniformly distributed over ASCII letters and numbers
+                Ok(Value::String(
+                    rand::thread_rng().sample_iter(&Alphanumeric).take(n).collect()
+                ))
+            } else {
+                Err(FunctionError::BadType{mfa: this_mfa()})
             }
         }))
         .insert(TremorFnWrapper {

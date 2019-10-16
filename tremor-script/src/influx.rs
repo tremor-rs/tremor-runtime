@@ -23,7 +23,7 @@ use std::str::Chars;
 
 // taken from https://github.com/simd-lite/simdjson-rs/blob/f9af58334b8e1133f2d27a4f34a57d9576eebfff/src/value/generator.rs#L103
 
-#[inline(always)]
+#[inline]
 fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
     let mut start = 0;
 
@@ -41,7 +41,7 @@ fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
     Some(())
 }
 
-#[inline(always)]
+#[inline]
 fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
     let mut start = 0;
 
@@ -222,16 +222,16 @@ fn parse_fields<'input>(chars: &mut Chars) -> Result<Object<'input>> {
 fn parse_tags<'input>(chars: &mut Chars) -> Result<Object<'input>> {
     let mut res = HashMap::new();
     loop {
-        let (key, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c != '=' {
+        let (key, c_key) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        if c_key != '=' {
             return Err(ErrorKind::InvalidInfluxData("Tag without value".into()).into());
         };
-        let (val, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c == '=' {
+        let (val, c_val) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        if c_val == '=' {
             return Err(ErrorKind::InvalidInfluxData("= found in tag value".into()).into());
         }
         res.insert(key, Value::String(val));
-        if c == ' ' {
+        if c_val == ' ' {
             return Ok(res);
         }
     }

@@ -32,37 +32,37 @@ impl fmt::Debug for HttpC {
 
 impl HttpC {
     pub fn new(url: String) -> Self {
-        HttpC {
+        Self {
             client: reqwest::Client::new(),
             url,
         }
     }
 
-    pub fn get(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn get(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.get(endpoint))
     }
 
-    pub fn post(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn post(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.post(endpoint))
     }
 
-    pub fn put(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn put(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.put(endpoint))
     }
 
-    pub fn patch(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn patch(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.patch(endpoint))
     }
 
-    pub fn delete(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn delete(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.delete(endpoint))

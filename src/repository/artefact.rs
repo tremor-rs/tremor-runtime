@@ -306,7 +306,7 @@ impl Artefact for OnrampArtefact {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
     fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let stream = onramp::lookup(self.binding_type.clone(), self.config.clone())?;
+        let stream = onramp::lookup(&self.binding_type, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
             codec.clone()
         } else {
@@ -338,18 +338,15 @@ impl Artefact for OnrampArtefact {
         if let Some(onramp) = system.reg.find_onramp(id)? {
             // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
             for (_from, to) in mappings {
-                match to.resource_type() {
-                    //TODO: Check that we really have the right onramp!
-                    Some(ResourceType::Pipeline) => {
-                        if let Some(pipeline) = system.reg.find_pipeline(&to)? {
-                            onramp.send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))?;
-                        } else {
-                            return Err(format!("Pipeline {:?} not found", to).into());
-                        }
+                //TODO: Check that we really have the right onramp!
+                if let Some(ResourceType::Pipeline) = to.resource_type() {
+                    if let Some(pipeline) = system.reg.find_pipeline(&to)? {
+                        onramp.send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))?;
+                    } else {
+                        return Err(format!("Pipeline {:?} not found", to).into());
                     }
-                    _ => {
-                        return Err("Destination isn't a Pipeline".into());
-                    }
+                } else {
+                    return Err("Destination isn't a Pipeline".into());
                 }
             }
             Ok(true)
@@ -457,10 +454,8 @@ impl Artefact for Binding {
                             (Some(ResourceType::Onramp), Some(ResourceType::Pipeline)) => {
                                 onramps.push((from.clone(), to))
                             }
-                            (Some(ResourceType::Pipeline), Some(ResourceType::Offramp)) => {
-                                pipelines.push((from.clone(), to))
-                            }
-                            (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline)) => {
+                            (Some(ResourceType::Pipeline), Some(ResourceType::Offramp))
+                            | (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline)) => {
                                 pipelines.push((from.clone(), to))
                             }
                             (_, _) => {

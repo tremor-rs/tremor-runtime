@@ -30,9 +30,9 @@ pub enum ErrorLevel {
 impl ErrorLevel {
     fn to_color(&self) -> Color {
         match self {
-            ErrorLevel::Error => Color::Red,
-            ErrorLevel::Warning => Color::Yellow,
-            ErrorLevel::Hint => Color::Green,
+            Self::Error => Color::Red,
+            Self::Warning => Color::Yellow,
+            Self::Hint => Color::Green,
         }
     }
 }
@@ -207,11 +207,7 @@ pub trait Highlighter {
                     Token::DocComment(_) => {
                         c.set_intense(true).set_fg(Some(Color::Cyan));
                     }
-                    Token::TestLiteral(_, _) => {
-                        c.set_intense(true).set_fg(Some(Color::Magenta));
-                    }
-
-                    Token::StringLiteral(_) => {
+                    Token::TestLiteral(_, _) | Token::StringLiteral(_) => {
                         c.set_intense(true).set_fg(Some(Color::Magenta));
                     }
                     Token::Bad(_) => {
@@ -333,7 +329,7 @@ pub struct Dumb {
 }
 impl Dumb {
     pub fn new() -> Self {
-        Dumb::default()
+        Self::default()
     }
 }
 
@@ -361,7 +357,7 @@ impl Term {
     pub fn new() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
         let buff = bufwtr.buffer();
-        Term { bufwtr, buff }
+        Self { bufwtr, buff }
     }
 }
 

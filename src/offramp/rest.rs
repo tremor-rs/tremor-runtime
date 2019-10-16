@@ -78,9 +78,9 @@ impl Rest {
     fn flush(client: &HttpC, config: Config, payload: &str) -> Result<u64> {
         let start = Instant::now();
         let c = if config.put {
-            client.put("".to_string())?
+            client.put("")?
         } else {
-            client.post("".to_string())?
+            client.post("")?
         };
         let c = config
             .headers

@@ -30,8 +30,8 @@ pub struct Pattern {
 }
 
 impl Pattern {
-    pub fn from_file(file_path: String, definition: String) -> Result<Pattern> {
-        let file = File::open(file_path.clone())?;
+    pub fn from_file(file_path: &str, definition: &str) -> Result<Self> {
+        let file = File::open(file_path)?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
         let mut grok = Grok::default();
@@ -39,32 +39,27 @@ impl Pattern {
 
         let mut result = Grok::default();
 
-        for (_num, line) in input.lines().enumerate() {
+        for (num, line) in input.lines().enumerate() {
             let l = line?;
             if l.is_empty() || l.starts_with('#') {
                 continue;
             }
 
-            match recognizer.match_against(&l) {
-                Some(m) => {
-                    if let Some((alias, pattern)) = m
-                        .get("alias")
-                        .and_then(|alias| Some((alias, m.get("pattern")?)))
-                    {
-                        result.insert_definition(alias.to_string(), pattern.to_string())
-                    } else {
-                        return Err(
-                            format!("{}: {:?}", "Expected a non-NONE value", (_num, &l)).into()
-                        );
-                    }
+            if let Some(m) = recognizer.match_against(&l) {
+                if let Some((alias, pattern)) = m
+                    .get("alias")
+                    .and_then(|alias| Some((alias, m.get("pattern")?)))
+                {
+                    result.insert_definition(alias.to_string(), pattern.to_string())
+                } else {
+                    return Err(format!("{}: {:?}", "Expected a non-NONE value", (num, &l)).into());
                 }
-                None => {
-                    return Err(format!("{}: {:?}", "Error in pattern on line", (_num, &l)).into());
-                }
+            } else {
+                return Err(format!("{}: {:?}", "Error in pattern on line", (num, &l)).into());
             }
         }
 
-        Ok(Pattern {
+        Ok(Self {
             definition: format!("{}{}", "file://", file_path),
             pattern: result.compile(&definition, true)?,
         })
@@ -73,7 +68,7 @@ impl Pattern {
     pub fn new(definition: String) -> Result<Self> {
         let mut grok = Grok::default();
         if let Ok(pattern) = grok.compile(&definition, true) {
-            Ok(Pattern {
+            Ok(Self {
                 definition,
                 pattern,
             })
@@ -82,7 +77,7 @@ impl Pattern {
         }
     }
 
-    pub fn matches(&self, data: Vec<u8>) -> Result<Value> {
+    pub fn matches(&self, data: &[u8]) -> Result<Value> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {
             Some(m) => {

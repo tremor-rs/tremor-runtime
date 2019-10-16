@@ -30,7 +30,7 @@ pub struct GELF {
 
 impl GELF {
     pub fn default() -> Self {
-        GELF {
+        Self {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
@@ -39,7 +39,7 @@ impl GELF {
         }
     }
     pub fn tcp() -> Self {
-        GELF {
+        Self {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
@@ -243,7 +243,7 @@ impl GELF {
 
 fn assemble(key: u64, m: GELFMsgs) -> Option<Vec<u8>> {
     let mut result = Vec::with_capacity(m.bytes);
-    for v in m.segments.into_iter() {
+    for v in m.segments {
         if let Some(mut v) = v {
             result.append(&mut v)
         } else {

@@ -23,6 +23,6 @@ impl EventContext {
     }
 
     pub fn from_ingest_ns(ingest_ns: u64) -> Self {
-        EventContext { at: ingest_ns }
+        Self { at: ingest_ns }
     }
 }

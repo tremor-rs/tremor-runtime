@@ -140,7 +140,7 @@ impl<'script> Upable<'script> for OperatorDecl1<'script> {
             params: match self.params {
                 Some(p) => {
                     let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
+                    for (name, value) in p {
                         pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
@@ -174,7 +174,7 @@ impl<'script> Upable<'script> for OperatorStmt1<'script> {
             params: match self.params {
                 Some(p) => {
                     let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
+                    for (name, value) in p {
                         pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
@@ -231,7 +231,7 @@ impl<'script> ScriptDecl1<'script> {
             params: match self.params {
                 Some(p) => {
                     let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
+                    for (name, value) in p {
                         pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
@@ -269,7 +269,7 @@ impl<'script> ScriptStmt1<'script> {
             params: match self.params {
                 Some(p) => {
                     let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
+                    for (name, value) in p {
                         pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                     }
                     Some(pup)
@@ -335,7 +335,7 @@ impl<'script> WindowDecl1<'script> {
             kind: self.kind,
             params: {
                 let mut pup = HashMap::new();
-                for (name, value) in self.params.into_iter() {
+                for (name, value) in self.params {
                     pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                 }
                 pup
@@ -532,16 +532,16 @@ pub enum GroupBy<'script> {
 impl<'script> BaseExpr for GroupBy<'script> {
     fn s(&self) -> Location {
         match self {
-            GroupBy::Expr { start, .. } => *start,
-            GroupBy::Set { start, .. } => *start,
-            GroupBy::Each { start, .. } => *start,
+            GroupBy::Expr { start, .. }
+            | GroupBy::Set { start, .. }
+            | GroupBy::Each { start, .. } => *start,
         }
     }
     fn e(&self) -> Location {
         match self {
-            GroupBy::Expr { end, .. } => *end,
-            GroupBy::Set { end, .. } => *end,
-            GroupBy::Each { end, .. } => *end,
+            GroupBy::Expr { end, .. } | GroupBy::Set { end, .. } | GroupBy::Each { end, .. } => {
+                *end
+            }
         }
     }
 }

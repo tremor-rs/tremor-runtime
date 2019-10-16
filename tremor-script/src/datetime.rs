@@ -16,6 +16,7 @@
 use crate::errors::*;
 use chrono::{DateTime, NaiveDateTime};
 
+#[allow(clippy::cast_sign_loss)]
 pub fn _parse(datetime: &str, input_fmt: &str, has_timezone: bool) -> Result<u64> {
     if has_timezone {
         Ok(DateTime::parse_from_str(datetime, input_fmt)

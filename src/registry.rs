@@ -76,7 +76,7 @@ pub struct Registry<A: Artefact> {
 
 impl<A: Artefact> Registry<A> {
     pub fn new() -> Self {
-        Registry {
+        Self {
             map: HashMap::new(),
         }
     }

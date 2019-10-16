@@ -968,37 +968,34 @@ impl<'input> Lexer<'input> {
             // This would be the second quote
             Some((mut end, '"')) => {
                 self.bump();
-                match self.lookahead() {
-                    Some((end, '"')) => {
-                        self.bump();
-                        // We don't allow anything tailing the initial `"""`
-                        match self.bump() {
-                            Some((_, '\n')) => self.hd(start).map(|e| vec![e]),
-                            Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
-                                Range::from((start, end)).expand_lines(2),
-                                Range::from((start, end)),
-                                format!(r#""""{}\n"#, ch),
-                                ch,
-                            )
-                            .into()),
-                            None => Err(ErrorKind::UnterminatedHereDoc(
-                                Range::from((start, end)).expand_lines(2),
-                                Range::from((start, end)),
-                                r#""""\n"#.to_string(),
-                            )
-                            .into()),
-                        }
+                if let Some((end, '"')) = self.lookahead() {
+                    self.bump();
+                    // We don't allow anything tailing the initial `"""`
+                    match self.bump() {
+                        Some((_, '\n')) => self.hd(start).map(|e| vec![e]),
+                        Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            format!(r#""""{}\n"#, ch),
+                            ch,
+                        )
+                        .into()),
+                        None => Err(ErrorKind::UnterminatedHereDoc(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            r#""""\n"#.to_string(),
+                        )
+                        .into()),
                     }
+                } else {
                     // We had two quotes followed by something not a quote so
                     // it is an empty string.
-                    _ => {
-                        //TODO :make slice
-                        let start = end;
-                        end.column += 1;
-                        end.absolute += 1;
-                        res.push(spanned2(start, end, Token::DQuote));
-                        Ok(res)
-                    }
+                    //TODO :make slice
+                    let start = end;
+                    end.column += 1;
+                    end.absolute += 1;
+                    res.push(spanned2(start, end, Token::DQuote));
+                    Ok(res)
                 }
             }
             Some(_) => self.qs(start, end, false, string, res),
@@ -1420,8 +1417,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '-' => Some(self.sb(start)),
                     '#' => Some(self.cx(start)),
                     '=' => Some(self.eq(start)),
-                    '<' => Some(self.an(start)),
-                    '>' => Some(self.an(start)),
+                    '<' | '>' => Some(self.an(start)),
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),

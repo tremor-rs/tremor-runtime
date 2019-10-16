@@ -21,6 +21,7 @@ pub trait Upable<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
 }
 
+#[allow(clippy::use_self)]
 impl<'script, U: Upable<'script>> Upable<'script> for Vec<U> {
     type Target = Vec<U::Target>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -28,6 +29,7 @@ impl<'script, U: Upable<'script>> Upable<'script> for Vec<U> {
     }
 }
 
+#[allow(clippy::use_self)]
 impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
     type Target = Option<U::Target>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -35,7 +37,7 @@ impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
     }
 }
 
-#[allow(clippy::implicit_hasher)]
+#[allow(clippy::implicit_hasher, clippy::use_self)]
 impl<'script, K, U: Upable<'script>> Upable<'script> for HashMap<K, U>
 where
     K: std::cmp::Eq + std::hash::Hash,
