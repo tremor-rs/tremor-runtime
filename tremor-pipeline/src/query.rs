@@ -28,6 +28,7 @@ use tremor_script::ast::Stmt;
 use tremor_script::ast::{WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
+use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{AggrRegistry, Registry, Value};
 
 fn resolve_input_port(port: String) -> Result<InputPort> {
@@ -72,44 +73,22 @@ fn resolve_output_port(port: String) -> Result<OutputPort> {
     }
 }
 
-fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
+fn window_decl_to_impl<'script>(
+    d: &WindowDecl<'script>,
+    stmt: &StmtRentalWrapper,
+) -> Result<WindowImpl> {
     use op::trickle::select::*;
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
-            match d.params.as_ref() {
-                Some(params) => {
-                    if params.contains_key("interval") {
-                        let interval = params.get("interval")
-                            .and_then(Value::as_u64)
-                            .ok_or_else(|| error_missing_config("interval"))?;
-                        return Ok(TumblingWindowOnEventTime {
-                            size: interval,
-                            next_window: None,
-                        }
-                        .into());
-                    }
-
-                    if params.contains_key("size") {
-                        let size = params.get("size")
-                            .and_then(Value::as_u64)
-                            .ok_or_else(|| error_missing_config("size"))?;
-                        return Ok(TumblingWindowOnEventNumber {
-                            size,
-                            next_window: None,
-                        }
-                        .into());
-                    }
-
-                    // FIXME add a suitable error
-                    unreachable!(); // bad parameters to window defn
-
-                }
-                _ => {
-                    // FIXME add a suitable error
-                    unreachable!(); // bad parameters to window defn
-
-                }
+            let script = if d.script.is_some() { Some(d) } else { None };
+            if let Some(interval) = d.params.get("interval").and_then(Value::as_u64) {
+                Ok(TumblingWindowOnTime::from_stmt(interval, script, stmt).into())
+            } else if let Some(size) = d.params.get("size").and_then(Value::as_u64) {
+                Ok(TumblingWindowOnNumber::from_stmt(size, script, stmt).into())
+            } else {
+                // FIXME add a suitable error
+                unimplemented!();
             }
         }
     }
@@ -210,7 +189,11 @@ impl Query {
                     let into = resolve_input_port(into)?;
                     if links.contains_key(&from) {
                         match links.get_mut(&from) {
-                            Some(x) => if !x.contains(&select_in) { x.push(select_in.clone()) },
+                            Some(x) => {
+                                if !x.contains(&select_in) {
+                                    x.push(select_in.clone())
+                                }
+                            }
                             None => return Err("should never get here - link should be ok".into()),
                         }
                         match links.get_mut(&select_out) {
@@ -263,7 +246,7 @@ impl Query {
                 }
                 Stmt::WindowDecl(w) => {
                     let name = w.id.clone().to_string();
-                    windows.insert(name, window_decl_to_impl(w)?);
+                    windows.insert(name, window_decl_to_impl(w, &that)?);
                 }
                 Stmt::OperatorDecl(o) => {
                     let name = o.id.clone().to_string();
@@ -337,12 +320,7 @@ impl Query {
 
                     let id = pipe_graph.add_node(node.clone());
 
-                    let op = node.to_op(
-                        supported_operators,
-                        Some(that_defn),
-                        Some(that),
-                        None,
-                    )?;
+                    let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(o.id.clone(), id);
                     outputs.push(id);
@@ -384,9 +362,10 @@ impl Query {
             }
         }
 
-        println!("{:?}", petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel]));
-            
-
+        println!(
+            "{:?}",
+            petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
+        );
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
@@ -440,7 +419,6 @@ impl Query {
             for (k, idx) in &inputs {
                 inputs2.insert(k.clone(), i2pos[idx]);
             }
-
 
             let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
             let exec = ExecutableGraph {

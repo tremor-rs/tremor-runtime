@@ -45,7 +45,7 @@ WindowKind: WindowKind = {
 }
 
 Stmt: Stmt1<'input> = {
-    <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params }),
+    <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => Stmt1::WindowDecl(WindowDecl1 { start, end, id: id.id.to_string(), kind, params: params.0, script: params.1 }),
     <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::OperatorDecl(OperatorDecl1 { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "define" "script" <id:Ident> <params:WithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::Stream(StreamStmt { start, end, id: id.id.to_string() }),
@@ -111,6 +111,14 @@ GroupDefs_: Vec<GroupBy1<'input>> = {
     <Sep<GroupDefs_, GroupDef, ",">> => <>
 }
 
+EmbeddedScriptImut: Option<Script1<'input>> = {
+    ("script" <ExprImut>)? => Some(Script1{exprs: vec![Expr1::Imut(<>?)]}),
+}
+
+WithScriptClause: (WithExprs1<'input>, Option<Script1<'input>>) = {
+    "with" <with:WithExprs> <script:EmbeddedScriptImut> "end" => (with, script),
+}
+
 
 
 
@@ -142,6 +150,7 @@ OperatorKind: OperatorKind = {
 EmbeddedScript: Script1<'input> = {
     "script" <exprs:Exprs> "end" => Script1{exprs},
 }
+
 
 ///////////////////////////////////////
 

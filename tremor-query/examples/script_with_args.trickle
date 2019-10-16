@@ -1,7 +1,6 @@
 define script test
 with
   beep = "beep"
-end
 script
   { "beep": "{args.beep}" }
 end;

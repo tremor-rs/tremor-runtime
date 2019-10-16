@@ -1,0 +1,15 @@
+# pairs
+define tumbling window `1sec`
+with
+   interval = datetime::with_seconds(10),
+script
+  event.time
+end;
+
+
+select {
+    "window": window,
+    "data": win::collect_flattened(event.value),
+}
+from in[`1sec`]
+into out;

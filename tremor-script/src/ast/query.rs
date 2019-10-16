@@ -310,7 +310,8 @@ pub struct WindowDecl1<'script> {
     pub end: Location,
     pub id: String,
     pub kind: WindowKind,
-    pub params: Option<WithExprs1<'script>>,
+    pub params: WithExprs1<'script>,
+    pub script: Option<Script1<'script>>,
 }
 
 impl<'script> WindowDecl1<'script> {
@@ -318,21 +319,28 @@ impl<'script> WindowDecl1<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<WindowDecl<'script>> {
+        let mut maybe_script = self
+            .script
+            .map(|s| s.up_script(helper.reg, helper.aggr_reg))
+            .transpose()?;
+        if let Some((_, ref mut warnings)) = maybe_script {
+            helper.warnings.append(warnings);
+            helper.warnings.sort();
+            helper.warnings.dedup();
+        };
         Ok(WindowDecl {
             start: self.start,
             end: self.end,
             id: self.id,
             kind: self.kind,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p.into_iter() {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
-                    }
-                    Some(pup)
+            params: {
+                let mut pup = HashMap::new();
+                for (name, value) in self.params.into_iter() {
+                    pup.insert(name.id.to_string(), reduce2(value.up(helper)?)?);
                 }
-                None => None,
+                pup
             },
+            script: maybe_script.map(|s| s.0),
         })
     }
 }
@@ -343,7 +351,8 @@ pub struct WindowDecl<'script> {
     pub end: Location,
     pub id: String,
     pub kind: WindowKind,
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
+    pub script: Option<Script<'script>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

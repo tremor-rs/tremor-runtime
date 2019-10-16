@@ -16,12 +16,13 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
-use std::borrow::Borrow;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
+use std::mem;
 use std::sync::Arc;
+use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
+    ast::{InvokeAggrFn, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
     prelude::*,
     query::rentals::Stmt as StmtRental,
 };
@@ -44,6 +45,11 @@ rental! {
         pub struct Select {
             stmt: Arc<StmtRental>,
             select: tremor_script::ast::SelectStmt<'stmt>,
+        }
+        #[rental(covariant, debug, clone)]
+        pub struct Window {
+            stmt: Arc<StmtRental>,
+            window: WindowDecl<'stmt>,
         }
     }
 }
@@ -74,16 +80,7 @@ pub struct Window {
     dims: SelectDims,
 }
 
-impl Window {
-    /*
-    fn from_aggregates(aggregates: Aggrs<'query>, window_impl: WindowImpl) -> Window<'query> {
-        Window {
-            aggregates,
-            window_impl,
-        }
-    }
-    */
-}
+impl Window {}
 
 impl WindowTrait for Window {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
@@ -93,16 +90,17 @@ impl WindowTrait for Window {
 
 #[derive(Debug, Clone)]
 pub enum WindowImpl {
-    TumblingTimeBased(TumblingWindowOnEventTime),
-    TumblingCountBased(TumblingWindowOnEventNumber),
+    TumblingCountBased(TumblingWindowOnNumber),
+    TumblingTimeBased(TumblingWindowOnTime),
     No(NoWindow),
 }
 
 impl std::default::Default for WindowImpl {
     fn default() -> Self {
-        TumblingWindowOnEventTime {
+        TumblingWindowOnTime {
             size: 15_000_000_000,
             next_window: None,
+            script: None,
         }
         .into()
     }
@@ -111,28 +109,27 @@ impl std::default::Default for WindowImpl {
 impl WindowTrait for WindowImpl {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
         match self {
-            WindowImpl::TumblingTimeBased(w) => w.on_event(event),
-            WindowImpl::TumblingCountBased(w) => w.on_event(event),
-            WindowImpl::No(w) => w.on_event(event),
+            Self::TumblingTimeBased(w) => w.on_event(event),
+            Self::TumblingCountBased(w) => w.on_event(event),
+            Self::No(w) => w.on_event(event),
         }
     }
 }
 
 impl From<NoWindow> for WindowImpl {
     fn from(w: NoWindow) -> Self {
-        WindowImpl::No(w)
+        Self::No(w)
     }
 }
 
-impl From<TumblingWindowOnEventTime> for WindowImpl {
-    fn from(w: TumblingWindowOnEventTime) -> Self {
-        WindowImpl::TumblingTimeBased(w)
+impl From<TumblingWindowOnNumber> for WindowImpl {
+    fn from(w: TumblingWindowOnNumber) -> Self {
+        Self::TumblingCountBased(w)
     }
 }
-
-impl From<TumblingWindowOnEventNumber> for WindowImpl {
-    fn from(w: TumblingWindowOnEventNumber) -> Self {
-        WindowImpl::TumblingCountBased(w)
+impl From<TumblingWindowOnTime> for WindowImpl {
+    fn from(w: TumblingWindowOnTime) -> Self {
+        Self::TumblingTimeBased(w)
     }
 }
 
@@ -174,23 +171,61 @@ impl WindowTrait for NoWindow {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct TumblingWindowOnEventTime {
+pub struct TumblingWindowOnTime {
     pub next_window: Option<u64>,
     pub size: u64,
+    script: Option<rentals::Window>,
+}
+impl TumblingWindowOnTime {
+    pub fn from_stmt(size: u64, script: Option<&WindowDecl>, stmt: &StmtRentalWrapper) -> Self {
+        let script = script.map(|s| {
+            rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
+        });
+        Self {
+            next_window: None,
+            size,
+            script: script,
+        }
+    }
 }
 
-impl WindowTrait for TumblingWindowOnEventTime {
+impl WindowTrait for TumblingWindowOnTime {
     fn on_event(&mut self, event: &Event) -> WindowEvent {
+        let time = if let Some(script) = self
+            .script
+            .as_ref()
+            .and_then(|s| s.suffix().script.as_ref())
+        {
+            let context = EventContext::from_ingest_ns(event.ingest_ns);
+            let (mut unwind_event, mut event_meta) = event.data.parts();
+            let value = script.run(
+                &context,
+                AggrType::Emit,
+                &mut unwind_event, // event
+                &mut event_meta,   // $
+            );
+            let data = match value {
+                Ok(Return::Emit { value, .. }) => value.as_u64(),
+                _ => unimplemented!(),
+            };
+            if let Some(time) = data {
+                time
+            } else {
+                unimplemented!();
+            }
+        } else {
+            event.ingest_ns
+        };
         match self.next_window {
             None => {
-                self.next_window = Some(event.ingest_ns + self.size);
+                self.next_window = Some(time + self.size);
                 WindowEvent {
                     open: true,
                     emit: false,
                 }
             }
-            Some(next_window) if next_window <= event.ingest_ns => {
-                self.next_window = Some(event.ingest_ns + self.size);
+            Some(next_window) if next_window <= time => {
+                self.next_window = Some(time + self.size);
                 WindowEvent {
                     open: true,
                     emit: true,
@@ -205,13 +240,51 @@ impl WindowTrait for TumblingWindowOnEventTime {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct TumblingWindowOnEventNumber {
+pub struct TumblingWindowOnNumber {
     pub next_window: Option<u64>,
     pub size: u64,
+    script: Option<rentals::Window>,
 }
 
-impl WindowTrait for TumblingWindowOnEventNumber {
-    fn on_event(&mut self, _event: &Event) -> WindowEvent {
+impl TumblingWindowOnNumber {
+    pub fn from_stmt(size: u64, script: Option<&WindowDecl>, stmt: &StmtRentalWrapper) -> Self {
+        let script = script.map(|s| {
+            rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
+        });
+        Self {
+            next_window: None,
+            size,
+            script: script,
+        }
+    }
+}
+impl WindowTrait for TumblingWindowOnNumber {
+    fn on_event(&mut self, event: &Event) -> WindowEvent {
+        let count = if let Some(script) = self
+            .script
+            .as_ref()
+            .and_then(|s| s.suffix().script.as_ref())
+        {
+            let context = EventContext::from_ingest_ns(event.ingest_ns);
+            let (mut unwind_event, mut event_meta) = event.data.parts();
+            let value = script.run(
+                &context,
+                AggrType::Emit,
+                &mut unwind_event, // event
+                &mut event_meta,   // $
+            );
+            let data = match value {
+                Ok(Return::Emit { value, .. }) => value.as_u64(),
+                _ => unimplemented!(),
+            };
+            if let Some(count) = data {
+                count
+            } else {
+                unimplemented!();
+            }
+        } else {
+            1
+        };
         match self.next_window {
             None => {
                 self.next_window = Some(0);
@@ -220,14 +293,14 @@ impl WindowTrait for TumblingWindowOnEventNumber {
                     emit: false,
                 }
             }
-            Some(next_window) if next_window < (self.size - 1) => {
-                self.next_window = Some(next_window + 1);
+            Some(next_window) if next_window < (self.size - count) => {
+                self.next_window = Some(next_window + count);
                 WindowEvent {
                     open: false,
                     emit: false,
                 }
             }
-            Some(next_window) if next_window >= (self.size - 1) => {
+            Some(next_window) if next_window >= (self.size - count) => {
                 self.next_window = Some(0);
                 WindowEvent {
                     open: true,
@@ -608,17 +681,19 @@ mod test {
         let windows = vec![
             (
                 "15s".into(),
-                TumblingWindowOnEventTime {
+                TumblingWindowOnTime {
                     size: 15_000_000_000,
                     next_window: None,
+                    script: None,
                 }
                 .into(),
             ),
             (
                 "30s".into(),
-                TumblingWindowOnEventTime {
+                TumblingWindowOnTime {
                     size: 30_000_000_000,
                     next_window: None,
+                    script: None,
                 }
                 .into(),
             ),

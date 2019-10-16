@@ -253,7 +253,7 @@ mod test {
 
     #[test]
     fn collect() -> Result<()> {
-        let mut a = Collect::default();
+        let mut a = CollectFlattened::default();
         a.init();
         let one = Value::from(1);
         let two = Value::from(2);
