@@ -146,7 +146,11 @@ pub trait Highlighter {
                     {
                         if end.line == line - 1 {
                             printed_error = true;
-                            let len = std::cmp::max(end.column - start.column, 1);
+                            // FIXME This isn't perfect, there are cases in trickle where more specific
+                            // hygienic errors would be preferable ( eg: for-locals integration test )
+                            //
+                            let delta = (end.column as i64 - start.column as i64).abs();
+                            let len = std::cmp::max(delta, 1) as usize;
                             let prefix =
                                 String::from(" ").repeat(start.column.checked_sub(1).unwrap_or(0));
                             let underline = String::from("^").repeat(len);
