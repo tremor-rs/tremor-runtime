@@ -25,11 +25,11 @@ use std::fmt;
 use std::marker::PhantomData;
 
 pub use crate::registry::ServantId;
-pub use artefact::BindingArtefact;
+pub use artefact::Binding as BindingArtefact;
 pub use artefact::OfframpArtefact;
 pub use artefact::OnrampArtefact;
-pub use artefact::PipelineArtefact;
-pub use artefact::{Artefact, ArtefactId};
+pub use artefact::Pipeline as PipelineArtefact;
+pub use artefact::{Artefact, Id as ArtefactId};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoWrapper<A: Artefact> {
@@ -98,11 +98,11 @@ impl<A: Artefact> Repository<A> {
                 let wrapper = e.get();
                 if wrapper.system {
                     Err(ErrorKind::UnpublishFailedSystemArtefact(id.to_string()).into())
-                } else if !wrapper.instances.is_empty() {
-                    Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
-                } else {
+                } else if wrapper.instances.is_empty() {
                     let (_, w) = e.remove_entry();
                     Ok(w.artefact)
+                } else {
+                    Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
                 }
             }
         }

@@ -29,7 +29,7 @@ pub struct StdErr {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for StdErr {
+impl offramp::Impl for StdErr {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         Ok(Box::new(StdErr {
             pipelines: HashMap::new(),

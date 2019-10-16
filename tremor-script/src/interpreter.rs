@@ -269,23 +269,21 @@ where
                     current = c;
                     subrange = None;
                     continue;
+                } else if let Some(o) = current.as_object() {
+                    return error_bad_key(
+                        outer,
+                        segment, //&Expr::dummy(*start, *end),
+                        &path,
+                        id.to_string(),
+                        o.keys().map(|v| v.to_string()).collect(),
+                    );
                 } else {
-                    if let Some(o) = current.as_object() {
-                        return error_bad_key(
-                            outer,
-                            segment, //&Expr::dummy(*start, *end),
-                            &path,
-                            id.to_string(),
-                            o.keys().map(|v| v.to_string()).collect(),
-                        );
-                    } else {
-                        return error_type_conflict(
-                            outer,
-                            segment,
-                            current.value_type(),
-                            ValueType::Object,
-                        );
-                    }
+                    return error_type_conflict(
+                        outer,
+                        segment,
+                        current.value_type(),
+                        ValueType::Object,
+                    );
                 }
             }
             Segment::Idx { idx, .. } => {

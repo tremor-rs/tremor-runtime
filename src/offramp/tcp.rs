@@ -46,7 +46,7 @@ pub struct Config {
     pub is_no_delay: bool,
 }
 
-impl OfframpImpl for Tcp {
+impl offramp::Impl for Tcp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

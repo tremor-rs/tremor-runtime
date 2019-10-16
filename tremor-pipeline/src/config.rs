@@ -30,7 +30,7 @@ pub struct InputPort {
 }
 
 impl<'de> Deserialize<'de> for InputPort {
-    fn deserialize<D>(deserializer: D) -> Result<InputPort, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -38,12 +38,12 @@ impl<'de> Deserialize<'de> for InputPort {
         let s = String::deserialize(deserializer)?;
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
-            [id, port] => Ok(InputPort {
+            [id, port] => Ok(Self {
                 id: id.to_string(),
                 port: port.to_string(),
                 had_port: true,
             }),
-            [id] => Ok(InputPort {
+            [id] => Ok(Self {
                 id: id.to_string(),
                 port: "in".to_string(),
                 had_port: false,
@@ -76,7 +76,7 @@ pub struct OutputPort {
 }
 
 impl<'de> Deserialize<'de> for OutputPort {
-    fn deserialize<D>(deserializer: D) -> Result<OutputPort, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -84,12 +84,12 @@ impl<'de> Deserialize<'de> for OutputPort {
         let s = String::deserialize(deserializer)?;
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
-            [id, port] => Ok(OutputPort {
+            [id, port] => Ok(Self {
                 id: id.to_string(),
                 port: port.to_string(),
                 had_port: true,
             }),
-            [id] => Ok(OutputPort {
+            [id] => Ok(Self {
                 id: id.to_string(),
                 port: "out".to_string(),
                 had_port: false,

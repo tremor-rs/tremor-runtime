@@ -48,7 +48,7 @@ impl fmt::Debug for GPub {
     }
 }
 
-impl OfframpImpl for GPub {
+impl offramp::Impl for GPub {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

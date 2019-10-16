@@ -14,11 +14,11 @@
 
 use crate::errors::*;
 use crate::{Event, Operator};
-use halfbrown::{hashmap,HashMap};
+use halfbrown::{hashmap, HashMap};
 use std::mem;
 use std::sync::Arc;
-use tremor_script::prelude::*;
 use tremor_script::ast::ARGS_CONST_ID;
+use tremor_script::prelude::*;
 
 rental! {
     pub mod rentals {
@@ -50,7 +50,7 @@ impl TrickleScript {
         id: String,
         defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
         node_rentwrapped: tremor_script::query::StmtRentalWrapper,
-    ) -> Result<TrickleScript> {
+    ) -> Result<Self> {
         use std::borrow::Cow;
 
         // We require Value to be static here to enforce the constraint that
@@ -70,7 +70,9 @@ impl TrickleScript {
         let args: Value;
 
         let mut params = HashMap::new();
-        if let tremor_script::ast::query::Stmt::ScriptDecl(ref defn) = defn_rentwrapped.stmt.suffix() { 
+        if let tremor_script::ast::query::Stmt::ScriptDecl(ref defn) =
+            defn_rentwrapped.stmt.suffix()
+        {
             if let Some(p) = &defn.params {
                 // Set params from decl as meta vars
                 for (name, value) in p {
@@ -78,7 +80,9 @@ impl TrickleScript {
                     params.insert(Cow::Owned(name.clone()), value.clone());
                 }
                 // Set params from instance as meta vars ( eg: upsert ~= override + add )
-                if let tremor_script::ast::query::Stmt::Script(instance) = node_rentwrapped.stmt.suffix() {
+                if let tremor_script::ast::query::Stmt::Script(instance) =
+                    node_rentwrapped.stmt.suffix()
+                {
                     if let Some(map) = &instance.params {
                         for (name, value) in map {
                             // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
@@ -87,23 +91,21 @@ impl TrickleScript {
                     }
                 } else {
                     return Err(ErrorKind::PipelineError(
-                        "Trying to turn something into script create that isn't a script create".into(),
+                        "Trying to turn something into script create that isn't a script create"
+                            .into(),
                     )
                     .into());
                 }
             }
             args = tremor_script::Value::Object(params);
         } else {
-                return Err(ErrorKind::PipelineError(
-                    "Trying to turn something into script define that isn't a script define".into(),
-                )
-                .into());
-
+            return Err(ErrorKind::PipelineError(
+                "Trying to turn something into script define that isn't a script define".into(),
+            )
+            .into());
         };
-        
         let script = match defn_rentwrapped.stmt.suffix() {
-            tremor_script::ast::Stmt::ScriptDecl(ref script) =>
-                script.clone(),
+            tremor_script::ast::Stmt::ScriptDecl(ref script) => script.clone(),
             _other => {
                 return Err(ErrorKind::PipelineError(
                     "Trying to turn a non script into a script operator".into(),
@@ -113,15 +115,17 @@ impl TrickleScript {
         };
 
         let script = rentals::Script::new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
-                std::mem::transmute(script)
+            std::mem::transmute(script)
         });
 
+        #[allow(clippy::transmute_ptr_to_ptr)]
         #[allow(mutable_transmutes)]
-        let script_ref: &mut tremor_script::ast::ScriptDecl = unsafe { mem::transmute(script.suffix()) };
-        script_ref.script.consts = vec![ Value::Null, Value::Null, Value::Null];
+        let script_ref: &mut tremor_script::ast::ScriptDecl =
+            unsafe { mem::transmute(script.suffix()) };
+        script_ref.script.consts = vec![Value::Null, Value::Null, Value::Null];
         script_ref.script.consts[ARGS_CONST_ID] = args;
 
-        Ok(TrickleScript {
+        Ok(Self {
             id,
             defn: defn_rentwrapped.stmt,
             node: node_rentwrapped.stmt,

@@ -60,7 +60,7 @@ impl std::fmt::Debug for GCS {
     }
 }
 
-impl OfframpImpl for GCS {
+impl offramp::Impl for GCS {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

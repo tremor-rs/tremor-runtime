@@ -99,7 +99,7 @@ impl Rate {
             .and_then(Value::as_u64)
             .unwrap_or(1000);
         let windows = meta.get("windows").and_then(Value::as_usize).unwrap_or(100);
-        Some(Rate {
+        Some(Self {
             rate,
             time_range,
             windows,

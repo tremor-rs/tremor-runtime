@@ -30,7 +30,7 @@ impl TrickleOperator {
     pub fn with_stmt(
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
-    ) -> Result<TrickleOperator> {
+    ) -> Result<Self> {
         use crate::op;
         let stmt = stmt_rentwrapped.stmt.suffix();
         let op: Box<dyn Operator> = match stmt {
@@ -128,7 +128,7 @@ impl TrickleOperator {
             }
         };
 
-        Ok(TrickleOperator {
+        Ok(Self {
             id,
             stmt: stmt_rentwrapped,
             op,

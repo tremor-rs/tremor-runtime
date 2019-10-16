@@ -71,12 +71,12 @@ fn window_decl_to_impl<'script>(
 pub struct Query(pub tremor_script::query::Query);
 impl From<tremor_script::query::Query> for Query {
     fn from(q: tremor_script::query::Query) -> Self {
-        Query(q)
+        Self(q)
     }
 }
 impl Query {
     pub fn parse(script: &str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
-        Ok(Query(tremor_script::query::Query::parse(
+        Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
         )?))
     }
@@ -96,26 +96,26 @@ impl Query {
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
 
         // FIXME compute public streams - do not hardcode
-        let _in = "in".to_string();
+        let in_s = "in".to_string();
         let id = pipe_graph.add_node(NodeConfig {
-            id: _in.clone(),
+            id: in_s.clone(),
             kind: NodeKind::Input,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
         });
-        nodes.insert(_in.clone(), id);
+        nodes.insert(in_s.clone(), id);
         let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
-        inputs.insert(_in, id);
+        inputs.insert(in_s, id);
 
         // FIXME compute public streams - do not hardcode
         let err = "err".to_string();
         let id = pipe_graph.add_node(NodeConfig {
             id: err.clone(),
             kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
@@ -130,7 +130,7 @@ impl Query {
         let id = pipe_graph.add_node(NodeConfig {
             id: out.clone(),
             kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
@@ -206,7 +206,7 @@ impl Query {
                     let node = NodeConfig {
                         id: select_in.id.to_string(),
                         kind: NodeKind::Operator,
-                        _type: "trickle::select".to_string(),
+                        op_type: "trickle::select".to_string(),
                         config: None,
                         defn: None,
                         node: None,
@@ -225,7 +225,7 @@ impl Query {
                         let node = NodeConfig {
                             id,
                             kind: NodeKind::Operator,
-                            _type: "passthrough".to_string(),
+                            op_type: "passthrough".to_string(),
                             config: None,
                             defn: None,
                             node: None,
@@ -259,7 +259,7 @@ impl Query {
                     let node = NodeConfig {
                         id: name.to_string(),
                         kind: NodeKind::Operator,
-                        _type: "trickle::operator".to_string(),
+                        op_type: "trickle::operator".to_string(),
                         config: None,
                         defn: None,
                         node: None,
@@ -306,7 +306,7 @@ impl Query {
                     let node = NodeConfig {
                         id: name.to_string(),
                         kind: NodeKind::Operator,
-                        _type: "trickle::script".to_string(),
+                        op_type: "trickle::script".to_string(),
                         config: None,
                         defn: Some(std::sync::Arc::new(that_defn.clone())),
                         node: Some(std::sync::Arc::new(that.clone())),
@@ -326,7 +326,7 @@ impl Query {
         let id = pipe_graph.add_node(NodeConfig {
             id: "_metrics".to_string(),
             kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
@@ -377,21 +377,18 @@ impl Query {
             let mut signalflow = Vec::new();
             let mut i = 0;
             for nx in pipe_graph.node_indices() {
-                match pipe_ops.remove(&nx) {
-                    Some(op) => {
-                        i2pos.insert(nx, i);
-                        if op.handles_contraflow() {
-                            contraflow.push(i);
-                        }
-                        if op.handles_signal() {
-                            signalflow.push(i);
-                        }
-                        graph.push(op);
-                        i += 1;
+                if let Some(op) = pipe_ops.remove(&nx) {
+                    i2pos.insert(nx, i);
+                    if op.handles_contraflow() {
+                        contraflow.push(i);
                     }
-                    _ => {
-                        return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
+                    if op.handles_signal() {
+                        signalflow.push(i);
                     }
+                    graph.push(op);
+                    i += 1;
+                } else {
+                    return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
                 }
             }
 
@@ -450,7 +447,7 @@ pub fn supported_operators(
     use op::trickle::script::TrickleScript;
     use op::trickle::select::{SelectDims, TrickleSelect};
 
-    let name_parts: Vec<&str> = config._type.split("::").collect();
+    let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => {
@@ -490,9 +487,9 @@ pub fn supported_operators(
                 };
             Box::new(TrickleSelect::with_stmt(
                 config.id.clone(),
-                groups,
+                &groups,
                 windows?,
-                node,
+                &node,
             )?)
         }
         ["trickle", "operator"] => {
@@ -533,12 +530,12 @@ pub fn supported_operators(
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }
-        _ => return Err(ErrorKind::UnknownNamespace(config._type.clone()).into()),
+        _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
     };
     Ok(OperatorNode {
         id: config.id.clone(),
         kind: config.kind,
-        _type: config._type.clone(),
+        op_type: config.op_type.clone(),
         op,
     })
 }

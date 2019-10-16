@@ -198,7 +198,7 @@ pub enum SignalKind {
 pub struct NodeConfig {
     pub id: String,
     pub kind: NodeKind,
-    pub _type: String,
+    pub op_type: String,
     pub config: config::ConfigMap,
     pub defn: Option<Arc<StmtRentalWrapper>>,
     pub node: Option<Arc<StmtRentalWrapper>>,
@@ -212,7 +212,7 @@ impl PartialEq for NodeConfig {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
             && self.kind == other.kind
-            && self._type == other._type
+            && self.op_type == other.op_type
             && self.config == other.config
     }
 }
@@ -221,7 +221,7 @@ impl std::hash::Hash for NodeConfig {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
         self.kind.hash(state);
-        self._type.hash(state);
+        self.op_type.hash(state);
         self.config.hash(state);
     }
 }
@@ -230,7 +230,7 @@ impl std::hash::Hash for NodeConfig {
 pub struct OperatorNode {
     pub id: String,
     pub kind: NodeKind,
-    pub _type: String,
+    pub op_type: String,
     pub op: Box<dyn Operator>,
 }
 
@@ -264,7 +264,10 @@ impl Operator for OperatorNode {
 
 // TODO We need an actual operator registry ...
 // because we really don't care here.
-#[allow(clippy::implicit_hasher)]
+// We allow needless pass by value since the function type
+// and it's other implementations use the values and require
+// them passed
+#[allow(clippy::implicit_hasher, clippy::needless_pass_by_value)]
 pub fn buildin_ops(
     node: &NodeConfig,
     _defn: Option<StmtRentalWrapper>,
@@ -278,7 +281,7 @@ pub fn buildin_ops(
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     use op::runtime::TremorFactory;
-    let name_parts: Vec<&str> = node._type.split("::").collect();
+    let name_parts: Vec<&str> = node.op_type.split("::").collect();
     let factory = match name_parts.as_slice() {
         ["passthrough"] => PassthroughFactory::new_boxed(),
         ["debug", "history"] => EventHistoryFactory::new_boxed(),
@@ -289,12 +292,12 @@ pub fn buildin_ops(
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }
-        _ => return Err(ErrorKind::UnknownNamespace(node._type.clone()).into()),
+        _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
     };
     Ok(OperatorNode {
         id: node.id.clone(),
         kind: node.kind,
-        _type: node._type.clone(),
+        op_type: node.op_type.clone(),
         op: factory.from_node(node)?,
     })
 }
@@ -333,7 +336,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Input,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None, // passthrough has no config
             defn: None,
             node: None,
@@ -347,7 +350,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         let id = graph.add_node(NodeConfig {
             id: node_id.clone(),
             kind: NodeKind::Operator,
-            _type: node.node_type.clone(),
+            op_type: node.node_type.clone(),
             config: node.config.clone(),
             defn: None,
             node: None,
@@ -359,7 +362,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None, // passthrough has no config
             defn: None,
             node: None,
@@ -372,7 +375,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let id = graph.add_node(NodeConfig {
         id: "metrics".to_string(),
         kind: NodeKind::Output,
-        _type: "passthrough".to_string(),
+        op_type: "passthrough".to_string(),
         config: None, // passthrough has no config
         defn: None,
         node: None,
@@ -497,7 +500,7 @@ impl ExecutableGraph {
             if event.ingest_ns - self.last_metrics > ival {
                 let mut tags = HashMap::new();
                 tags.insert("pipeline".into(), self.id.clone().into());
-                self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
+                self.enqueue_metrics("events", tags, event.ingest_ns);
                 self.last_metrics = event.ingest_ns;
             }
         }
@@ -553,7 +556,7 @@ impl ExecutableGraph {
 
     fn enqueue_metrics(
         &mut self,
-        metric_name: String,
+        metric_name: &str,
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) {

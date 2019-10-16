@@ -74,7 +74,7 @@ pub struct Elastic {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Elastic {
+impl offramp::Impl for Elastic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

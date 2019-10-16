@@ -31,20 +31,20 @@ mod tcp;
 mod udp;
 mod ws;
 
-pub trait OnrampImpl {
+pub trait Impl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
 }
 
 #[derive(Clone)]
-pub enum OnrampMsg {
+pub enum Msg {
     Connect(Vec<(TremorURL, PipelineAddr)>),
     Disconnect { id: TremorURL, tx: Sender<bool> },
 }
 
-pub type OnrampAddr = Sender<OnrampMsg>;
+pub type Addr = Sender<Msg>;
 
 pub trait Onramp: Send {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr>;
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
@@ -73,26 +73,26 @@ impl Actor for Manager {
     }
 }
 
-pub struct CreateOnramp {
+pub struct Create {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
     pub codec: String,
     pub preprocessors: Vec<String>,
 }
 
-impl fmt::Debug for CreateOnramp {
+impl fmt::Debug for Create {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "StartOnramp({})", self.id)
     }
 }
 
-impl Message for CreateOnramp {
-    type Result = Result<OnrampAddr>;
+impl Message for Create {
+    type Result = Result<Addr>;
 }
 
-impl Handler<CreateOnramp> for Manager {
-    type Result = Result<OnrampAddr>;
-    fn handle(&mut self, mut req: CreateOnramp, _ctx: &mut Context<Self>) -> Self::Result {
+impl Handler<Create> for Manager {
+    type Result = Result<Addr>;
+    fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
         req.stream.start(req.codec, req.preprocessors)
     }
 }

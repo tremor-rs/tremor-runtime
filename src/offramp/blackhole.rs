@@ -55,7 +55,7 @@ pub struct Blackhole {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Blackhole {
+impl offramp::Impl for Blackhole {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

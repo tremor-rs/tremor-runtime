@@ -79,7 +79,7 @@ impl fmt::Debug for Kafka {
     }
 }
 
-impl OfframpImpl for Kafka {
+impl offramp::Impl for Kafka {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

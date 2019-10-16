@@ -20,8 +20,8 @@ use error_chain::*;
 use serde_yaml;
 use std;
 impl<P> From<std::sync::PoisonError<P>> for Error {
-    fn from(e: std::sync::PoisonError<P>) -> Error {
-        Error::from(format!("poison Error: {:?}", e))
+    fn from(e: std::sync::PoisonError<P>) -> Self {
+        Self::from(format!("poison Error: {:?}", e))
     }
 }
 

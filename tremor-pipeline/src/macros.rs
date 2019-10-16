@@ -27,7 +27,7 @@ macro_rules! op {
         }
         impl $factory {
             fn new() -> Self {
-                $factory {}
+                Self {}
             }
             pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator> {
                 Box::new(Self::new())

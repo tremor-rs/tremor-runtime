@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use super::{Offramp, OfframpAddr, OfframpImpl};
 pub use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub use crate::codec::{self, Codec};
 pub use crate::dflt::{self, *};
 pub use crate::errors::*;
+pub use crate::offramp::{self, Offramp};
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;

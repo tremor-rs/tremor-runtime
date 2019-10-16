@@ -15,8 +15,6 @@
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec, PipelineVec};
 use crate::errors::*;
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
-use crate::offramp::{self, OfframpAddr, OfframpMsg};
-use crate::onramp::{self, OnrampAddr};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
@@ -25,6 +23,7 @@ use crate::url::TremorURL;
 use crate::utils::nanotime;
 use actix;
 use actix::prelude::*;
+use actix::Addr as ActixAddr;
 use crossbeam_channel::{bounded, Sender};
 use futures::future::Future;
 use hashbrown::HashMap;
@@ -37,8 +36,8 @@ use std::thread::JoinHandle;
 use tremor_pipeline;
 use tremor_pipeline::Event;
 
-pub use crate::offramp::CreateOfframp;
-pub use crate::onramp::CreateOnramp;
+pub use crate::offramp;
+pub use crate::onramp;
 
 lazy_static! {
     pub static ref METRICS_PIPELINE: TremorURL = {
@@ -58,13 +57,13 @@ lazy_static! {
     };
 }
 
-pub type SystemAddr = Addr<Manager>;
+pub type Addr = ActixAddr<Manager>;
 pub type ActixHandle = JoinHandle<std::result::Result<(), std::io::Error>>;
 
 #[derive(Debug)]
 pub struct Manager {
-    pub offramp: Addr<offramp::Manager>,
-    pub onramp: Addr<onramp::Manager>,
+    pub offramp: ActixAddr<offramp::Manager>,
+    pub onramp: ActixAddr<onramp::Manager>,
     pub offramp_t: ActixHandle,
     pub onramp_t: ActixHandle,
     pub qsize: usize,
@@ -101,7 +100,7 @@ impl Message for CreatePipeline {
 #[derive(Debug)]
 pub enum PipelineMsg {
     Event { event: Event, input: String },
-    ConnectOfframp(String, TremorURL, OfframpAddr),
+    ConnectOfframp(String, TremorURL, offramp::Addr),
     ConnectPipeline(String, TremorURL, PipelineAddr),
     Disconnect(String, TremorURL),
     Signal(Event),
@@ -110,14 +109,14 @@ pub enum PipelineMsg {
 
 #[derive(Debug)]
 enum PipelineDest {
-    Offramp(OfframpAddr),
+    Offramp(offramp::Addr),
     Pipeline(PipelineAddr),
 }
 
 impl PipelineDest {
     pub fn send_event(&self, input: String, event: Event) -> Result<()> {
         match self {
-            PipelineDest::Offramp(addr) => addr.send(OfframpMsg::Event { input, event })?,
+            PipelineDest::Offramp(addr) => addr.send(offramp::Msg::Event { input, event })?,
             PipelineDest::Pipeline(addr) => addr.addr.send(PipelineMsg::Event { input, event })?,
         }
         Ok(())
@@ -249,9 +248,9 @@ impl Handler<CreatePipeline> for Manager {
     }
 }
 
-impl Handler<CreateOfframp> for Manager {
-    type Result = Result<OfframpAddr>;
-    fn handle(&mut self, req: CreateOfframp, _ctx: &mut Self::Context) -> Self::Result {
+impl Handler<offramp::Create> for Manager {
+    type Result = Result<offramp::Addr>;
+    fn handle(&mut self, req: offramp::Create, _ctx: &mut Self::Context) -> Self::Result {
         self.offramp
             .send(req)
             .wait()
@@ -259,9 +258,9 @@ impl Handler<CreateOfframp> for Manager {
     }
 }
 
-impl Handler<CreateOnramp> for Manager {
-    type Result = Result<OnrampAddr>;
-    fn handle(&mut self, req: CreateOnramp, _ctx: &mut Self::Context) -> Self::Result {
+impl Handler<onramp::Create> for Manager {
+    type Result = Result<onramp::Addr>;
+    fn handle(&mut self, req: onramp::Create, _ctx: &mut Self::Context) -> Self::Result {
         self.onramp
             .send(req)
             .wait()
@@ -309,12 +308,12 @@ impl Message for Count {
 
 #[derive(Clone, Debug)]
 pub struct World {
-    pub system: SystemAddr,
+    pub system: Addr,
     pub repo: Repositories,
     pub reg: Registries,
     system_pipelines: HashMap<ServantId, PipelineAddr>,
-    system_onramps: HashMap<ServantId, OnrampAddr>,
-    system_offramps: HashMap<ServantId, OfframpAddr>,
+    system_onramps: HashMap<ServantId, onramp::Addr>,
+    system_offramps: HashMap<ServantId, offramp::Addr>,
     storage_directory: Option<String>,
 }
 

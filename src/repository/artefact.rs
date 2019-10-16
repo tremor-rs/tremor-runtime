@@ -14,52 +14,52 @@
 
 use crate::codec;
 use crate::errors::*;
-use crate::offramp::{self, CreateOfframp, OfframpAddr, OfframpMsg};
-use crate::onramp::{self, CreateOnramp, OnrampAddr, OnrampMsg};
+use crate::offramp;
+use crate::onramp;
 use crate::registry::ServantId;
 use crate::system::{PipelineAddr, PipelineMsg, World};
 use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
 use tremor_pipeline::query;
-pub type ArtefactId = TremorURL;
+pub type Id = TremorURL;
 pub use crate::OffRamp as OfframpArtefact;
 pub use crate::OnRamp as OnrampArtefact;
 use crossbeam_channel::bounded;
 
 #[derive(Clone, Debug)]
-pub struct BindingArtefact {
+pub struct Binding {
     pub binding: crate::Binding,
     pub mapping: Option<crate::config::MappingMap>,
 }
 
 #[derive(Clone)]
-pub enum PipelineArtefact {
+pub enum Pipeline {
     Pipeline(Box<tremor_pipeline::Pipeline>),
     Query(query::Query),
 }
 
-impl PipelineArtefact {
+impl Pipeline {
     pub fn to_executable_graph(
         &self,
         resolver: tremor_pipeline::NodeLookupFn,
     ) -> Result<tremor_pipeline::ExecutableGraph> {
         match self {
-            PipelineArtefact::Pipeline(p) => Ok(p.to_executable_graph(resolver)?),
-            PipelineArtefact::Query(q) => Ok(q.to_pipe()?),
+            Self::Pipeline(p) => Ok(p.to_executable_graph(resolver)?),
+            Self::Query(q) => Ok(q.to_pipe()?),
         }
     }
 }
 
-impl From<tremor_pipeline::Pipeline> for PipelineArtefact {
-    fn from(pipeline: tremor_pipeline::Pipeline) -> PipelineArtefact {
-        PipelineArtefact::Pipeline(Box::new(pipeline))
+impl From<tremor_pipeline::Pipeline> for Pipeline {
+    fn from(pipeline: tremor_pipeline::Pipeline) -> Self {
+        Self::Pipeline(Box::new(pipeline))
     }
 }
 
-impl From<query::Query> for PipelineArtefact {
-    fn from(query: query::Query) -> PipelineArtefact {
-        PipelineArtefact::Query(query)
+impl From<query::Query> for Pipeline {
+    fn from(query: query::Query) -> Self {
+        Self::Query(query)
     }
 }
 
@@ -87,11 +87,11 @@ pub trait Artefact: Clone {
         id: TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool>;
-    fn artefact_id(u: TremorURL) -> Result<ArtefactId>;
+    fn artefact_id(u: TremorURL) -> Result<Id>;
     fn servant_id(u: TremorURL) -> Result<ServantId>;
 }
 
-impl Artefact for PipelineArtefact {
+impl Artefact for Pipeline {
     type SpawnResult = PipelineAddr;
     type LinkResult = bool;
     type LinkLHS = String;
@@ -187,7 +187,7 @@ impl Artefact for PipelineArtefact {
         }
     }
 
-    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+    fn artefact_id(mut id: TremorURL) -> Result<Id> {
         id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
             (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
@@ -204,7 +204,7 @@ impl Artefact for PipelineArtefact {
 }
 
 impl Artefact for OfframpArtefact {
-    type SpawnResult = OfframpAddr;
+    type SpawnResult = offramp::Addr;
     type LinkResult = bool;
     type LinkLHS = TremorURL;
     type LinkRHS = TremorURL;
@@ -223,7 +223,7 @@ impl Artefact for OfframpArtefact {
         };
         let res = world
             .system
-            .send(CreateOfframp {
+            .send(offramp::Create {
                 id: servant_id,
                 codec,
                 offramp,
@@ -243,7 +243,7 @@ impl Artefact for OfframpArtefact {
             for (pipeline_id, _this) in mappings {
                 info!("Linking offramp {} to {}", id, pipeline_id);
                 if let Some(pipeline) = system.reg.find_pipeline(pipeline_id.clone())? {
-                    offramp.send(OfframpMsg::Connect {
+                    offramp.send(offramp::Msg::Connect {
                         id: pipeline_id,
                         addr: pipeline,
                     })?;
@@ -265,7 +265,7 @@ impl Artefact for OfframpArtefact {
         if let Some(offramp) = system.reg.find_offramp(id.clone())? {
             let (tx, rx) = bounded(mappings.len());
             for (_this, pipeline_id) in mappings {
-                offramp.send(OfframpMsg::Disconnect {
+                offramp.send(offramp::Msg::Disconnect {
                     id: pipeline_id,
                     tx: tx.clone(),
                 })?;
@@ -281,7 +281,7 @@ impl Artefact for OfframpArtefact {
         }
     }
 
-    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+    fn artefact_id(mut id: TremorURL) -> Result<Id> {
         id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
             (Some(ResourceType::Offramp), Some(_)) => Ok(id),
@@ -297,7 +297,7 @@ impl Artefact for OfframpArtefact {
     }
 }
 impl Artefact for OnrampArtefact {
-    type SpawnResult = OnrampAddr;
+    type SpawnResult = onramp::Addr;
     type LinkResult = bool;
     type LinkLHS = String;
     type LinkRHS = TremorURL;
@@ -315,7 +315,7 @@ impl Artefact for OnrampArtefact {
         };
         let res = world
             .system
-            .send(CreateOnramp {
+            .send(onramp::Create {
                 id: servant_id,
                 preprocessors,
                 codec,
@@ -338,7 +338,7 @@ impl Artefact for OnrampArtefact {
                     //TODO: Check that we really have the right onramp!
                     Some(ResourceType::Pipeline) => {
                         if let Some(pipeline) = system.reg.find_pipeline(to.clone())? {
-                            onramp.send(OnrampMsg::Connect(vec![(to.clone(), pipeline)]))?;
+                            onramp.send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))?;
                         } else {
                             return Err(format!("Pipeline {:?} not found", to).into());
                         }
@@ -367,7 +367,7 @@ impl Artefact for OnrampArtefact {
                 links.push(to.to_owned())
             }
             for (_port, pipeline_id) in mappings {
-                onramp.send(OnrampMsg::Disconnect {
+                onramp.send(onramp::Msg::Disconnect {
                     id: pipeline_id,
                     tx: tx.clone(),
                 })?;
@@ -383,7 +383,7 @@ impl Artefact for OnrampArtefact {
         }
     }
 
-    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+    fn artefact_id(mut id: TremorURL) -> Result<Id> {
         id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
             (Some(ResourceType::Onramp), Some(_)) => Ok(id),
@@ -399,9 +399,9 @@ impl Artefact for OnrampArtefact {
     }
 }
 
-impl Artefact for BindingArtefact {
-    type SpawnResult = BindingArtefact;
-    type LinkResult = BindingArtefact;
+impl Artefact for Binding {
+    type SpawnResult = Self;
+    type LinkResult = Self;
     type LinkLHS = String;
     type LinkRHS = String;
     fn spawn(&self, _world: &World, _servant_id: ServantId) -> Result<Self::SpawnResult> {
@@ -604,7 +604,7 @@ impl Artefact for BindingArtefact {
         Ok(true)
     }
 
-    fn artefact_id(mut id: TremorURL) -> Result<ArtefactId> {
+    fn artefact_id(mut id: TremorURL) -> Result<Id> {
         id.trim_to_artefact();
         match (&id.resource_type(), &id.artefact()) {
             (Some(ResourceType::Binding), Some(_)) => Ok(id),

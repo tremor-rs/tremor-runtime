@@ -39,13 +39,13 @@ mod tcp;
 mod udp;
 mod ws;
 
-pub enum OfframpMsg {
+pub enum Msg {
     Event { event: Event, input: String },
     Connect { id: TremorURL, addr: PipelineAddr },
     Disconnect { id: TremorURL, tx: Sender<bool> },
 }
 
-pub type OfframpAddr = Sender<OfframpMsg>;
+pub type Addr = Sender<Msg>;
 
 // We allow this here since we can't pass in &dyn Code as that would taint the
 // overlying object with lifetimes.
@@ -60,7 +60,7 @@ pub trait Offramp: Send {
     fn remove_pipeline(&mut self, _id: TremorURL) -> bool;
 }
 
-pub trait OfframpImpl {
+pub trait Impl {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>;
 }
 
@@ -95,26 +95,26 @@ impl Actor for Manager {
     }
 }
 
-pub struct CreateOfframp {
+pub struct Create {
     pub id: ServantId,
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
     pub postprocessors: Vec<String>,
 }
 
-impl fmt::Debug for CreateOfframp {
+impl fmt::Debug for Create {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "StartOfframp({})", self.id)
     }
 }
 
-impl Message for CreateOfframp {
-    type Result = Result<OfframpAddr>;
+impl Message for Create {
+    type Result = Result<Addr>;
 }
 
-impl Handler<CreateOfframp> for Manager {
-    type Result = Result<OfframpAddr>;
-    fn handle(&mut self, mut req: CreateOfframp, _ctx: &mut Context<Self>) -> Self::Result {
+impl Handler<Create> for Manager {
+    type Result = Result<Addr>;
+    fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
         req.offramp.start(&req.codec, &req.postprocessors)?;
 
         let (tx, rx) = bounded(self.qsize);
@@ -124,15 +124,15 @@ impl Handler<CreateOfframp> for Manager {
             info!("[Offramp::{}] started", offramp_id);
             for m in rx {
                 match m {
-                    OfframpMsg::Event { event, input } => {
+                    Msg::Event { event, input } => {
                         // TODO FIXME implement postprocessors
                         req.offramp.on_event(&req.codec, input, event);
                     }
-                    OfframpMsg::Connect { id, addr } => {
+                    Msg::Connect { id, addr } => {
                         info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
                         req.offramp.add_pipeline(id, addr);
                     }
-                    OfframpMsg::Disconnect { id, tx } => {
+                    Msg::Disconnect { id, tx } => {
                         info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
                         let r = req.offramp.remove_pipeline(id.clone());
                         info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);

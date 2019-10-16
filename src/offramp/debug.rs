@@ -40,7 +40,7 @@ pub struct Debug {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Debug {
+impl offramp::Impl for Debug {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         Ok(Box::new(Debug {
             last: Instant::now(),

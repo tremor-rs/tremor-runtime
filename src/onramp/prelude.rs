@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use super::{Onramp, OnrampAddr, OnrampImpl, OnrampMsg};
 pub use crate::codec::{self, Codec};
 pub use crate::errors::*;
+pub use crate::onramp::{self, Onramp};
 pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;

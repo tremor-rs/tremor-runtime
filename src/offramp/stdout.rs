@@ -29,7 +29,7 @@ pub struct StdOut {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for StdOut {
+impl offramp::Impl for StdOut {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         Ok(Box::new(StdOut {
             pipelines: HashMap::new(),

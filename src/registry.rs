@@ -54,11 +54,10 @@ use std::marker::PhantomData;
 
 mod servant;
 
-pub use servant::BindingServant;
-pub use servant::OfframpServant;
-pub use servant::OnrampServant;
-pub use servant::PipelineServant;
-pub use servant::ServantId;
+pub use servant::{
+    Binding as BindingServant, Id as ServantId, Offramp as OfframpServant, Onramp as OnrampServant,
+    Pipeline as PipelineServant,
+};
 
 #[derive(Clone, Debug)]
 pub struct Servant<A>

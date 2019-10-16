@@ -88,6 +88,8 @@ impl WindowTrait for Window {
     }
 }
 
+// We allow this since No is barely ever used.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum WindowImpl {
     TumblingCountBased(TumblingWindowOnNumber),
@@ -184,7 +186,7 @@ impl TumblingWindowOnTime {
         Self {
             next_window: None,
             size,
-            script: script,
+            script,
         }
     }
 }
@@ -254,7 +256,7 @@ impl TumblingWindowOnNumber {
         Self {
             next_window: None,
             size,
-            script: script,
+            script,
         }
     }
 }
@@ -321,9 +323,9 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 impl TrickleSelect {
     pub fn with_stmt(
         id: String,
-        dims: SelectDims,
+        dims: &SelectDims,
         windows: Vec<(String, WindowImpl)>,
-        stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
+        stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         let select = match stmt_rentwrapped.stmt.suffix() {
             tremor_script::ast::Stmt::Select(ref select) => select.clone(),
@@ -537,7 +539,7 @@ impl Operator for TrickleSelect {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
-                    for arg in aggr.args.iter() {
+                    for arg in &aggr.args {
                         let result = arg.run(
                             opts,
                             &ctx,

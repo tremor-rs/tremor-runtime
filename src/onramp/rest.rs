@@ -32,11 +32,11 @@ pub struct Config {
     /// port to listen to, defaults to 8000
     #[serde(default = "dflt_port")]
     pub port: u32,
-    pub resources: Vec<RestConfig>,
+    pub resources: Vec<EndpointConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct RestConfig {
+pub struct EndpointConfig {
     path: String,
     allow: Vec<ResourceConfig>,
 }
@@ -61,7 +61,7 @@ pub struct Rest {
     pub config: Config,
 }
 
-impl OnrampImpl for Rest {
+impl onramp::Impl for Rest {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
@@ -73,7 +73,7 @@ impl OnrampImpl for Rest {
 }
 
 impl Onramp for Rest {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
         thread::Builder::new()
@@ -153,9 +153,9 @@ fn handler(
     let _ = tx.send(response);
 
     let status = StatusCode::from_u16(match *req.method() {
-        Method::POST => 201u16,
-        Method::DELETE => 200u16,
-        _ => 204u16,
+        Method::POST => 201_u16,
+        Method::DELETE => 200_u16,
+        _ => 204_u16,
     })
     .unwrap_or_default();
     Box::new(result(Ok(HttpResponse::build(status).body("".to_string()))))
@@ -170,7 +170,7 @@ fn header(headers: &actix_web::http::header::HeaderMap) -> HashMap<String, Strin
         .collect()
 }
 
-fn path_params(patterns: Vec<RestConfig>, path: &str) -> (String, HashMap<String, String>) {
+fn path_params(patterns: Vec<EndpointConfig>, path: &str) -> (String, HashMap<String, String>) {
     for pattern in patterns {
         let mut path = actix_web::dev::Path::new(path);
         if ResourceDef::new(&pattern.path).match_path(&mut path) {
@@ -186,7 +186,7 @@ fn path_params(patterns: Vec<RestConfig>, path: &str) -> (String, HashMap<String
 }
 
 fn onramp_loop(
-    rx: Receiver<OnrampMsg>,
+    rx: Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
     codec: String,
@@ -217,8 +217,8 @@ fn onramp_loop(
     loop {
         if pipelines.is_empty() {
             match rx.recv() {
-                Ok(OnrampMsg::Connect(ps)) => pipelines.append(&mut ps.clone()),
-                Ok(OnrampMsg::Disconnect { tx, .. }) => {
+                Ok(onramp::Msg::Connect(ps)) => pipelines.append(&mut ps.clone()),
+                Ok(onramp::Msg::Disconnect { tx, .. }) => {
                     let _ = tx.send(true);
                     return Ok(());
                 }

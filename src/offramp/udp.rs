@@ -42,7 +42,7 @@ pub struct Config {
     pub dst_port: u16,
 }
 
-impl OfframpImpl for Udp {
+impl offramp::Impl for Udp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;

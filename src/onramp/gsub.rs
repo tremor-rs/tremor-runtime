@@ -42,7 +42,7 @@ pub struct Config {
     pub sync: bool,
 }
 
-impl OnrampImpl for GSub {
+impl onramp::Impl for GSub {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
@@ -54,7 +54,7 @@ impl OnrampImpl for GSub {
 }
 
 fn onramp_loop(
-    rx: Receiver<OnrampMsg>,
+    rx: Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
     codec: String,
@@ -79,8 +79,8 @@ fn onramp_loop(
 
         while pipelines.is_empty() {
             match rx.recv()? {
-                OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
-                OnrampMsg::Disconnect { tx, .. } => {
+                onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
+                onramp::Msg::Disconnect { tx, .. } => {
                     let _ = tx.send(true);
                     return Ok(());
                 }
@@ -90,8 +90,8 @@ fn onramp_loop(
         match rx.try_recv() {
             Err(TryRecvError::Empty) => (),
             Err(_e) => error!("Crossbream receive error"),
-            Ok(OnrampMsg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(OnrampMsg::Disconnect { id, tx }) => {
+            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
+            Ok(onramp::Msg::Disconnect { id, tx }) => {
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
                     let _ = tx.send(true);
@@ -151,7 +151,7 @@ fn onramp_loop(
 }
 
 impl Onramp for GSub {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
+    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
 
