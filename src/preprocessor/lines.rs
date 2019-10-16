@@ -153,15 +153,6 @@ impl Preprocessor for Lines {
             .filter(|event| !event.is_empty() && self.is_valid_line(event))
             .collect::<Vec<Vec<u8>>>())
     }
-
-    // TODO remove
-    fn process2(
-        &mut self,
-        ingest_ns: &mut u64,
-        source_id: &str,
-        data: &[u8],
-    ) -> Option<Result<Vec<Vec<u8>>>> {
-        dbg!(source_id);
-        Some(self.process(ingest_ns, data))
-    }
 }
+
+// TODO add tests

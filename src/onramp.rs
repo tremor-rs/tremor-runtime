@@ -25,8 +25,6 @@ mod file;
 mod gsub;
 mod kafka;
 mod metronome;
-// TODO remove now that we don't rely on the macro definitions in prelude
-//#[macro_use]
 mod prelude;
 mod rest;
 // TODO replace tcp with tcp2

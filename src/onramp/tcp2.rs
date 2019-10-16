@@ -22,7 +22,7 @@ use std::time::Duration;
 
 const ONRAMP: Token = Token(0);
 
-// TODO expose this as config (but still main the buffer on stack)
+// TODO expose this as config (would have to change buffer to be vector?)
 const BUFFER_SIZE_BYTES: usize = 8192;
 // TODO remove later. test value
 //const BUFFER_SIZE_BYTES: usize = 16;
@@ -163,7 +163,6 @@ fn onramp_loop(
                     }
                 },
                 token => {
-                    //if let Some(stream) = connections.get_mut(&token) {
                     if let Some(TremorTcpConnection {
                         ref mut stream,
                         ref mut preprocessors,
@@ -172,7 +171,6 @@ fn onramp_loop(
                         // TODO test re-connections
                         let client_addr = stream.peer_addr()?;
 
-                        //let mut meta = metamap! { // TODO remove. uses macro local to the crate
                         let mut meta = tremor_pipeline::metamap! {
                             "source_id" => token.0.to_string(),
                             "source_ip" => client_addr.ip().to_string(),
@@ -221,7 +219,7 @@ fn onramp_loop(
                                     // release the token for re-use. ensures that we don't run out of
                                     // tokens (eg: if we were to just keep incrementing the token number)
                                     returned_tokens.push(token.0);
-                                    println!("Returned token number for reuse: {}", token.0);
+                                    trace!("Returned token number for reuse: {}", token.0);
 
                                     break;
                                 }
