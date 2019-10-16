@@ -2,6 +2,8 @@
 define tumbling window pairs
 with
    size = 2,
+script
+   2
 end;
 
 define tumbling window triples
@@ -20,9 +22,5 @@ select {
     "count": stats::count(),
     "other": win::collect_flattened(event.value),
 }
-from in/out[pairs, triples, quads]
-into snot/in;
-
-create stream snot;
-
-select event from snot/out into out;
+from in[pairs, triples, quads]
+into out;
