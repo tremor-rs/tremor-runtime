@@ -366,8 +366,8 @@ pub struct WindowDefn1 {
 pub struct MutSelect1<'script> {
     pub start: Location,
     pub end: Location,
-    pub from: Ident<'script>,
-    pub into: Ident<'script>,
+    pub from: (Ident<'script>, Option<Ident<'script>>),
+    pub into: (Ident<'script>, Option<Ident<'script>>),
     pub target: ImutExpr1<'script>,
     pub maybe_where: Option<ImutExpr1<'script>>,
     pub maybe_having: Option<ImutExpr1<'script>>,
@@ -425,11 +425,27 @@ impl<'script> MutSelect1<'script> {
 
         let windows = self.windows.unwrap_or_default();
 
+        let from = match self.from {
+            (stream, None) => {
+                let mut port = stream.clone();
+                port.id = Cow::Borrowed("out");
+                (stream, port)
+            }
+            (stream, Some(port)) => (stream, port),
+        };
+        let into = match self.into {
+            (stream, None) => {
+                let mut port = stream.clone();
+                port.id = Cow::Borrowed("in");
+                (stream, port)
+            }
+            (stream, Some(port)) => (stream, port),
+        };
         Ok(MutSelect {
             start: self.start,
             end: self.end,
-            from: self.from,
-            into: self.into,
+            from,
+            into,
             target,
             maybe_where,
             maybe_having,
@@ -443,8 +459,8 @@ impl<'script> MutSelect1<'script> {
 pub struct MutSelect<'script> {
     pub start: Location,
     pub end: Location,
-    pub from: Ident<'script>,
-    pub into: Ident<'script>,
+    pub from: (Ident<'script>, Ident<'script>),
+    pub into: (Ident<'script>, Ident<'script>),
     pub target: ImutExpr<'script>,
     pub maybe_where: Option<ImutExpr<'script>>,
     pub maybe_having: Option<ImutExpr<'script>>,

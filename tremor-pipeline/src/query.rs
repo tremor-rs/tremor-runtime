@@ -137,6 +137,21 @@ impl Query {
         inputs.insert(_in, id);
 
         // FIXME compute public streams - do not hardcode
+        let err = "err".to_string();
+        let id = pipe_graph.add_node(NodeConfig {
+            id: err.clone(),
+            kind: NodeKind::Output,
+            _type: "passthrough".to_string(),
+            config: None,
+            defn: None,
+            node: None,
+        });
+        nodes.insert(err.clone(), id);
+        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+        pipe_ops.insert(id, op);
+        outputs.push(id);
+
+        // FIXME compute public streams - do not hardcode
         let out = "out".to_string();
         let id = pipe_graph.add_node(NodeConfig {
             id: out.clone(),
@@ -150,7 +165,6 @@ impl Query {
         let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
-
         let mut port_indexes: PortIndexMap = HashMap::new();
 
         let mut windows = HashMap::new();
@@ -170,18 +184,18 @@ impl Query {
             match stmt {
                 Stmt::Select(ref select) => {
                     let s = &select.stmt;
-                    let from = s.from.id.clone().to_string();
+                    let from = s.from.0.id.clone().to_string();
                     if !nodes.contains_key(&from.clone()) {
                         let mut h = DumbHighlighter::default();
-                        let arse = query_stream_not_defined(&s, &s.from, from)?;
+                        let butt = query_stream_not_defined(&s, &s.from.0, from)?;
                         tremor_script::query::Query::format_error_from_script(
                             &self.0.source,
                             &mut h,
-                            &arse,
+                            &butt,
                         )?;
                         return Err("Missing node".into());
                     }
-                    let into = s.into.id.clone().to_string();
+                    let into = s.into.0.id.clone().to_string();
 
                     let from = resolve_output_port(from)?;
                     let select_in = resolve_input_port(from.id.clone() + "_select")?;
@@ -240,6 +254,8 @@ impl Query {
                             Some(that),
                             Some(windows.clone()),
                         )?;
+                        // FIXME: .unwrap() streams should also be an input
+                        // inputs.insert(name.clone(), id);
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
