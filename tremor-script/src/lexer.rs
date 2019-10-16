@@ -1389,7 +1389,7 @@ impl<'input> Iterator for Lexer<'input> {
                     ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
                     '/' => Some(Ok(spanned2(start, start, Token::Div))),
                     // TODO account for extractors which use | to mark format boundaries
-                    '|' => Some(Ok(spanned2(start, start, Token::BitOr))),
+                    //'|' => Some(Ok(spanned2(start, start, Token::BitOr))),
                     '^' => Some(Ok(spanned2(start, start, Token::BitXor))),
                     '&' => Some(Ok(spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
