@@ -41,6 +41,9 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     fn valid_arity(&self, n: usize) -> bool {
         self.arity().contains(&n)
     }
+    fn warning(&self) -> Option<String> {
+        None
+    }
 }
 impl_downcast!(sync TremorAggrFn);
 
@@ -529,6 +532,9 @@ impl TremorAggrFnWrapper {
     }
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
+    }
+    pub fn warning(&self) -> Option<String> {
+        self.fun.warning()
     }
     pub fn merge(&mut self, src: &Self) -> FResult<()> {
         use std::borrow::Borrow;

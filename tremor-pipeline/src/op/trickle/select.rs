@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt, GROUP_CONST_ID, WINDOW_CONST_ID, ARGS_CONST_ID},
+    ast::{InvokeAggrFn, SelectStmt, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
     prelude::*,
     query::rentals::Stmt as StmtRental,
 };
@@ -234,9 +234,10 @@ impl WindowTrait for TumblingWindowOnEventNumber {
                     emit: true,
                 }
             }
-            Some(_) => WindowEvent { // FIXME should never occur in practice
-                 open: false,
-                 emit: false,
+            Some(_) => WindowEvent {
+                // FIXME should never occur in practice
+                open: false,
+                emit: false,
             },
         }
     }
@@ -437,6 +438,9 @@ impl Operator for TrickleSelect {
             if window_event.open {
                 // When we close the window we clear all the aggregates
                 groups.clear()
+            }
+            if !window_event.emit {
+                break;
             }
         }
 

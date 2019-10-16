@@ -94,7 +94,8 @@ pub trait Highlighter {
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors(tokens, None)
+        self.highlight_errors(tokens, None)?;
+        self.finalize()
     }
 
     fn highlight_runtime_error(
@@ -316,8 +317,7 @@ pub trait Highlighter {
         }
 
         self.reset()?;
-        writeln!(self.get_writer());
-        self.finalize()
+        writeln!(self.get_writer())
     }
 }
 

@@ -138,7 +138,8 @@ where
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         match e.context() {
             (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(tokens, start, end, Some(e.into()))
+                h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
+                h.finalize()
             }
 
             _other => {
@@ -149,11 +150,14 @@ where
     }
 
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
-        for w in &self.warnings {
+        let mut warnings = self.warnings.clone();
+        warnings.sort();
+        warnings.dedup();
+        for w in &warnings {
             let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
             h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
-        Ok(())
+        h.finalize()
     }
 
     #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...

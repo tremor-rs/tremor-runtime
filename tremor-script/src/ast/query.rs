@@ -222,6 +222,8 @@ impl<'script> ScriptDecl1<'script> {
         // Inject consts
         let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         helper.warnings.append(&mut warnings);
+        helper.warnings.sort();
+        helper.warnings.dedup();
         let script_decl = ScriptDecl {
             start: self.start,
             end: self.end,

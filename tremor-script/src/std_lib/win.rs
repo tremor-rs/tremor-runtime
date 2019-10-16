@@ -116,8 +116,8 @@ impl TremorAggrFn for Last {
 }
 
 #[derive(Clone, Debug, Default)]
-struct Collect(Vec<Value<'static>>);
-impl TremorAggrFn for Collect {
+struct CollectFlattened(Vec<Value<'static>>);
+impl TremorAggrFn for CollectFlattened {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.push(args[0].clone_static());
         Ok(())
@@ -152,7 +152,57 @@ impl TremorAggrFn for Collect {
     fn arity(&self) -> RangeInclusive<usize> {
         1..=1
     }
+    fn warning(&self) -> Option<String> {
+        Some(String::from(
+            "Collect functions are very expensive memory wise, try avoiding them.",
+        ))
+    }
 }
+
+#[derive(Clone, Debug, Default)]
+struct CollectNested(Vec<Value<'static>>);
+impl TremorAggrFn for CollectNested {
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+        self.0.push(args[0].clone_static());
+        Ok(())
+    }
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+        // FIXME: how?
+        Ok(())
+    }
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
+        Ok(Value::Array(self.0.clone()))
+    }
+    fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
+        let mut r = Vec::with_capacity(self.0.len());
+        std::mem::swap(&mut r, &mut self.0);
+        Ok(Value::Array(r))
+    }
+    fn init(&mut self) {
+        self.0 = Vec::with_capacity(self.0.len());
+    }
+
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
+        if let Some(other) = src.downcast_ref::<Self>() {
+            // On self is earlier then other, so as long
+            // as other has a value we take it
+            self.0.push(Value::Array(other.0.clone()));
+        }
+        Ok(())
+    }
+    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=1
+    }
+    fn warning(&self) -> Option<String> {
+        Some(String::from(
+            "Collect functions are very expensive memory wise, try avoiding them.",
+        ))
+    }
+}
+
 pub fn load_aggr(registry: &mut AggrRegistry) {
     registry
         .insert(TremorAggrFnWrapper {
@@ -162,8 +212,13 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
         })
         .insert(TremorAggrFnWrapper {
             module: "win".to_string(),
-            name: "collect".to_string(),
-            fun: Box::new(Collect::default()),
+            name: "collect_flattened".to_string(),
+            fun: Box::new(CollectFlattened::default()),
+        })
+        .insert(TremorAggrFnWrapper {
+            module: "win".to_string(),
+            name: "collect_nested".to_string(),
+            fun: Box::new(CollectNested::default()),
         })
         .insert(TremorAggrFnWrapper {
             module: "win".to_string(),

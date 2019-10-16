@@ -84,7 +84,7 @@ pub struct Script1<'script> {
     pub exprs: Exprs1<'script>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Warning {
     pub outer: Range,
     pub inner: Range,
@@ -1128,6 +1128,13 @@ impl<'script> Upable<'script> for InvokeAggr1<'script> {
                 self.args.len(),
             )
             .into());
+        }
+        if let Some(warning) = invocable.warning() {
+            helper.warnings.push(Warning {
+                inner: self.extent(),
+                outer: self.extent(),
+                msg: warning,
+            });
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?;
