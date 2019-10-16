@@ -25,51 +25,25 @@ use petgraph::dot::{Config, Dot};
 use simd_json::ValueTrait;
 use std::sync::Arc;
 use tremor_script::ast::Stmt;
-use tremor_script::ast::{WindowDecl, WindowKind};
+use tremor_script::ast::{Ident, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{AggrRegistry, Registry, Value};
 
-fn resolve_input_port(port: String) -> Result<InputPort> {
-    let v: Vec<&str> = port.split('/').collect();
-    match v.as_slice() {
-        [id, port] => Ok(InputPort {
-            id: id.to_string(),
-            port: port.to_string(),
-            had_port: true,
-        }),
-        [id] => Ok(InputPort {
-            id: id.to_string(),
-            port: "in".to_string(),
-            had_port: false,
-        }),
-        _ => Err(ErrorKind::PipelineError(
-            "Bad port syntax, needs to be <id>/<port> or <id> (where port becomes 'out')"
-                .to_string(),
-        )
-        .into()),
+fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
+    InputPort {
+        id: port.0.id.to_string(),
+        port: port.1.id.to_string(),
+        had_port: true,
     }
 }
 
-fn resolve_output_port(port: String) -> Result<OutputPort> {
-    let v: Vec<&str> = port.split('/').collect();
-    match v.as_slice() {
-        [id, port] => Ok(OutputPort {
-            id: id.to_string(),
-            port: port.to_string(),
-            had_port: true,
-        }),
-        [id] => Ok(OutputPort {
-            id: id.to_string(),
-            port: "out".to_string(),
-            had_port: false,
-        }),
-        _ => Err(ErrorKind::PipelineError(
-            "Bad port syntax, needs to be <id>/<port> or <id> (where port becomes 'out')"
-                .to_string(),
-        )
-        .into()),
+fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
+    OutputPort {
+        id: port.0.id.to_string(),
+        port: port.1.id.to_string(),
+        had_port: true,
     }
 }
 
@@ -170,6 +144,7 @@ impl Query {
         let mut windows = HashMap::new();
         let mut operators = HashMap::new();
         let mut scripts = HashMap::new();
+        let mut select_num = 0;
 
         for stmt in &script.stmts {
             let stmt_rental =
@@ -184,8 +159,8 @@ impl Query {
             match stmt {
                 Stmt::Select(ref select) => {
                     let s = &select.stmt;
-                    let from = s.from.0.id.clone().to_string();
-                    if !nodes.contains_key(&from.clone()) {
+                    if !nodes.contains_key(&s.from.0.id.to_string()) {
+                        let from = s.from.0.id.clone().to_string();
                         let mut h = DumbHighlighter::default();
                         let butt = query_stream_not_defined(&s, &s.from.0, from)?;
                         tremor_script::query::Query::format_error_from_script(
@@ -195,12 +170,21 @@ impl Query {
                         )?;
                         return Err("Missing node".into());
                     }
-                    let into = s.into.0.id.clone().to_string();
 
-                    let from = resolve_output_port(from)?;
-                    let select_in = resolve_input_port(from.id.clone() + "_select")?;
-                    let select_out = resolve_output_port(from.id.clone() + "_select")?;
-                    let into = resolve_input_port(into)?;
+                    let select_in = InputPort {
+                        id: format!("select_{}", select_num),
+                        port: "out".into(),
+                        had_port: false,
+                    };
+                    let select_out = OutputPort {
+                        id: format!("select_{}", select_num),
+                        port: "out".into(),
+                        had_port: false,
+                    };
+
+                    select_num += 1;
+                    let into = resolve_input_port(&s.into);
+                    let from = resolve_output_port(&s.from);
                     if links.contains_key(&from) {
                         match links.get_mut(&from) {
                             Some(x) => {
@@ -236,10 +220,10 @@ impl Query {
                 }
                 Stmt::Stream(s) => {
                     let name = s.id.clone().to_string();
-                    let src = resolve_output_port(name.clone())?;
-                    if !nodes.contains_key(&src.id) {
+                    let id = name.clone();
+                    if !nodes.contains_key(&id) {
                         let node = NodeConfig {
-                            id: src.id.to_string(),
+                            id,
                             kind: NodeKind::Operator,
                             _type: "passthrough".to_string(),
                             config: None,
@@ -271,9 +255,6 @@ impl Query {
                 Stmt::Operator(o) => {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
-
-                    let _op_in = resolve_input_port(name.clone())?;
-                    let _op_out = resolve_output_port(name.clone())?;
 
                     let node = NodeConfig {
                         id: name.to_string(),
@@ -308,9 +289,6 @@ impl Query {
                 Stmt::Script(o) => {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
-
-                    let _op_in = resolve_input_port(name.clone())?;
-                    let _op_out = resolve_output_port(name.clone())?;
 
                     let stmt_rental = tremor_script::query::rentals::Stmt::new(
                         Arc::new(self.0.clone()),
