@@ -1,7 +1,6 @@
 onramp:
   - id: gelf-tcp
-    # TODO make this tcp later
-    type: tcp2
+    type: tcp
     preprocessors:
       - lines-null
     codec: json

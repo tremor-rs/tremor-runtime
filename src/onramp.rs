@@ -27,9 +27,7 @@ mod kafka;
 mod metronome;
 mod prelude;
 mod rest;
-// TODO replace tcp with tcp2
 mod tcp;
-mod tcp2;
 mod udp;
 
 pub trait OnrampImpl {
@@ -57,9 +55,7 @@ pub fn lookup(name: String, config: Option<Value>) -> Result<Box<dyn Onramp>> {
         "kafka" => kafka::Kafka::from_config(&config),
         "metronome" => metronome::Metronome::from_config(&config),
         "udp" => udp::Udp::from_config(&config),
-        // TODO replace tcp with tcp2
         "tcp" => tcp::Tcp::from_config(&config),
-        "tcp2" => tcp2::Tcp::from_config(&config),
         "rest" => rest::Rest::from_config(&config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }

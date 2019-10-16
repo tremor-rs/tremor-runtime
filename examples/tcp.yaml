@@ -1,7 +1,6 @@
 onramp:
   - id: tcp
-    # TODO make this tcp later
-    type: tcp2
+    type: tcp
     codec: json
     config:
       # TODO support strings here
