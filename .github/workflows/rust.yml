@@ -13,18 +13,18 @@ jobs:
         run: cargo install cargo-deny
       - name: Check dependencies
         run: cargo deny check
-  sanity:
-    runs-on: ubuntu-latest
-    steps:
-      # TODO enable after adding check scripts from 0.6
-      #- uses: actions/checkout@v1
-      #- name: Safety cheks
-      #  run: ./checks/safety.sh -a
-      # TODO remove? same as unused-deps
-      - name: unused deps (tremor-runtime)
-        run: ./dep_check.sh
-      - name: unused deps (dissect)
-        run: ./dep_check.sh dissect
+  # TODO enable after adding check scripts from 0.6
+  #sanity:
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - uses: actions/checkout@v1
+  #    - name: Safety cheks
+  #      run: ./checks/safety.sh -a
+  #    # TODO remove? same as unused-deps
+  #    - name: unused deps (tremor-runtime)
+  #      run: ./dep_check.sh
+  #    - name: unused deps (dissect)
+  #      run: ./dep_check.sh dissect
   unused-deps:
     strategy:
       fail-fast: false
