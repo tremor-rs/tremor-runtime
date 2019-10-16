@@ -4,14 +4,12 @@ onramp:
     type: tcp2
     preprocessors:
       - lines-null
-      - remove-empty
     codec: json
     config:
       # TODO support strings here
       #host: 'localhost'
       host: 127.0.0.1
       port: 12202
-      # TODO introduce config option for delimiter (null byte for gelf tcp)
 
 offramp:
   - id: console

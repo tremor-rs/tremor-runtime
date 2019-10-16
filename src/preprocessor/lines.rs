@@ -15,14 +15,15 @@
 use super::Preprocessor;
 use crate::errors::*;
 use std::any::Any;
+use std::cmp::min;
 
 #[derive(Clone)]
 pub struct Lines {
     separator: char,
     max_length: usize,
-    // to keep track of partial line reads
+    // to keep track of line fragments when partial data comes through
+    fragment_length: usize,
     buffer: Vec<u8>,
-    message_fragment_length: usize, // TODO better naming/type
 }
 
 impl Lines {
@@ -31,9 +32,89 @@ impl Lines {
         Lines {
             separator,
             max_length,
-            buffer: vec![0; max_length],
-            message_fragment_length: 0,
+            fragment_length: 0,
+            // allocating at once with enough capacity to ensure we don't do re-allocations
+            // optimizing for performance here instead of memory usage
+            buffer: Vec::with_capacity(max_length),
         }
+    }
+
+    fn is_valid_line(&self, v: &[u8]) -> bool {
+        if v.len() <= self.max_length {
+            true
+        } else {
+            warn!(
+                "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
+                v.len(),
+                self.max_length,
+                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
+            );
+            false
+        }
+    }
+
+    fn save_fragment(&mut self, v: &[u8]) {
+        let total_fragment_length = self.fragment_length + v.len();
+
+        if total_fragment_length <= self.max_length {
+            self.buffer.extend_from_slice(v);
+            trace!(
+                "Saved line fragment of length {} to preprocessor buffer: {:?}",
+                v.len(),
+                String::from_utf8_lossy(v)
+            );
+        } else {
+            warn!(
+                "Discarded line fragment of length {} since total length of {} exceeds maximum allowed length of {}: {:?}",
+                v.len(),
+                total_fragment_length,
+                self.max_length,
+                String::from_utf8_lossy(v)
+            );
+            // since we are not saving the current fragment, anything that was saved earlier is
+            // useless now so clear the buffer
+            self.buffer.clear();
+        }
+
+        // remember the total fragment length for later use
+        self.fragment_length = total_fragment_length;
+    }
+
+    fn complete_fragment(&mut self, v: &mut Vec<u8>) {
+        let total_fragment_length = self.fragment_length + v.len();
+
+        if total_fragment_length <= self.max_length {
+            // prepend v with buffer content
+            // extend the buffer first (we know it has enough capacity to hold v without any
+            // further allocation), then copy the buffer over to v
+            self.buffer.append(v);
+            *v = self.buffer.clone();
+            // alt methods
+            // TODO remove
+            //v.splice(0..0, self.buffer.iter().cloned());
+            //*v = [&self.buffer[..], v].concat();
+
+            trace!(
+                "Added line fragment of length {} from preprocessor buffer: {:?}",
+                self.buffer.len(),
+                String::from_utf8_lossy(&self.buffer)
+            );
+        } else {
+            warn!(
+                "Discarded line fragment of length {} since total length of {} exceeds maximum allowed line length of {}: {:?}",
+                v.len(),
+                total_fragment_length,
+                self.max_length,
+                String::from_utf8_lossy(v)
+            );
+            // since v is of no use anymore (we did not make a complete line out of it), clear it
+            // this enables callers of this function to handle v differently for this case.
+            v.clear();
+        }
+
+        // reset the preprocessor to initial state
+        self.buffer.clear();
+        self.fragment_length = 0;
     }
 }
 
@@ -42,17 +123,38 @@ impl Preprocessor for Lines {
         self
     }
 
-    // TODO implement main process here in functional style and compare with the current
-    // imperative implementation
-    /*
-    fn process(&mut self, _ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(data
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        // split incoming bytes by specifed line separator
+        let mut events: Vec<Vec<u8>> = data
             .split(|c| *c == self.separator as u8)
             .map(Vec::from)
-            .collect())
-    }
-    */
+            .collect();
 
+        match events.pop() {
+            Some(last_event) => {
+                // if incoming data had at least one line separator boundary (anywhere)
+                // AND if the preprocessor has memory of line fragment from earlier,
+                // reconstruct the first event fully (by adding the buffer contents to it)
+                if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
+                    self.complete_fragment(&mut events[0]);
+                }
+
+                // if the incoming data did not end in a line boundary, last event is actually
+                // a fragment so we need to remmeber it for later (when more data arrives)
+                if !last_event.is_empty() {
+                    self.save_fragment(&last_event);
+                }
+            }
+            None => unreachable!(),
+        }
+
+        Ok(events
+            .into_iter()
+            .filter(|event| !event.is_empty() && self.is_valid_line(event))
+            .collect::<Vec<Vec<u8>>>())
+    }
+
+    // TODO remove
     fn process2(
         &mut self,
         ingest_ns: &mut u64,
@@ -60,99 +162,6 @@ impl Preprocessor for Lines {
         data: &[u8],
     ) -> Option<Result<Vec<Vec<u8>>>> {
         dbg!(source_id);
-
-        // TODO track buffers by source_id
-        // might be tricky to clear the buffer if the connection drops (eg: in the case of onramps
-        // like tcp)
         Some(self.process(ingest_ns, data))
-    }
-
-    // TODO separate out some of the logic here in other functions for readability
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let mut result: Vec<Vec<u8>> = Vec::new();
-        let mut message_start_index = 0;
-
-        for (i, c) in data.iter().enumerate() {
-            if *c == self.separator as u8 {
-                // doesn't take the separator index into account
-                let mut message_length = i - message_start_index;
-
-                // if there's a message fragment from earlier, account it for the total message length
-                if self.message_fragment_length > 0 {
-                    message_length += self.message_fragment_length;
-                }
-
-                if message_length > self.max_length {
-                    warn!(
-                        "Ignored message of length {} since it exceeds maximum allowed line length of {}",
-                        message_length,
-                        self.max_length
-                    );
-                } else if self.message_fragment_length > 0 {
-                    trace!(
-                        "Adding message fragment of length {} from processor buffer: {}",
-                        self.message_fragment_length,
-                        String::from_utf8_lossy(&self.buffer[0..self.message_fragment_length])
-                    );
-                    result.push(
-                        [
-                            &self.buffer[0..self.message_fragment_length],
-                            &data[message_start_index..i],
-                        ]
-                        .concat(),
-                    );
-
-                    // clear the buffer now that we have used (not strictly necessary though...)
-                    for i in &mut self.buffer[0..self.message_fragment_length] {
-                        *i = 0;
-                    }
-                } else {
-                    result.push(data[message_start_index..i].to_vec());
-                }
-
-                // reset the start index for the message, as well as the fragment length
-                message_start_index = i + 1;
-                self.message_fragment_length = 0;
-            }
-
-            // check if there's residual data left
-            if i == data.len() - 1 && message_start_index != i + 1 {
-                let total_fragment_length =
-                    self.message_fragment_length + (i - message_start_index + 1);
-
-                if total_fragment_length <= self.max_length {
-                    // for resuming message reads
-                    self.buffer[self.message_fragment_length..total_fragment_length]
-                        .copy_from_slice(&data[message_start_index..=i]);
-
-                    trace!(
-                        "Saved message fragment of length {} to processor buffer: {}",
-                        total_fragment_length - self.message_fragment_length,
-                        String::from_utf8_lossy(
-                            &self.buffer[self.message_fragment_length..total_fragment_length]
-                        )
-                    );
-                } else {
-                    warn!(
-                        "Discarded message fragment of length {} since total length of {} exceeds maximum allowed line length of {}",
-                        total_fragment_length - self.message_fragment_length,
-                        total_fragment_length,
-                        self.max_length
-                    );
-                    // TODO clear the buffer now that we don't need it (not strictly necessary though...)
-                }
-
-                // keep track of the partial message length so far
-                self.message_fragment_length = total_fragment_length;
-            }
-        }
-
-        // TODO remove later?
-        trace!(
-            "Processor buffer: {}",
-            String::from_utf8_lossy(&self.buffer)
-        );
-
-        Ok(result)
     }
 }
