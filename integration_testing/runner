@@ -151,7 +151,7 @@ do
         exit 1
     fi
 
-    query_file="${TEST_DIR}/query.tickle"
+    query_file="${TEST_DIR}/query.trickle"
 
     out_file="${TEST_DIR}/out.json.xz"
     if [ ! -f "${out_file}" ]
