@@ -1065,6 +1065,7 @@ mod test {
             stmt: Box::new(stmt),
             aggregates: vec![],
             consts: vec![Value::Null, Value::Null, Value::Null],
+            locals: 0,
         })
     }
     #[test]
