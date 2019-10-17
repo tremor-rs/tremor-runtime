@@ -715,7 +715,7 @@ mod test {
             ),
         ];
         let id = "select".to_string();
-        TrickleSelect::with_stmt(id, groups, windows, stmt)
+        TrickleSelect::with_stmt(id, &groups, windows, &stmt)
     }
 
     fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(String, Event)>> {

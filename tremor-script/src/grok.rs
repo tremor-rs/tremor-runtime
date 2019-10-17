@@ -114,7 +114,7 @@ mod tests {
             dbg!(pat.clone());
             dbg!(raw.clone());
             let codec = Pattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes().to_vec());
+            let decoded = codec.matches(raw.as_bytes());
             dbg!(&decoded);
             match decoded {
                 Ok(j) => assert_eq!(j, $json),
@@ -131,7 +131,7 @@ mod tests {
             dbg!(pat.clone());
             dbg!(raw.clone());
             let codec = Pattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes().to_vec());
+            let decoded = codec.matches(raw.as_bytes());
             match decoded {
                 Err(decoded) => assert_eq!($expr, decoded.description()),
                 _ => eprintln!("{}", "Expected no match"),
