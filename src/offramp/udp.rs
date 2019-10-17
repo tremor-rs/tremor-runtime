@@ -48,7 +48,7 @@ impl offramp::Impl for Udp {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let socket = UdpSocket::bind((config.host.as_str(), config.port))?;
             socket.connect((config.dst_host.as_str(), config.dst_port))?;
-            Ok(Box::new(Udp {
+            Ok(Box::new(Self {
                 config,
                 socket,
                 pipelines: HashMap::new(),

@@ -54,7 +54,7 @@ impl offramp::Impl for Tcp {
             stream.set_nonblocking(config.is_non_blocking)?;
             stream.set_ttl(config.ttl)?;
             stream.set_nodelay(config.is_no_delay)?;
-            Ok(Box::new(Tcp {
+            Ok(Box::new(Self {
                 config,
                 stream,
                 pipelines: HashMap::new(),

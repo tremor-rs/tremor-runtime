@@ -101,7 +101,7 @@ impl offramp::Impl for Kafka {
                 .name_prefix("kafka-pool-")
                 .pool_size(config.threads)
                 .build();
-            Ok(Box::new(Kafka {
+            Ok(Box::new(Self {
                 pool,
                 producer,
                 topic: config.topic.clone(),

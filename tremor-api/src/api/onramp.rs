@@ -26,49 +26,46 @@ struct OnRampWrap {
     instances: Vec<String>,
 }
 
-pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> ApiResult {
-    let res: Result<Vec<String>> = data.world.repo.list_onramps().map(|l| {
+pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
+    let result: Result<Vec<String>> = data.world.repo.list_onramps().map(|l| {
         l.iter()
             .filter_map(tremor_runtime::url::TremorURL::artefact)
             .collect()
     });
-    reply(req, data, res, false, 200)
+    reply(&req, &data, result, false, 200)
 }
 
-pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> ApiResult {
+pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
     let decoded_data: tremor_runtime::config::OnRamp = decode(&req, &data_raw)?;
     let url = build_url(&["onramp", &decoded_data.id])?;
-    let res = data.world.repo.publish_onramp(&url, false, decoded_data);
-    reply(req, data, res, true, 201)
+    let result = data.world.repo.publish_onramp(&url, false, decoded_data);
+    reply(&req, &data, result, true, 201)
 }
 
 pub fn unpublish_artefact(
     (req, data, id): (HttpRequest, Data<State>, Path<(String)>),
-) -> ApiResult {
+) -> HTTPResult {
     let url = build_url(&["onramp", &id])?;
-    let res = data.world.repo.unpublish_onramp(&url);
-    reply(req, data, res, true, 200)
+    let result = data.world.repo.unpublish_onramp(&url);
+    reply(&req, &data, result, true, 200)
 }
 
-pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> ApiResult {
+pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
     let url = build_url(&["onramp", &id])?;
-    let res = data
+    let result = data
         .world
         .repo
         .find_onramp(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
-    match res {
-        Some(res) => {
-            let res: Result<OnRampWrap> = Ok(OnRampWrap {
-                artefact: res.artefact,
-                instances: res
-                    .instances
-                    .iter()
-                    .filter_map(tremor_runtime::url::TremorURL::instance)
-                    .collect(),
-            });
-            reply(req, data, res, false, 200)
-        }
-        None => Err(error::ErrorNotFound(r#"{"error": "Artefact not found"}"#)),
-    }
+        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?
+        .ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))?;
+
+    let result: Result<OnRampWrap> = Ok(OnRampWrap {
+        artefact: result.artefact,
+        instances: result
+            .instances
+            .iter()
+            .filter_map(tremor_runtime::url::TremorURL::instance)
+            .collect(),
+    });
+    reply(&req, &data, result, false, 200)
 }

@@ -90,19 +90,15 @@ fn save_config(config: &TargetConfig) {
     let dot_config = format!("{}/config.yaml", tremor_root);
     let raw = serde_yaml::to_string(&config);
     let file = File::create(&dot_config);
-    match raw {
-        Ok(raw) => match file {
-            Ok(mut f) => {
-                f.write_all(&raw.into_bytes())
-                    .expect("Config file is not readlable error");
-            }
-            _ => {
-                eprintln!("Unable to create bootstrap config for tremor-tool");
-            }
-        },
-        _ => {
-            eprintln!("Expected non-empty config.yaml");
+    if let Ok(raw) = raw {
+        if let Ok(mut f) = file {
+            f.write_all(&raw.into_bytes())
+                .expect("Config file is not readlable error");
+        } else {
+            eprintln!("Unable to create bootstrap config for tremor-tool");
         }
+    } else {
+        eprintln!("Expected non-empty config.yaml");
     }
 }
 
@@ -159,8 +155,7 @@ impl<'a> TremorApp<'a> {
         let cmd = app.clone().get_matches();
         let format = match cmd.value_of("format") {
             Some("json") => FormatKind::Json,
-            Some("yaml") => FormatKind::Yaml,
-            _ => FormatKind::Yaml,
+            Some("yaml") | _ => FormatKind::Yaml,
         };
         Self {
             app: cmd,
@@ -465,7 +460,7 @@ fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) {
         .value_of("SOURCE")
         .ok_or("SOURCE not provided")
         .expect("SOURCE not provided");
-    let json = load(path_to_file.to_string()).expect("Bad source path");
+    let json = load(path_to_file).expect("Bad source path");
     let endpoints: Vec<String> = serde_json::from_value(json).expect("Unable to parse json");
     app.config.instances.insert(id.to_string(), endpoints);
     save_config(&app.config);
@@ -492,9 +487,8 @@ fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     println!(
         "{}",
         match cmd.value_of("format") {
-            Some("json") => serde_json::to_string(&version)?,
             Some("yaml") => serde_yaml::to_string(&version)?,
-            _ => serde_json::to_string(&version)?,
+            Some("json") | _ => serde_json::to_string(&version)?,
         }
     );
     Ok(())
@@ -558,7 +552,7 @@ fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "pipeline";
     let mut response = restc
@@ -573,13 +567,13 @@ fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
 fn conductor_pipeline_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("pipeline/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("pipeline/{id}/{instance}", id = a_id, instance = s_id);
     let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
@@ -642,7 +636,7 @@ fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "binding";
     let mut response = restc
@@ -657,13 +651,13 @@ fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
 fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
     let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
@@ -671,15 +665,15 @@ fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
 fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let mut response = restc
         .post(&endpoint)?
@@ -693,13 +687,13 @@ fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
 fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
     let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
@@ -758,7 +752,7 @@ fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "offramp";
     let mut response = restc
@@ -773,13 +767,13 @@ fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
 fn conductor_offramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("offramp/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("offramp/{id}/{instance}", id = a_id, instance = s_id);
     let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
@@ -838,7 +832,7 @@ fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "onramp";
     let mut response = restc
@@ -853,13 +847,13 @@ fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
 fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("onramp/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("onramp/{id}/{instance}", id = a_id, instance = s_id);
     let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
@@ -868,9 +862,9 @@ fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
 // Utility code //
 //////////////////
 
-fn load(path_to_file: String) -> Result<serde_json::Value> {
-    let mut source = File::open(&path_to_file)?;
-    let ext = Path::new(&path_to_file)
+fn load(path_to_file: &str) -> Result<serde_json::Value> {
+    let mut source = File::open(path_to_file)?;
+    let ext = Path::new(path_to_file)
         .extension()
         .and_then(OsStr::to_str)
         .ok_or("Could not create fail path")?;
@@ -905,8 +899,7 @@ fn accept(app: &TremorApp) -> &'static str {
 fn handle_response(response: &mut reqwest::Response) -> Result<()> {
     let status = response.status();
     match status {
-        StatusCode::OK => println!("{}", &response.text()?),
-        StatusCode::CREATED => println!("{}", &response.text()?),
+        StatusCode::OK | StatusCode::CREATED => println!("{}", &response.text()?),
         StatusCode::NOT_FOUND => eprintln!("Not found"),
         StatusCode::CONFLICT => eprintln!("Conflict"),
         _ => eprintln!("Unexpected response ( status: {} )", status.as_u16()),

@@ -65,7 +65,7 @@ impl offramp::Impl for GCS {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let hub = storage_api(&config.service_account.to_string())?;
-            Ok(Box::new(GCS {
+            Ok(Box::new(Self {
                 cnt: 0,
                 config,
                 hub,

@@ -97,7 +97,7 @@ impl offramp::Impl for Elastic {
             //    None => "tremor-host.local".to_string(),
             //};
 
-            Ok(Box::new(Elastic {
+            Ok(Box::new(Self {
                 client_idx: 0,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],

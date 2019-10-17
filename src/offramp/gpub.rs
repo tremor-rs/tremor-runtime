@@ -22,6 +22,7 @@
 
 use crate::google::{pubsub_api, GpsHub};
 use crate::offramp::prelude::*;
+use google_pubsub1::{PublishRequest, PubsubMessage};
 use hashbrown::HashMap;
 use serde_yaml;
 use std::fmt;
@@ -53,7 +54,7 @@ impl offramp::Impl for GPub {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let hub = pubsub_api(&config.service_account.to_string())?;
-            Ok(Box::new(GPub {
+            Ok(Box::new(Self {
                 config,
                 hub,
                 pipelines: HashMap::new(),
@@ -90,11 +91,11 @@ impl Offramp for GPub {
 
         for value in event.value_iter() {
             if let Ok(ref raw) = codec.encode(value) {
-                let message = google_pubsub1::PubsubMessage {
+                let message = PubsubMessage {
                     data: Some(base64::encode(&raw)),
-                    ..Default::default()
+                    ..PubsubMessage::default()
                 };
-                let request = google_pubsub1::PublishRequest {
+                let request = PublishRequest {
                     messages: Some(vec![message]),
                 };
                 let response = methods.topics_publish(request.clone(), &topic_name).doit();

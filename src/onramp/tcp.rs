@@ -38,7 +38,7 @@ impl onramp::Impl for Tcp {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Tcp { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for tcp onramp".into())
         }
@@ -46,14 +46,11 @@ impl onramp::Impl for Tcp {
 }
 
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    rx: &Receiver<onramp::Msg>,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: std::boxed::Box<dyn codec::Codec>,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
     // Imposed Limit of a TCP payload
     let mut buf = [0; 65535];
 
@@ -119,13 +116,15 @@ fn onramp_loop(
 }
 
 impl Onramp for Tcp {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
+        let codec = codec::lookup(codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-tcp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

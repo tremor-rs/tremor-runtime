@@ -42,49 +42,49 @@ impl Clone for Error {
 }
 
 impl From<actix::MailboxError> for Error {
-    fn from(m: actix::MailboxError) -> Error {
+    fn from(m: actix::MailboxError) -> Self {
         ErrorKind::MailboxError(m).into()
     }
 }
 
 impl From<hdr_s::DeserializeError> for Error {
-    fn from(e: hdr_s::DeserializeError) -> Error {
-        Error::from(format!("{:?}", e))
+    fn from(e: hdr_s::DeserializeError) -> Self {
+        Self::from(format!("{:?}", e))
     }
 }
 
 impl From<hdrhistogram::errors::CreationError> for Error {
-    fn from(e: hdrhistogram::errors::CreationError) -> Error {
-        Error::from(format!("{:?}", e))
+    fn from(e: hdrhistogram::errors::CreationError) -> Self {
+        Self::from(format!("{:?}", e))
     }
 }
 
 impl<T> From<crossbeam_channel::SendError<T>> for Error {
-    fn from(e: crossbeam_channel::SendError<T>) -> Error {
-        Error::from(format!("{:?}", e))
+    fn from(e: crossbeam_channel::SendError<T>) -> Self {
+        Self::from(format!("{:?}", e))
     }
 }
 impl From<crossbeam_channel::RecvError> for Error {
-    fn from(e: crossbeam_channel::RecvError) -> Error {
-        Error::from(format!("{:?}", e))
+    fn from(e: crossbeam_channel::RecvError) -> Self {
+        Self::from(format!("{:?}", e))
     }
 }
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
-    fn from(e: std::sync::PoisonError<P>) -> Error {
-        Error::from(format!("poison Error: {:?}", e))
+    fn from(e: std::sync::PoisonError<P>) -> Self {
+        Self::from(format!("poison Error: {:?}", e))
     }
 }
 
 impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
-    fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Error {
-        Error::from("Ernatal Error".to_string())
+    fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Self {
+        Self::from("Ernatal Error".to_string())
     }
 }
 
 #[cfg(test)]
 impl PartialEq for Error {
-    fn eq(&self, _other: &Error) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         // This might be Ok since we try to compare Result in tets
         false
     }

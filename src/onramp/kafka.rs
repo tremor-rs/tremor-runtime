@@ -65,7 +65,7 @@ impl onramp::Impl for Kafka {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Kafka { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -94,14 +94,11 @@ impl ConsumerContext for LoggingConsumerContext {
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    rx: &Receiver<onramp::Msg>,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
     let hostname = match get_hostname() {
         Some(h) => h,
         None => "tremor-host.local".to_string(),
@@ -245,14 +242,15 @@ fn onramp_loop(
 }
 
 impl Onramp for Kafka {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
-        //        let id = self.id.clone();
+        let codec = codec::lookup(&codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-kafka-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

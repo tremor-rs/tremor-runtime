@@ -127,6 +127,8 @@ struct WsServerState {
     preprocessors: Vec<String>,
 }
 /// do websocket handshake and start `MyWebSocket` actor
+// The signature is enforced by a forign trait.
+#[allow(clippy::needless_pass_by_value)]
 fn ws_index(
     r: HttpRequest,
     stream: web::Payload,
@@ -141,15 +143,16 @@ fn ws_index(
     )
 }
 
+// We got to allow this because of the way that the onramp works
+// by creating new instances during runtime.
+#[allow(clippy::needless_pass_by_value)]
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
+    rx: &Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
-    codec: &str,
+    mut codec: Box<dyn Codec>,
 ) -> Result<()> {
     let (main_tx, main_rx) = bounded(10);
-
-    let mut codec = codec::lookup(&codec)?;
 
     thread::Builder::new()
         .name(format!("onramp-ws-actix-loop-{}", "???"))
@@ -204,13 +207,16 @@ fn onramp_loop(
 }
 
 impl Onramp for Ws {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
+        let codec = codec::lookup(&codec)?;
+        // we need to change this here since ws is special
+        let preprocessors = preprocessors.to_vec();
         thread::Builder::new()
             .name(format!("onramp-udp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, &codec) {
+                if let Err(e) = onramp_loop(&rx, config, preprocessors, codec) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

@@ -20,6 +20,9 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+// This is OK, Blackhole is benchmark only
+#![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+
 use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
@@ -60,7 +63,7 @@ impl offramp::Impl for Blackhole {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
             let now_ns = nanotime();
-            Ok(Box::new(Blackhole {
+            Ok(Box::new(Self {
                 // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
                 stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,

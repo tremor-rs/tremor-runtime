@@ -65,7 +65,7 @@ impl onramp::Impl for Rest {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Rest { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for REST onramp".into())
         }
@@ -73,12 +73,15 @@ impl onramp::Impl for Rest {
 }
 
 impl Onramp for Rest {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
+        let codec = codec::lookup(&codec)?;
+        // rest is special
+        let preprocessors = preprocessors.to_vec();
         thread::Builder::new()
             .name(format!("onramp-rest-{}", "???"))
-            .spawn(|| onramp_loop(rx, config, preprocessors, codec))?;
+            .spawn(move || onramp_loop(&rx, config, preprocessors, codec))?;
 
         Ok(tx)
     }
@@ -105,9 +108,9 @@ struct OnrampState {
 }
 
 impl Default for OnrampState {
-    fn default() -> OnrampState {
+    fn default() -> Self {
         let (tx, _) = bounded(1);
-        OnrampState {
+        Self {
             tx,
             config: Config::default(),
         }
@@ -121,7 +124,7 @@ impl FromRequest for OnrampState {
     type Future = Result<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Result<Self> {
-        let state = req.get_app_data::<OnrampState>();
+        let state = req.get_app_data::<Self>();
         if let Some(st) = state {
             Ok(st.get_ref().to_owned())
         } else {
@@ -185,11 +188,14 @@ fn path_params(patterns: Vec<EndpointConfig>, path: &str) -> (String, HashMap<St
     (String::default(), HashMap::default())
 }
 
+// We got to allow this because of the way that the onramp works
+// by creating new instances during runtime.
+#[allow(clippy::needless_pass_by_value)]
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
+    rx: &Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
-    codec: String,
+    mut codec: std::boxed::Box<dyn codec::Codec>,
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
     let (tx, dr) = bounded::<Response>(1);
@@ -211,7 +217,6 @@ fn onramp_loop(
             }
         })?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
-    let mut codec = codec::lookup(&codec)?;
     let mut preprocessors = make_preprocessors(&preprocessors)?;
 
     loop {

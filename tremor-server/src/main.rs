@@ -159,7 +159,7 @@ fn run_dun() -> Result<()> {
     // Logging
 
     if let Some(logger_config) = matches.value_of("logger") {
-        log4rs::init_file(logger_config, Default::default())?;
+        log4rs::init_file(logger_config, log4rs::file::Deserializers::default())?;
     } else {
         env_logger::init();
     }
@@ -254,9 +254,7 @@ fn run_dun() -> Result<()> {
                     .route(web::get().to(tremor_api::offramp::get_artefact))
                     .route(web::delete().to(tremor_api::offramp::unpublish_artefact)),
             )
-            .service(
-                web::resource("/version").route(web::get().to(tremor_api::version::get_version)),
-            )
+            .service(web::resource("/version").route(web::get().to(tremor_api::version::get)))
             .service(fs::Files::new("/api-docs", "static").index_file("index.html"))
     });
     eprintln!("Listening at: http://{}", host);

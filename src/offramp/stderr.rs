@@ -31,7 +31,7 @@ pub struct StdErr {
 
 impl offramp::Impl for StdErr {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(StdErr {
+        Ok(Box::new(Self {
             pipelines: HashMap::new(),
             postprocessors: vec![],
         }))
@@ -41,9 +41,10 @@ impl Offramp for StdErr {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for value in event.value_iter() {
             if let Ok(raw) = codec.encode(value) {
-                match String::from_utf8(raw.to_vec()) {
-                    Ok(s) => eprintln!("{}", s),
-                    Err(_) => eprintln!("{:?}", raw),
+                if let Ok(s) = String::from_utf8(raw.to_vec()) {
+                    eprintln!("{}", s)
+                } else {
+                    eprintln!("{:?}", raw)
                 }
             }
         }

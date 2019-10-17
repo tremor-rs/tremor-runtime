@@ -32,18 +32,18 @@ struct BindingWrap {
 }
 
 pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    let res: Result<Vec<String>> = data.world.repo.list_bindings().map(|l| {
+    let result: Result<Vec<String>> = data.world.repo.list_bindings().map(|l| {
         l.iter()
             .filter_map(tremor_runtime::url::TremorURL::artefact)
             .collect()
     });
-    reply(req, data, res, false, 200)
+    reply(&req, &data, result, false, 200)
 }
 
-pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> ApiResult {
+pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
     let binding: tremor_runtime::config::Binding = decode(&req, &data_raw)?;
     let url = build_url(&["binding", &binding.id])?;
-    let res = data.world.repo.publish_binding(
+    let result = data.world.repo.publish_binding(
         &url,
         false,
         BindingArtefact {
@@ -51,73 +51,67 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
             mapping: None,
         },
     );
-    reply(req, data, res.map(|a| a.binding), true, 201)
+    reply(&req, &data, result.map(|a| a.binding), true, 201)
 }
 
 pub fn unpublish_artefact(
     (req, data, id): (HttpRequest, Data<State>, Path<(String)>),
-) -> ApiResult {
+) -> HTTPResult {
     let url = build_url(&["binding", &id])?;
-    let res = data.world.repo.unpublish_binding(&url);
-    reply(req, data, res.map(|a| a.binding), true, 200)
+    let result = data.world.repo.unpublish_binding(&url);
+    reply(&req, &data, result.map(|a| a.binding), true, 200)
 }
 
-pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> ApiResult {
+pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
     let url = build_url(&["binding", &id])?;
-    let res = data
-        .world
+    data.world
         .repo
         .find_binding(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?;
-    match res {
-        Some(res) => {
-            let res: Result<BindingWrap> = Ok(BindingWrap {
-                artefact: res.artefact.binding,
-                instances: res
+        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))
+        .and_then(|result| {
+            result.ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))
+        })
+        .map(|result| {
+            Ok(BindingWrap {
+                artefact: result.artefact.binding,
+                instances: result
                     .instances
                     .iter()
                     .filter_map(tremor_runtime::url::TremorURL::instance)
                     .collect(),
-            });
-            reply(req, data, res, false, 200)
-        }
-        None => Err(error::ErrorNotFound(r#"{"error": "Artefact not found"}"#)),
-    }
+            })
+        })
+        .and_then(|result| reply(&req, &data, result, false, 200))
 }
 
 pub fn get_servant(
     (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
-) -> ApiResult {
+) -> HTTPResult {
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res0 = data.world.reg.find_binding(&url);
-    match res0 {
-        Ok(res) => match res {
-            Some(res) => reply(req, data, Ok(res.binding), false, 200),
-            None => Err(error::ErrorNotFound("Binding not found")),
-        },
-        Err(e) => Err(error::ErrorInternalServerError(format!(
-            "Internal server error: {}",
-            e
-        ))),
-    }
+    data.world
+        .reg
+        .find_binding(&url)
+        .map_err(|e| error::ErrorInternalServerError(format!("Internal server error: {}", e)))
+        .and_then(|result| result.ok_or_else(|| error::ErrorNotFound("Binding not found")))
+        .and_then(|result| reply(&req, &data, Ok(result.binding), false, 200))
 }
 
 // We really don't want to deal with that!
 #[allow(clippy::implicit_hasher)]
 pub fn link_servant(
     (req, data, path, data_raw): (HttpRequest, Data<State>, Path<(String, String)>, String),
-) -> ApiResult {
+) -> HTTPResult {
     let decoded_data: HashMap<String, String> = decode(&req, &data_raw)?;
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res = data.world.link_binding(&url, decoded_data);
-    reply(req, data, res.map(|a| a.binding), true, 201)
+    let result = data.world.link_binding(&url, decoded_data);
+    reply(&req, &data, result.map(|a| a.binding), true, 201)
 }
 
 #[allow(clippy::implicit_hasher)]
 pub fn unlink_servant(
     (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
-) -> ApiResult {
+) -> HTTPResult {
     let url = build_url(&["binding", &path.0, &path.1])?;
-    let res = data.world.unlink_binding(&url, HashMap::new());
-    reply(req, data, res.map(|a| a.binding), true, 200)
+    let result = data.world.unlink_binding(&url, HashMap::new());
+    reply(&req, &data, result.map(|a| a.binding), true, 200)
 }

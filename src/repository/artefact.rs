@@ -212,7 +212,7 @@ impl Artefact for OfframpArtefact {
     type LinkRHS = TremorURL;
     fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         //TODO: define offramp by config!
-        let offramp = offramp::lookup(self.binding_type.clone(), self.config.clone())?;
+        let offramp = offramp::lookup(&self.binding_type, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
             codec::lookup(&codec)?
         } else {

@@ -33,7 +33,7 @@ impl onramp::Impl for Metronome {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Metronome { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for metronome onramp".into())
         }
@@ -41,15 +41,13 @@ impl onramp::Impl for Metronome {
 }
 
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    rx: &Receiver<onramp::Msg>,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
 
     loop {
         if pipelines.is_empty() {
@@ -98,12 +96,14 @@ fn onramp_loop(
 }
 
 impl Onramp for Metronome {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
+        let codec = codec::lookup(codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-metronome-{}", "???"))
-            .spawn(|| onramp_loop(rx, config, preprocessors, codec))?;
+            .spawn(move || onramp_loop(&rx, &config, preprocessors, codec))?;
         Ok(tx)
     }
 

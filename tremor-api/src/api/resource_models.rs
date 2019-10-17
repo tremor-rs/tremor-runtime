@@ -21,7 +21,7 @@ pub struct Version {
 
 impl Version {
     pub fn new() -> Self {
-        Version {
+        Self {
             version: version::VERSION.to_string(),
         }
     }

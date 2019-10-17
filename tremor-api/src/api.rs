@@ -28,13 +28,14 @@ pub mod version;
 
 mod resource_models;
 
-pub type ApiResult = Result<HttpResponse, error::Error>;
+pub type HTTPResult = Result<HttpResponse, error::Error>;
 
 #[derive(Clone)]
 pub struct State {
     pub world: World,
 }
 
+#[derive(Clone, Copy)]
 pub enum ResourceType {
     Json,
     Yaml,
@@ -60,8 +61,7 @@ pub fn accept(req: &HttpRequest) -> ResourceType {
     };
     match accept {
         Some("application/yaml") => ResourceType::Yaml,
-        Some("application/json") => ResourceType::Json,
-        _ => ResourceType::Json,
+        Some("application/json") | _ => ResourceType::Json,
     }
 }
 
@@ -91,7 +91,7 @@ pub fn handle_errors(e: TremorError) -> error::Error {
         }
     }
 }
-pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: u16) -> ApiResult {
+pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: u16) -> HTTPResult {
     let (t, r) = match t {
         ResourceType::Yaml => (
             "application/yaml",
@@ -119,18 +119,18 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: u16) -> ApiResul
 }
 
 pub fn reply<T: Serialize>(
-    req: HttpRequest,
-    data: Data<State>,
-    res: TremmorResult<T>,
+    req: &HttpRequest,
+    data: &Data<State>,
+    result_in: TremmorResult<T>,
     persist: bool,
     ok_code: u16,
-) -> ApiResult {
-    match res {
-        Ok(res) => {
+) -> HTTPResult {
+    match result_in {
+        Ok(r) => {
             if persist && data.world.save_config().is_err() {
                 return Err(error::ErrorInternalServerError("failed to save state"));
             };
-            serialize(accept(&req), &res, ok_code)
+            serialize(accept(&req), &r, ok_code)
         }
         Err(e) => Err(handle_errors(e)),
     }

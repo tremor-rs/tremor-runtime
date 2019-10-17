@@ -31,7 +31,7 @@ pub struct StdOut {
 
 impl offramp::Impl for StdOut {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(StdOut {
+        Ok(Box::new(Self {
             pipelines: HashMap::new(),
             postprocessors: vec![],
         }))
@@ -41,9 +41,10 @@ impl Offramp for StdOut {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
         for value in event.value_iter() {
             if let Ok(raw) = codec.encode(value) {
-                match String::from_utf8(raw.to_vec()) {
-                    Ok(s) => println!("{}", s),
-                    Err(_) => println!("{:?}", raw),
+                if let Ok(s) = String::from_utf8(raw.to_vec()) {
+                    println!("{}", s)
+                } else {
+                    println!("{:?}", raw)
                 }
             }
         }

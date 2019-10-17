@@ -42,7 +42,7 @@ pub struct Debug {
 
 impl offramp::Impl for Debug {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(Debug {
+        Ok(Box::new(Self {
             last: Instant::now(),
             update_time: Duration::from_secs(1),
             buckets: HashMap::new(),

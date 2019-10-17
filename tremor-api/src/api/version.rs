@@ -15,7 +15,7 @@
 use crate::api::{reply, resource_models as rm, State};
 use actix_web::{web::Data, HttpRequest, Responder};
 
-pub fn get_version((req, data): (HttpRequest, Data<State>)) -> impl Responder {
+pub fn get((req, data): (HttpRequest, Data<State>)) -> impl Responder {
     let payload = rm::Version::new();
-    reply(req, data, Ok(payload), false, 200)
+    reply(&req, &data, Ok(payload), false, 200)
 }

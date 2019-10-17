@@ -64,21 +64,21 @@ pub trait Impl {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>;
 }
 
-pub fn lookup(name: String, config: Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-    match name.as_str() {
-        "blackhole" => blackhole::Blackhole::from_config(&config),
-        "debug" => debug::Debug::from_config(&config),
-        "elastic" => elastic::Elastic::from_config(&config),
-        "file" => file::File::from_config(&config),
-        "gcs" => gcs::GCS::from_config(&config),
-        "gpub" => gpub::GPub::from_config(&config),
-        "kafka" => kafka::Kafka::from_config(&config),
-        "rest" => rest::Rest::from_config(&config),
-        "stdout" => stdout::StdOut::from_config(&config),
-        "stderr" => stderr::StdErr::from_config(&config),
-        "tcp" => tcp::Tcp::from_config(&config),
-        "udp" => udp::Udp::from_config(&config),
-        "ws" => ws::Ws::from_config(&config),
+pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+    match name {
+        "blackhole" => blackhole::Blackhole::from_config(config),
+        "debug" => debug::Debug::from_config(config),
+        "elastic" => elastic::Elastic::from_config(config),
+        "file" => file::File::from_config(config),
+        "gcs" => gcs::GCS::from_config(config),
+        "gpub" => gpub::GPub::from_config(config),
+        "kafka" => kafka::Kafka::from_config(config),
+        "rest" => rest::Rest::from_config(config),
+        "stdout" => stdout::StdOut::from_config(config),
+        "stderr" => stderr::StdErr::from_config(config),
+        "tcp" => tcp::Tcp::from_config(config),
+        "udp" => udp::Udp::from_config(config),
+        "ws" => ws::Ws::from_config(config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

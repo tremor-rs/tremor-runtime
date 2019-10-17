@@ -17,6 +17,7 @@ use crate::lexer::{Token, TokenFuns, TokenSpan};
 use crate::pos::*;
 use lalrpop_util::ParseError;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -109,6 +110,7 @@ pub trait Highlighter {
         self.highlight_errors(extracted, error)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn highlight_errors(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
@@ -149,8 +151,8 @@ pub trait Highlighter {
                             // FIXME This isn't perfect, there are cases in trickle where more specific
                             // hygienic errors would be preferable ( eg: for-locals integration test )
                             //
-                            let delta = (end.column as i64 - start.column as i64).abs();
-                            let len = std::cmp::max(delta, 1) as usize;
+                            let delta = end.column as i64 - start.column as i64;
+                            let len = usize::try_from(delta).unwrap_or(1);
                             let prefix =
                                 String::from(" ").repeat(start.column.checked_sub(1).unwrap_or(0));
                             let underline = String::from("^").repeat(len);

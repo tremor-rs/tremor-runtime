@@ -106,7 +106,7 @@ impl offramp::Impl for Ws {
                     warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
                     r
                 })?;
-            Ok(Box::new(Ws {
+            Ok(Box::new(Self {
                 addr: None,
                 config,
                 pipelines: HashMap::new(),

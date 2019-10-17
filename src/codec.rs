@@ -35,7 +35,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "binflux" => Ok(Box::new(influx::BInflux {})),
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
-        "statsd" => Ok(Box::new(string::String {})),
+        "statsd" => Ok(Box::new(statsd::StatsD {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }

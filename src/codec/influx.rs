@@ -40,6 +40,7 @@ use super::Codec;
 use crate::errors::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::borrow::Cow;
+use std::convert::TryFrom;
 use std::io::{Cursor, Write};
 use std::str;
 use tremor_script::{
@@ -65,7 +66,7 @@ enum RentalSnot {
 
 impl From<std::str::Utf8Error> for RentalSnot {
     fn from(e: std::str::Utf8Error) -> Self {
-        RentalSnot::Error(e.into())
+        Self::Error(e.into())
     }
 }
 
@@ -105,7 +106,10 @@ pub struct BInflux {}
 impl BInflux {
     pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
-            w.write_u16::<BigEndian>(s.len() as u16)?;
+            w.write_u16::<BigEndian>(
+                u16::try_from(s.len())
+                    .map_err(|_| ErrorKind::InvalidInfluxData("string too long".into()))?,
+            )?;
             w.write_all(s.as_bytes())?;
             Ok(())
         }
@@ -124,7 +128,11 @@ impl BInflux {
             return Err(ErrorKind::InvalidInfluxData("timestamp missing".into()).into());
         }
         if let Some(tags) = v.get("tags").and_then(Value::as_object) {
-            res.write_u16::<BigEndian>(tags.len() as u16)?;
+            res.write_u16::<BigEndian>(
+                u16::try_from(tags.len())
+                    .map_err(|_| ErrorKind::InvalidInfluxData("too many tags".into()))?,
+            )?;
+
             for (k, v) in tags {
                 if let Some(v) = v.as_str() {
                     write_str(&mut res, k)?;
@@ -136,7 +144,10 @@ impl BInflux {
         }
 
         if let Some(fields) = v.get("fields").and_then(Value::as_object) {
-            res.write_u16::<BigEndian>(fields.len() as u16)?;
+            res.write_u16::<BigEndian>(
+                u16::try_from(fields.len())
+                    .map_err(|_| ErrorKind::InvalidInfluxData("too many fields".into()))?,
+            )?;
             for (k, v) in fields {
                 write_str(&mut res, k)?;
                 if let Some(v) = v.as_i64() {
@@ -167,6 +178,7 @@ impl BInflux {
     pub fn decode<'event>(data: &'event [u8]) -> Result<Value<'event>> {
         fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<Cow<'event, str>> {
             let l = c.read_u16::<BigEndian>()? as usize;
+            #[allow(clippy::cast_possible_truncation)]
             let p = c.position() as usize;
             c.set_position((p + l) as u64);
             unsafe { Ok(str::from_utf8_unchecked(&c.get_ref()[p..p + l]).into()) }
@@ -225,7 +237,7 @@ impl BInflux {
 impl Codec for BInflux {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
-            BInflux::decode(&raw[0])
+            Self::decode(&raw[0])
                 .map(ValueAndMeta::from)
                 .map_err(RentalSnot::Error)
         })
@@ -238,7 +250,7 @@ impl Codec for BInflux {
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        BInflux::encode(data)
+        Self::encode(data)
     }
 }
 
@@ -262,7 +274,7 @@ mod tests {
             "measurement": "weather",
             "tags": {"location": "us-midwest"},
             "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         })
         .into();
 

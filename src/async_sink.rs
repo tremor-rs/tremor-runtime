@@ -53,7 +53,7 @@ impl fmt::Display for SinkDequeueError {
 /// completes.
 impl<T> AsyncSink<T> {
     pub fn new(capacity: usize) -> Self {
-        AsyncSink {
+        Self {
             queue: VecDeque::with_capacity(capacity),
             capacity,
             size: 0,

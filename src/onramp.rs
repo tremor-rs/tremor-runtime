@@ -44,7 +44,7 @@ pub enum Msg {
 pub type Addr = Sender<Msg>;
 
 pub trait Onramp: Send {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<Addr>;
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
@@ -93,7 +93,7 @@ impl Message for Create {
 impl Handler<Create> for Manager {
     type Result = Result<Addr>;
     fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
-        req.stream.start(req.codec, req.preprocessors)
+        req.stream.start(&req.codec, &req.preprocessors)
     }
 }
 

@@ -50,7 +50,7 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
 
 impl<A: Artefact> ActivatorLifecycleFsm<A> {
     pub fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
-        let mut fresh = ActivatorLifecycleFsm {
+        let mut fresh = Self {
             artefact,
             world,
             state: ActivationState::Deactivated,

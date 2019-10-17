@@ -59,7 +59,7 @@ impl offramp::Impl for Rest {
 
             let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
-            Ok(Box::new(Rest {
+            Ok(Box::new(Self {
                 client_idx: 0,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],

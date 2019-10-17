@@ -54,7 +54,7 @@ impl onramp::Impl for Blaster {
             } else {
                 source_data_file.read_to_end(&mut data)?;
             };
-            Ok(Box::new(Blaster { config, data }))
+            Ok(Box::new(Self { config, data }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -68,16 +68,16 @@ struct Acc {
     count: u64,
 }
 
+// We got to allow this because of the way that the onramp works
+// with iterating over the data.
+#[allow(clippy::needless_pass_by_value)]
 fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
+    rx: &Receiver<onramp::Msg>,
     data: Vec<u8>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
@@ -150,14 +150,15 @@ fn onramp_loop(
 }
 
 impl Onramp for Blaster {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<onramp::Addr> {
+    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let data2 = self.data.clone();
         let config2 = self.config.clone();
-
+        let codec = codec::lookup(&codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-blaster-{}", "???"))
-            .spawn(|| onramp_loop(rx, data2, config2, preprocessors, codec))?;
+            .spawn(move || onramp_loop(&rx, data2, &config2, preprocessors, codec))?;
         Ok(tx)
     }
 
