@@ -137,7 +137,7 @@ where
         let mut locals = 0;
 
         // FIXME make lexer EOS tolerant to avoid this kludge
-        source.push(' ');
+        source.push('\n');
 
         let query = rentals::Query::try_new(Box::new(source.clone()), |src| {
             let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
@@ -169,6 +169,8 @@ where
     }
 
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
+        let mut script = script.to_string();
+        script.push('\n');
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         h.highlight(tokens)
     }
@@ -178,6 +180,9 @@ where
         h: &mut H,
         e: &Error,
     ) -> std::io::Result<()> {
+        let mut script = script.to_string();
+        script.push('\n');
+
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         match e.context() {
             (Some(Range(start, end)), _) => {
@@ -215,5 +220,31 @@ where
 
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::highlighter;
+
+    fn parse(query: &str) {
+        let reg = Registry::default();
+        let aggr_reg = AggrRegistry::default();
+        if let Err(e) = Query::parse(query, &reg, &aggr_reg) {
+            let mut h = highlighter::Dumb::new();
+            if let Err(e) = Query::format_error_from_script(&query, &mut h, &e) {
+                eprintln!("Error: {}", e);
+            } else {
+                eprintln!("{}", h.to_string());
+            }
+            assert!(false)
+        } else {
+            assert!(true)
+        }
+    }
+    #[test]
+    fn for_in_select() {
+        parse(r#"select for event of case (a, b) => b end from in into out;"#);
     }
 }

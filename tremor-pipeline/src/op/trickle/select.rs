@@ -359,14 +359,15 @@ impl Operator for TrickleSelect {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
-        let local_stack = tremor_script::interpreter::LocalStack::with_size(0);
 
         // NOTE We are unwrapping our rental wrapped stmt
         let SelectStmt {
             stmt,
             aggregates,
             consts,
+            locals,
         }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
+        let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
         consts[WINDOW_CONST_ID] = Value::Null;
         consts[GROUP_CONST_ID] = Value::Null;
         consts[ARGS_CONST_ID] = Value::Null;

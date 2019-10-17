@@ -112,14 +112,21 @@ impl<'script, 'registry> Helper<'script, 'registry>
 where
     'script: 'registry,
 {
+    pub fn has_locals(&self) -> bool {
+        self.locals
+            .iter()
+            .any(|(n, _)| !n.starts_with(" __SHADOW "))
+    }
     pub fn swap(
         &mut self,
         aggregates: &mut Vec<InvokeAggrFn<'script>>,
         consts: &mut HashMap<String, usize>,
+        locals: &mut HashMap<String, usize>,
     ) {
         use std::mem;
         mem::swap(&mut self.aggregates, aggregates);
         mem::swap(&mut self.consts, consts);
+        mem::swap(&mut self.locals, locals);
     }
     pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {

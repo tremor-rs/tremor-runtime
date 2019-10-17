@@ -66,9 +66,10 @@ impl<'script> Upable<'script> for Stmt1<'script> {
             Stmt1::Select(stmt) => {
                 let mut aggregates = Vec::new();
                 let mut consts = HashMap::new();
-                helper.swap(&mut aggregates, &mut consts);
+                let mut locals = HashMap::new();
+                helper.swap(&mut aggregates, &mut consts, &mut locals);
                 let stmt: MutSelect<'script> = stmt.up(helper)?;
-                helper.swap(&mut aggregates, &mut consts);
+                helper.swap(&mut aggregates, &mut consts, &mut locals);
                 // We know that select statements have exactly three consts
                 let consts = vec![Value::Null, Value::Null, Value::Null];
 
@@ -76,6 +77,7 @@ impl<'script> Upable<'script> for Stmt1<'script> {
                     stmt: Box::new(stmt),
                     aggregates,
                     consts,
+                    locals: locals.len(),
                 }))
             }
             Stmt1::Stream(stmt) => Ok(Stmt::Stream(stmt)),
@@ -110,6 +112,7 @@ pub struct SelectStmt<'script> {
     pub stmt: Box<MutSelect<'script>>,
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     pub consts: Vec<Value<'script>>,
+    pub locals: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -392,12 +395,12 @@ impl<'script> MutSelect1<'script> {
         helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
         let target = self.target.up(helper)?;
 
-        if !helper.locals.is_empty() {
+        if helper.has_locals() {
             return error_no_locals(&(self.start, self.end), &target);
         };
 
         let maybe_having = self.maybe_having.up(helper)?;
-        if !helper.locals.is_empty() {
+        if helper.has_locals() {
             if let Some(definitely) = maybe_having {
                 return error_no_locals(&(self.start, self.end), &definitely);
             }
@@ -411,13 +414,13 @@ impl<'script> MutSelect1<'script> {
         }
 
         let maybe_where = self.maybe_where.up(helper)?;
-        if !helper.locals.is_empty() {
+        if helper.has_locals() {
             if let Some(definitely) = maybe_where {
                 return error_no_locals(&(self.start, self.end), &definitely);
             }
         };
         let maybe_group_by = self.maybe_group_by.up(helper)?;
-        if !helper.locals.is_empty() {
+        if helper.has_locals() {
             if let Some(definitely) = maybe_group_by {
                 return error_no_locals(&(self.start, self.end), &definitely);
             }
