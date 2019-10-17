@@ -124,7 +124,10 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    let script_file = matches.value_of("SCRIPT").expect("No script file provided");
+    let script_file = matches
+        .value_of("SCRIPT")
+        .ok_or_else(|| Error::from("No script file provided"))?;
+
     let input = File::open(&script_file);
     let mut raw = String::new();
 
@@ -143,8 +146,7 @@ fn main() -> Result<()> {
                 Script::highlight_script_with(&raw, &mut h)?;
             }
             if matches.is_present("print-ast") {
-                let ast = serde_json::to_string_pretty(&runnable.script.suffix())
-                    .expect("Failed to render AST");
+                let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
                 println!();
                 let mut h = TermHighlighter::new();
                 Script::highlight_script_with(&ast, &mut h)?;
@@ -205,7 +207,7 @@ fn main() -> Result<()> {
             let mut global_map = Value::Object(hashmap! {});
             let mut event = events
                 .pop()
-                .expect("At least one event needs to be specified");
+                .ok_or_else(|| Error::from("At least one event needs to be specified"))?;
             for event in &mut events {
                 runnable.run(
                     &EventContext { at: 0 },

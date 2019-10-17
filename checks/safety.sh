@@ -38,7 +38,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unwrap()' > /dev/null
                 then
-                    echo "##[error] unwrap found in $file, don't unwrap it panics."
+                    echo "##[error] unwrap found in $file don't unwrap it panics."
                     count=$((count + 1))
                 fi
             done
@@ -48,7 +48,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d'  "$file" | grep 'unimplemented!' > /dev/null
                 then
-                    echo "##[error] unimplemented! found in $file, please implement."
+                    echo "##[error] unimplemented! found in $file please implement."
                     grep -nH 'unimplemented!' "$file"
                     count=$((count + 1))
                 fi
@@ -59,7 +59,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d'  "$file" | grep 'let _' > /dev/null
                 then
-                    echo "##[error] 'let _' found in $file, please use error handling."
+                    echo "##[error] 'let _' found in $file please use error handling."
                     grep -nH 'let _' "$file"
                     count=$((count + 1))
                 fi
@@ -70,7 +70,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unreachable!' > /dev/null
                 then
-                    echo "##[error] unreachable! found in $file, please don't."
+                    echo "##[error] unreachable! found in $file please don't."
                     grep -nH 'unreachable!' "$file"
                     count=$((count + 1))
                 fi
@@ -81,7 +81,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'dbg!' > /dev/null
                 then
-                    echo "##[error] dbg! found in $file, please use error!, info! etc instead."
+                    echo "##[error] dbg! found in $file please use error!, info! etc instead."
                     grep -nH 'dbg!' "$file"
                     count=$((count + 1))
                 fi
@@ -93,7 +93,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'exit(' > /dev/null
                 then
-                    echo "##[error] exit(_) found in $file, please don't ever do that."
+                    echo "##[error] exit(_) found in $file please don't ever do that."
                     grep -nH 'exit(' "$file"
                     count=$((count + 1))
                 fi
@@ -104,7 +104,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' "$file" | grep 'panic!(' > /dev/null
                 then
-                    echo "##[error] panic found in $file, no, just no!"
+                    echo "##[error] panic found in $file no, just no!"
                     grep -nH 'panic!(' "$file"
                     count=$((count + 1))
                 fi
@@ -115,7 +115,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'expect(' > /dev/null
                 then
-                    echo "##[error] expect found in $file, try hygenic errors, this panics!"
+                    echo "##[error] expect found in $file try hygenic errors, this panics!"
                     count=$((count + 1))
                 fi
             done
@@ -125,7 +125,7 @@ while getopts hauiprebldxc opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep '[a-z]\[' > /dev/null
                 then
-                    echo "##[error] array access ([...]) found in $file, that could go wrong, array access can panic."
+                    echo "##[error] array access ([...]) found in $file that could go wrong, array access can panic."
                     count=$((count + 1))
                 fi
             done
@@ -136,7 +136,7 @@ while getopts hauiprebldxc opt; do
             do
                 if  ! grep 'clippy::pedantic' "$file" > /dev/null
                 then
-                    echo "##[error] $file, does not enforce clippy pedantic."
+                    echo "##[error] $file does not enforce clippy pedantic."
                     count=$((count + 1))
                 fi
             done

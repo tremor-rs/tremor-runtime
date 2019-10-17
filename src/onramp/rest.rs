@@ -153,15 +153,17 @@ fn handler(
         method: req.method().as_str().to_owned(),
     };
 
-    let _ = tx.send(response);
-
-    let status = StatusCode::from_u16(match *req.method() {
-        Method::POST => 201_u16,
-        Method::DELETE => 200_u16,
-        _ => 204_u16,
-    })
-    .unwrap_or_default();
-    Box::new(result(Ok(HttpResponse::build(status).body("".to_string()))))
+    if let Err(_e) = tx.send(response) {
+        Box::new(result(Err("Failed to send to pipeline".into())))
+    } else {
+        let status = StatusCode::from_u16(match *req.method() {
+            Method::POST => 201_u16,
+            Method::DELETE => 200_u16,
+            _ => 204_u16,
+        })
+        .unwrap_or_default();
+        Box::new(result(Ok(HttpResponse::build(status).body("".to_string()))))
+    }
 }
 
 fn header(headers: &actix_web::http::header::HeaderMap) -> HashMap<String, String> {
@@ -199,7 +201,7 @@ fn onramp_loop(
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
     let (tx, dr) = bounded::<Response>(1);
-    let _ = thread::Builder::new()
+    thread::Builder::new()
         .name(format!("onramp-rest-{}", "???"))
         .spawn(move || {
             let data = Data::new(OnrampState { tx, config });
@@ -210,10 +212,8 @@ fn onramp_loop(
             })
             .bind(host);
 
-            if let Ok(server) = s {
-                let _ = server.run();
-            } else {
-                return error!("Cannot bind to host");
+            if let Err(err) = s.and_then(HttpServer::run) {
+                return error!("Cannot run server: {}", err);
             }
         })?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();

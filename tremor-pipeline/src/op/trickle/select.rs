@@ -70,7 +70,7 @@ pub struct TrickleSelect {
 }
 
 pub trait WindowTrait: std::fmt::Debug {
-    fn on_event(&mut self, event: &Event) -> WindowEvent;
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
 }
 
 #[derive(Debug)]
@@ -83,7 +83,7 @@ pub struct Window {
 impl Window {}
 
 impl WindowTrait for Window {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         self.window_impl.on_event(event)
     }
 }
@@ -109,7 +109,7 @@ impl std::default::Default for WindowImpl {
 }
 
 impl WindowTrait for WindowImpl {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         match self {
             Self::TumblingTimeBased(w) => w.on_event(event),
             Self::TumblingCountBased(w) => w.on_event(event),
@@ -156,18 +156,18 @@ pub struct NoWindow {
 }
 
 impl WindowTrait for NoWindow {
-    fn on_event(&mut self, _event: &Event) -> WindowEvent {
+    fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
         if self.open {
-            WindowEvent {
+            Ok(WindowEvent {
                 open: false,
                 emit: true,
-            }
+            })
         } else {
             self.open = true;
-            WindowEvent {
+            Ok(WindowEvent {
                 open: true,
                 emit: true,
-            }
+            })
         }
     }
 }
@@ -192,51 +192,47 @@ impl TumblingWindowOnTime {
 }
 
 impl WindowTrait for TumblingWindowOnTime {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
-        let time = if let Some(script) = self
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+        let time = self
             .script
             .as_ref()
-            .and_then(|s| s.suffix().script.as_ref())
-        {
-            let context = EventContext::from_ingest_ns(event.ingest_ns);
-            let (mut unwind_event, mut event_meta) = event.data.parts();
-            let value = script.run(
-                &context,
-                AggrType::Emit,
-                &mut unwind_event, // event
-                &mut event_meta,   // $
-            );
-            let data = match value {
-                Ok(Return::Emit { value, .. }) => value.as_u64(),
-                _ => unimplemented!(),
-            };
-            if let Some(time) = data {
-                time
-            } else {
-                unimplemented!();
-            }
-        } else {
-            event.ingest_ns
-        };
+            .and_then(|script| script.suffix().script.as_ref())
+            .map(|script| {
+                let context = EventContext::from_ingest_ns(event.ingest_ns);
+                let (mut unwind_event, mut event_meta) = event.data.parts();
+                let value = script.run(
+                    &context,
+                    AggrType::Emit,
+                    &mut unwind_event, // event
+                    &mut event_meta,   // $
+                )?;
+                let data = match value {
+                    Return::Emit { value, .. } => value.as_u64(),
+                    Return::EmitEvent { .. } => unwind_event.as_u64(),
+                    Return::Drop { .. } => None,
+                };
+                data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
+            })
+            .unwrap_or(Ok(event.ingest_ns))?;
         match self.next_window {
             None => {
                 self.next_window = Some(time + self.size);
-                WindowEvent {
+                Ok(WindowEvent {
                     open: true,
                     emit: false,
-                }
+                })
             }
             Some(next_window) if next_window <= time => {
                 self.next_window = Some(time + self.size);
-                WindowEvent {
+                Ok(WindowEvent {
                     open: true,
                     emit: true,
-                }
+                })
             }
-            Some(_) => WindowEvent {
+            Some(_) => Ok(WindowEvent {
                 open: false,
                 emit: false,
-            },
+            }),
         }
     }
 }
@@ -261,59 +257,55 @@ impl TumblingWindowOnNumber {
     }
 }
 impl WindowTrait for TumblingWindowOnNumber {
-    fn on_event(&mut self, event: &Event) -> WindowEvent {
-        let count = if let Some(script) = self
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+        let count = self
             .script
             .as_ref()
-            .and_then(|s| s.suffix().script.as_ref())
-        {
-            let context = EventContext::from_ingest_ns(event.ingest_ns);
-            let (mut unwind_event, mut event_meta) = event.data.parts();
-            let value = script.run(
-                &context,
-                AggrType::Emit,
-                &mut unwind_event, // event
-                &mut event_meta,   // $
-            );
-            let data = match value {
-                Ok(Return::Emit { value, .. }) => value.as_u64(),
-                _ => unimplemented!(),
-            };
-            if let Some(count) = data {
-                count
-            } else {
-                unimplemented!();
-            }
-        } else {
-            1
-        };
+            .and_then(|script| script.suffix().script.as_ref())
+            .map(|script| {
+                let context = EventContext::from_ingest_ns(event.ingest_ns);
+                let (mut unwind_event, mut event_meta) = event.data.parts();
+                let value = script.run(
+                    &context,
+                    AggrType::Emit,
+                    &mut unwind_event, // event
+                    &mut event_meta,   // $
+                )?;
+                let data = match value {
+                    Return::Emit { value, .. } => value.as_u64(),
+                    Return::EmitEvent { .. } => unwind_event.as_u64(),
+                    Return::Drop { .. } => None,
+                };
+                data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
+            })
+            .unwrap_or(Ok(1))?;
         match self.next_window {
             None => {
                 self.next_window = Some(0);
-                WindowEvent {
+                Ok(WindowEvent {
                     open: true,
                     emit: false,
-                }
+                })
             }
             Some(next_window) if next_window < (self.size - count) => {
                 self.next_window = Some(next_window + count);
-                WindowEvent {
+                Ok(WindowEvent {
                     open: false,
                     emit: false,
-                }
+                })
             }
             Some(next_window) if next_window >= (self.size - count) => {
                 self.next_window = Some(0);
-                WindowEvent {
+                Ok(WindowEvent {
                     open: true,
                     emit: true,
-                }
+                })
             }
-            Some(_) => WindowEvent {
+            Some(_) => Ok(WindowEvent {
                 // FIXME should never occur in practice
                 open: false,
                 emit: false,
-            },
+            }),
         }
     }
 }
@@ -337,7 +329,6 @@ impl TrickleSelect {
             }
         };
 
-        // FIXME - ensure that windows are sensilbe (i.e. they are ever growing multiples of each other  unwrap()
         let windows = windows
             .into_iter()
             .map(|(name, window_impl)| Window {
@@ -427,7 +418,7 @@ impl Operator for TrickleSelect {
         };
         let mut itr = self.windows.iter_mut().peekable();
         while let Some(this) = itr.next() {
-            let window_event = this.on_event(&event);
+            let window_event = this.on_event(&event)?;
             let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
             if window_event.emit {
                 // If we would emit first merge the data to the next window (if there is any)

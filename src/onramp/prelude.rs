@@ -78,15 +78,19 @@ pub fn send_event(
                     let len = pipelines.len();
                     for (input, addr) in &pipelines[..len - 1] {
                         if let Some(input) = input.instance_port() {
-                            let _ = addr.addr.send(PipelineMsg::Event {
+                            if let Err(e) = addr.addr.send(PipelineMsg::Event {
                                 input,
                                 event: event.clone(),
-                            });
+                            }) {
+                                error!("[Onramp] failed to send to pipeline {}", e);
+                            }
                         }
                     }
                     let (input, addr) = &pipelines[len - 1];
                     if let Some(input) = input.instance_port() {
-                        let _ = addr.addr.send(PipelineMsg::Event { input, event });
+                        if let Err(e) = addr.addr.send(PipelineMsg::Event { input, event }) {
+                            error!("[Onramp] failed to send to pipeline {}", e);
+                        }
                     }
                 }
                 Ok(None) => (),

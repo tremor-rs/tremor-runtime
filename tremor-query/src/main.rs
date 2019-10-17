@@ -30,7 +30,6 @@ use clap::{App, Arg};
 pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use chrono::{Timelike, Utc};
 use halfbrown::hashmap;
-use simd_json::borrowed::Value;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -101,12 +100,6 @@ fn main() -> Result<()> {
                 .takes_value(false)
                 .help("Prints the ast with no highlighting."),
         )
-        // .arg(
-        //     Arg::with_name("print-pipeline-dot")
-        //         .short("d")
-        //         .takes_value(false)
-        //         .help("Prints the trickle script as a GraphViz dot file."),
-        // )
         .arg(
             Arg::with_name("print-result-raw")
                 .short("x")
@@ -121,16 +114,16 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    let script_file = matches.value_of("SCRIPT").expect("No script file provided");
-    let input = File::open(&script_file);
+    let script_file = matches
+        .value_of("SCRIPT")
+        .ok_or_else(|| Error::from("No script file provided"))?;
+
+    let mut input = File::open(&script_file)?;
     let mut raw = String::new();
 
     let selected_output = matches.value_of("output");
 
-    input
-        .expect("bad input")
-        .read_to_string(&mut raw)
-        .expect("");
+    input.read_to_string(&mut raw)?;
 
     let reg: Registry = registry::registry();
 
@@ -148,25 +141,21 @@ fn main() -> Result<()> {
         }
     };
     let mut h = TermHighlighter::new();
-    runnable
-        .format_warnings_with(&mut h)
-        .expect("failed to format error");
+    runnable.format_warnings_with(&mut h)?;
     let runnable = tremor_pipeline::query::Query(runnable);
     if matches.is_present("highlight-source") {
         println!();
         let mut h = TermHighlighter::new();
-        Query::highlight_script_with(&raw, &mut h).expect("Highlighter failed");
+        Query::highlight_script_with(&raw, &mut h)?;
     }
     if matches.is_present("print-ast") {
-        let ast =
-            serde_json::to_string_pretty(&runnable.0.query.suffix()).expect("Failed to render AST");
+        let ast = serde_json::to_string_pretty(&runnable.0.query.suffix())?;
         println!();
         let mut h = TermHighlighter::new();
-        Query::highlight_script_with(&ast, &mut h).expect("Highlighter failed");
+        Query::highlight_script_with(&ast, &mut h)?;
     }
     if matches.is_present("print-ast-raw") {
-        let ast =
-            serde_json::to_string_pretty(&runnable.0.query.suffix()).expect("Failed to render AST");
+        let ast = serde_json::to_string_pretty(&runnable.0.query.suffix())?;
         println!();
         println!("{}", ast);
     }
@@ -222,78 +211,72 @@ fn main() -> Result<()> {
 
     // let mut global_map = Value::Object(hashmap! {});
     // let ctx = ();
-    let _expr = Value::Null;
-    if matches.is_present("print-pipeline-dot") {
-        // FIXME will never fire as this ( dev-only, transient ) facility has been removed
-        //                let expr = runnable.to_pipe(&ctx, &mut global_map);
-        //                println!("{}", &expr.expect("").0.to_dot());
-    } else {
-        let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
-        // FIXME todo exercise graph with event / MRP
-        let mut continuation: tremor_pipeline::Returns = vec![];
+    let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 
-        let mut id = 0;
-        loop {
-            for event in &events {
-                let value = LineValue::new(vec![], |_| unsafe {
-                    std::mem::transmute(ValueAndMeta {
-                        value: event.clone(),
-                        ..ValueAndMeta::default()
-                    })
-                });
-                continuation.clear();
-                let ingest_ns = nanotime();
-                /*
-                if matches.value_of("replay-influx").is_some() {
-                    let this = event
-                        .get("timestamp")
-                        .and_then(Value::as_u64)
-                        .unwrap_or_else(|| id * 1_000_000_000);
-                    if this < last {
-                        last += 1;
-                    } else {
-                        last = this;
-                    }
-                    last
+    // FIXME todo exercise graph with event / MRP
+    let mut continuation: tremor_pipeline::Returns = vec![];
+
+    let mut id = 0;
+    loop {
+        for event in &events {
+            let value = LineValue::new(vec![], |_| unsafe {
+                std::mem::transmute(ValueAndMeta {
+                    value: event.clone(),
+                    ..ValueAndMeta::default()
+                })
+            });
+            continuation.clear();
+            let ingest_ns = nanotime();
+            /*
+            if matches.value_of("replay-influx").is_some() {
+                let this = event
+                    .get("timestamp")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_else(|| id * 1_000_000_000);
+                if this < last {
+                    last += 1;
                 } else {
-                    id * 1_000_000_000
-                };
-                */
-                execable.enqueue(
-                    "in",
-                    tremor_pipeline::Event {
-                        id,
-                        ingest_ns,
-                        is_batch: false,
-                        kind: None,
-                        data: value.clone(),
-                    },
-                    &mut continuation,
-                )?;
+                    last = this;
+                }
+                last
+            } else {
+                id * 1_000_000_000
+            };
+            */
+            execable.enqueue(
+                "in",
+                tremor_pipeline::Event {
+                    id,
+                    ingest_ns,
+                    is_batch: false,
+                    kind: None,
+                    data: value.clone(),
+                },
+                &mut continuation,
+            )?;
 
-                for (output, event) in continuation.drain(..) {
-                    let event = &event.data.suffix().value;
-                    if matches.is_present("quiet") {
-                    } else if matches.is_present("print-result-raw") {
-                        println!("{}", serde_json::to_string_pretty(event).expect(""));
-                    } else if selected_output.is_none() || selected_output == Some(&output) {
-                        println!("{}>>", output);
-                        let result = format!("{} ", serde_json::to_string_pretty(event).expect(""));
-                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
-                        let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens)?;
-                    }
+            for (output, event) in continuation.drain(..) {
+                let event = &event.data.suffix().value;
+                if matches.is_present("quiet") {
+                } else if matches.is_present("print-result-raw") {
+                    println!("{}", serde_json::to_string_pretty(event)?);
+                } else if selected_output.is_none() || selected_output == Some(&output) {
+                    println!("{}>>", output);
+                    let result = format!("{} ", serde_json::to_string_pretty(event)?);
+                    let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                    let mut h = TermHighlighter::new();
+                    h.highlight(lexed_tokens)?;
                 }
             }
-            id += 1;
-            if matches.value_of("replay-influx").is_none() {
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            } else {
-                break;
-            }
         }
-    };
+        id += 1;
+        if matches.value_of("replay-influx").is_none() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        } else {
+            break;
+        }
+    }
 
     Ok(())
 }

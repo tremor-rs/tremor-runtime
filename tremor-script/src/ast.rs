@@ -1757,8 +1757,8 @@ impl<'script> Upable<'script> for ImutComprehensionCase1<'script> {
     type Target = ImutComprehensionCase<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // regiter key and value as shadowed variables
-        let _key_idx = helper.register_shadow_var(&self.key_name);
-        let _val_idx = helper.register_shadow_var(&self.value_name);
+        helper.register_shadow_var(&self.key_name);
+        helper.register_shadow_var(&self.value_name);
 
         let guard = self.guard.up(helper)?;
         let exprs = self.exprs.up(helper)?;

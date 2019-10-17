@@ -79,31 +79,23 @@ struct TremorApp<'a> {
     config: TargetConfig,
 }
 
-fn tremor_home_dir() -> String {
-    let tremor_root = dirs::home_dir().expect("Expected home_dir");
-    let tremor_root = tremor_root.to_str().expect("Expected home_dir");
-    format!("{}/{}", tremor_root, ".tremor")
+fn tremor_home_dir() -> Result<String> {
+    dirs::home_dir()
+        .and_then(|s| s.to_str().map(ToString::to_string))
+        .ok_or_else(|| Error::from("Expected home_dir"))
+        .map(|tremor_root| format!("{}/{}", tremor_root, ".tremor"))
 }
 
-fn save_config(config: &TargetConfig) {
-    let tremor_root = tremor_home_dir();
+fn save_config(config: &TargetConfig) -> Result<()> {
+    let tremor_root = tremor_home_dir()?;
     let dot_config = format!("{}/config.yaml", tremor_root);
-    let raw = serde_yaml::to_string(&config);
-    let file = File::create(&dot_config);
-    if let Ok(raw) = raw {
-        if let Ok(mut f) = file {
-            f.write_all(&raw.into_bytes())
-                .expect("Config file is not readlable error");
-        } else {
-            eprintln!("Unable to create bootstrap config for tremor-tool");
-        }
-    } else {
-        eprintln!("Expected non-empty config.yaml");
-    }
+    let raw = serde_yaml::to_vec(&config)?;
+    let mut file = File::create(&dot_config)?;
+    Ok(file.write_all(&raw)?)
 }
 
-fn load_config() -> TargetConfig {
-    let tremor_root = tremor_home_dir();
+fn load_config() -> Result<TargetConfig> {
+    let tremor_root = tremor_home_dir()?;
     let dot_config = format!("{}/config.yaml", tremor_root);
     let mut default = TargetConfig {
         instances: HashMap::new(),
@@ -120,48 +112,42 @@ fn load_config() -> TargetConfig {
                 match meta {
                     Ok(meta) => {
                         if meta.is_file() {
-                            let mut source = File::open(&dot_config)
-                                .expect("Unable to open tremor tool config file");
+                            let mut source = File::open(&dot_config)?;
                             let mut raw = vec![];
-                            source
-                                .read_to_end(&mut raw)
-                                .expect("Expected readable file");
-
-                            let r: TargetConfig = serde_yaml::from_slice(raw.as_slice())
-                                .expect("Unable to map slice to yaml");
-                            r
+                            source.read_to_end(&mut raw)?;
+                            Ok(serde_yaml::from_slice(raw.as_slice())?)
                         } else {
-                            default
+                            Ok(default)
                         }
                     }
                     Err(_file) => {
-                        save_config(&default);
+                        save_config(&default)?;
                         load_config()
                     }
                 }
             } else {
-                default
+                Ok(default)
             }
         }
         Err(_dir) => {
-            fs::create_dir(&tremor_root).expect("Unable to create tremor home directory");
+            fs::create_dir(&tremor_root)?;
             load_config()
         }
     }
 }
 
 impl<'a> TremorApp<'a> {
-    fn new(app: &'a clap::App) -> Self {
+    fn try_new(app: &'a clap::App) -> Result<Self> {
         let cmd = app.clone().get_matches();
         let format = match cmd.value_of("format") {
             Some("json") => FormatKind::Json,
             Some("yaml") | _ => FormatKind::Yaml,
         };
-        Self {
+        Ok(Self {
             app: cmd,
             format,
-            config: load_config(),
-        }
+            config: load_config()?,
+        })
     }
 }
 
@@ -172,10 +158,10 @@ fn usage(app: &TremorApp) -> Result<()> {
     Ok(())
 }
 
-fn slurp(file: &str) -> config::Config {
-    let file = File::open(file).expect("could not open file");
+fn slurp(file: &str) -> Result<config::Config> {
+    let file = File::open(file)?;
     let buffered_reader = BufReader::new(file);
-    serde_yaml::from_reader(buffered_reader).expect("Failed to read config file")
+    Ok(serde_yaml::from_reader(buffered_reader)?)
 }
 
 fn run(mut app: TremorApp) -> Result<()> {
@@ -193,18 +179,16 @@ fn run(mut app: TremorApp) -> Result<()> {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     use clap::App;
     let yaml = load_yaml!("./cli.yaml");
     let app = App::from_yaml(yaml);
-    let app = TremorApp::new(&app);
-    if let Err(e) = run(app) {
-        eprintln!("Error: {}", e)
-    }
+    let app = TremorApp::try_new(&app)?;
+    run(app)
 }
 
 fn script_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
-    tr_fun::load().expect("Unable to load builtin tremor-script registry functions");
+    tr_fun::load()?;
     if let Some(matches) = cmd.subcommand_matches("run") {
         script_run_cmd(&matches)
     } else {
@@ -216,8 +200,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
     let f = cmd.value_of("SCRIPT").ok_or("SCRIPT not provided")?;
     let mut file = File::open(f)?;
     let mut script = String::new();
-    file.read_to_string(&mut script)
-        .expect("Unable to read the file");
+    file.read_to_string(&mut script)?;
 
     let input: Box<dyn BufRead> = match cmd.value_of("DATA") {
         None => Box::new(BufReader::new(io::stdin())),
@@ -231,8 +214,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
         if l.is_empty() || l.starts_with('#') {
             continue;
         }
-        let mut codec =
-            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
+        let mut codec = tremor_runtime::codec::lookup("json")?;
 
         match codec.decode(l.as_bytes().to_vec(), 0) {
             Ok(Some(ref json)) => {
@@ -337,7 +319,7 @@ fn pipe_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
 fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
-    let config = slurp(script);
+    let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
     let mut flow = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
@@ -349,12 +331,10 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
     for (num, line) in input.lines().enumerate() {
         let l = line?;
-        let mut codec =
-            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
+        let mut codec = tremor_runtime::codec::lookup("json")?;
         let data = codec
-            .decode(l.as_bytes().to_vec(), 0)
-            .expect("Failed to decode input JSON")
-            .expect("Failed to decode input JSON");
+            .decode(l.as_bytes().to_vec(), 0)?
+            .ok_or_else(|| Error::from("Failed to decode input JSON"))?;
 
         let mut eventset = Vec::new();
         flow.enqueue(
@@ -378,7 +358,7 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
 fn pipe_to_dot_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
-    let config = slurp(script);
+    let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
     println!("{}", pipeline.to_dot());
@@ -425,22 +405,22 @@ struct Binding {
 
 fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_target_list_cmd(app, &matches);
+        conductor_target_list_cmd(app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_target_create_cmd(app, &matches);
+        conductor_target_create_cmd(app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_target_delete_cmd(app, &matches);
+        conductor_target_delete_cmd(app, &matches)
     } else {
-        println!("{}", serde_json::to_string(&app.config.instances)?)
+        println!("{}", serde_json::to_string(&app.config.instances)?);
+        Ok(())
     }
-    Ok(())
 }
 
 /////////////////////////////
 // API endpoint targetting //
 /////////////////////////////
 
-fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) {
+fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
     println!(
         "{:?}",
         app.config
@@ -449,30 +429,22 @@ fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) {
             .cloned()
             .collect::<Vec<String>>()
     );
+    Ok(())
 }
 
-fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) {
-    let id = cmd
-        .value_of("TARGET_ID")
-        .ok_or("TARGET_ID not provided")
-        .expect("TARGET_ID not provided");
-    let path_to_file = cmd
-        .value_of("SOURCE")
-        .ok_or("SOURCE not provided")
-        .expect("SOURCE not provided");
-    let json = load(path_to_file).expect("Bad source path");
-    let endpoints: Vec<String> = serde_json::from_value(json).expect("Unable to parse json");
+fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+    let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
+    let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
+    let json = load(path_to_file)?;
+    let endpoints: Vec<String> = serde_json::from_value(json)?;
     app.config.instances.insert(id.to_string(), endpoints);
-    save_config(&app.config);
+    save_config(&app.config)
 }
 
-fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) {
-    let id = cmd
-        .value_of("TARGET_ID")
-        .ok_or("TARGET_ID not provided")
-        .expect("TARGET_ID not provided");
+fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+    let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     app.config.instances.remove(&id.to_string());
-    save_config(&app.config);
+    save_config(&app.config)
 }
 
 //////////////////
@@ -869,9 +841,7 @@ fn load(path_to_file: &str) -> Result<serde_json::Value> {
         .and_then(OsStr::to_str)
         .ok_or("Could not create fail path")?;
     let mut raw = vec![];
-    source
-        .read_to_end(&mut raw)
-        .expect("Expected readable file");
+    source.read_to_end(&mut raw)?;
 
     if ext == "yaml" || ext == "yml" {
         Ok(serde_yaml::from_slice(raw.as_slice())?)

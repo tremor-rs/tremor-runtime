@@ -267,7 +267,9 @@ fn run_dun() -> Result<()> {
         warn!("API stopped");
         world.stop();
     }
-    let _ = handle.join();
+    if let Err(e) = handle.join() {
+        error!("Tremor terminated badly: {:?}", e);
+    }
     warn!("World stopped");
     Ok(())
 }

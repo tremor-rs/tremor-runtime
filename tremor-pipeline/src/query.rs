@@ -23,6 +23,7 @@ use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use simd_json::ValueTrait;
+use std::mem;
 use std::sync::Arc;
 use tremor_script::ast::Stmt;
 use tremor_script::ast::{Ident, WindowDecl, WindowKind};
@@ -61,8 +62,9 @@ fn window_decl_to_impl<'script>(
             } else if let Some(size) = d.params.get("size").and_then(Value::as_u64) {
                 Ok(TumblingWindowOnNumber::from_stmt(size, script, stmt).into())
             } else {
-                // FIXME add a suitable error
-                unimplemented!();
+                Err(Error::from(
+                    "Bad window configuration, either `size` or `interval` is required",
+                ))
             }
         }
     }
@@ -149,7 +151,7 @@ impl Query {
         for stmt in &script.stmts {
             let stmt_rental =
                 tremor_script::query::rentals::Stmt::new(Arc::new(self.0.clone()), |_| unsafe {
-                    std::mem::transmute(stmt.clone())
+                    mem::transmute(stmt.clone())
                 });
 
             let that = tremor_script::query::StmtRentalWrapper {
@@ -238,8 +240,7 @@ impl Query {
                             Some(that),
                             Some(windows.clone()),
                         )?;
-                        // FIXME: .unwrap() streams should also be an input
-                        // inputs.insert(name.clone(), id);
+                        inputs.insert(name.clone(), id);
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
@@ -265,13 +266,13 @@ impl Query {
                         node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
+                    let inner_stmt: tremor_script::ast::Stmt = operators
+                        .get(&target)
+                        .ok_or_else(|| Error::from("operator not found"))?
+                        .clone();
                     let stmt_rental = tremor_script::query::rentals::Stmt::new(
                         Arc::new(self.0.clone()),
-                        |_| unsafe {
-                            let stmt: tremor_script::ast::Stmt =
-                                (*operators.get(&target).expect("not found")).clone();
-                            std::mem::transmute(stmt)
-                        },
+                        |_| unsafe { mem::transmute(inner_stmt) },
                     );
 
                     let that = tremor_script::query::StmtRentalWrapper {
@@ -290,13 +291,13 @@ impl Query {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
 
+                    let inner_stmt: tremor_script::ast::Stmt = operators
+                        .get(&target)
+                        .ok_or_else(|| Error::from("operator not found"))?
+                        .clone();
                     let stmt_rental = tremor_script::query::rentals::Stmt::new(
                         Arc::new(self.0.clone()),
-                        |_| unsafe {
-                            let stmt: tremor_script::ast::Stmt =
-                                (*scripts.get(&target).expect("not found")).clone();
-                            std::mem::transmute(stmt)
-                        },
+                        |_| unsafe { mem::transmute(inner_stmt) },
                     );
 
                     let that_defn = tremor_script::query::StmtRentalWrapper {
@@ -514,7 +515,7 @@ pub fn supported_operators(
             };
             Box::new(TrickleScript::with_stmt(
                 config.id.clone(),
-                defn.expect(""),
+                defn.ok_or_else(|| Error::from("Script definition missing"))?,
                 node,
             )?)
         }
