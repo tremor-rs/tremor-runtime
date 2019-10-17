@@ -97,29 +97,25 @@ impl Offramp for GCS {
         Ok(())
     }
 
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(ref raw) = codec.encode(value) {
-                let req = Object::default();
-                let r = google::verbose(
-                    self.hub
-                        .objects()
-                        .insert(req, &self.config.bucket)
-                        .name(&format!("{}.{}", self.config.name, self.cnt))
-                        .content_encoding(&self.config.content_encoding)
-                        .upload(
-                            Cursor::new(raw),
-                            "application/octet-stream"
-                                .parse()
-                                //ALLOW: This is a constant, we know that it will parse correctly
-                                .expect("we know this is valid"),
-                        ),
-                );
-                self.cnt += 1;
-                if let Err(ref e) = r {
-                    error!("google cloud storage error {}: ", e);
-                };
-            }
+            let raw = codec.encode(value)?;
+            let req = Object::default();
+            google::verbose(
+                self.hub
+                    .objects()
+                    .insert(req, &self.config.bucket)
+                    .name(&format!("{}.{}", self.config.name, self.cnt))
+                    .content_encoding(&self.config.content_encoding)
+                    .upload(
+                        Cursor::new(raw),
+                        "application/octet-stream"
+                            .parse()
+                            //ALLOW: This is a constant, we know that it will parse correctly
+                            .expect("we know this is valid"),
+                    ),
+            )?;
         }
+        Ok(())
     }
 }

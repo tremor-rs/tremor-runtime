@@ -92,7 +92,7 @@ impl Offramp for Blackhole {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let now_ns = nanotime();
 
@@ -100,9 +100,7 @@ impl Offramp for Blackhole {
                 let mut buf = Vec::new();
                 let mut serializer = V2Serializer::new();
 
-                if let Err(e) = serializer.serialize(&self.delivered, &mut buf) {
-                    error!("Failed to serialize histogram: {:?}", e);
-                };
+                serializer.serialize(&self.delivered, &mut buf)?;
                 if quantiles(buf.as_slice(), stdout(), 5, 2).is_ok() {
                     println!(
                         "\n\nThroughput: {:.1} MB/s",
@@ -120,11 +118,10 @@ impl Offramp for Blackhole {
                 if let Ok(v) = codec.encode(value) {
                     self.bytes += v.len();
                 };
-                if let Err(e) = self.delivered.record(delta_ns) {
-                    error!("HDR Histogram error: {:?}", e)
-                }
+                self.delivered.record(delta_ns)?
             }
         }
+        Ok(())
     }
     fn default_codec(&self) -> &str {
         "null"

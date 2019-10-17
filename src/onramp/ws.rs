@@ -189,9 +189,9 @@ fn onramp_loop(
                 Ok(onramp::Msg::Disconnect { id, tx }) => {
                     pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if pipelines.is_empty() {
-                        let _ = tx.send(true);
+                        tx.send(true)?
                     } else {
-                        let _ = tx.send(false);
+                        tx.send(false)?
                     }
                 }
             },

@@ -54,7 +54,7 @@ pub type Addr = Sender<Msg>;
 #[allow(clippy::borrowed_box)]
 pub trait Offramp: Send {
     fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
-    fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event);
+    fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event) -> Result<()>;
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, _id: TremorURL, _addr: PipelineAddr);
     fn remove_pipeline(&mut self, _id: TremorURL) -> bool;
@@ -126,7 +126,9 @@ impl Handler<Create> for Manager {
                 match m {
                     Msg::Event { event, input } => {
                         // TODO FIXME implement postprocessors
-                        req.offramp.on_event(&req.codec, input, event);
+                        if let Err(e) = req.offramp.on_event(&req.codec, input, event) {
+                            info!("[Offramp::{}] On Event error: {}", offramp_id, e);
+                        };
                     }
                     Msg::Connect { id, addr } => {
                         info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
@@ -139,7 +141,9 @@ impl Handler<Create> for Manager {
                         if r {
                             info!("[Offramp::{}] Marked as done ", offramp_id);
                         }
-                        let _ = tx.send(r);
+                        if let Err(e) = tx.send(r) {
+                            error!("Failed to send reply: {}", e)
+                        }
                     }
                 }
             }

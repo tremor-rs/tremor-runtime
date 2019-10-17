@@ -41,7 +41,6 @@ use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use serde_yaml;
 use simd_json::json;
-use std::convert::From;
 use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
@@ -160,7 +159,9 @@ impl Elastic {
             }
 
             // TODO: Handle contraflow for notification
-            let _ = tx.send(r);
+            if let Err(e) = tx.send(r) {
+                error!("Failed to send reply: {}", e)
+            }
         });
         self.queue.enqueue(rx)?;
         Ok(())
@@ -187,28 +188,21 @@ impl Elastic {
 
 impl Offramp for Elastic {
     // We enforce json here!
-    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
-        let mut payload = String::from("");
+    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        // We estimate a single message is 512 byte on everage, might be off but it's
+        // a guess
+        let mut payload = String::with_capacity(512 * event.value_meta_iter().count());
 
         for (value, meta) in event.value_meta_iter() {
-            let index = if let Some(index) = meta.get("index").and_then(Value::as_str) {
-                index
-            } else {
-                error!("'index' not set for elastic offramp!");
-                return;
-            };
-            let doc_type = if let Some(doc_type) = meta.get("doc_type").and_then(Value::as_str) {
-                doc_type
-            } else {
-                error!("'doc-type' not set for elastic offramp!");
-                return;
-            };
-            let pipeline = if let Some(pipeline) = meta.get("pipeline").and_then(Value::as_str) {
-                Some(pipeline)
-            } else {
-                None
-            };
-            match pipeline {
+            let index = meta
+                .get("index")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::from("'index' not set for elastic offramp!"))?;
+            let doc_type = meta
+                .get("doc_type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::from("'doc-type' not set for elastic offramp!"))?;
+            match meta.get("pipeline").and_then(Value::as_str) {
                 None => payload.push_str(
                     json!({
                     "index":
@@ -219,7 +213,7 @@ impl Offramp for Elastic {
                     .encode()
                     .as_str(),
                 ),
-                Some(ref pipeline) => payload.push_str(
+                Some(pipeline) => payload.push_str(
                     json!({
                     "index":
                     {
@@ -236,7 +230,7 @@ impl Offramp for Elastic {
             payload.push_str(s.as_str());
             payload.push('\n');
         }
-        let _ = self.maybe_enque(payload);
+        self.maybe_enque(payload)
     }
     fn default_codec(&self) -> &str {
         "json"

@@ -31,7 +31,6 @@ pub struct File {
     file: FSFile,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
-    config: Config,
 }
 
 #[derive(Deserialize)]
@@ -49,7 +48,6 @@ impl offramp::Impl for File {
                 file,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
-                config,
             }))
         } else {
             Err("Blackhole offramp requires a config".into())
@@ -59,29 +57,17 @@ impl offramp::Impl for File {
 
 impl Offramp for File {
     // TODO
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(ref raw) = codec.encode(value) {
-                match postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec()) {
-                    Ok(packets) => {
-                        for packet in packets {
-                            //TODO: Error handling
-                            if let Err(e) = self
-                                .file
-                                .write_all(&packet)
-                                .and_then(|_| self.file.write_all(b"\n"))
-                            {
-                                error!("Failed wo write to stdout file: {}", e)
-                            }
-                        }
-                    }
-                    Err(e) => error!(
-                        "Failed to postprocess before writing to file {}: {}",
-                        self.config.file, e
-                    ),
-                }
+            let raw = codec.encode(value)?;
+            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+            for packet in packets {
+                self.file
+                    .write_all(&packet)
+                    .and_then(|_| self.file.write_all(b"\n"))?;
             }
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

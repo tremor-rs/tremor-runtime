@@ -224,7 +224,7 @@ fn onramp_loop(
             match rx.recv() {
                 Ok(onramp::Msg::Connect(ps)) => pipelines.append(&mut ps.clone()),
                 Ok(onramp::Msg::Disconnect { tx, .. }) => {
-                    let _ = tx.send(true);
+                    tx.send(true)?;
                     return Ok(());
                 }
                 Err(e) => error!("{}", e),

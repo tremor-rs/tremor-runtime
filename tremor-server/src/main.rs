@@ -289,6 +289,7 @@ fn main() {
             eprintln!("backtrace: {:?}", backtrace);
         }
 
+        // ALLOW: main.rs
         ::std::process::exit(1);
     }
 }

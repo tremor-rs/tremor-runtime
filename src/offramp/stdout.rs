@@ -38,16 +38,16 @@ impl offramp::Impl for StdOut {
     }
 }
 impl Offramp for StdOut {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(raw) = codec.encode(value) {
-                if let Ok(s) = String::from_utf8(raw.to_vec()) {
-                    println!("{}", s)
-                } else {
-                    println!("{:?}", raw)
-                }
+            let raw = codec.encode(value)?;
+            if let Ok(s) = std::str::from_utf8(&raw) {
+                println!("{}", s)
+            } else {
+                println!("{:?}", raw)
             }
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

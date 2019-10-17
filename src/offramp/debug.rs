@@ -53,7 +53,7 @@ impl offramp::Impl for Debug {
     }
 }
 impl Offramp for Debug {
-    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
@@ -80,6 +80,7 @@ impl Offramp for Debug {
             }
             self.cnt += 1;
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

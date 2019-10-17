@@ -125,8 +125,9 @@ impl Rest {
                 };
             }
 
-            // TODO: Handle contraflow for notification
-            let _ = tx.send(r);
+            if let Err(e) = tx.send(r) {
+                error!("Failed to send reply: {}", e)
+            }
         });
         self.queue.enqueue(rx)?;
         Ok(())
@@ -152,22 +153,15 @@ impl Rest {
 }
 
 impl Offramp for Rest {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         let mut payload = String::from("");
         for value in event.value_iter() {
-            match codec.encode(value) {
-                Ok(raw) => {
-                    if let Ok(s) = str::from_utf8(&raw) {
-                        payload.push_str(s);
-                        payload.push('\n');
-                    } else {
-                        error!("Contant is not valid utf8")
-                    }
-                }
-                Err(e) => error!("Event data needs to be raw: {}", e),
-            }
+            let raw = codec.encode(value)?;
+            let s = str::from_utf8(&raw)?;
+            payload.push_str(s);
+            payload.push('\n');
         }
-        let _ = self.maybe_enque(payload);
+        self.maybe_enque(payload)
     }
     fn default_codec(&self) -> &str {
         "json"

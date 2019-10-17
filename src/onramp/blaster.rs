@@ -94,14 +94,13 @@ fn onramp_loop(
     acc.consuming = acc.elements.clone();
 
     let iters = config.iters;
-    let _interval = if let Some(i) = config.interval { i } else { 0 };
     let mut id = 0;
     loop {
         if pipelines.is_empty() {
             match rx.recv()? {
                 onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
                 onramp::Msg::Disconnect { tx, .. } => {
-                    let _ = tx.send(true);
+                    tx.send(true)?;
                     return Ok(());
                 }
             };
@@ -118,10 +117,10 @@ fn onramp_loop(
                 Ok(onramp::Msg::Disconnect { id, tx }) => {
                     pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if pipelines.is_empty() {
-                        let _ = tx.send(true);
+                        tx.send(true)?;
                         return Ok(());
                     } else {
-                        let _ = tx.send(false);
+                        tx.send(false)?;
                     }
                 }
             };

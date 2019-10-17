@@ -159,6 +159,7 @@ fn main() -> Result<()> {
                 || matches.is_present("print-ast")
                 || matches.is_present("print-ast-raw")
             {
+                // ALLOW: main.rs
                 std::process::exit(0);
             }
 
@@ -258,6 +259,7 @@ fn main() -> Result<()> {
                 Err(e) => {
                     let mut h = TermHighlighter::new();
                     runnable.format_error_with(&mut h, &e)?;
+                    // ALLOW: main.rs
                     std::process::exit(1);
                 }
             }
@@ -268,6 +270,7 @@ fn main() -> Result<()> {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);
             };
+            // ALLOW: main.rs
             std::process::exit(1);
         }
     };

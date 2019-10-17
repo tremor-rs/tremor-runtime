@@ -28,7 +28,6 @@ use std::net::UdpSocket;
 /// An offramp that write a given file
 pub struct Udp {
     socket: UdpSocket,
-    config: Config,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
 }
@@ -49,7 +48,6 @@ impl offramp::Impl for Udp {
             let socket = UdpSocket::bind((config.host.as_str(), config.port))?;
             socket.connect((config.dst_host.as_str(), config.dst_port))?;
             Ok(Box::new(Self {
-                config,
                 socket,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
@@ -62,18 +60,13 @@ impl offramp::Impl for Udp {
 
 impl Offramp for Udp {
     // TODO
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(ref raw) = codec.encode(value) {
-                //TODO: Error handling
-                if let Err(e) = self.socket.send(&raw) {
-                    error!(
-                        "Failed wo send UDP datagram to {}:{} => {}",
-                        self.config.dst_host, self.config.dst_port, e
-                    )
-                }
-            }
+            let raw = codec.encode(value)?;
+            //TODO: Error handling
+            self.socket.send(&raw)?;
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

@@ -85,24 +85,23 @@ impl Offramp for GPub {
         "json"
     }
 
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         let methods = self.hub.projects();
         let topic_name = self.config.topic.clone();
 
         for value in event.value_iter() {
-            if let Ok(ref raw) = codec.encode(value) {
-                let message = PubsubMessage {
-                    data: Some(base64::encode(&raw)),
-                    ..PubsubMessage::default()
-                };
-                let request = PublishRequest {
-                    messages: Some(vec![message]),
-                };
-                let response = methods.topics_publish(request.clone(), &topic_name).doit();
-                if let Err(ref e) = response {
-                    error!("Error publishing to gpub offramp topic: {}", e);
-                };
-            }
+            let raw = codec.encode(value)?;
+            let message = PubsubMessage {
+                data: Some(base64::encode(&raw)),
+                ..PubsubMessage::default()
+            };
+            let request = PublishRequest {
+                messages: Some(vec![message]),
+            };
+            methods
+                .topics_publish(request.clone(), &topic_name)
+                .doit()?;
         }
+        Ok(())
     }
 }

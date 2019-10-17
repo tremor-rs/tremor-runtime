@@ -121,12 +121,10 @@ impl offramp::Impl for Ws {
 }
 
 impl Offramp for Ws {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         // If we are not connected yet we wait for a message to connect
         if self.addr.is_none() {
-            if let Ok(addr) = self.rx.recv() {
-                self.addr = addr;
-            }
+            self.addr = self.rx.recv()?;
         }
         // We eat up the entire buffer
         while let Ok(addr) = self.rx.try_recv() {
@@ -138,7 +136,7 @@ impl Offramp for Ws {
             let url = self.config.url.clone();
             let tx = self.tx.clone();
             let txe = self.tx.clone();
-            let _i_don_even_know_anymore = thread::Builder::new()
+            thread::Builder::new()
                 .name(format!("offramp-ws-actix-loop-{}", "???"))
                 .spawn(move || -> io::Result<()> {
                     let sys = actix::System::new("ws-offramp");
@@ -170,32 +168,28 @@ impl Offramp for Ws {
                     let r = sys.run();
                     warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
                     r
-                });
+                })?;
         }
         if let Some(addr) = &self.addr {
             for value in event.value_iter() {
-                if let Ok(raw) = codec.encode(value) {
-                    match postprocess(&mut self.postprocessors, event.ingest_ns, raw) {
-                        Ok(datas) => {
-                            for raw in datas {
-                                if self.config.binary {
-                                    addr.do_send(WsMessage::Binary(raw));
-                                } else if let Ok(txt) = String::from_utf8(raw) {
-                                    addr.do_send(WsMessage::Text(txt));
-                                } else {
-                                    error!("[WS Offramp] Invalid utf8 data for text message")
-                                }
-                            }
-                        }
-                        Err(e) => error!("[WS Offramp] Postprocessors failed: {}", e),
+                let raw = codec.encode(value)?;
+                let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
+                for raw in datas {
+                    if self.config.binary {
+                        addr.do_send(WsMessage::Binary(raw));
+                    } else if let Ok(txt) = String::from_utf8(raw) {
+                        addr.do_send(WsMessage::Text(txt));
+                    } else {
+                        error!("[WS Offramp] Invalid utf8 data for text message");
+                        return Err(Error::from("Invalid utf8 data for text message"));
                     }
-                } else {
-                    error!("[WS Offramp] Codec failed")
                 }
             }
         } else {
-            error!("[WS Offramp] not connected")
-        }
+            error!("[WS Offramp] not connected");
+            return Err(Error::from("not connected"));
+        };
+        Ok(())
     }
 
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {

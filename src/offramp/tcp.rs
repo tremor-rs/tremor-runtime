@@ -29,7 +29,6 @@ use std::net::TcpStream;
 /// An offramp streams over TCP/IP
 pub struct Tcp {
     stream: TcpStream,
-    config: Config,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
 }
@@ -55,7 +54,6 @@ impl offramp::Impl for Tcp {
             stream.set_ttl(config.ttl)?;
             stream.set_nodelay(config.is_no_delay)?;
             Ok(Box::new(Self {
-                config,
                 stream,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
@@ -67,30 +65,16 @@ impl offramp::Impl for Tcp {
 }
 
 impl Offramp for Tcp {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(ref raw) = codec.encode(value) {
-                match postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec()) {
-                    Ok(packets) => {
-                        for packet in packets {
-                            if let Err(e) = self.stream.write(&packet) {
-                                error!(
-                                    "Failed wo send over TCP stream to {}:{} => {}",
-                                    self.config.host, self.config.port, e
-                                )
-                            }
-                        }
-                    }
-                    Err(e) => error!(
-                        "Failed to postprocess before sending over TCP stream to {}:{} => {}",
-                        self.config.host, self.config.port, e
-                    ),
-                }
-                if let Err(e) = self.stream.flush() {
-                    error!("failed to flush stream: {}", e);
-                };
+            let raw = codec.encode(value)?;
+            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+            for packet in packets {
+                self.stream.write_all(&packet)?;
             }
+            self.stream.flush()?;
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

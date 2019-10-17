@@ -59,6 +59,30 @@ impl From<hdrhistogram::errors::CreationError> for Error {
     }
 }
 
+impl From<hdrhistogram::RecordError> for Error {
+    fn from(e: hdrhistogram::RecordError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<hdrhistogram::serialization::V2SerializeError> for Error {
+    fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<google_storage1::Error> for Error {
+    fn from(e: google_storage1::Error) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<google_pubsub1::Error> for Error {
+    fn from(e: google_pubsub1::Error) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
 impl<T> From<crossbeam_channel::SendError<T>> for Error {
     fn from(e: crossbeam_channel::SendError<T>) -> Self {
         Self::from(format!("{:?}", e))

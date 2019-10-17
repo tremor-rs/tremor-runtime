@@ -117,28 +117,28 @@ impl offramp::Impl for Kafka {
 
 impl Offramp for Kafka {
     // TODO
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
-            if let Ok(raw) = codec.encode(value) {
-                let mut record = FutureRecord::to(&self.topic);
-                record = record.payload(&raw);
-                //TODO: Key
-                let r = if let Some(ref k) = self.key {
-                    self.producer.send(record.key(k.as_str()), 1)
-                } else {
-                    self.producer.send(record, 1)
-                };
-                let producer_future = r.then(|_result| {
-                    // match result {
-                    //     Ok(Ok(_delivery)) => ret.send(),
-                    //     Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
-                    //     Err(_) => ret.with_value(Err("Future cancled".into())).send(),
-                    // }
-                    Ok(())
-                });
-                self.pool.spawn(producer_future);
-            }
+            let raw = codec.encode(value)?;
+            let mut record = FutureRecord::to(&self.topic);
+            record = record.payload(&raw);
+            //TODO: Key
+            let r = if let Some(ref k) = self.key {
+                self.producer.send(record.key(k.as_str()), 1)
+            } else {
+                self.producer.send(record, 1)
+            };
+            let producer_future = r.then(|_result| {
+                // match result {
+                //     Ok(Ok(_delivery)) => ret.send(),
+                //     Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
+                //     Err(_) => ret.with_value(Err("Future cancled".into())).send(),
+                // }
+                Ok(())
+            });
+            self.pool.spawn(producer_future);
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);
