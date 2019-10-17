@@ -16,7 +16,6 @@ use crate::offramp::prelude::*;
 use crate::rest::HttpC;
 use halfbrown::HashMap;
 use serde_yaml;
-use std::convert::From;
 use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
@@ -75,7 +74,7 @@ impl offramp::Impl for Rest {
 }
 
 impl Rest {
-    fn flush(client: &HttpC, config: Config, payload: &str) -> Result<u64> {
+    fn flush(client: &HttpC, config: Config, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
         let c = if config.put {
             client.put("")?
@@ -86,12 +85,12 @@ impl Rest {
             .headers
             .into_iter()
             .fold(c, |c, (k, v)| c.header(k.as_str(), v.as_str()));
-        c.body(payload.to_owned()).send()?;
+        c.body(payload).send()?;
         let d = duration_to_millis(start.elapsed());
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: String) -> Result<()> {
+    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = channel();
@@ -102,7 +101,7 @@ impl Rest {
             .collect();
         let config = self.config.clone();
         self.pool.execute(move || {
-            let r = Self::flush(&destination, config, payload.as_str());
+            let r = Self::flush(&destination, config, payload);
             let mut m = Object::new();
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());
@@ -132,7 +131,7 @@ impl Rest {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: String) -> Result<()> {
+    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 //TODO: how do we handle this?
@@ -154,12 +153,11 @@ impl Rest {
 
 impl Offramp for Rest {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
-        let mut payload = String::from("");
+        let mut payload = Vec::with_capacity(4096);
         for value in event.value_iter() {
-            let raw = codec.encode(value)?;
-            let s = str::from_utf8(&raw)?;
-            payload.push_str(s);
-            payload.push('\n');
+            let mut raw = codec.encode(value)?;
+            payload.append(&mut raw);
+            payload.push(b'\n');
         }
         self.maybe_enque(payload)
     }

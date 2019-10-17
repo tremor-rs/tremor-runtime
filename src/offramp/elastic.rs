@@ -113,11 +113,9 @@ impl offramp::Impl for Elastic {
 }
 
 impl Elastic {
-    fn flush(client: &Client<SyncSender>, payload: &str) -> Result<u64> {
+    fn flush(client: &Client<SyncSender>, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
-        let res = client
-            .request(BulkRequest::new(payload.to_owned()))
-            .send()?;
+        let res = client.request(BulkRequest::new(payload)).send()?;
         for item in res.into_response::<BulkErrorsResponse>()? {
             error!("Elastic Search item error: {:?}", item);
         }
@@ -126,7 +124,7 @@ impl Elastic {
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: String) -> Result<()> {
+    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = channel();
@@ -136,7 +134,7 @@ impl Elastic {
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
         self.pool.execute(move || {
-            let r = Self::flush(&destination.client, payload.as_str());
+            let r = Self::flush(&destination.client, payload);
             let mut m = Object::new();
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());
@@ -166,7 +164,7 @@ impl Elastic {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: String) -> Result<()> {
+    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 //TODO: how do we handle this?
@@ -191,7 +189,7 @@ impl Offramp for Elastic {
     fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
-        let mut payload = String::with_capacity(512 * event.value_meta_iter().count());
+        let mut payload = Vec::with_capacity(4096);
 
         for (value, meta) in event.value_meta_iter() {
             let index = meta
@@ -203,32 +201,26 @@ impl Offramp for Elastic {
                 .and_then(Value::as_str)
                 .ok_or_else(|| Error::from("'doc-type' not set for elastic offramp!"))?;
             match meta.get("pipeline").and_then(Value::as_str) {
-                None => payload.push_str(
-                    json!({
-                    "index":
-                    {
-                        "_index": index,
-                        "_type": doc_type
-                    }})
-                    .encode()
-                    .as_str(),
-                ),
-                Some(pipeline) => payload.push_str(
-                    json!({
-                    "index":
-                    {
-                        "_index": index,
-                        "_type": doc_type,
-                        "pipeline": pipeline
-                    }})
-                    .encode()
-                    .as_str(),
-                ),
+                None => json!({
+                "index":
+                {
+                    "_index": index,
+                    "_type": doc_type
+                }})
+                .write(&mut payload)?,
+
+                Some(pipeline) => json!({
+                "index":
+                {
+                    "_index": index,
+                    "_type": doc_type,
+                    "pipeline": pipeline
+                }})
+                .write(&mut payload)?,
             };
-            payload.push('\n');
-            let s = value.encode();
-            payload.push_str(s.as_str());
-            payload.push('\n');
+            payload.push(b'\n');
+            value.write(&mut payload)?;
+            payload.push(b'\n');
         }
         self.maybe_enque(payload)
     }
