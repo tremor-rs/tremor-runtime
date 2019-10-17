@@ -25,6 +25,7 @@ nav:
     - Aggregate Function Reference:
       - Overview: tremor-query/functions.md
       - stats: tremor-query/functions/stats.md
+      - win: tremor-query/functions/win.md
     - Recipes: tremor-query/recipes.md
   - Tremor Script:
     - Overview: tremor-script/index.md
