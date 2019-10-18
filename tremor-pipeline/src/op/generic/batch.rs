@@ -83,21 +83,21 @@ impl Operator for Batch {
                 if let Some(ref mut a) = this.value.as_array_mut() {
                     let mut e = Object::with_capacity(7);
                     // {"id":1,
-                    e.insert("id".into(), id.into());
+                    e.insert_nocheck("id".into(), id.into());
                     //  "data": {
                     //      "value": "snot", "meta":{}
                     //  },
                     let mut data = Object::with_capacity(2);
-                    data.insert("value".into(), other.value);
-                    data.insert("meta".into(), other.meta);
-                    e.insert("data".into(), Value::Object(data));
+                    data.insert_nocheck("value".into(), other.value);
+                    data.insert_nocheck("meta".into(), other.meta);
+                    e.insert_nocheck("data".into(), Value::Object(data));
                     //  "ingest_ns":1,
-                    e.insert("ingest_ns".into(), ingest_ns.into());
+                    e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
                     //  "kind":null,
                     // kind is always null on events
-                    e.insert("kind".into(), Value::Null);
+                    e.insert_nocheck("kind".into(), Value::Null);
                     //  "is_batch":false
-                    e.insert("is_batch".into(), is_batch.into());
+                    e.insert_nocheck("is_batch".into(), is_batch.into());
                     // }
                     a.push(Value::Object(e))
                 };

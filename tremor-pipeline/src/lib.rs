@@ -129,14 +129,16 @@ impl<'value> Iterator for ValueMetaIter<'value> {
     type Item = (&'value Value<'value>, &'value Value<'value>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.event.is_batch {
-            self.idx += 1;
-            self.event
+            let r = self
+                .event
                 .data
                 .suffix()
                 .value
                 .as_array()
-                .and_then(|arr| arr.get(self.idx - 1))
-                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)))
+                .and_then(|arr| arr.get(self.idx))
+                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)));
+            self.idx += 1;
+            r
         } else if self.idx == 0 {
             let v = self.event.data.suffix();
             self.idx += 1;
@@ -165,14 +167,16 @@ impl<'value> Iterator for ValueIter<'value> {
     type Item = &'value BorrowedValue<'value>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.event.is_batch {
-            self.idx += 1;
-            self.event
+            let r = self
+                .event
                 .data
                 .suffix()
                 .value
                 .as_array()
-                .and_then(|arr| arr.get(self.idx - 1))
-                .and_then(|e| e.get("data")?.get("value"))
+                .and_then(|arr| arr.get(self.idx))
+                .and_then(|e| e.get("data")?.get("value"));
+            self.idx += 1;
+            r
         } else if self.idx == 0 {
             let v = &self.event.data.suffix().value;
             self.idx += 1;

@@ -45,28 +45,28 @@ pub struct EventHistory {
 }
 
 impl Operator for EventHistory {
-    fn on_event(&mut self, _port: &str, mut event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
         let id = event.id;
-        event.data.rent_mut(|data| {
-            let meta = &mut data.meta;
-            match meta.get_mut(self.config.name.as_str()) {
-                Some(Value::Array(ref mut history)) => {
-                    history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
+        let (_, meta) = event.data.parts();
+        match meta
+            .get_mut(self.config.name.as_str())
+            .and_then(Value::as_array_mut)
+        {
+            Some(ref mut history) => {
+                history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
+            }
+            None => {
+                if let Some(ref mut obj) = meta.as_object_mut() {
+                    obj.insert(
+                        self.config.name.clone().into(),
+                        Value::Array(vec![Value::from(format!(
+                            "evt: {}({})",
+                            self.config.op, id
+                        ))]),
+                    );
                 }
-                None => {
-                    if let Some(ref mut obj) = meta.as_object_mut() {
-                        obj.insert(
-                            self.config.name.clone().into(),
-                            Value::Array(vec![Value::from(format!(
-                                "evt: {}({})",
-                                self.config.op, id
-                            ))]),
-                        );
-                    }
-                }
-                _ => (),
-            };
-        });
+            }
+        };
         Ok(vec![("out".to_string(), event)])
     }
 
@@ -75,26 +75,27 @@ impl Operator for EventHistory {
     }
     fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
         let id = signal.id;
-        signal.data.rent_mut(|data| {
-            let meta = &mut data.meta;
-            match meta.get_mut(self.config.name.as_str()) {
-                Some(Value::Array(ref mut history)) => {
-                    history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
+        let (_, meta) = signal.data.parts();
+
+        match meta
+            .get_mut(self.config.name.as_str())
+            .and_then(Value::as_array_mut)
+        {
+            Some(ref mut history) => {
+                history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
+            }
+            None => {
+                if let Some(ref mut obj) = meta.as_object_mut() {
+                    obj.insert(
+                        self.config.name.clone().into(),
+                        Value::Array(vec![Value::from(format!(
+                            "sig: {}({})",
+                            self.config.op, id
+                        ))]),
+                    );
                 }
-                None => {
-                    if let Some(ref mut obj) = meta.as_object_mut() {
-                        obj.insert(
-                            self.config.name.clone().into(),
-                            Value::Array(vec![Value::from(format!(
-                                "sig: {}({})",
-                                self.config.op, id
-                            ))]),
-                        );
-                    }
-                }
-                _ => (),
-            };
-        });
+            }
+        };
         Ok(vec![])
     }
 }

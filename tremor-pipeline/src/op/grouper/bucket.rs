@@ -150,7 +150,7 @@ impl Operator for Grouper {
                 });
 
             let d = meta.get("dimensions").unwrap_or(&Value::Null);
-            let dimensions = serde_json::to_string(d)?;
+            let dimensions = d.encode();
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {
                     let rate = if let Some(rate) = Rate::from_meta(&meta) {

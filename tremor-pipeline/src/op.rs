@@ -33,7 +33,9 @@ pub trait Operator: std::fmt::Debug + Send {
     }
     // A lot of operators won't need to handle signals so we default to
     // passing the signal through
-    fn on_signal(&mut self, _signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+        // Make the trait signature nicer
+        let _ = signal;
         Ok(vec![])
     }
 
@@ -42,14 +44,19 @@ pub trait Operator: std::fmt::Debug + Send {
     }
     // A lot of operators won't need to handle insights so we default to
     // passing the isnight through
-    fn on_contraflow(&mut self, _insight: &mut Event) {}
+    fn on_contraflow(&mut self, insight: &mut Event) {
+        // Make the trait signature nicer
+        let _ = insight;
+    }
 
     // Returns metrics for this operator
     fn metrics(
         &self,
-        _tags: HashMap<Cow<'static, str>, Value<'static>>,
-        _timestamp: u64,
+        tags: HashMap<Cow<'static, str>, Value<'static>>,
+        timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
+        // Make the trait signature nicer
+        let _ = (tags, timestamp);
         Ok(Vec::new())
     }
 }
