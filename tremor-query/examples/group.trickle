@@ -1,8 +1,6 @@
-create tumbling window `5secs`
- with
-   #IOU constant functions
-   #interval = datetime::with_seconds(5),
-   interval = 5000000000
+define tumbling window `5secs`
+with
+   interval = datetime::with_seconds(5),
 end;
 
 select {
@@ -12,7 +10,7 @@ select {
     "mean": stats::mean(event.value),
     "stdev": stats::stdev(event.value),
     "var": stats::var(event.value),
-    "group": event.`group`
+    "group": group[0]
 }
 from in[`5secs`]
 group by set(event.`group`)

@@ -50,7 +50,9 @@ Stmt: Stmt1<'input> = {
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => Stmt1::ScriptDecl(ScriptDecl1 { start, end, id: id.id.to_string(), script, params }),
     <start:@L> "create" "stream" <id:Ident> <end:@L> => Stmt1::Stream(StreamStmt { start, end, id: id.id.to_string() }),
     <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Operator(OperatorStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => Stmt1::Operator(OperatorStmt1 { start, end, id: id.id.to_string(), target: id.id.to_string(), params }),
     <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => Stmt1::Script(ScriptStmt1 { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => Stmt1::Script(ScriptStmt1 { start, end, id: id.id.to_string(), target: id.id.to_string(), params }),
     <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => Stmt1::Select(Box::new(MutSelect1 { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 

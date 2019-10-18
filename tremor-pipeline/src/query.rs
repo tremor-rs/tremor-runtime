@@ -33,6 +33,12 @@ use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{AggrRegistry, Registry, Value};
 
+// Legacy ops for backwards compat with pipeline.yaml at runtime in trickle / extension
+use op::debug::EventHistoryFactory;
+use op::generic::{BackpressureFactory, BatchFactory};
+use op::grouper::BucketGrouperFactory;
+use op::runtime::TremorFactory;
+
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
         id: common_cow(port.0.id.to_string()),
@@ -186,8 +192,9 @@ impl Query {
                     };
 
                     select_num += 1;
-                    let into = resolve_input_port(&s.into);
                     let from = resolve_output_port(&s.from);
+                    let into = resolve_input_port(&s.into);
+                    dbg!(&links);
                     if links.contains_key(&from) {
                         match links.get_mut(&from) {
                             Some(x) => {
@@ -195,11 +202,11 @@ impl Query {
                                     x.push(select_in.clone())
                                 }
                             }
-                            None => return Err("should never get here - link should be ok".into()),
+                            None => return Err("should never get here - link should be ok 1".into()),
                         }
                         match links.get_mut(&select_out) {
                             Some(x) => x.push(into),
-                            None => return Err("should never get here - link should be ok".into()),
+                            None => return Err("should never get here - link should be ok 2".into()),
                         }
                     } else {
                         links.insert(from, vec![select_in.clone()]);
@@ -291,10 +298,9 @@ impl Query {
                 Stmt::Script(o) => {
                     let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
-
-                    let inner_stmt: tremor_script::ast::Stmt = operators
+                    let inner_stmt: tremor_script::ast::Stmt = scripts
                         .get(&target)
-                        .ok_or_else(|| Error::from("operator not found"))?
+                        .ok_or_else(|| Error::from("script not found"))?
                         .clone();
                     let stmt_rental = tremor_script::query::rentals::Stmt::new(
                         Arc::new(self.0.clone()),
@@ -442,7 +448,6 @@ pub fn supported_operators(
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
-    //    use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     //    use op::runtime::TremorFactory;
     use op::trickle::operator::TrickleOperator;
@@ -527,11 +532,11 @@ pub fn supported_operators(
             let op = PassthroughFactory::new_boxed();
             op.from_node(config)?
         }
-        // ["debug", "history"] => EventHistoryFactory::new_boxed(),
-        // ["runtime", "tremor"] => TremorFactory::new_boxed(),
-        // ["grouper", "bucket"] => BucketGrouperFactory::new_boxed(),
-        // ["generic", "batch"] => BatchFactory::new_boxed(),
-        // ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
+        ["debug", "history"] => EventHistoryFactory::new_boxed().from_node(config)?,
+        ["runtime", "tremor"] => TremorFactory::new_boxed().from_node(config)?,
+        ["grouper", "bucket"] => BucketGrouperFactory::new_boxed().from_node(config)?,
+        ["generic", "batch"] => BatchFactory::new_boxed().from_node(config)?,
+        ["generic", "backpressure"] => BackpressureFactory::new_boxed().from_node(config)?,
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }

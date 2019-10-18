@@ -16,13 +16,19 @@ end;
 
 
 select {
-    "window": window,
+    "window": window, # we have no way of referencing current frame
     "count": stats::count(),
-    "other": win::collect_flattened(event.value),
+    "nested": match true of
+      case true =>
+        for win::collect_nested(event) of
+          case (i, d) => {"w": window, "d": d}
+        end
+      default => "snot"
+    end
 }
-from in/out[pairs, triples, quads]
-into snot/in;
+from in[pairs, triples, quads]
+into snot;
 
 create stream snot;
 
-select event from snot/out into out;
+select event from snot into out;

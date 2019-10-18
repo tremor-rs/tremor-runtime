@@ -8,7 +8,10 @@ script
 end;
 
 create operator kfc from kfc;
-create script categorize from categorize;
+
+# where script definition and instance name are the same, we can
+# omit the from clause in operator and script 'create' statements
+create script categorize;
 
 # Stream ingested data into categorize script
 select event from in into categorize;
