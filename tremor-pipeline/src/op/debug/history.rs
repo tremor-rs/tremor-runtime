@@ -49,7 +49,7 @@ impl Operator for EventHistory {
         let id = event.id;
         event.data.rent_mut(|data| {
             let meta = &mut data.meta;
-            match meta.get_mut(&self.config.name) {
+            match meta.get_mut(self.config.name.as_str()) {
                 Some(Value::Array(ref mut history)) => {
                     history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
                 }
@@ -77,7 +77,7 @@ impl Operator for EventHistory {
         let id = signal.id;
         signal.data.rent_mut(|data| {
             let meta = &mut data.meta;
-            match meta.get_mut(&self.config.name) {
+            match meta.get_mut(self.config.name.as_str()) {
                 Some(Value::Array(ref mut history)) => {
                     history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
                 }
@@ -127,7 +127,7 @@ mod test {
         assert_eq!("out", out);
         let _ = op.on_signal(&mut event);
 
-        let history = event.data.suffix().meta.get(&op.config.name);
+        let history = event.data.suffix().meta.get(op.config.name.as_str());
 
         match history.and_then(Value::as_array) {
             Some(history) => {

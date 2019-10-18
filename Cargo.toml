@@ -13,7 +13,6 @@ members = [
     "tremor-tool",
     "tremor-script",
     "tremor-query",
-    "window",
     "tremor-pipeline",
     "tremor-api",
     "dissect",
@@ -102,15 +101,6 @@ hyper = "0.10"  # chan't update this because of google
 # logstash grok patterns
 grok = "1"
 
-## Unused dependencies
-# uuid = { version = "0.7", features = ["serde", "v4"] }
-# window = { path = "window" }
-# rand = "0.5"
-# bytes = "0.4"
-# futures-channel = "0.2"
-# futures-timer = "0.1"
-# lru = "0.1"
-
 [dev-dependencies]
 matches = "0.1"
 # criterion = "0.2"
@@ -128,6 +118,3 @@ ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
-
-[patch.crates-io]
-simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = "known-key" }

@@ -18,12 +18,3 @@ http = "0.1"
 dirs = "2"
 serde = "1"
 halfbrown="0.1"
-
-#window = { path = "../window" }
-#uuid = { version = "0.7", features = ["serde", "v4"]}
-#prometheus = { version = "0.4", features = ["process"] }
-#lazy_static = "0.2"
-#error-chain="0.12"
-#env_logger = "0.5"
-#log = "0.4"
-#log4rs = "0.8"
