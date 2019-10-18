@@ -1,0 +1,12 @@
+[package]
+name = "window"
+version = "0.1.0"
+authors = ["Heinz Gies <hgies@wayfair.com>"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+chrono = "0.4"
+
+[dev-dependencies]
+proptest = "0.9.4"

@@ -1,0 +1,13 @@
+name: License audit
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install clippy-deny
+        run: cargo install cargo-deny
+      - name: Check dependencies
+        run: cargo deny check

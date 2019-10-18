@@ -1,0 +1,13 @@
+branch: true
+ignore-not-existing: true
+llvm: true
+filter: covered
+output-type: lcov
+prefix-dir: /home/user/build/
+ignore-dir:
+  - "/*"
+  - "C:/*"
+  - "../*"
+#path-mapping:
+#  - "/path1"
+#  - "/path2"

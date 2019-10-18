@@ -9,15 +9,16 @@ license = "Apache-2.0"
 [workspace]
 
 members = [
+    "dissect",
+    "http-bench-server",
+    "kv",
+    "tremor-api",
+    "tremor-pipeline",
+    "tremor-query",
+    "tremor-script",
     "tremor-server",
     "tremor-tool",
-    "tremor-script",
-    "tremor-query",
-    "tremor-pipeline",
-    "tremor-api",
-    "dissect",
-    "kv",
-    "http-bench-server"
+    "window",
 ]
 
 [profile.release]

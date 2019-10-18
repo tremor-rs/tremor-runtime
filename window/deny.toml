@@ -1,0 +1,102 @@
+[licenses]
+unlicensed= "deny"
+unknown= "deny"
+
+#
+# License types that we explicitly allow
+#
+
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "LLVM-exception",
+    "MIT",
+    "Unlicense",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+]
+
+#
+# Crates with no detectable license files that we explicitly allow
+#
+skip = [
+    # ring has multiple licenses but is ASL 2 compatible
+    { name = "ring", licenses = [] },
+    # webpki uses an ISC license but it only has a 0.83 confidence level
+    { name = "webpki", licenses = [] },
+]
+
+#
+# Crates with licenses this tool fails to auto-detect with high confidence we explicitly allow
+#
+
+# This is MIT Apache dual licensed
+[[licenses.ignore]]
+name = "criterion-plot"
+license_files = [
+  { path = "LICENSE-APACHE", hash = 0xa577772b },
+  { path = "LICENSE-MIT", hash = 0x343f7050 }
+]
+
+# This is MIT, Apache, CC, BSD-2 and BSD-3
+[[licenses.ignore]]
+name = "crossbeam-channel"
+license_files = [
+  { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.ignore]]
+name = "hyper-rustls"
+license_files = [
+  { path = "LICENSE", hash = 0x3154a1c7 },
+]
+
+[[licenses.ignore]]
+# ring has a rather complicated LICENSE file due to reasons spelled out
+# in said LICENSE file, but is basically OpenSSL for older parts, and ISC
+# for newer parts
+name = "ring"
+license_files = [
+  { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.ignore]]
+name = "rustls"
+license_files = [
+  { path = "LICENSE", hash = 0xe567c411 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.ignore]]
+name = "sct"
+license_files = [
+  { path = "LICENSE", hash = 0xb7619ae7 },
+]
+
+# ISC style
+[[licenses.ignore]]
+name = "webpki"
+license_files = [
+  { path = "LICENSE", hash = 0x1c7e6c },
+]
+
+# MPL-2.0
+[[licenses.ignore]]
+name = "webpki-roots"
+license_files = [
+  { path = "LICENSE", hash = 0x6c919c48 },
+]
+
+# This is Zlib
+[[licenses.ignore]]
+name = "adler32"
+license_files = [
+  { path = "LICENSE", hash = 0x1e225da6 },
+]
