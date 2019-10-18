@@ -34,3 +34,4 @@ ccov.zip
 grcov
 cobertura.xml
 coverage.html
+temp/

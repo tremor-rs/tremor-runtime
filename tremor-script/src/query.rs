@@ -229,8 +229,8 @@ mod test {
     use crate::highlighter;
 
     fn parse(query: &str) {
-        let reg = Registry::default();
-        let aggr_reg = AggrRegistry::default();
+        let reg = crate::registry();
+        let aggr_reg = crate::aggr_registry();
         if let Err(e) = Query::parse(query, &reg, &aggr_reg) {
             let mut h = highlighter::Dumb::new();
             if let Err(e) = Query::format_error_from_script(&query, &mut h, &e) {
@@ -246,5 +246,35 @@ mod test {
     #[test]
     fn for_in_select() {
         parse(r#"select for event of case (a, b) => b end from in into out;"#);
+    }
+
+    #[test]
+    fn script_with_args() {
+        parse(
+            r#"
+define script test
+with
+  beep = "beep"
+script
+  { "beep": "{args.beep}" }
+end;
+
+create script beep from test;
+create script boop from test
+with
+  beep = "boop" # override
+end;
+
+# Stream ingested data into script with default params
+select event from in into beep;
+
+# Stream ingested data into script with overridden params
+select event from in into boop;
+
+# Stream script operator synthetic events into out stream
+select event from beep into out;
+select event from boop into out;        
+        "#,
+        )
     }
 }
