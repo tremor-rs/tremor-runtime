@@ -12,18 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::op::prelude::*;
-
-#[derive(Debug, Clone, Hash)]
-pub struct Passthrough {}
-
-op!(PassthroughFactory (_node) {
-    Ok(Box::new(Passthrough{}))
-});
-
-#[allow(unused_mut)]
-impl Operator for Passthrough {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        Ok(vec![("out".into(), event)])
-    }
-}
+pub use super::*;
+pub use crate::errors::*;
+pub use crate::{Event, Operator};
+pub use halfbrown::{hashmap, HashMap};
+pub use serde_yaml;
+pub use std::borrow::Cow;

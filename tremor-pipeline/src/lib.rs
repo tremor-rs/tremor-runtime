@@ -63,15 +63,16 @@ pub mod query;
 pub use op::{InitializableOperator, Operator};
 pub type MetaValue = simd_json::value::owned::Value;
 pub type MetaMap = simd_json::value::owned::Object;
-pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
-pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
+pub type PortIndexMap =
+    HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
+pub type ExecPortIndexMap = HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
     defn: Option<StmtRentalWrapper>,
     node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
-pub type NodeMap = HashMap<String, NodeIndex>;
+pub type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
 lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
@@ -82,10 +83,22 @@ lazy_static! {
     };
 }
 
+pub fn common_cow(s: String) -> Cow<'static, str> {
+    macro_rules! cows {
+        ($target:expr, $($cow:expr),*) => {
+            match $target.as_str() {
+                $($cow => $cow.into()),*,
+                _ => Cow::Owned($target),
+            }
+        };
+    }
+    cows!(s, "in", "out", "err", "main")
+}
+
 #[derive(Clone, Debug)]
 pub struct Pipeline {
     pub id: config::ID,
-    pub inputs: HashMap<String, NodeIndex>,
+    pub inputs: HashMap<Cow<'static, str>, NodeIndex>,
     pub port_indexes: PortIndexMap,
     pub outputs: Vec<NodeIndex>,
     pub config: config::Pipeline,
@@ -200,7 +213,7 @@ pub enum SignalKind {
 
 #[derive(Debug, Clone, PartialOrd, Eq)]
 pub struct NodeConfig {
-    pub id: String,
+    pub id: Cow<'static, str>,
     pub kind: NodeKind,
     pub op_type: String,
     pub config: config::ConfigMap,
@@ -232,21 +245,21 @@ impl std::hash::Hash for NodeConfig {
 
 #[derive(Debug)]
 pub struct OperatorNode {
-    pub id: String,
+    pub id: Cow<'static, str>,
     pub kind: NodeKind,
     pub op_type: String,
     pub op: Box<dyn Operator>,
 }
 
 impl Operator for OperatorNode {
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, event)
     }
 
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_signal(signal)?;
         Ok(vec![])
     }
@@ -332,11 +345,12 @@ pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
 
 pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let mut graph = ConfigGraph::new();
-    let mut nodes = HashMap::new(); // <String, NodeIndex>
-    let mut inputs = HashMap::new();
+    let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new(); // <String, NodeIndex>
+    let mut inputs: HashMap<Cow<'static, str>, _> = HashMap::new();
     let mut outputs = Vec::new();
     let mut port_indexes: PortIndexMap = HashMap::new();
     for stream in &config.interface.inputs {
+        let stream = common_cow(stream.clone());
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Input,
@@ -346,11 +360,11 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             node: None,
         });
         nodes.insert(stream.clone(), id);
-        inputs.insert(stream.clone(), id);
+        inputs.insert(stream, id);
     }
 
     for node in &config.nodes {
-        let node_id = node.id.clone();
+        let node_id = common_cow(node.id.clone());
         let id = graph.add_node(NodeConfig {
             id: node_id.clone(),
             kind: NodeKind::Operator,
@@ -363,28 +377,29 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     }
 
     for stream in &config.interface.outputs {
+        let stream = common_cow(stream.clone());
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Output,
-            op_type: "passthrough".to_string(),
+            op_type: "passthrough".into(),
             config: None, // passthrough has no config
             defn: None,
             node: None,
         });
-        nodes.insert(stream.clone(), id);
+        nodes.insert(stream, id);
         outputs.push(id);
     }
 
     // Add metrics output port
     let id = graph.add_node(NodeConfig {
-        id: "metrics".to_string(),
+        id: "metrics".into(),
         kind: NodeKind::Output,
         op_type: "passthrough".to_string(),
         config: None, // passthrough has no config
         defn: None,
         node: None,
     });
-    nodes.insert("metrics".to_string(), id);
+    nodes.insert("metrics".into(), id);
     outputs.push(id);
 
     for (from, tos) in &config.links {
@@ -479,8 +494,8 @@ impl NodeMetrics {
 pub struct ExecutableGraph {
     pub id: String,
     pub graph: Vec<OperatorNode>,
-    pub inputs: HashMap<String, usize>,
-    pub stack: Vec<(usize, String, Event)>,
+    pub inputs: HashMap<Cow<'static, str>, usize>,
+    pub stack: Vec<(usize, Cow<'static, str>, Event)>,
     pub signalflow: Vec<usize>,
     pub contraflow: Vec<usize>,
     pub port_indexes: ExecPortIndexMap,
@@ -490,7 +505,7 @@ pub struct ExecutableGraph {
     pub metric_interval: Option<u64>,
 }
 
-pub type Returns = Vec<(String, Event)>;
+pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
     /// This is a performance critial function!
     pub fn enqueue(
@@ -503,13 +518,13 @@ impl ExecutableGraph {
         if let Some(ival) = self.metric_interval {
             if event.ingest_ns - self.last_metrics > ival {
                 let mut tags = HashMap::new();
-                tags.insert("pipeline".into(), self.id.clone().into());
+                tags.insert("pipeline".into(), common_cow(self.id.clone()).into());
                 self.enqueue_metrics("events", tags, event.ingest_ns);
                 self.last_metrics = event.ingest_ns;
             }
         }
         self.stack
-            .push((self.inputs[stream_name], "in".to_string(), event));
+            .push((self.inputs[stream_name], "in".into(), event));
         self.run(returns)
     }
 
@@ -540,13 +555,13 @@ impl ExecutableGraph {
                 for (out_port, _) in &res {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs
-                        .get_mut(out_port.as_str())
+                        .get_mut(out_port)
                     {
                         *count += 1;
                     } else {
                         unsafe { self.metrics.get_unchecked_mut(idx) }
                             .outputs
-                            .insert(out_port.clone().into(), 1);
+                            .insert(out_port.clone(), 1);
                     }
                 }
                 self.enqueue_events(idx, res);
@@ -574,7 +589,7 @@ impl ExecutableGraph {
                 for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".to_owned(),
+                        "in".into(),
                         Event {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
@@ -592,7 +607,7 @@ impl ExecutableGraph {
                 for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".to_owned(),
+                        "in".into(),
                         Event {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
@@ -609,33 +624,33 @@ impl ExecutableGraph {
         }
     }
 
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(String, Event)>) {
+    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
                 let len = outgoing.len();
                 for (idx, in_port) in outgoing.iter().take(len - 1) {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
                         .inputs
-                        .get_mut(in_port.as_str())
+                        .get_mut(in_port)
                     {
                         *count += 1;
                     } else {
                         unsafe { self.metrics.get_unchecked_mut(*idx) }
                             .inputs
-                            .insert(in_port.clone().into(), 1);
+                            .insert(in_port.clone(), 1);
                     }
                     self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
                 let (idx, in_port) = unsafe { outgoing.get_unchecked(len - 1) };
                 if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
                     .inputs
-                    .get_mut(in_port.as_str())
+                    .get_mut(in_port)
                 {
                     *count += 1;
                 } else {
                     unsafe { self.metrics.get_unchecked_mut(*idx) }
                         .inputs
-                        .insert(in_port.clone().into(), 1);
+                        .insert(in_port.clone(), 1);
                 }
                 self.stack.push((*idx, in_port.clone(), event))
             }
@@ -934,7 +949,7 @@ mod test {
         let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let l = p.config.links.iter().next().expect("no links");
         assert_eq!(
-            (&"in".to_string(), vec!["out".to_string()]),
+            (&"in".into(), vec!["out".into()]),
             (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())
         );
     }

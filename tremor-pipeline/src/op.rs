@@ -16,6 +16,7 @@ pub mod debug;
 pub mod generic;
 pub mod grouper;
 pub mod identity;
+pub mod prelude;
 pub mod runtime;
 pub mod trickle;
 
@@ -26,14 +27,14 @@ use std::borrow::Cow;
 use tremor_script::Value;
 
 pub trait Operator: std::fmt::Debug + Send {
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>>;
+    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
 
     fn handles_signal(&self) -> bool {
         false
     }
     // A lot of operators won't need to handle signals so we default to
     // passing the signal through
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // Make the trait signature nicer
         let _ = signal;
         Ok(vec![])

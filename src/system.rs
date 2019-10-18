@@ -27,6 +27,7 @@ use actix::Addr as ActixAddr;
 use crossbeam_channel::{bounded, Sender};
 use futures::future::Future;
 use hashbrown::HashMap;
+use std::borrow::Cow;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -99,10 +100,13 @@ impl Message for CreatePipeline {
 
 #[derive(Debug)]
 pub enum PipelineMsg {
-    Event { event: Event, input: String },
-    ConnectOfframp(String, TremorURL, offramp::Addr),
-    ConnectPipeline(String, TremorURL, PipelineAddr),
-    Disconnect(String, TremorURL),
+    Event {
+        event: Event,
+        input: Cow<'static, str>,
+    },
+    ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
+    ConnectPipeline(Cow<'static, str>, TremorURL, PipelineAddr),
+    Disconnect(Cow<'static, str>, TremorURL),
     Signal(Event),
     Insight(Event),
 }
@@ -114,7 +118,7 @@ enum PipelineDest {
 }
 
 impl PipelineDest {
-    pub fn send_event(&self, input: String, event: Event) -> Result<()> {
+    pub fn send_event(&self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event })?,
             Self::Pipeline(addr) => addr.addr.send(PipelineMsg::Event { input, event })?,
@@ -128,8 +132,8 @@ impl Handler<CreatePipeline> for Manager {
     fn handle(&mut self, req: CreatePipeline, _ctx: &mut Self::Context) -> Self::Result {
         #[inline]
         fn send_events(
-            eventset: &mut Vec<(String, Event)>,
-            dests: &halfbrown::HashMap<String, Vec<(TremorURL, PipelineDest)>>,
+            eventset: &mut Vec<(Cow<'static, str>, Event)>,
+            dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>>,
         ) -> Result<()> {
             for (output, event) in eventset.drain(..) {
                 if let Some(dest) = dests.get(&output) {
@@ -141,7 +145,8 @@ impl Handler<CreatePipeline> for Manager {
                                 .ok_or_else(|| {
                                     Error::from(format!("missing instance port in {}.", id))
                                 })?
-                                .clone(),
+                                .clone()
+                                .into(),
                             event.clone(),
                         )?;
                     }
@@ -152,7 +157,8 @@ impl Handler<CreatePipeline> for Manager {
                             .ok_or_else(|| {
                                 Error::from(format!("missing instance port in {}.", id))
                             })?
-                            .clone(),
+                            .clone()
+                            .into(),
                         event,
                     )?;
                 };
@@ -161,9 +167,9 @@ impl Handler<CreatePipeline> for Manager {
         }
         let config = req.config;
         let id = req.id.clone();
-        let mut dests: halfbrown::HashMap<String, Vec<(TremorURL, PipelineDest)>> =
+        let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>> =
             halfbrown::HashMap::new();
-        let mut eventset = Vec::new();
+        let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
         let (tx, rx) = bounded::<PipelineMsg>(self.qsize);
         let mut pipeline = config.to_executable_graph(tremor_pipeline::buildin_ops)?;
         let mut pid = req.id.clone();

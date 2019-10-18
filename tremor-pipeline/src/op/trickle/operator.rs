@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::common_cow;
 use crate::errors::*;
-use crate::{Event, Operator};
+use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
 use tremor_script::{self};
@@ -55,7 +56,7 @@ impl TrickleOperator {
                                     .ok_or_else(|| error_missing_config("name"))?
                                     .to_owned(),
                             },
-                            id: op.id.to_string(),
+                            id: op.id.clone().into(),
                         })
                     }
                     ("generic", "backpressure") => {
@@ -107,16 +108,13 @@ impl TrickleOperator {
                             data: op::generic::batch::empty(),
                             max_delay_ns,
                             first_ns: 0,
-                            id: op.id.clone(),
+                            id: common_cow(op.id.clone()),
                         })
                     }
-                    ("grouper", "bucket") => {
-                        use halfbrown::HashMap;
-                        Box::new(op::grouper::bucket::Grouper {
-                            buckets: HashMap::new(),
-                            _id: op.id.clone(),
-                        })
-                    }
+                    ("grouper", "bucket") => Box::new(op::grouper::bucket::Grouper {
+                        buckets: HashMap::new(),
+                        _id: common_cow(op.id.clone()),
+                    }),
                     (s, o) => return Err(ErrorKind::UnknownOp(s.into(), o.into()).into()),
                 }
             }
@@ -139,7 +137,7 @@ impl TrickleOperator {
 impl Operator for TrickleOperator {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, event)
     }
 }

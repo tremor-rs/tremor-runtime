@@ -26,6 +26,7 @@
 //! be discarded.
 
 use crate::errors::*;
+use crate::op::prelude::*;
 use crate::{Event, Operator};
 use serde_yaml;
 use tremor_script::prelude::*;
@@ -74,18 +75,18 @@ op!(BackpressureFactory(node) {
             last_pass: 0,
         }))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
     }});
 
 impl Operator for Backpressure {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let d = event.ingest_ns - self.last_pass;
         if d < self.backoff {
-            Ok(vec![("overflow".to_string(), event)])
+            Ok(vec![("overflow".into(), event)])
         } else {
             self.last_pass = event.ingest_ns;
-            Ok(vec![("out".to_string(), event)])
+            Ok(vec![("out".into(), event)])
         }
     }
     fn handles_contraflow(&self) -> bool {

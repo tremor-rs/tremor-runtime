@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
-use crate::{Event, Operator};
-use halfbrown::{hashmap, HashMap};
+use crate::op::prelude::*;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::ast::ARGS_CONST_ID;
@@ -51,8 +49,6 @@ impl TrickleScript {
         defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
         node_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
-        use std::borrow::Cow;
-
         // We require Value to be static here to enforce the constraint that
         // arguments name/value pairs live at least as long as the operator nodes that have
         // dependencies on them.
@@ -135,7 +131,7 @@ impl TrickleScript {
 }
 
 impl Operator for TrickleScript {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
 
         let data = event.data.suffix();
@@ -156,13 +152,17 @@ impl Operator for TrickleScript {
         );
 
         match value {
-            Ok(Return::EmitEvent { port }) => {
-                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-            }
+            Ok(Return::EmitEvent { port }) => Ok(vec![(
+                port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
+                event,
+            )]),
 
             Ok(Return::Emit { value, port }) => {
                 *unwind_event = value;
-                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
+                Ok(vec![(
+                    port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
+                    event,
+                )])
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
@@ -174,7 +174,7 @@ impl Operator for TrickleScript {
                     error.insert("event".into(), o);
                 };
                 //*unwind_event = data;
-                Ok(vec![("error".to_string(), event)])
+                Ok(vec![("error".into(), event)])
             }
         }
     }

@@ -17,12 +17,13 @@ use crate::errors::*;
 use crate::op;
 use crate::op::trickle::select::WindowImpl;
 use crate::OperatorNode;
-use crate::{ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
+use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use simd_json::ValueTrait;
+use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::ast::Stmt;
@@ -34,16 +35,16 @@ use tremor_script::{AggrRegistry, Registry, Value};
 
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
-        id: port.0.id.to_string(),
-        port: port.1.id.to_string(),
+        id: common_cow(port.0.id.to_string()),
+        port: common_cow(port.1.id.to_string()),
         had_port: true,
     }
 }
 
 fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
-        id: port.0.id.to_string(),
-        port: port.1.id.to_string(),
+        id: common_cow(port.0.id.to_string()),
+        port: common_cow(port.1.id.to_string()),
         had_port: true,
     }
 }
@@ -92,13 +93,13 @@ impl Query {
 
         let mut pipe_graph = ConfigGraph::new();
         let mut pipe_ops = HashMap::new();
-        let mut nodes = HashMap::new();
-        let mut links: IndexMap<_, Vec<InputPort>> = IndexMap::new();
+        let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new();
+        let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
 
         // FIXME compute public streams - do not hardcode
-        let in_s = "in".to_string();
+        let in_s: Cow<'static, str> = "in".into();
         let id = pipe_graph.add_node(NodeConfig {
             id: in_s.clone(),
             kind: NodeKind::Input,
@@ -113,7 +114,7 @@ impl Query {
         inputs.insert(in_s, id);
 
         // FIXME compute public streams - do not hardcode
-        let err = "err".to_string();
+        let err: Cow<'static, str> = "err".into();
         let id = pipe_graph.add_node(NodeConfig {
             id: err.clone(),
             kind: NodeKind::Output,
@@ -128,7 +129,7 @@ impl Query {
         outputs.push(id);
 
         // FIXME compute public streams - do not hardcode
-        let out = "out".to_string();
+        let out: Cow<'static, str> = "out".into();
         let id = pipe_graph.add_node(NodeConfig {
             id: out.clone(),
             kind: NodeKind::Output,
@@ -161,7 +162,7 @@ impl Query {
             match stmt {
                 Stmt::Select(ref select) => {
                     let s = &select.stmt;
-                    if !nodes.contains_key(&s.from.0.id.to_string()) {
+                    if !nodes.contains_key(&s.from.0.id) {
                         let from = s.from.0.id.clone().to_string();
                         let mut h = DumbHighlighter::default();
                         let butt = query_stream_not_defined(&s, &s.from.0, from)?;
@@ -174,12 +175,12 @@ impl Query {
                     }
 
                     let select_in = InputPort {
-                        id: format!("select_{}", select_num),
+                        id: format!("select_{}", select_num).into(),
                         port: "out".into(),
                         had_port: false,
                     };
                     let select_out = OutputPort {
-                        id: format!("select_{}", select_num),
+                        id: format!("select_{}", select_num).into(),
                         port: "out".into(),
                         had_port: false,
                     };
@@ -206,7 +207,7 @@ impl Query {
                     }
 
                     let node = NodeConfig {
-                        id: select_in.id.to_string(),
+                        id: select_in.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::select".to_string(),
                         config: None,
@@ -221,7 +222,7 @@ impl Query {
                     outputs.push(id);
                 }
                 Stmt::Stream(s) => {
-                    let name = s.id.clone().to_string();
+                    let name = common_cow(s.id.clone());
                     let id = name.clone();
                     if !nodes.contains_key(&id) {
                         let node = NodeConfig {
@@ -258,7 +259,7 @@ impl Query {
                     let target = o.target.clone().to_string();
 
                     let node = NodeConfig {
-                        id: name.to_string(),
+                        id: common_cow(name),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         config: None,
@@ -280,7 +281,7 @@ impl Query {
                     };
                     let op = node.to_op(supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(o.id.clone(), id);
+                    nodes.insert(common_cow(o.id.clone()), id);
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(s) => {
@@ -305,7 +306,7 @@ impl Query {
                     };
 
                     let node = NodeConfig {
-                        id: name.to_string(),
+                        id: common_cow(name),
                         kind: NodeKind::Operator,
                         op_type: "trickle::script".to_string(),
                         config: None,
@@ -317,7 +318,7 @@ impl Query {
 
                     let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(o.id.clone(), id);
+                    nodes.insert(common_cow(o.id.clone()), id);
                     outputs.push(id);
                 }
             };
@@ -325,14 +326,14 @@ impl Query {
 
         // Add metrics output port
         let id = pipe_graph.add_node(NodeConfig {
-            id: "_metrics".to_string(),
+            id: "_metrics".into(),
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
         });
-        nodes.insert("metrics".to_string(), id);
+        nodes.insert("metrics".into(), id);
         let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
@@ -343,8 +344,8 @@ impl Query {
                 let from_idx = nodes[&from.id];
                 let to_idx = nodes[&to.id];
 
-                let from_tpl = (from_idx, from.port.clone());
-                let to_tpl = (to_idx, to.port.clone());
+                let from_tpl = (from_idx, from.port.clone().into());
+                let to_tpl = (to_idx, to.port.clone().into());
                 match port_indexes.get_mut(&from_tpl) {
                     None => {
                         port_indexes.insert(from_tpl, vec![to_tpl]);
@@ -407,7 +408,7 @@ impl Query {
                 port_indexes2.insert((i2pos[&i1], s1.clone()), connections);
             }
 
-            let mut inputs2: HashMap<String, usize> = HashMap::new();
+            let mut inputs2: HashMap<Cow<'static, str>, usize> = HashMap::new();
             for (k, idx) in &inputs {
                 inputs2.insert(k.clone(), i2pos[idx]);
             }
@@ -487,7 +488,7 @@ pub fn supported_operators(
                     Err("Declared as select but isn't a select".into())
                 };
             Box::new(TrickleSelect::with_stmt(
-                config.id.clone(),
+                config.id.clone().to_string(),
                 &groups,
                 windows?,
                 &node,
@@ -502,7 +503,10 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            Box::new(TrickleOperator::with_stmt(config.id.clone(), node)?)
+            Box::new(TrickleOperator::with_stmt(
+                config.id.clone().to_string(),
+                node,
+            )?)
         }
         ["trickle", "script"] => {
             let node = if let Some(node) = node {
@@ -514,7 +518,7 @@ pub fn supported_operators(
                 .into());
             };
             Box::new(TrickleScript::with_stmt(
-                config.id.clone(),
+                config.id.clone().to_string(),
                 defn.ok_or_else(|| Error::from("Script definition missing"))?,
                 node,
             )?)
@@ -534,7 +538,7 @@ pub fn supported_operators(
         _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
     };
     Ok(OperatorNode {
-        id: config.id.clone(),
+        id: config.id.clone().into(),
         kind: config.kind,
         op_type: config.op_type.clone(),
         op,

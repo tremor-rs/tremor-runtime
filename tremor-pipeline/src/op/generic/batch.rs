@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use crate::config::dflt;
-use crate::errors::*;
-use crate::{Event, Operator};
+use crate::op::prelude::*;
 use serde_yaml;
 use tremor_script::prelude::*;
 
@@ -34,7 +33,7 @@ pub struct Batch {
     pub len: usize,
     pub max_delay_ns: Option<u64>,
     pub first_ns: u64,
-    pub id: String,
+    pub id: Cow<'static, str>,
     pub event_id: u64,
 }
 
@@ -63,12 +62,12 @@ op!(BatchFactory(node) {
             id: node.id.clone(),
         }))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
     }});
 
 impl Operator for Batch {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // TODO: This is ugly
         let Event {
             id,
@@ -125,7 +124,7 @@ impl Operator for Batch {
                 is_batch: true,
             };
             self.event_id += 1;
-            Ok(vec![("out".to_string(), event)])
+            Ok(vec![("out".into(), event)])
         } else {
             Ok(vec![])
         }
@@ -135,7 +134,7 @@ impl Operator for Batch {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         if let Some(delay_ns) = self.max_delay_ns {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
@@ -152,7 +151,7 @@ impl Operator for Batch {
                     is_batch: true,
                 };
                 self.event_id += 1;
-                Ok(vec![("out".to_string(), event)])
+                Ok(vec![("out".into(), event)])
             } else {
                 Ok(vec![])
             }
@@ -179,7 +178,7 @@ mod test {
             max_delay_ns: None,
             data: empty(),
             len: 0,
-            id: "badger".to_string(),
+            id: "badger".into(),
         };
         let event1 = Event {
             is_batch: false,
@@ -238,7 +237,7 @@ mod test {
             max_delay_ns: Some(1_000_000),
             data: empty(),
             len: 0,
-            id: "badger".to_string(),
+            id: "badger".into(),
         };
         let event1 = Event {
             is_batch: false,
@@ -316,7 +315,7 @@ mod test {
             max_delay_ns: Some(1_000_000),
             data: empty(),
             len: 0,
-            id: "badger".to_string(),
+            id: "badger".into(),
         };
         let event1 = Event {
             is_batch: false,

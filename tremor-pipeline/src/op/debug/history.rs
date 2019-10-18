@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
-use crate::{Event, Operator};
-use serde_yaml;
+use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -33,7 +31,7 @@ op!(EventHistoryFactory(node) {
             id: node.id.clone(),
         }))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
     }});
 
@@ -41,11 +39,11 @@ op!(EventHistoryFactory(node) {
 #[allow(clippy::module_name_repetitions)]
 pub struct EventHistory {
     pub config: Config,
-    pub id: String,
+    pub id: Cow<'static, str>,
 }
 
 impl Operator for EventHistory {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let id = event.id;
         let (_, meta) = event.data.parts();
         match meta
@@ -67,13 +65,13 @@ impl Operator for EventHistory {
                 }
             }
         };
-        Ok(vec![("out".to_string(), event)])
+        Ok(vec![("out".into(), event)])
     }
 
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let id = signal.id;
         let (_, meta) = signal.data.parts();
 
@@ -110,7 +108,7 @@ mod test {
                 op: "green".to_string(),
                 name: "snot".to_string(),
             },
-            id: "badger".to_string(),
+            id: "badger".into(),
         };
         let event = Event {
             is_batch: false,

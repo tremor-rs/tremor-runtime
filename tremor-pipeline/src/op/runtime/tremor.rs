@@ -11,10 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::*;
+use crate::op::prelude::*;
 use crate::FN_REGISTRY;
-use crate::{Event, Operator};
-use halfbrown::hashmap;
 use simd_json::borrowed::Value;
 use simd_json::value::ValueTrait;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
@@ -29,7 +27,7 @@ op!(TremorFactory(node) {
                 Ok(Box::new(Tremor {
                     runtime,
                     config,
-                    id: node.id.clone(),
+                    id: node.id.clone().to_string(),
                 })),
             Err(e) => {
                 let mut h = DumbHighlighter::new();
@@ -42,7 +40,7 @@ op!(TremorFactory(node) {
             }
         }
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.clone().to_string()).into())
     }
 });
 
@@ -61,7 +59,7 @@ pub struct Tremor {
 impl Operator for Tremor {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
         let data = event.data.suffix();
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
@@ -75,13 +73,17 @@ impl Operator for Tremor {
             &mut event_meta,   // $
         );
         match value {
-            Ok(Return::EmitEvent { port }) => {
-                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
-            }
+            Ok(Return::EmitEvent { port }) => Ok(vec![(
+                port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
+                event,
+            )]),
 
             Ok(Return::Emit { value, port }) => {
                 *unwind_event = value;
-                Ok(vec![(port.unwrap_or_else(|| "out".to_string()), event)])
+                Ok(vec![(
+                    port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
+                    event,
+                )])
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
@@ -93,7 +95,7 @@ impl Operator for Tremor {
                     error.insert("event".into(), o);
                 };
                 //*unwind_event = data;
-                Ok(vec![("error".to_string(), event)])
+                Ok(vec![("error".into(), event)])
             }
         }
     }
@@ -119,7 +121,7 @@ mod test {
         let mut op = Tremor {
             config,
             runtime,
-            id: "badger".to_string(),
+            id: "badger".into(),
         };
         let event = Event {
             is_batch: false,

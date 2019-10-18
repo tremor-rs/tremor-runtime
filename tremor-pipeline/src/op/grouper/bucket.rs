@@ -76,7 +76,7 @@ op!(BucketGrouperFactory(node) {
             _id: node.id.clone(),
         }))
     } else {
-        Err(ErrorKind::ExtraOpConfig(node.id.clone()).into())
+        Err(ErrorKind::ExtraOpConfig(node.id.to_string()).into())
     }
 });
 /// Single bucket specification
@@ -123,7 +123,7 @@ impl Bucket {
 }
 
 pub struct Grouper {
-    pub _id: String,
+    pub _id: Cow<'static, str>,
     pub buckets: HashMap<String, Bucket>,
 }
 
@@ -134,7 +134,7 @@ impl std::fmt::Debug for Grouper {
 }
 
 impl Operator for Grouper {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let meta = &event.data.suffix().meta;
         if let Some(class) = meta.get("class").and_then(Value::as_str) {
             let (_, groups) = self
@@ -156,7 +156,7 @@ impl Operator for Grouper {
                     let rate = if let Some(rate) = Rate::from_meta(&meta) {
                         rate
                     } else {
-                        return Ok(vec![("error".to_string(), event)]);
+                        return Ok(vec![("error".into(), event)]);
                     };
                     groups.cache.put(
                         dimensions.clone(),
@@ -177,13 +177,13 @@ impl Operator for Grouper {
             };
             if window.inc_t(event.ingest_ns).is_ok() {
                 groups.pass += 1;
-                Ok(vec![("out".to_string(), event)])
+                Ok(vec![("out".into(), event)])
             } else {
                 groups.overflow += 1;
-                Ok(vec![("overflow".to_string(), event)])
+                Ok(vec![("overflow".into(), event)])
             }
         } else {
-            Ok(vec![("error".to_string(), event)])
+            Ok(vec![("error".into(), event)])
         }
     }
 

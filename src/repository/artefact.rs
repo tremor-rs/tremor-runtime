@@ -119,7 +119,7 @@ impl Artefact for Pipeline {
                                 .addr
                                 .clone()
                                 .send(PipelineMsg::ConnectOfframp(
-                                    from.clone(),
+                                    from.clone().into(),
                                     to.clone(),
                                     offramp,
                                 ))
@@ -136,7 +136,11 @@ impl Artefact for Pipeline {
                             pipeline
                                 .addr
                                 .clone()
-                                .send(PipelineMsg::ConnectPipeline(from.clone(), to.clone(), p))
+                                .send(PipelineMsg::ConnectPipeline(
+                                    from.clone().into(),
+                                    to.clone(),
+                                    p,
+                                ))
                                 .map_err(|e| -> Error {
                                     format!("Could not send to pipeline: {:?}", e).into()
                                 })?;
@@ -167,13 +171,13 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Offramp) => {
                         pipeline
                             .addr
-                            .send(PipelineMsg::Disconnect(from.clone(), to))
+                            .send(PipelineMsg::Disconnect(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     Some(ResourceType::Pipeline) => {
                         pipeline
                             .addr
-                            .send(PipelineMsg::Disconnect(from.clone(), to))
+                            .send(PipelineMsg::Disconnect(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     _ => {

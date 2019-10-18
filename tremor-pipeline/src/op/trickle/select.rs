@@ -356,7 +356,7 @@ impl TrickleSelect {
 impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -491,7 +491,7 @@ impl Operator for TrickleSelect {
                         };
                     }
                     events.push((
-                        "out".to_string(),
+                        "out".into(),
                         Event {
                             id: event.id,
                             ingest_ns: event.ingest_ns,
@@ -599,7 +599,7 @@ impl Operator for TrickleSelect {
                     }
                 };
             }
-            events.push(("out".to_string(), event));
+            events.push(("out".into(), event));
         }
         Ok(events)
     }
@@ -710,7 +710,10 @@ mod test {
         TrickleSelect::with_stmt(id, &groups, windows, &stmt)
     }
 
-    fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(String, Event)>> {
+    fn try_enqueue(
+        op: &mut TrickleSelect,
+        event: Event,
+    ) -> Result<Option<(Cow<'static, str>, Event)>> {
         let mut action = op.on_event("in", event)?;
         let first = action.pop();
         if action.is_empty() {
@@ -723,7 +726,7 @@ mod test {
     fn try_enqueue_two(
         op: &mut TrickleSelect,
         event: Event,
-    ) -> Result<Option<[(String, Event); 2]>> {
+    ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
         let mut action = op.on_event("in", event)?;
         let r = action
             .pop()

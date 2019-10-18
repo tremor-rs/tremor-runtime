@@ -21,6 +21,7 @@ use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use actix::prelude::*;
 use crossbeam_channel::{bounded, Sender};
+use std::borrow::Cow;
 use std::fmt;
 use std::thread;
 
@@ -40,9 +41,18 @@ mod udp;
 mod ws;
 
 pub enum Msg {
-    Event { event: Event, input: String },
-    Connect { id: TremorURL, addr: PipelineAddr },
-    Disconnect { id: TremorURL, tx: Sender<bool> },
+    Event {
+        event: Event,
+        input: Cow<'static, str>,
+    },
+    Connect {
+        id: TremorURL,
+        addr: PipelineAddr,
+    },
+    Disconnect {
+        id: TremorURL,
+        tx: Sender<bool>,
+    },
 }
 
 pub type Addr = Sender<Msg>;
@@ -126,7 +136,7 @@ impl Handler<Create> for Manager {
                 match m {
                     Msg::Event { event, input } => {
                         // TODO FIXME implement postprocessors
-                        if let Err(e) = req.offramp.on_event(&req.codec, input, event) {
+                        if let Err(e) = req.offramp.on_event(&req.codec, input.into(), event) {
                             info!("[Offramp::{}] On Event error: {}", offramp_id, e);
                         };
                     }
