@@ -73,17 +73,12 @@ impl Operator for Tremor {
             &mut event_meta,   // $
         );
         match value {
-            Ok(Return::EmitEvent { port }) => Ok(vec![(
-                port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
-                event,
-            )]),
-
+            Ok(Return::EmitEvent { port }) => {
+                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
+            }
             Ok(Return::Emit { value, port }) => {
                 *unwind_event = value;
-                Ok(vec![(
-                    port.map(Cow::Owned).unwrap_or_else(|| "out".into()),
-                    event,
-                )])
+                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {

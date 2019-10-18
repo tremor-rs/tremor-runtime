@@ -202,11 +202,15 @@ impl Query {
                                     x.push(select_in.clone())
                                 }
                             }
-                            None => return Err("should never get here - link should be ok 1".into()),
+                            None => {
+                                return Err("should never get here - link should be ok 1".into())
+                            }
                         }
                         match links.get_mut(&select_out) {
                             Some(x) => x.push(into),
-                            None => return Err("should never get here - link should be ok 2".into()),
+                            None => {
+                                return Err("should never get here - link should be ok 2".into())
+                            }
                         }
                     } else {
                         links.insert(from, vec![select_in.clone()]);
@@ -350,8 +354,8 @@ impl Query {
                 let from_idx = nodes[&from.id];
                 let to_idx = nodes[&to.id];
 
-                let from_tpl = (from_idx, from.port.clone().into());
-                let to_tpl = (to_idx, to.port.clone().into());
+                let from_tpl = (from_idx, from.port.clone());
+                let to_tpl = (to_idx, to.port.clone());
                 match port_indexes.get_mut(&from_tpl) {
                     None => {
                         port_indexes.insert(from_tpl, vec![to_tpl]);
@@ -543,7 +547,7 @@ pub fn supported_operators(
         _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
     };
     Ok(OperatorNode {
-        id: config.id.clone().into(),
+        id: config.id.clone(),
         kind: config.kind,
         op_type: config.op_type.clone(),
         op,
