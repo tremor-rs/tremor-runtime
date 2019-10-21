@@ -1,7 +1,9 @@
 onramp:
   - id: tcp
     type: tcp
-    codec: json
+    preprocessors:
+      - lines-pipe
+    codec: string
     config:
       # TODO support strings here
       #host: "localhost"
@@ -12,7 +14,7 @@ onramp:
 offramp:
   - id: console
     type: stdout
-    codec: yaml
+    codec: string
     config:
       prefix: "TCP "
 

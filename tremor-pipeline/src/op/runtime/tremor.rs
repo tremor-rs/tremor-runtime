@@ -79,7 +79,7 @@ impl Operator for Tremor {
         let mut event_meta: simd_json::borrowed::Value =
             simd_json::owned::Value::Object(event.meta).into();
         // TODO remove later
-        dbg!(&event_meta);
+        //dbg!(&event_meta);
         // unwind_event => the event
         // event_meta => meta
         let value = self.runtime.run(
