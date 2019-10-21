@@ -97,13 +97,14 @@ where
 {
     reg: &'registry Registry,
     aggr_reg: &'registry AggrRegistry,
+    can_emit: bool,
     is_in_aggr: bool,
     operators: Vec<OperatorDecl<'script>>,
     scripts: Vec<ScriptDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     warnings: Vec<Warning>,
-    local_idx: usize,
     shadowed_vars: Vec<String>,
+    functions: HashMap<String, usize>,
     pub locals: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
 }
@@ -128,18 +129,20 @@ where
         mem::swap(&mut self.consts, consts);
         mem::swap(&mut self.locals, locals);
     }
+
     pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
             aggr_reg,
             is_in_aggr: false,
+            can_emit: false,
             operators: Vec::new(),
             scripts: Vec::new(),
             aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
             consts: HashMap::new(),
-            local_idx: 0,
+            functions: HashMap::new(),
             shadowed_vars: Vec::new(),
         }
     }
@@ -190,9 +193,8 @@ where
         if let Some(idx) = self.locals.get(id.as_str()) {
             *idx
         } else {
-            self.locals.insert(id.to_string(), self.local_idx);
-            self.local_idx += 1;
-            self.local_idx - 1
+            self.locals.insert(id.to_string(), self.locals.len());
+            self.locals.len() - 1
         }
     }
     fn is_const(&self, id: &str) -> Option<&usize> {
@@ -211,6 +213,9 @@ impl<'script> Script1<'script> {
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
         helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
+
+        #[allow(unused_mut)]
+        let mut fns: Vec<FnDecl<'script>> = Vec::new();
 
         let mut exprs = vec![];
         let len = self.exprs.len();
@@ -243,6 +248,14 @@ impl<'script> Script1<'script> {
                     }
 
                     consts.push(reduce2(expr)?);
+                }
+                #[allow(unreachable_code, unused_variables)]
+                Expr1::FnDecl(f) => {
+                    #[cfg(not(feature = "fns"))]
+                    return Err("Functions are currently not supported.".into());
+                    let f = f.up(&mut helper)?;
+                    helper.functions.insert(f.name.id.to_string(), fns.len());
+                    fns.push(f);
                 }
                 other => exprs.push(other.up(&mut helper)?),
             }
@@ -280,6 +293,7 @@ impl<'script> Script1<'script> {
                 consts,
                 aggregates: helper.aggregates,
                 locals: helper.locals.len(),
+                fns,
             },
             helper.warnings,
         ))
@@ -292,6 +306,7 @@ pub struct Script<'script> {
     pub consts: Vec<Value<'script>>,
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     pub locals: usize,
+    pub fns: Vec<FnDecl<'script>>,
 }
 
 use crate::interpreter::*;
@@ -317,17 +332,17 @@ where
             result_needed: true,
             aggr,
         };
+
+        let env = Env {
+            context,
+            consts: &self.consts,
+            aggrs: &self.aggregates,
+            fns: &self.fns,
+        };
+
         while let Some(expr) = exprs.next() {
             if exprs.peek().is_none() {
-                match stry!(expr.run(
-                    opts.with_result(),
-                    context,
-                    &self.aggregates,
-                    event,
-                    meta,
-                    &mut local,
-                    &self.consts,
-                )) {
+                match stry!(expr.run(opts.with_result(), &env, event, meta, &mut local)) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {
@@ -341,15 +356,7 @@ where
                     }
                 }
             } else {
-                match stry!(expr.run(
-                    opts.without_result(),
-                    context,
-                    &self.aggregates,
-                    event,
-                    meta,
-                    &mut local,
-                    &self.consts,
-                )) {
+                match stry!(expr.run(opts.without_result(), &env, event, meta, &mut local)) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {
@@ -519,6 +526,7 @@ pub enum Expr1<'script> {
         end: Location,
     },
     Emit(Box<EmitExpr1<'script>>),
+    FnDecl(FnDecl1<'script>),
     Imut(ImutExpr1<'script>), //Test(TestExpr1)
 }
 
@@ -574,9 +582,61 @@ impl<'script> Upable<'script> for Expr1<'script> {
             Expr1::Drop { start, end } => Expr::Drop { start, end },
             Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             Expr1::Imut(i) => i.up(helper)?.into(),
+            Expr1::FnDecl(_) => unreachable!("filtered out"),
         })
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FnDecl1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub name: Ident<'script>,
+    pub args: Vec<Ident<'script>>,
+    pub body: Exprs1<'script>,
+}
+impl_expr!(FnDecl1);
+
+impl<'script> Upable<'script> for FnDecl1<'script> {
+    type Target = FnDecl<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let can_emit = helper.can_emit;
+        let mut aggrs = Vec::new();
+        let mut locals = HashMap::new();
+        let mut consts = HashMap::new();
+
+        for (i, a) in self.args.iter().enumerate() {
+            locals.insert(a.id.to_string(), i);
+        }
+
+        helper.can_emit = false;
+        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        let body = self.body.up(helper)?;
+        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.can_emit = can_emit;
+
+        Ok(FnDecl {
+            start: self.start,
+            end: self.end,
+            name: self.name,
+            args: self.args,
+            body,
+            locals: locals.len(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FnDecl<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub name: Ident<'script>,
+    pub args: Vec<Ident<'script>>,
+    pub body: Exprs<'script>,
+    pub locals: usize,
+}
+
+impl_expr!(FnDecl);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ImutExpr1<'script> {
@@ -591,6 +651,7 @@ pub enum ImutExpr1<'script> {
     Unary(Box<UnaryExpr1<'script>>),
     Literal(Literal<'script>),
     Invoke(Invoke1<'script>),
+    InvokeLocal(InvokeLocal1<'script>),
     InvokeAggr(InvokeAggr1<'script>),
     Present {
         path: Path1<'script>,
@@ -608,6 +669,7 @@ impl<'script> BaseExpr for ImutExpr1<'script> {
             ImutExpr1::Comprehension(e) => e.start,
             ImutExpr1::Invoke(e) => e.s(),
             ImutExpr1::InvokeAggr(e) => e.s(),
+            ImutExpr1::InvokeLocal(e) => e.s(),
             ImutExpr1::List(e) => e.s(),
             ImutExpr1::Literal(e) => e.s(),
             ImutExpr1::Match(e) => e.start,
@@ -626,6 +688,7 @@ impl<'script> BaseExpr for ImutExpr1<'script> {
             ImutExpr1::Comprehension(e) => e.end,
             ImutExpr1::Invoke(e) => e.e(),
             ImutExpr1::InvokeAggr(e) => e.e(),
+            ImutExpr1::InvokeLocal(e) => e.e(),
             ImutExpr1::List(e) => e.e(),
             ImutExpr1::Literal(e) => e.e(),
             ImutExpr1::Match(e) => e.end,
@@ -815,6 +878,10 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                     }
                 }
             }
+            ImutExpr1::InvokeLocal(i) => {
+                let i = i.up(helper)?;
+                ImutExpr::InvokeLocal(i)
+            }
             ImutExpr1::InvokeAggr(i) => {
                 let i = i.up(helper)?;
                 ImutExpr::InvokeAggr(i)
@@ -908,6 +975,7 @@ pub enum ImutExpr<'script> {
     Invoke2(Invoke<'script>),
     Invoke3(Invoke<'script>),
     Invoke(Invoke<'script>),
+    InvokeLocal(InvokeLocal<'script>),
     InvokeAggr(InvokeAggr),
 }
 
@@ -928,6 +996,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             | ImutExpr::Invoke2(e)
             | ImutExpr::Invoke3(e) => e.s(),
             ImutExpr::InvokeAggr(e) => e.s(),
+            ImutExpr::InvokeLocal(e) => e.s(),
             ImutExpr::List(e) => e.s(),
             ImutExpr::Literal(e) => e.s(),
             ImutExpr::Local { start, .. } | ImutExpr::Present { start, .. } => *start,
@@ -948,6 +1017,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             | ImutExpr::Invoke2(e)
             | ImutExpr::Invoke3(e) => e.e(),
             ImutExpr::InvokeAggr(e) => e.e(),
+            ImutExpr::InvokeLocal(e) => e.e(),
             ImutExpr::List(e) => e.e(),
             ImutExpr::Literal(e) => e.e(),
             ImutExpr::Match(e) => e.e(),
@@ -1097,6 +1167,46 @@ impl<'script> PartialEq for Invoke<'script> {
 impl<'script> fmt::Debug for Invoke<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn {}::{}", self.module, self.fun)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct InvokeLocal1<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub fun: String,
+    pub args: ImutExprs1<'script>,
+}
+impl_expr!(InvokeLocal1);
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct InvokeLocal<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub fun: String,
+    pub id: usize,
+    pub args: ImutExprs<'script>,
+}
+impl_expr!(InvokeLocal);
+
+impl<'script> Upable<'script> for InvokeLocal1<'script> {
+    type Target = InvokeLocal<'script>;
+    #[allow(unreachable_code, unused_variables)]
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        #[cfg(not(feature = "fns"))]
+        return Err("Functions are currently not supported.".into());
+        let id = if let Some(id) = helper.functions.get(&self.fun) {
+            *id
+        } else {
+            unimplemented!();
+        };
+        Ok(InvokeLocal {
+            start: self.start,
+            end: self.end,
+            fun: self.fun,
+            id,
+            args: self.args.up(helper)?,
+        })
     }
 }
 

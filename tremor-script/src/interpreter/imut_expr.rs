@@ -14,17 +14,18 @@
 
 use super::{
     exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
-    test_predicate_expr, AggrType, ExecOpts, LocalStack, FALSE, TRUE,
+    test_predicate_expr, AggrType, Cont, Env, ExecOpts, LocalStack, LocalValue, FALSE, TRUE,
 };
+
 use crate::ast::*;
 use crate::errors::*;
 use crate::registry::{Registry, TremorAggrFnWrapper};
 use crate::stry;
-use crate::EventContext;
 use simd_json::value::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
+use std::mem;
 
 impl<'run, 'event, 'script> ImutExpr<'script>
 where
@@ -35,14 +36,12 @@ where
     pub fn eval_to_string(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
     ) -> Result<Cow<'event, str>> {
-        match stry!(self.run(opts, context, aggrs, event, meta, local, consts)).borrow() {
+        match stry!(self.run(opts, env, event, meta, local)).borrow() {
             Value::String(s) => Ok(s.clone()),
             other => error_type_conflict(self, self, other.value_type(), ValueType::Object),
         }
@@ -52,31 +51,21 @@ where
     pub fn run(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
             ImutExpr::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
-            ImutExpr::Path(path) => {
-                resolve(self, opts, context, aggrs, event, meta, local, consts, path)
-            }
-            ImutExpr::Present { path, .. } => {
-                self.present(opts, context, aggrs, event, meta, local, consts, path)
-            }
+            ImutExpr::Path(path) => resolve(self, opts, env, event, meta, local, path),
+            ImutExpr::Present { path, .. } => self.present(opts, env, event, meta, local, path),
             ImutExpr::Record(ref record) => {
                 let mut object: Object = Object::with_capacity(record.fields.len());
 
                 for field in &record.fields {
-                    let result = stry!(field
-                        .value
-                        .run(opts, context, aggrs, event, meta, local, consts));
-                    let name = stry!(field
-                        .name
-                        .eval_to_string(opts, context, aggrs, event, meta, local, consts));
+                    let result = stry!(field.value.run(opts, env, event, meta, local));
+                    let name = stry!(field.name.eval_to_string(opts, env, event, meta, local));
                     object.insert(name, result.into_owned());
                 }
 
@@ -85,32 +74,20 @@ where
             ImutExpr::List(ref list) => {
                 let mut r: Vec<Value<'event>> = Vec::with_capacity(list.exprs.len());
                 for expr in &list.exprs {
-                    r.push(
-                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts))
-                            .into_owned(),
-                    );
+                    r.push(stry!(expr.run(opts, env, event, meta, local)).into_owned());
                 }
                 Ok(Cow::Owned(Value::Array(r)))
             }
-            ImutExpr::Invoke1(ref call) => {
-                self.invoke1(opts, context, aggrs, event, meta, local, consts, call)
+            ImutExpr::Invoke1(ref call) => self.invoke1(opts, env, event, meta, local, call),
+            ImutExpr::Invoke2(ref call) => self.invoke2(opts, env, event, meta, local, call),
+            ImutExpr::Invoke3(ref call) => self.invoke3(opts, env, event, meta, local, call),
+            ImutExpr::Invoke(ref call) => self.invoke(opts, env, event, meta, local, call),
+            ImutExpr::InvokeLocal(ref call) => {
+                self.invoke_local(opts, env, event, meta, local, call)
             }
-            ImutExpr::Invoke2(ref call) => {
-                self.invoke2(opts, context, aggrs, event, meta, local, consts, call)
-            }
-            ImutExpr::Invoke3(ref call) => {
-                self.invoke3(opts, context, aggrs, event, meta, local, consts, call)
-            }
-            ImutExpr::Invoke(ref call) => {
-                self.invoke(opts, context, aggrs, event, meta, local, consts, call)
-            }
-            ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, aggrs, call),
-            ImutExpr::Patch(ref expr) => {
-                self.patch(opts, context, aggrs, event, meta, local, consts, expr)
-            }
-            ImutExpr::Merge(ref expr) => {
-                self.merge(opts, context, aggrs, event, meta, local, consts, expr)
-            }
+            ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
+            ImutExpr::Patch(ref expr) => self.patch(opts, env, event, meta, local, expr),
+            ImutExpr::Merge(ref expr) => self.merge(opts, env, event, meta, local, expr),
             ImutExpr::Local {
                 idx,
                 start,
@@ -138,21 +115,15 @@ where
                 idx,
                 is_const: true,
                 ..
-            } => match consts.get(*idx) {
+            } => match env.consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
                 _ => error_oops(self, "Unknown local variable"),
             },
-            ImutExpr::Unary(ref expr) => {
-                self.unary(opts, context, aggrs, event, meta, local, consts, expr)
-            }
-            ImutExpr::Binary(ref expr) => {
-                self.binary(opts, context, aggrs, event, meta, local, consts, expr)
-            }
-            ImutExpr::Match(ref expr) => {
-                self.match_expr(opts, context, aggrs, event, meta, local, consts, expr)
-            }
+            ImutExpr::Unary(ref expr) => self.unary(opts, env, event, meta, local, expr),
+            ImutExpr::Binary(ref expr) => self.binary(opts, env, event, meta, local, expr),
+            ImutExpr::Match(ref expr) => self.match_expr(opts, env, event, meta, local, expr),
             ImutExpr::Comprehension(ref expr) => {
-                self.comprehension(opts, context, aggrs, event, meta, local, consts, expr)
+                self.comprehension(opts, env, event, meta, local, expr)
             }
         }
     }
@@ -160,19 +131,17 @@ where
     fn comprehension(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script ImutComprehension,
     ) -> Result<Cow<'run, Value<'event>>> {
         //use std::borrow::Cow;
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
-        let target_value = stry!(target.run(opts, context, aggrs, event, meta, local, consts));
+        let target_value = stry!(target.run(opts, env, event, meta, local));
 
         if let Some(target_map) = target_value.as_object() {
             // Record comprehension case
@@ -187,12 +156,10 @@ where
                 stry!(set_local_shadow(self, local, expr.val_id, v));
                 for e in cases {
                     // FIXME: use test_gaurd_expr
-                    if stry!(test_guard(
-                        self, opts, context, aggrs, event, meta, local, consts, &e.guard
-                    )) {
-                        let v = stry!(self.execute_effectors(
-                            opts, context, aggrs, event, meta, local, consts, e, &e.exprs,
-                        ));
+                    if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
+                        let v = stry!(
+                            self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)
+                        );
                         // NOTE: We are creating a new value so we have to clone;
                         value_vec.push(v.into_owned());
                         continue 'comprehension_outer;
@@ -216,12 +183,10 @@ where
 
                 for e in cases {
                     // FIXME: use test_gaurd_expr
-                    if stry!(test_guard(
-                        self, opts, context, aggrs, event, meta, local, consts, &e.guard
-                    )) {
-                        let v = stry!(self.execute_effectors(
-                            opts, context, aggrs, event, meta, local, consts, e, &e.exprs,
-                        ));
+                    if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
+                        let v = stry!(
+                            self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)
+                        );
 
                         value_vec.push(v.into_owned());
                         count += 1;
@@ -238,12 +203,10 @@ where
     fn execute_effectors<T: BaseExpr>(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         inner: &'script T,
         effectors: &'script [ImutExpr<'script>],
     ) -> Result<Cow<'run, Value<'event>>> {
@@ -252,46 +215,38 @@ where
         }
         // Since we don't have side effects we don't need to run anything but the last effector!
         let effector = &effectors[effectors.len() - 1];
-        effector.run(opts, context, aggrs, event, meta, local, consts)
+        effector.run(opts, env, event, meta, local)
     }
 
     fn match_expr(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script ImutMatch,
     ) -> Result<Cow<'run, Value<'event>>> {
-        let target = stry!(expr
-            .target
-            .run(opts, context, aggrs, event, meta, local, consts));
+        let target = stry!(expr.target.run(opts, env, event, meta, local));
 
         for predicate in &expr.patterns {
             if stry!(test_predicate_expr(
                 self,
                 opts,
-                context,
-                aggrs,
+                env,
                 event,
                 meta,
                 local,
-                consts,
                 &target,
                 &predicate.pattern,
                 &predicate.guard,
             )) {
                 return self.execute_effectors(
                     opts,
-                    context,
-                    aggrs,
+                    env,
                     event,
                     meta,
                     local,
-                    consts,
                     predicate,
                     &predicate.exprs,
                 );
@@ -303,23 +258,16 @@ where
     fn binary(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script BinExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
-        let lhs = stry!(expr
-            .lhs
-            .run(opts, context, aggrs, event, meta, local, consts));
-        let rhs = stry!(expr
-            .rhs
-            .run(opts, context, aggrs, event, meta, local, consts));
+        let lhs = stry!(expr.lhs.run(opts, env, event, meta, local));
+        let rhs = stry!(expr.rhs.run(opts, env, event, meta, local));
         match exec_binary(expr.kind, &lhs, &rhs) {
             Some(v) => Ok(v),
-
             None => error_invalid_binary(self, &expr.lhs, expr.kind, &lhs, &rhs),
         }
     }
@@ -327,17 +275,13 @@ where
     fn unary(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script UnaryExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
-        let rhs = stry!(expr
-            .expr
-            .run(opts, context, aggrs, event, meta, local, consts));
+        let rhs = stry!(expr.expr.run(opts, env, event, meta, local));
         match exec_unary(expr.kind, &rhs) {
             Some(v) => Ok(v),
             None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs),
@@ -347,12 +291,10 @@ where
     fn present(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         path: &'script Path,
     ) -> Result<Cow<'run, Value<'event>>> {
         let mut subrange: Option<(usize, usize)> = None;
@@ -362,7 +304,7 @@ where
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
                 _ => return error_oops(self, "Unknown local variable"),
             },
-            Path::Const(path) => match consts.get(path.idx) {
+            Path::Const(path) => match env.consts.get(path.idx) {
                 Some(v) => v,
                 _ => return error_oops(self, "Unknown constant variable"),
             },
@@ -413,7 +355,7 @@ where
                 Segment::Element { expr, .. } => {
                     let next = match (
                         current,
-                        stry!(expr.run(opts, context, aggrs, event, meta, local, consts)).borrow(),
+                        stry!(expr.run(opts, env, event, meta, local)).borrow(),
                     ) {
                         (Value::Array(a), idx) => {
                             if let Some(idx) = idx.as_usize() {
@@ -457,16 +399,12 @@ where
                             (0, a.len())
                         };
 
-                        let s = stry!(
-                            range_start.run(opts, context, aggrs, event, meta, local, consts)
-                        );
+                        let s = stry!(range_start.run(opts, env, event, meta, local));
 
                         if let Some(range_start) = s.as_usize() {
                             let range_start = range_start + start;
 
-                            let e = stry!(
-                                range_end.run(opts, context, aggrs, event, meta, local, consts)
-                            );
+                            let e = stry!(range_end.run(opts, env, event, meta, local));
 
                             if let Some(range_end) = e.as_usize() {
                                 let range_end = range_end + start;
@@ -493,21 +431,19 @@ where
     fn invoke1(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v = stry!(expr
                 .args
                 .get_unchecked(0)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             expr.invocable
-                .invoke(context, &[v.borrow()])
+                .invoke(&env.context, &[v.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -519,25 +455,23 @@ where
     fn invoke2(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v1 = stry!(expr
                 .args
                 .get_unchecked(0)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             let v2 = stry!(expr
                 .args
                 .get_unchecked(1)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             expr.invocable
-                .invoke(context, &[v1.borrow(), v2.borrow()])
+                .invoke(&env.context, &[v1.borrow(), v2.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -549,29 +483,27 @@ where
     fn invoke3(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
             let v1 = stry!(expr
                 .args
                 .get_unchecked(0)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             let v2 = stry!(expr
                 .args
                 .get_unchecked(1)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             let v3 = stry!(expr
                 .args
                 .get_unchecked(2)
-                .run(opts, context, aggrs, event, meta, local, consts));
+                .run(opts, env, event, meta, local));
             expr.invocable
-                .invoke(context, &[v1.borrow(), v2.borrow(), v3.borrow()])
+                .invoke(&env.context, &[v1.borrow(), v2.borrow(), v3.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -583,18 +515,16 @@ where
     fn invoke(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         let mut argv: Vec<Cow<'run, Value<'event>>> = Vec::with_capacity(expr.args.len());
         let mut argv1: Vec<&Value> = Vec::with_capacity(expr.args.len());
         for arg in &expr.args {
-            let result = stry!(arg.run(opts, context, aggrs, event, meta, local, consts));
+            let result = stry!(arg.run(opts, env, event, meta, local));
             argv.push(result);
         }
         unsafe {
@@ -603,18 +533,78 @@ where
             }
         }
         expr.invocable
-            .invoke(context, &argv1)
+            .invoke(&env.context, &argv1)
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
                 e.into_err(self, self, r)
             })
     }
+    fn invoke_local(
+        &'script self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event, 'script>,
+        event: &'run Value<'event>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+        expr: &'script InvokeLocal,
+    ) -> Result<Cow<'run, Value<'event>>> {
+        let f = &env.fns[expr.id];
+        let mut this_local = LocalStack::with_size(f.locals);
+        for (i, arg) in expr.args.iter().enumerate() {
+            let result = stry!(arg.run(opts, env, event, meta, local));
+            this_local.values[i] = Some(LocalValue {
+                v: result.into_owned(),
+            });
+        }
+        let mut exprs = f.body.iter().peekable();
+        #[allow(mutable_transmutes)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        unsafe {
+            while let Some(expr) = exprs.next() {
+                if exprs.peek().is_none() {
+                    match stry!(expr.run(
+                        opts.with_result(),
+                        &env,
+                        mem::transmute(event),
+                        mem::transmute(meta),
+                        &mut this_local
+                    )) {
+                        // I don't like this!
+                        Cont::Cont(v) => return Ok(mem::transmute(v)),
+                        _ => unimplemented!(),
+                    }
+                } else {
+                    match stry!(expr.run(
+                        opts.without_result(),
+                        &env,
+                        mem::transmute(event),
+                        mem::transmute(meta),
+                        &mut this_local
+                    )) {
+                        Cont::Cont(_v) => (),
+                        _ => unimplemented!(),
+                    }
+                }
+            }
+        }
+
+        /*
+        expr.invocable
+            .invoke(context, &argv1)
+            .map(Cow::Owned)
+            .map_err(|e| {
+                let r: Option<&Registry> = None;
+                e.into_err(self, self, r)
+            })
+        */
+        Ok(Cow::Owned(Value::I64(42)))
+    }
 
     fn emit_aggr(
         &'script self,
         opts: ExecOpts,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         expr: &'script InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
@@ -623,10 +613,9 @@ where
 
         unsafe {
             // FIXME?
-            use std::mem;
             #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
             let invocable: &mut TremorAggrFnWrapper =
-                mem::transmute(&aggrs[expr.aggr_id].invocable);
+                mem::transmute(&env.aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {
                 let r: Option<&Registry> = None;
                 e.into_err(self, self, r)
@@ -639,22 +628,17 @@ where
     fn patch(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Patch,
     ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We clone this since we patch it - this should be not mutated but cloned
 
-        let mut value = stry!(expr
-            .target
-            .run(opts, context, aggrs, event, meta, local, consts))
-        .into_owned();
+        let mut value = stry!(expr.target.run(opts, env, event, meta, local)).into_owned();
         stry!(patch_value(
-            self, opts, context, aggrs, event, meta, local, consts, &mut value, expr,
+            self, opts, env, event, meta, local, &mut value, expr,
         ));
         Ok(Cow::Owned(value))
     }
@@ -662,26 +646,20 @@ where
     fn merge(
         &'script self,
         opts: ExecOpts,
-        context: &'run EventContext,
-        aggrs: &'run [InvokeAggrFn<'script>],
+        env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        consts: &'run [Value<'event>],
         expr: &'script Merge,
     ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We got to clone here since we're are going
         // to change the value
-        let value = stry!(expr
-            .target
-            .run(opts, context, aggrs, event, meta, local, consts));
+        let value = stry!(expr.target.run(opts, env, event, meta, local));
 
         if value.is_object() {
             // Make sure we clone the data so we don't muate it in place
             let mut value = value.into_owned();
-            let replacement = stry!(expr
-                .expr
-                .run(opts, context, aggrs, event, meta, local, consts));
+            let replacement = stry!(expr.expr.run(opts, env, event, meta, local));
 
             if replacement.is_object() {
                 stry!(merge_values(self, &expr.expr, &mut value, &replacement));

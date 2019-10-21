@@ -180,6 +180,7 @@ Exprs: Exprs1<'input> = {
 
 MayBeConstExpr: Expr1<'input> = {
      Const => <>,
+     FnDecl => Expr1::FnDecl(<>),
      Expr => <>
 }
 
@@ -212,8 +213,8 @@ SimpleExpr: Expr1<'input> = {
 AlwaysImutExpr: ImutExpr1<'input> = {
     <pp:Patch> => ImutExpr1::Patch(Box::new(pp)),
     <pp:Merge> => ImutExpr1::Merge(Box::new(pp)),
-    <call:InvokeAggr> => ImutExpr1::InvokeAggr(call),
     <call:Invoke> => ImutExpr1::Invoke(call),
+    <call:InvokeLocal> => ImutExpr1::InvokeLocal(call),
     <literal:Literal> => ImutExpr1::Literal(literal),
     <path:Path> => ImutExpr1::Path(path),
     <record:Record> => ImutExpr1::Record(Box::new(record)),
@@ -296,6 +297,23 @@ ComplexExprImut: ImutExpr1<'input> = {
     <comprehension:ForImut> => ImutExpr1::Comprehension(Box::new(comprehension)),
     ExprImut => <>
 }
+
+FnDecl: FnDecl1<'input> = {
+  <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => FnDecl1{name, args, body, start, end}
+}
+
+FnArgs: Vec<Ident<'input>> = {
+    <fields:FnArgs_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
+    },
+}
+
+FnArgs_: Vec<Ident<'input>> = {
+    <Sep<FnArgs_, Ident, ",">> => <>
+}
+
 
 SimpleExprImut: ImutExpr1<'input> = {
     "(" <expr:ComplexExprImut> ")" => expr,
@@ -514,14 +532,15 @@ Selector: Segment1<'input> = {
 // argument list.
 
 /// Function invocation
-InvokeAggr: InvokeAggr1<'input> = {
-    <start:@L> <module:Ident> "::" <fun:Ident> "[" <arg:ComplexExprImut> "]" <end:@L> => InvokeAggr1 { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![arg], start, end },
-}
-
-/// Function invocation
 Invoke: Invoke1<'input> = {
     <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => Invoke1 { module: module.id.to_string(), fun: fun.id.to_string(), args, start, end },
     <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => Invoke1 { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![], start, end },
+}
+
+/// Function invocation
+InvokeLocal: InvokeLocal1<'input> = {
+    <start:@L> <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => InvokeLocal1 { fun: fun.id.to_string(), args, start, end },
+    <start:@L> <fun:Ident> "(" ")" <end:@L> => InvokeLocal1 { fun: fun.id.to_string(), args: vec![], start, end },
 }
 
 InvokeArgs: ImutExprs1<'input> = {
@@ -932,6 +951,7 @@ extern {
         "event" => Token::Event,
         "present" => Token::Present,
         "absent" => Token::Absent,
+        "fn" => Token::Fun,
         "." => Token::Dot,
         "\"" => Token::DQuote,
         ";" => Token::Semi,

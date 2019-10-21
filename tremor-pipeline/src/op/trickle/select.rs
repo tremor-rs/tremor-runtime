@@ -19,6 +19,8 @@ use simd_json::borrowed::Value;
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use std::sync::Arc;
+use tremor_script::ast::FnDecl;
+use tremor_script::interpreter::Env;
 use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{
     self,
@@ -357,6 +359,7 @@ impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+        const NO_FNS: [FnDecl<'static>; 0] = [];
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -379,15 +382,13 @@ impl Operator for TrickleSelect {
         // FIXME: ?
         if let Some(guard) = &stmt.maybe_where {
             let (unwind_event, event_meta) = event.data.parts();
-            let test = guard.run(
-                opts,
-                &ctx,
-                &NO_AGGRS,
-                unwind_event,
-                event_meta,
-                &local_stack,
-                &consts,
-            )?;
+            let env = Env {
+                context: &ctx,
+                consts: &consts,
+                aggrs: &NO_AGGRS,
+                fns: &NO_FNS,
+            };
+            let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
             match test.borrow() {
                 Value::Bool(true) => (),
                 Value::Bool(false) => {
@@ -455,27 +456,19 @@ impl Operator for TrickleSelect {
                     let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
                     consts[GROUP_CONST_ID] = group.clone_static();
 
-                    let value = stmt.target.run(
-                        opts,
-                        &ctx,
-                        &aggrs,
-                        unwind_event,
-                        event_meta,
-                        &local_stack,
-                        &consts,
-                    )?;
+                    let env = Env {
+                        context: &ctx,
+                        consts: &consts,
+                        aggrs: &aggrs,
+                        fns: &NO_FNS,
+                    };
+                    let value =
+                        stmt.target
+                            .run(opts, &env, unwind_event, event_meta, &local_stack)?;
 
                     let result = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
-                        let test = guard.run(
-                            opts,
-                            &ctx,
-                            &aggrs,
-                            &result,
-                            &Value::Null,
-                            &local_stack,
-                            &consts,
-                        )?;
+                        let test = guard.run(opts, &env, &result, &Value::Null, &local_stack)?;
                         match test.borrow() {
                             Value::Bool(true) => (),
                             Value::Bool(false) => {
@@ -521,26 +514,27 @@ impl Operator for TrickleSelect {
             #[allow(mutable_transmutes)]
             let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
+
             for group in group_values {
                 let group = Value::Array(group);
                 let (_, aggrs) = groups
                     .entry(group.encode())
                     .or_insert_with(|| (group.clone_static(), aggregates.clone()));
                 consts[GROUP_CONST_ID] = group.clone_static();
+                let env = Env {
+                    context: &ctx,
+                    consts: &consts,
+                    aggrs: &NO_AGGRS,
+                    fns: &NO_FNS,
+                };
+
                 for aggr in aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
                     for arg in &aggr.args {
-                        let result = arg.run(
-                            opts,
-                            &ctx,
-                            &NO_AGGRS,
-                            unwind_event,
-                            &event_meta,
-                            &local_stack,
-                            &consts,
-                        )?;
+                        let result =
+                            arg.run(opts, &env, unwind_event, &event_meta, &local_stack)?;
                         argv.push(result);
                     }
                     unsafe {
@@ -562,29 +556,21 @@ impl Operator for TrickleSelect {
             //
             // FIXME: This can be nicer, got to look at run for tremor script
 
+            let env = Env {
+                context: &ctx,
+                consts: &consts,
+                aggrs: &NO_AGGRS,
+                fns: &NO_FNS,
+            };
             let (unwind_event, event_meta) = event.data.parts();
 
-            let value = stmt.target.run(
-                opts,
-                &ctx,
-                &NO_AGGRS,
-                unwind_event,
-                &event_meta,
-                &local_stack,
-                &consts,
-            )?;
+            let value = stmt
+                .target
+                .run(opts, &env, unwind_event, &event_meta, &local_stack)?;
 
             *unwind_event = value.into_owned();
             if let Some(guard) = &stmt.maybe_having {
-                let test = guard.run(
-                    opts,
-                    &ctx,
-                    &NO_AGGRS,
-                    unwind_event,
-                    &Value::Null,
-                    &local_stack,
-                    &consts,
-                )?;
+                let test = guard.run(opts, &env, unwind_event, &Value::Null, &local_stack)?;
                 match test.into_owned() {
                     Value::Bool(true) => (),
                     Value::Bool(false) => {
