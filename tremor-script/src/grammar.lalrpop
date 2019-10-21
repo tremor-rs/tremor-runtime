@@ -133,7 +133,7 @@ CmpExprImut: ImutExpr1<'input> = {
     BitShiftExprImut => <>,
 }
 
-/// Bit shift operators (>>, <<)
+/// Bit shift operators (>>, >>>, <<)
 BitShiftExprImut: ImutExpr1<'input> = {
     BinOp<BinBitShift, BitShiftExprImut, AddExprImut> => <>,
     AddExprImut => <>,
@@ -704,7 +704,8 @@ BinCmp: BinOpKind = {
     "<" => BinOpKind::Lt,
 }
 BinBitShift: BinOpKind = {
-    ">>" => BinOpKind::RBitShift,
+    ">>" => BinOpKind::RBitShiftSigned,
+    ">>>" => BinOpKind::RBitShiftUnsigned,
     "<<" => BinOpKind::LBitShift,
 }
 BinAdd: BinOpKind = {
@@ -770,7 +771,8 @@ extern {
         ">" => lexer::Token::Gt,
         "<=" => lexer::Token::Lte,
         "<" => lexer::Token::Lt,
-        ">>" => lexer::Token::RBitShift,
+        ">>" => lexer::Token::RBitShiftSigned,
+        ">>>" => lexer::Token::RBitShiftUnsigned,
         "<<" => lexer::Token::LBitShift,
         "!" => lexer::Token::BitNot,
         "|" => lexer::Token::BitOr,

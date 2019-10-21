@@ -191,7 +191,8 @@ pub enum Token<'input> {
     Gt,
     Lte,
     Lt,
-    RBitShift,
+    RBitShiftSigned,
+    RBitShiftUnsigned,
     LBitShift,
     Add,
     Sub,
@@ -337,7 +338,8 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Gt => true,
             Token::Lte => true,
             Token::Lt => true,
-            Token::RBitShift => true,
+            Token::RBitShiftSigned => true,
+            Token::RBitShiftUnsigned => true,
             Token::LBitShift => true,
             Token::Add => true,
             Token::Sub => true,
@@ -481,7 +483,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Gt => write!(f, ">"),
             Token::Lte => write!(f, "<="),
             Token::Lt => write!(f, "<"),
-            Token::RBitShift => write!(f, ">>"),
+            Token::RBitShiftSigned => write!(f, ">>"),
+            Token::RBitShiftUnsigned => write!(f, ">>>"),
             Token::LBitShift => write!(f, "<<"),
             Token::Mul => write!(f, "*"),
             Token::Div => write!(f, "/"),
@@ -719,7 +722,8 @@ impl<'input> Lexer<'input> {
             ">" => Ok(spanned2(start, end, Token::Gt)),
             ">=" => Ok(spanned2(start, end, Token::Gte)),
             "<<" => Ok(spanned2(start, end, Token::LBitShift)),
-            ">>" => Ok(spanned2(start, end, Token::RBitShift)),
+            ">>" => Ok(spanned2(start, end, Token::RBitShiftSigned)),
+            ">>>" => Ok(spanned2(start, end, Token::RBitShiftUnsigned)),
             _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
         }
     }
@@ -1529,7 +1533,8 @@ mod tests {
         lex_ok! { " > ", " ~ " => Token::Gt, };
         lex_ok! { " <= ", " ~ " => Token::Lte, };
         lex_ok! { " < ", " ~ " => Token::Lt, };
-        lex_ok! { " >> ", " ~ " => Token::RBitShift, };
+        lex_ok! { " >> ", " ~ " => Token::RBitShiftSigned, };
+        lex_ok! { " >>> ", " ~ " => Token::RBitShiftUnsigned, };
         lex_ok! { " << ", " ~ " => Token::LBitShift, };
         lex_ok! { " + ", " ~ " => Token::Add, };
         lex_ok! { " - ", " ~ " => Token::Sub, };

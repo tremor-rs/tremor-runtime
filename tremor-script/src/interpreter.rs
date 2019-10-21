@@ -165,8 +165,8 @@ pub fn exec_binary<'run, 'event: 'run>(
         (Lte, String(l), String(r)) => Some(static_bool!(l <= r)),
 
         // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
-        // and also implement >>>
-        (RBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l >> *r))),
+        (RBitShiftSigned, I64(l), I64(r)) => Some(Cow::Owned(I64(*l >> *r))),
+        (RBitShiftUnsigned, I64(l), I64(r)) => Some(Cow::Owned(I64((*l as u64 >> *r) as i64))),
         (LBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l << *r))),
 
         (Add, String(l), String(r)) => Some(Cow::Owned(format!("{}{}", *l, *r).into())),

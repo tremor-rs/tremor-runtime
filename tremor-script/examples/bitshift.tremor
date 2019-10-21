@@ -1,25 +1,37 @@
 emit [
-  # right bit shift
+  "right bit shift (signed)",
   42 >> 0,
   42 >> 2,
   -42 >> 2,
   42 >> 63,
 
-  # right bit shift (invalid)
+  # right bit shift (signed) (invalid)
   #42 >> 64,
   #42 >> -1,
   #42 >> 2.0,
   #42 >> "2",
   #42 >> true
-  #42 >>> 2
 
-  # left bit shift
+  "right bit shift (unsigned)",
+  42 >>> 0,
+  42 >>> 2,
+  -42 >>> 2,
+  42 >>> 63,
+
+  # right bit shift (unsigned) (invalid)
+  #42 >>> 64,
+  #42 >>> -1,
+  #42 >>> 2.0,
+  #42 >>> "2",
+  #42 >>> true
+
+  "left bit shift",
   42 << 0,
   42 << 2,
   -42 << 2,
   42 << 63
 
-  # left bit shift(invalid)
+  # left bit shift (invalid)
   #42 << 64
   #42 << -1
   #42 << 2.0

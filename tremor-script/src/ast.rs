@@ -2132,7 +2132,8 @@ pub enum BinOpKind {
     Lte,
     Lt,
 
-    RBitShift,
+    RBitShiftSigned,
+    RBitShiftUnsigned,
     LBitShift,
 
     Add,
@@ -2160,7 +2161,8 @@ impl fmt::Display for BinOpKind {
             BinOpKind::Lte => write!(f, "<="),
             BinOpKind::Lt => write!(f, "<"),
 
-            BinOpKind::RBitShift => write!(f, ">>"),
+            BinOpKind::RBitShiftSigned => write!(f, ">>"),
+            BinOpKind::RBitShiftUnsigned => write!(f, ">>>"),
             BinOpKind::LBitShift => write!(f, "<<"),
 
             BinOpKind::Add => write!(f, "+"),
