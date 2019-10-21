@@ -179,6 +179,7 @@ pub enum Token<'input> {
     BitNot,
     And,
     Or,
+    Xor,
     BitAnd,
     BitOr,
     BitXor,
@@ -325,6 +326,7 @@ impl<'input> TokenFuns for Token<'input> {
             Token::Not => true,
             Token::BitNot => true,
             Token::Or => true,
+            Token::Xor => true,
             Token::And => true,
             Token::BitOr => true,
             Token::BitXor => true,
@@ -471,6 +473,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::RBracket => write!(f, "]"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
+            Token::Xor => write!(f, "xor"),
             Token::BitAnd => write!(f, "&"),
             Token::BitOr => write!(f, "|"),
             Token::BitXor => write!(f, "^"),
@@ -795,6 +798,7 @@ impl<'input> Lexer<'input> {
             "false" => Token::BoolLiteral(false),
             "and" => Token::And,
             "or" => Token::Or,
+            "xor" => Token::Xor,
             "not" => Token::Not,
             "drop" => Token::Drop,
             "emit" => Token::Emit,
@@ -1522,6 +1526,7 @@ mod tests {
 
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
+        lex_ok! { " xor ", " ~ " => Token::Xor, };
         lex_ok! { " & ", " ~ " => Token::BitAnd, };
         // TODO enable
         //lex_ok! { " | ", " ~ " => Token::BitOr, };

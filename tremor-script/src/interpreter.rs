@@ -129,6 +129,7 @@ pub fn exec_binary<'run, 'event: 'run>(
         (NotEq, Null, Null) => Some(static_bool!(false)),
         (And, Bool(l), Bool(r)) => Some(static_bool!(*l && *r)),
         (Or, Bool(l), Bool(r)) => Some(static_bool!(*l || *r)),
+        (Xor, Bool(l), Bool(r)) => Some(static_bool!(*l != *r)),
 
         (BitAnd, I64(l), I64(r)) => Some(Cow::Owned(I64(*l & *r))),
         (BitAnd, Bool(l), Bool(r)) => Some(static_bool!(*l & *r)),

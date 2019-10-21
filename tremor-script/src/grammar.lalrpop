@@ -93,7 +93,14 @@ ExprImut: ImutExpr1<'input> = {
 
 /// Logical or
 OrExprImut: ImutExpr1<'input> = {
-    <o:BinOp<BinOr, ExprImut, AndExprImut>> => <>,
+    /// TODO should be OrExprImut?
+    <o:BinOp<BinOr, ExprImut, XorExprImut>> => <>,
+    XorExprImut => <>,
+}
+
+/// Logical xor
+XorExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinXor, XorExprImut, AndExprImut>> => <>,
     AndExprImut => <>,
 }
 
@@ -681,6 +688,9 @@ BinOp<Op, Current, Next>: ImutExpr1<'input> = {
 BinOr: BinOpKind = {
     "or" => BinOpKind::Or,
 }
+BinXor: BinOpKind = {
+    "xor" => BinOpKind::Xor,
+}
 BinAnd: BinOpKind = {
     "and" => BinOpKind::And,
 }
@@ -734,6 +744,7 @@ extern {
         "nil" => lexer::Token::Nil,
         "and" => lexer::Token::And,
         "or" => lexer::Token::Or,
+        "xor" => lexer::Token::Xor,
         "not" => lexer::Token::Not,
         "drop" => lexer::Token::Drop,
         "emit" => lexer::Token::Emit,

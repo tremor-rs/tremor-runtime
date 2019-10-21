@@ -5,6 +5,12 @@ emit {
     "10": true or false,
     "11": true or true,
   },
+  "xor": {
+    "00": false xor false,
+    "01": false xor true,
+    "10": true xor false,
+    "11": true xor true,
+  },
   "and": {
     "00": false and false,
     "01": false and true,

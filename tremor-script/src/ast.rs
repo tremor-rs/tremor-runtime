@@ -2118,6 +2118,7 @@ impl<'script, Ctx: Context + Clone + 'static> PartialEq for EventPath<'script, C
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum BinOpKind {
     Or,
+    Xor,
     And,
 
     BitOr,
@@ -2147,6 +2148,7 @@ impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BinOpKind::Or => write!(f, "or"),
+            BinOpKind::Xor => write!(f, "xor"),
             BinOpKind::And => write!(f, "and"),
 
             BinOpKind::BitOr => write!(f, "|"),
