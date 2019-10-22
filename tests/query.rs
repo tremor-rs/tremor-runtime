@@ -21,14 +21,14 @@ use tremor_pipeline;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::Event;
 use tremor_pipeline::ExecutableGraph;
+use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
 
 use xz2::read::XzDecoder;
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
-    let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let q = Query::parse(query, &reg, &aggr_reg)?;
+    let q = Query::parse(query, &*FN_REGISTRY.lock()?, &aggr_reg)?;
     Ok(q.to_pipe()?)
 }
 
@@ -162,4 +162,17 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
-test_cases!(passthrough);
+test_cases!(
+    default_rule,
+    dimensions,
+    example_rule,
+    layered_limiting,
+    lru,
+    merge,
+    multi_dimensions,
+    mutate,
+    patch,
+    rewrite_root,
+    passthrough,
+    tremor_map
+);
