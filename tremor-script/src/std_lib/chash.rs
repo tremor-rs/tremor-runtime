@@ -42,7 +42,7 @@ pub fn load(registry: &mut Registry) {
     );
 }
 
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> io::Result<()> {
+pub fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> io::Result<()> {
     match j {
         Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
             write!(w, "{}", j.encode())
