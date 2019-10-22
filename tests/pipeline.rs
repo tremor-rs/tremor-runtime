@@ -21,16 +21,15 @@ use tremor_pipeline;
 use tremor_pipeline::Event;
 use tremor_runtime;
 use tremor_runtime::errors::*;
-use xz2::read::XzDecoder;
+use tremor_script::utils::*;
 
 macro_rules! test_cases {
-
     ($($file:ident),*) => {
         $(
             #[test]
             fn $file() -> Result<()> {
 
-                tremor_runtime::functions::load();
+                tremor_runtime::functions::load()?;
                 let pipeline_file = concat!("tests/pipelines/", stringify!($file), "/pipeline.yaml");
                 let in_file = concat!("tests/pipelines/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/pipelines/", stringify!($file), "/out.xz");
@@ -42,39 +41,9 @@ macro_rules! test_cases {
                 let pipeline = tremor_pipeline::build_pipeline(config)?;
                 let mut pipeline = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
 
-                let file = File::open(in_file)?;
-                let mut in_data = Vec::new();
-                XzDecoder::new(file).read_to_end(&mut in_data)?;
-                let mut in_lines = in_data
-                    .lines()
-                    .collect::<std::result::Result<Vec<String>, _>>()?;
-                let mut in_bytes = Vec::new();
-                unsafe {
-                    for line in &mut in_lines {
-                        in_bytes.push(line.as_bytes_mut())
-                    }
-                }
-                let mut in_json = Vec::new();
-                for bytes in in_bytes {
-                    in_json.push(to_borrowed_value(bytes)?)
-                }
+                let in_json = load_event_file(in_file)?;
+                let mut out_json = load_event_file(out_file)?;
 
-                let file = File::open(out_file)?;
-                let mut out_data = Vec::new();
-                XzDecoder::new(file).read_to_end(&mut out_data)?;
-                let mut out_lines = out_data
-                    .lines()
-                    .collect::<std::result::Result<Vec<String>, _>>()?;
-                let mut out_bytes = Vec::new();
-                unsafe {
-                    for line in &mut out_lines {
-                        out_bytes.push(line.as_bytes_mut())
-                    }
-                }
-                let mut out_json = Vec::new();
-                for bytes in out_bytes {
-                    out_json.push(to_borrowed_value(bytes)?)
-                }
                 out_json.reverse();
 
                 let mut results = Vec::new();
@@ -102,57 +71,6 @@ macro_rules! test_cases {
             }
         )*
     };
-}
-
-fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
-    let mut w = Vec::new();
-    sorted_serialize_(j, &mut w)?;
-    Ok(String::from_utf8(w)?)
-}
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
-    match j {
-        Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
-            write!(w, "{}", j.encode())?;
-        }
-        Value::Array(a) => {
-            let mut iter = a.iter();
-            write!(w, "[")?;
-
-            if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?
-            }
-
-            for e in iter {
-                write!(w, ",")?;
-                sorted_serialize_(e, w)?
-            }
-            write!(w, "]")?;
-        }
-        Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
-
-            v.sort_by_key(|(k, _)| k.to_string());
-            let mut iter = v.into_iter();
-
-            write!(w, "{{")?;
-
-            if let Some((k, v)) = iter.next() {
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-
-            for (k, v) in iter {
-                write!(w, ",")?;
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-            write!(w, "}}")?;
-        }
-    }
-    Ok(())
 }
 
 test_cases!(

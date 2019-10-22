@@ -41,6 +41,7 @@ cidr-utils = "0.3"
 jumphash = "0.1"
 rand = "0.7"
 hdrhistogram = "6.3.4"
+xz2 = "0.1"
 
 [build-dependencies]
 lalrpop = "0.17"

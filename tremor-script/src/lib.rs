@@ -46,6 +46,7 @@ mod std_lib;
 #[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
+pub mod utils;
 pub use ctx::EventContext;
 pub mod prelude;
 

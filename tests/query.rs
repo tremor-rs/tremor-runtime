@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use serde_yaml;
 use simd_json::to_borrowed_value;
-use simd_json::BorrowedValue as Value;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline;
@@ -24,8 +22,9 @@ use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
-
+use tremor_script::utils::*;
 use xz2::read::XzDecoder;
+
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let q = Query::parse(query, &*FN_REGISTRY.lock()?, &aggr_reg)?;
@@ -39,7 +38,7 @@ macro_rules! test_cases {
             #[test]
             fn $file() -> Result<()> {
 
-                tremor_runtime::functions::load();
+                tremor_runtime::functions::load()?;
                 let pipeline_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
@@ -49,39 +48,9 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
                 let mut pipeline = to_pipe(&contents)?;
 
-                let file = File::open(in_file)?;
-                let mut in_data = Vec::new();
-                XzDecoder::new(file).read_to_end(&mut in_data)?;
-                let mut in_lines = in_data
-                    .lines()
-                    .collect::<std::result::Result<Vec<String>, _>>()?;
-                let mut in_bytes = Vec::new();
-                unsafe {
-                    for line in &mut in_lines {
-                        in_bytes.push(line.as_bytes_mut())
-                    }
-                }
-                let mut in_json = Vec::new();
-                for bytes in in_bytes {
-                    in_json.push(to_borrowed_value(bytes)?)
-                }
+                let in_json = load_event_file(in_file)?;
+                let mut out_json = load_event_file(out_file)?;
 
-                let file = File::open(out_file)?;
-                let mut out_data = Vec::new();
-                XzDecoder::new(file).read_to_end(&mut out_data)?;
-                let mut out_lines = out_data
-                    .lines()
-                    .collect::<std::result::Result<Vec<String>, _>>()?;
-                let mut out_bytes = Vec::new();
-                unsafe {
-                    for line in &mut out_lines {
-                        out_bytes.push(line.as_bytes_mut())
-                    }
-                }
-                let mut out_json = Vec::new();
-                for bytes in out_bytes {
-                    out_json.push(to_borrowed_value(bytes)?)
-                }
                 out_json.reverse();
 
                 let mut results = Vec::new();
@@ -109,57 +78,6 @@ macro_rules! test_cases {
             }
         )*
     };
-}
-
-fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
-    let mut w = Vec::new();
-    sorted_serialize_(j, &mut w)?;
-    Ok(String::from_utf8(w)?)
-}
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
-    match j {
-        Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
-            write!(w, "{}", j.encode())?;
-        }
-        Value::Array(a) => {
-            let mut iter = a.iter();
-            write!(w, "[")?;
-
-            if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?
-            }
-
-            for e in iter {
-                write!(w, ",")?;
-                sorted_serialize_(e, w)?
-            }
-            write!(w, "]")?;
-        }
-        Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
-
-            v.sort_by_key(|(k, _)| k.to_string());
-            let mut iter = v.into_iter();
-
-            write!(w, "{{")?;
-
-            if let Some((k, v)) = iter.next() {
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-
-            for (k, v) in iter {
-                write!(w, ",")?;
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-            write!(w, "}}")?;
-        }
-    }
-    Ok(())
 }
 
 test_cases!(
