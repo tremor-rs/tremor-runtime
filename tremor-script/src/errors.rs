@@ -152,6 +152,7 @@ impl ErrorKind {
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
             | InvalidConst(outer, inner)
+            | InvalidFn(outer, inner)
             | AssignToConst(outer, inner, _)
             | DoubleConst(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
@@ -468,8 +469,13 @@ error_chain! {
                 display("You are trying to assing to a value that isn't valid")
         }
         InvalidConst(expr: Range, inner: Range) {
-            description("Can't declare a const here location")
-                display("Can't declare a const here location")
+            description("Can't declare a const here")
+                display("Can't declare a const here")
+        }
+
+        InvalidFn(expr: Range, inner: Range) {
+            description("Can't declare a function here")
+                display("Can't declare a function here")
         }
         DoubleConst(expr: Range, inner: Range, name: String) {
             description("Can't declare a constant twice")

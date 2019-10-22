@@ -14,7 +14,7 @@
 
 use super::{
     exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
-    test_predicate_expr, AggrType, Cont, Env, ExecOpts, LocalStack, LocalValue, FALSE, TRUE,
+    test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
 use crate::ast::*;
@@ -82,9 +82,6 @@ where
             ImutExpr::Invoke2(ref call) => self.invoke2(opts, env, event, meta, local, call),
             ImutExpr::Invoke3(ref call) => self.invoke3(opts, env, event, meta, local, call),
             ImutExpr::Invoke(ref call) => self.invoke(opts, env, event, meta, local, call),
-            ImutExpr::InvokeLocal(ref call) => {
-                self.invoke_local(opts, env, event, meta, local, call)
-            }
             ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
             ImutExpr::Patch(ref expr) => self.patch(opts, env, event, meta, local, expr),
             ImutExpr::Merge(ref expr) => self.merge(opts, env, event, meta, local, expr),
@@ -539,66 +536,6 @@ where
                 let r: Option<&Registry> = None;
                 e.into_err(self, self, r)
             })
-    }
-    fn invoke_local(
-        &'script self,
-        opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
-        event: &'run Value<'event>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-        expr: &'script InvokeLocal,
-    ) -> Result<Cow<'run, Value<'event>>> {
-        let f = &env.fns[expr.id];
-        let mut this_local = LocalStack::with_size(f.locals);
-        for (i, arg) in expr.args.iter().enumerate() {
-            let result = stry!(arg.run(opts, env, event, meta, local));
-            this_local.values[i] = Some(LocalValue {
-                v: result.into_owned(),
-            });
-        }
-        let mut exprs = f.body.iter().peekable();
-        #[allow(mutable_transmutes)]
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        unsafe {
-            while let Some(expr) = exprs.next() {
-                if exprs.peek().is_none() {
-                    match stry!(expr.run(
-                        opts.with_result(),
-                        &env,
-                        mem::transmute(event),
-                        mem::transmute(meta),
-                        &mut this_local
-                    )) {
-                        // I don't like this!
-                        Cont::Cont(v) => return Ok(mem::transmute(v)),
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    match stry!(expr.run(
-                        opts.without_result(),
-                        &env,
-                        mem::transmute(event),
-                        mem::transmute(meta),
-                        &mut this_local
-                    )) {
-                        Cont::Cont(_v) => (),
-                        _ => unimplemented!(),
-                    }
-                }
-            }
-        }
-
-        /*
-        expr.invocable
-            .invoke(context, &argv1)
-            .map(Cow::Owned)
-            .map_err(|e| {
-                let r: Option<&Registry> = None;
-                e.into_err(self, self, r)
-            })
-        */
-        Ok(Cow::Owned(Value::I64(42)))
     }
 
     fn emit_aggr(

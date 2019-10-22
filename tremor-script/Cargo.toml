@@ -51,3 +51,6 @@ criterion = "0.3.0"
 matches = "0.1"
 pretty_assertions = "0.6.1"
 float-cmp = "0.5"
+
+[features]
+fns = []

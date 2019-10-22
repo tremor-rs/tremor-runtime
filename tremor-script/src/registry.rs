@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::BaseExpr;
+use crate::ast::{BaseExpr, Exprs, Warning};
+use crate::errors::*;
+use crate::lexer::{self, TokenFuns};
+use crate::parser::grammar;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
 use downcast_rs::{impl_downcast, DowncastSync};
@@ -21,6 +24,7 @@ use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
+use std::mem;
 use std::ops::RangeInclusive;
 
 pub trait TremorAggrFn: DowncastSync + Sync + Send {
@@ -60,6 +64,90 @@ pub trait TremorFn: Sync + Send {
     }
 }
 pub type FResult<T> = std::result::Result<T, FunctionError>;
+
+#[derive(Debug, Clone)]
+pub struct CustomFn {
+    //module: Arc<Script>,
+    pub body: Exprs<'static>,
+    pub args: Vec<String>,
+    pub locals: usize,
+}
+
+impl TremorFn for CustomFn {
+    fn invoke<'event>(
+        &self,
+        ctx: &EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>> {
+        use crate::ast::InvokeAggrFn;
+        use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack, LocalValue};
+        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+        const NO_CONSTS: [Value<'static>; 0] = [];
+        let mut this_local = LocalStack::with_size(self.locals);
+        for (i, arg) in args.iter().enumerate() {
+            this_local.values[i] = Some(LocalValue { v: (*arg).clone() });
+        }
+        let opts = ExecOpts {
+            result_needed: false,
+            aggr: AggrType::Tick,
+        };
+        let mut exprs = self.body.iter().peekable();
+        let env = Env {
+            context: ctx,
+            consts: &NO_CONSTS,
+            aggrs: &NO_AGGRS,
+        };
+        let mut no_event = Value::Null;
+        let mut no_meta = Value::Null;
+        #[allow(mutable_transmutes)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        unsafe {
+            while let Some(expr) = exprs.next() {
+                if exprs.peek().is_none() {
+                    match expr.run(
+                        opts.with_result(),
+                        &env,
+                        mem::transmute(&mut no_event),
+                        mem::transmute(&mut no_meta),
+                        &mut this_local,
+                    )? {
+                        // I don't like this!
+                        Cont::Cont(v) => return Ok(mem::transmute(v.into_owned())),
+                        _ => unimplemented!(),
+                    }
+                } else {
+                    expr.run(
+                        opts,
+                        &env,
+                        mem::transmute(&mut no_event),
+                        mem::transmute(&mut no_meta),
+                        &mut this_local,
+                    )?;
+                }
+            }
+        }
+
+        /*
+        expr.invocable
+            .invoke(context, &argv1)
+            .map(Cow::Owned)
+            .map_err(|e| {
+                let r: Option<&Registry> = None;
+                e.into_err(self, self, r)
+            })
+        */
+        Ok(Value::I64(42))
+    }
+    fn snot_clone(&self) -> Box<dyn TremorFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> RangeInclusive<usize> {
+        RangeInclusive::new(self.args.len(), self.args.len())
+    }
+    fn is_const(&self) -> bool {
+        false
+    }
+}
 
 #[allow(unused_variables)]
 pub fn registry() -> Registry {
@@ -118,13 +206,19 @@ pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError 
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub enum FunctionError {
     BadArity { mfa: MFA, calling_a: usize },
     RuntimeError { mfa: MFA, error: String },
     MissingModule { m: String },
     MissingFunction { m: String, f: String },
     BadType { mfa: MFA },
+    Error(Error),
+}
+impl From<Error> for FunctionError {
+    fn from(error: Error) -> Self {
+        Self::Error(error)
+    }
 }
 
 impl FunctionError {
@@ -134,7 +228,6 @@ impl FunctionError {
         inner: &I,
         registry: Option<&Registry>,
     ) -> crate::errors::Error {
-        use crate::errors::{best_hint, ErrorKind};
         use FunctionError::*;
         let outer = outer.extent();
         let inner = inner.extent();
@@ -169,6 +262,7 @@ impl FunctionError {
                 ErrorKind::MissingFunction(outer, inner, m, f, suggestion).into()
             }
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
+            Error(e) => e,
         }
     }
 }
@@ -223,6 +317,7 @@ impl PartialEq for TremorFnWrapper {
 #[derive(Debug, Clone)]
 pub struct Registry {
     functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
+    modules: Vec<String>,
 }
 
 #[macro_export]
@@ -461,6 +556,7 @@ impl Default for Registry {
     fn default() -> Self {
         Self {
             functions: HashMap::new(),
+            modules: Vec::new(),
         }
     }
 }
@@ -496,6 +592,36 @@ impl Registry {
             self.functions.insert(module_name, module);
         }
         self
+    }
+
+    #[cfg(feature = "fns")]
+    pub fn load_module(&mut self, name: &str, code: &str) -> Result<Vec<Warning>> {
+        if self.functions.contains_key(name) {
+            return Err(format!("Module {} already exists.", name).into());
+        }
+        let mut source = code.to_string();
+        source.push(' ');
+
+        let lexemes: Result<Vec<_>> = lexer::tokenizer(&source).collect();
+        let mut filtered_tokens = Vec::new();
+
+        for t in lexemes? {
+            let keep = !t.value.is_ignorable();
+            if keep {
+                filtered_tokens.push(Ok(t));
+            }
+        }
+
+        let mut module = HashMap::new();
+
+        let fake_aggr_reg = Aggr::default();
+        let warnings = grammar::ScriptParser::new()
+            .parse(filtered_tokens)?
+            .load_module(name, &mut module, &self, &fake_aggr_reg)?;
+        let module_name = name.to_string();
+        self.functions.insert(module_name, module);
+        self.modules.push(source);
+        Ok(warnings)
     }
 }
 

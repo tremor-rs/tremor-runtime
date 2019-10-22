@@ -15,7 +15,6 @@
 // NOTE: we use a lot of arguments here, we are aware of that but tough luck
 // FIXME: investigate if re-writing would make code better
 #![allow(clippy::too_many_arguments)]
-
 // FIXME possible optimisations:
 // * P001 [x] re-write `let x = merge x of ... end` to a mutable merge that does not require cloing `x`
 // * P002 [x] don't construct data for expressions that return value is never used
@@ -27,6 +26,9 @@
 // FIXME todo
 // * 101 [ ] `%{x > 3}` and other comparisons
 // * 102 [x] Remove the need for `()` around when clauses that contain binary ops
+
+// NOTE: For env / end
+#![allow(clippy::similar_names)]
 
 mod expr;
 mod imut_expr;
@@ -67,16 +69,15 @@ where
     pub context: &'run EventContext,
     pub consts: &'run [Value<'event>],
     pub aggrs: &'run [InvokeAggrFn<'script>],
-    pub fns: &'run [FnDecl<'event>],
 }
 
 #[derive(Clone, Debug)]
 pub struct LocalValue<'value> {
-    v: Value<'value>,
+    pub v: Value<'value>,
 }
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {
-    values: Vec<Option<LocalValue<'stack>>>,
+    pub values: Vec<Option<LocalValue<'stack>>>,
 }
 
 impl<'stack> LocalStack<'stack> {
@@ -1037,7 +1038,6 @@ impl<'script> GroupBy<'script> {
         'event: 'run,
     {
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-        const NO_FNS: [FnDecl<'static>; 0] = [];
         let opts = ExecOpts {
             result_needed: true,
             aggr: AggrType::Emit,
@@ -1049,7 +1049,6 @@ impl<'script> GroupBy<'script> {
             consts: &consts,
             context: ctx,
             aggrs: &NO_AGGRS,
-            fns: &NO_FNS,
         };
         match self {
             GroupBy::Expr { expr, .. } => {

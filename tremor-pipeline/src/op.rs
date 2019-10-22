@@ -26,6 +26,7 @@ use halfbrown::HashMap;
 use std::borrow::Cow;
 use tremor_script::Value;
 
+#[allow(unused_variables)]
 pub trait Operator: std::fmt::Debug + Send {
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
 
@@ -36,7 +37,6 @@ pub trait Operator: std::fmt::Debug + Send {
     // passing the signal through
     fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // Make the trait signature nicer
-        let _ = signal;
         Ok(vec![])
     }
 
@@ -47,7 +47,6 @@ pub trait Operator: std::fmt::Debug + Send {
     // passing the isnight through
     fn on_contraflow(&mut self, insight: &mut Event) {
         // Make the trait signature nicer
-        let _ = insight;
     }
 
     // Returns metrics for this operator
@@ -57,7 +56,6 @@ pub trait Operator: std::fmt::Debug + Send {
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         // Make the trait signature nicer
-        let _ = (tags, timestamp);
         Ok(Vec::new())
     }
 }

@@ -19,7 +19,6 @@ use simd_json::borrowed::Value;
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::FnDecl;
 use tremor_script::interpreter::Env;
 use tremor_script::query::StmtRentalWrapper;
 use tremor_script::{
@@ -359,7 +358,6 @@ impl Operator for TrickleSelect {
     #[allow(clippy::transmute_ptr_to_ptr)]
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        const NO_FNS: [FnDecl<'static>; 0] = [];
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -386,7 +384,6 @@ impl Operator for TrickleSelect {
                 context: &ctx,
                 consts: &consts,
                 aggrs: &NO_AGGRS,
-                fns: &NO_FNS,
             };
             let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
             match test.borrow() {
@@ -460,7 +457,6 @@ impl Operator for TrickleSelect {
                         context: &ctx,
                         consts: &consts,
                         aggrs: &aggrs,
-                        fns: &NO_FNS,
                     };
                     let value =
                         stmt.target
@@ -525,7 +521,6 @@ impl Operator for TrickleSelect {
                     context: &ctx,
                     consts: &consts,
                     aggrs: &NO_AGGRS,
-                    fns: &NO_FNS,
                 };
 
                 for aggr in aggrs.iter_mut() {
@@ -560,7 +555,6 @@ impl Operator for TrickleSelect {
                 context: &ctx,
                 consts: &consts,
                 aggrs: &NO_AGGRS,
-                fns: &NO_FNS,
             };
             let (unwind_event, event_meta) = event.data.parts();
 

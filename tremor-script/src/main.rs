@@ -75,6 +75,13 @@ fn main() -> Result<()> {
                 .index(1),
         )
         .arg(
+            Arg::with_name("modules")
+                .short("m")
+                .takes_value(true)
+                .multiple(true)
+                .help("The event to load."),
+        )
+        .arg(
             Arg::with_name("event")
                 .short("e")
                 .takes_value(true)
@@ -128,12 +135,30 @@ fn main() -> Result<()> {
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
 
-    let input = File::open(&script_file);
     let mut raw = String::new();
+    let mut input = File::open(&script_file)?;
+    input.read_to_string(&mut raw)?;
 
-    input?.read_to_string(&mut raw)?;
+    #[allow(unused_mut)]
+    let mut reg: Registry = registry::registry();
 
-    let reg: Registry = registry::registry();
+    if let Some(modules) = matches.values_of("modules") {
+        use std::path::Path;
+        for module in modules {
+            if let Some(name) = Path::new(module)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+            {
+                let mut code = String::new();
+                let mut input = File::open(&module)?;
+                input.read_to_string(&mut code)?;
+
+                reg.load_module(&name, &code)?;
+                dbg!(name);
+            }
+        }
+    }
 
     match Script::parse(&raw, &reg) {
         Ok(runnable) => {

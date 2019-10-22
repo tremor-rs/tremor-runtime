@@ -194,7 +194,6 @@ impl Query {
                     select_num += 1;
                     let from = resolve_output_port(&s.from);
                     let into = resolve_input_port(&s.into);
-                    dbg!(&links);
                     if links.contains_key(&from) {
                         match links.get_mut(&from) {
                             Some(x) => {
