@@ -18,10 +18,19 @@ use simd_json::BorrowedValue as Value;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline;
+use tremor_pipeline::query::Query;
 use tremor_pipeline::Event;
+use tremor_pipeline::ExecutableGraph;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+
 use xz2::read::XzDecoder;
+fn to_pipe(query: &str) -> Result<ExecutableGraph> {
+    let reg = tremor_script::registry();
+    let aggr_reg = tremor_script::aggr_registry();
+    let q = Query::parse(query, &reg, &aggr_reg)?;
+    Ok(q.to_pipe()?)
+}
 
 macro_rules! test_cases {
 
@@ -31,16 +40,14 @@ macro_rules! test_cases {
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load();
-                let pipeline_file = concat!("tests/pipelines/", stringify!($file), "/pipeline.yaml");
-                let in_file = concat!("tests/pipelines/", stringify!($file), "/in.xz");
-                let out_file = concat!("tests/pipelines/", stringify!($file), "/out.xz");
+                let pipeline_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
+                let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
+                let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
 
                 let mut file = File::open(pipeline_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(&contents)?;
-                let pipeline = tremor_pipeline::build_pipeline(config)?;
-                let mut pipeline = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
+                let mut pipeline = to_pipe(&contents)?;
 
                 let file = File::open(in_file)?;
                 let mut in_data = Vec::new();
@@ -155,16 +162,4 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
-test_cases!(
-    default_rule,
-    dimensions,
-    example_rule,
-    layered_limiting,
-    lru,
-    merge,
-    multi_dimensions,
-    passthrough,
-    patch,
-    rewrite_root,
-    tremor_map
-);
+test_cases!(passthrough);
