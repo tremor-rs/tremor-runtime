@@ -17,7 +17,7 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 
-use crate::ast::{self, BaseExpr, BaseStmt, Expr, Ident};
+use crate::ast::{self, BaseExpr, Expr, Ident};
 use crate::errors;
 use crate::lexer;
 use crate::pos;
@@ -577,7 +577,7 @@ error_chain! {
 #[allow(dead_code)]
 // We need this since boxes are terrible
 #[allow(clippy::borrowed_box)]
-pub fn query_stream_not_defined<T, S: BaseStmt, I: BaseStmt>(
+pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
     stmt: &Box<S>,
     inner: &I,
     name: String,

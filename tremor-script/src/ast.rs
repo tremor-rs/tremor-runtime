@@ -13,8 +13,6 @@
 // limitations under the License.
 
 pub mod base_expr;
-
-pub mod base_stmt;
 pub mod query;
 pub mod upable;
 use crate::errors::*;
@@ -24,7 +22,6 @@ use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, Tremo
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
-pub use base_stmt::BaseStmt;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
@@ -39,36 +36,6 @@ use upable::Upable;
 macro_rules! impl_expr {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
-            fn s(&self) -> Location {
-                self.start
-            }
-
-            fn e(&self) -> Location {
-                self.end
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! impl_stmt {
-    ($name:ident) => {
-        impl<'script> BaseStmt for $name<'script> {
-            fn s(&self) -> Location {
-                self.start
-            }
-
-            fn e(&self) -> Location {
-                self.end
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! impl_stmt1 {
-    ($name:ident) => {
-        impl<'script> BaseStmt for $name<'script> {
             fn s(&self) -> Location {
                 self.start
             }
@@ -438,7 +405,6 @@ pub struct Ident<'script> {
     pub end: Location,
     pub id: Cow<'script, str>,
 }
-impl_stmt1!(Ident);
 impl_expr!(Ident);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

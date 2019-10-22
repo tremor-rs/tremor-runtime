@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::*;
-use crate::{impl_expr, impl_stmt, impl_stmt1};
+use crate::impl_expr;
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(dead_code)]
 #[allow(clippy::module_name_repetitions)]
@@ -164,7 +164,7 @@ pub struct OperatorStmt1<'script> {
     pub target: String,
     pub params: Option<WithExprs1<'script>>,
 }
-impl_stmt1!(OperatorStmt1);
+impl_expr!(OperatorStmt1);
 
 impl<'script> Upable<'script> for OperatorStmt1<'script> {
     type Target = OperatorStmt<'script>;
@@ -205,7 +205,7 @@ pub struct OperatorStmt<'script> {
     pub target: String,
     pub params: Option<HashMap<String, Value<'script>>>,
 }
-impl_stmt!(OperatorStmt);
+impl_expr!(OperatorStmt);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl1<'script> {
@@ -378,7 +378,6 @@ pub struct MutSelect1<'script> {
     pub windows: Option<Vec<WindowDefn1>>,
 }
 impl_expr!(MutSelect1);
-impl_stmt1!(MutSelect1);
 
 impl<'script> MutSelect1<'script> {
     #[allow(dead_code)]
@@ -471,7 +470,6 @@ pub struct MutSelect<'script> {
     pub windows: Vec<WindowDefn1>,
 }
 impl_expr!(MutSelect);
-impl_stmt!(MutSelect);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum GroupBy1<'script> {
