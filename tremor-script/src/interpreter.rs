@@ -420,10 +420,9 @@ where
                     let s = stry!(range_start.run(opts, env, event, meta, local));
                     if let Some(range_start) = s.as_usize() {
                         let range_start = range_start + start;
-
                         let e = stry!(range_end.run(opts, env, event, meta, local));
                         if let Some(range_end) = e.as_usize() {
-                            let range_end = range_end + end;
+                            let range_end = range_end + range_start;
                             if range_end >= end {
                                 return error_array_out_of_bound(
                                     outer,

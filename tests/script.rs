@@ -65,4 +65,13 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(passthrough);
+test_cases!(
+    array_paths,
+    array_pattern,
+    base64,
+    binary,
+    cidr,
+    cidr_multi,
+    dummy,
+    passthrough
+);

@@ -13,8 +13,6 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use serde_yaml;
-use simd_json::to_borrowed_value;
-use simd_json::BorrowedValue as Value;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline;
