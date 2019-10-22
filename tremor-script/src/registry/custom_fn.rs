@@ -58,17 +58,17 @@ impl TremorFn for CustomFn {
         unsafe {
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {
-                    match expr.run(
+                    return if let Cont::Cont(v) = expr.run(
                         opts.with_result(),
                         &env,
                         mem::transmute(&mut no_event),
                         mem::transmute(&mut no_meta),
                         &mut this_local,
                     )? {
-                        // I don't like this!
-                        Cont::Cont(v) => return Ok(mem::transmute(v.into_owned())),
-                        _ => unimplemented!(),
-                    }
+                        Ok(mem::transmute(v.into_owned()));
+                    } else {
+                        Err("can't emit here".into());
+                    };
                 } else {
                     expr.run(
                         opts,

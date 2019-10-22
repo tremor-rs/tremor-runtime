@@ -158,7 +158,6 @@ fn main() -> Result<()> {
                     input.read_to_string(&mut code)?;
 
                     reg.load_module(&name, &code)?;
-                    dbg!(name);
                 }
             }
         }
