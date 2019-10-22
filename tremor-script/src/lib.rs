@@ -48,6 +48,7 @@ mod str_suffix;
 mod tilde;
 pub mod utils;
 pub use ctx::EventContext;
+pub use interpreter::AggrType;
 pub mod prelude;
 
 #[cfg(test)]
