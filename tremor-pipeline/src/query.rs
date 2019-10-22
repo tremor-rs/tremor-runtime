@@ -190,31 +190,12 @@ impl Query {
                         port: "out".into(),
                         had_port: false,
                     };
-
                     select_num += 1;
                     let from = resolve_output_port(&s.from);
                     let into = resolve_input_port(&s.into);
-                    if links.contains_key(&from) {
-                        match links.get_mut(&from) {
-                            Some(x) => {
-                                if !x.contains(&select_in) {
-                                    x.push(select_in.clone())
-                                }
-                            }
-                            None => {
-                                return Err("should never get here - link should be ok 1".into())
-                            }
-                        }
-                        match links.get_mut(&select_out) {
-                            Some(x) => x.push(into),
-                            None => {
-                                return Err("should never get here - link should be ok 2".into())
-                            }
-                        }
-                    } else {
-                        links.insert(from, vec![select_in.clone()]);
-                        links.insert(select_out, vec![into]);
-                    }
+
+                    links.entry(from).or_default().push(select_in.clone());
+                    links.entry(select_out).or_default().push(into);
 
                     let node = NodeConfig {
                         id: select_in.id.clone(),
@@ -367,11 +348,12 @@ impl Query {
             }
         }
 
-        println!(
-            "{:?}",
-            petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
-        );
-
+        /*
+                println!(
+                    "{:?}",
+                    petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
+                );
+        */
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
             Err(ErrorKind::CyclicGraphError(format!(

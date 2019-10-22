@@ -134,7 +134,7 @@ where
             reg,
             aggr_reg,
             is_in_aggr: false,
-            can_emit: false,
+            can_emit: true,
             operators: Vec::new(),
             scripts: Vec::new(),
             aggregates: Vec::new(),
