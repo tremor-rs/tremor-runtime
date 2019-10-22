@@ -1,4 +1,4 @@
-emit {
+{
   "bb": true != true,
   "ii": 1 != 1,
   "example": 1 * 2 == 2,
@@ -8,4 +8,4 @@ emit {
   "ss": "snot" == "badger",
   "aa": [1,2,3] != [3,2,1],
   "rr": { "snot": "badger" } == { "snot": "badger" },
-};
+}

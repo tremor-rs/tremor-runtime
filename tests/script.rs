@@ -72,6 +72,15 @@ test_cases!(
     binary,
     cidr,
     cidr_multi,
+    datetime,
     dummy,
+    eq,
+    escape,
+    glob,
+    grok,
+    heredoc,
+    influx,
+    json,
+    jump,
     passthrough
 );
