@@ -11,8 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![forbid(warnings)]
-#![allow(dead_code)]
+
+// We allow dead code and unused code in the main line because
+// it is just a utility
+#![allow(dead_code, unused)]
 #![recursion_limit = "1024"]
 #![cfg_attr(
     feature = "cargo-clippy",
@@ -29,19 +31,16 @@ mod ctx;
 mod datetime;
 mod errors;
 pub mod grok;
-#[allow(unused, dead_code)]
 mod highlighter;
 mod influx;
 pub mod interpreter;
 mod lexer;
-#[allow(unused, dead_code)]
 mod parser;
-#[allow(unused, dead_code)]
 mod pos;
 mod registry;
 mod script;
 mod std_lib;
-#[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
+#[allow(clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
 #[macro_use]

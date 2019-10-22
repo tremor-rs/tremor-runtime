@@ -14,8 +14,10 @@
 
 pub mod base_expr;
 pub mod query;
+mod support;
 pub mod upable;
 use crate::errors::*;
+use crate::impl_expr;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
 use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
@@ -28,24 +30,8 @@ use serde::Serialize;
 use simd_json::value::{borrowed, ValueTrait};
 use simd_json::{BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
-use std::fmt;
 use std::mem;
 use upable::Upable;
-
-#[macro_export]
-macro_rules! impl_expr {
-    ($name:ident) => {
-        impl<'script> BaseExpr for $name<'script> {
-            fn s(&self) -> Location {
-                self.start
-            }
-
-            fn e(&self) -> Location {
-                self.end
-            }
-        }
-    };
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Script1<'script> {
@@ -498,6 +484,7 @@ pub struct Literal<'script> {
 impl_expr!(Literal);
 
 pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprs1<'script>);
+
 impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
     fn from(mut es: StrLitElements<'script>) -> StringLit1<'script> {
         let string = if es.0.len() == 1 {
@@ -694,45 +681,6 @@ pub enum ImutExpr1<'script> {
         end: Location,
     },
     String(StringLit1<'script>),
-}
-
-impl<'script> BaseExpr for ImutExpr1<'script> {
-    fn s(&self) -> Location {
-        match self {
-            ImutExpr1::String(e) => e.start,
-            ImutExpr1::Binary(e) => e.start,
-            ImutExpr1::Comprehension(e) => e.start,
-            ImutExpr1::Invoke(e) => e.s(),
-            ImutExpr1::InvokeAggr(e) => e.s(),
-            ImutExpr1::List(e) => e.s(),
-            ImutExpr1::Literal(e) => e.s(),
-            ImutExpr1::Match(e) => e.start,
-            ImutExpr1::Merge(e) => e.start,
-            ImutExpr1::Patch(e) => e.start,
-            ImutExpr1::Path(e) => e.s(),
-            ImutExpr1::Present { start, .. } => *start,
-            ImutExpr1::Record(e) => e.s(),
-            ImutExpr1::Unary(e) => e.start,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            ImutExpr1::String(e) => e.end,
-            ImutExpr1::Binary(e) => e.end,
-            ImutExpr1::Comprehension(e) => e.end,
-            ImutExpr1::Invoke(e) => e.e(),
-            ImutExpr1::InvokeAggr(e) => e.e(),
-            ImutExpr1::List(e) => e.e(),
-            ImutExpr1::Literal(e) => e.e(),
-            ImutExpr1::Match(e) => e.end,
-            ImutExpr1::Merge(e) => e.end,
-            ImutExpr1::Patch(e) => e.end,
-            ImutExpr1::Path(e) => e.e(),
-            ImutExpr1::Present { end, .. } => *end,
-            ImutExpr1::Record(e) => e.e(),
-            ImutExpr1::Unary(e) => e.end,
-        }
-    }
 }
 
 impl<'script> Upable<'script> for ImutExpr1<'script> {
@@ -1014,77 +962,6 @@ fn is_lit<'script>(e: &ImutExpr<'script>) -> bool {
     }
 }
 
-impl<'script> BaseExpr for ImutExpr<'script> {
-    fn s(&self) -> Location {
-        match self {
-            ImutExpr::Binary(e) => e.s(),
-            ImutExpr::Comprehension(e) => e.s(),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.s(),
-            ImutExpr::InvokeAggr(e) => e.s(),
-            ImutExpr::List(e) => e.s(),
-            ImutExpr::Literal(e) => e.s(),
-            ImutExpr::Local { start, .. } | ImutExpr::Present { start, .. } => *start,
-            ImutExpr::Match(e) => e.s(),
-            ImutExpr::Merge(e) => e.s(),
-            ImutExpr::Patch(e) => e.s(),
-            ImutExpr::Path(e) => e.s(),
-            ImutExpr::Record(e) => e.s(),
-            ImutExpr::Unary(e) => e.s(),
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            ImutExpr::Binary(e) => e.e(),
-            ImutExpr::Comprehension(e) => e.e(),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.e(),
-            ImutExpr::InvokeAggr(e) => e.e(),
-            ImutExpr::List(e) => e.e(),
-            ImutExpr::Literal(e) => e.e(),
-            ImutExpr::Match(e) => e.e(),
-            ImutExpr::Merge(e) => e.e(),
-            ImutExpr::Patch(e) => e.e(),
-            ImutExpr::Path(e) => e.e(),
-            ImutExpr::Local { end, .. } | ImutExpr::Present { end, .. } => *end,
-            ImutExpr::Record(e) => e.e(),
-            ImutExpr::Unary(e) => e.e(),
-        }
-    }
-}
-impl<'script> BaseExpr for Expr<'script> {
-    fn s(&self) -> Location {
-        match self {
-            Expr::Assign { start, .. }
-            | Expr::AssignMoveLocal { start, .. }
-            | Expr::Drop { start, .. } => *start,
-            Expr::Comprehension(e) => e.s(),
-            Expr::Emit(e) => e.s(),
-            Expr::Imut(e) => e.s(),
-            Expr::Match(e) => e.s(),
-            Expr::MergeInPlace(e) => e.s(),
-            Expr::PatchInPlace(e) => e.s(),
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            Expr::Assign { end, .. }
-            | Expr::AssignMoveLocal { end, .. }
-            | Expr::Drop { end, .. } => *end,
-            Expr::Comprehension(e) => e.e(),
-            Expr::Emit(e) => e.e(),
-            Expr::Imut(e) => e.e(),
-            Expr::Match(e) => e.e(),
-            Expr::MergeInPlace(e) => e.e(),
-            Expr::PatchInPlace(e) => e.e(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EmitExpr1<'script> {
     pub start: Location,
@@ -1186,22 +1063,6 @@ pub struct Invoke<'script> {
 }
 impl_expr!(Invoke);
 
-impl<'script> PartialEq for Invoke<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start
-            && self.end == other.end
-            && self.module == other.module
-            && self.fun == other.fun
-        //&& self.args == other.args FIXME why??!?
-    }
-}
-
-impl<'script> fmt::Debug for Invoke<'script> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn {}::{}", self.module, self.fun)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct InvokeAggr1<'script> {
     pub start: Location,
@@ -1274,32 +1135,6 @@ pub struct InvokeAggr {
     pub aggr_id: usize,
 }
 
-impl BaseExpr for InvokeAggr {
-    fn s(&self) -> Location {
-        self.start
-    }
-    fn e(&self) -> Location {
-        self.end
-    }
-}
-
-impl PartialEq for InvokeAggr {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start
-            && self.end == other.end
-            && self.module == other.module
-            && self.fun == other.fun
-            && self.aggr_id == other.aggr_id
-        //&& self.args == other.args FIXME why??!?
-    }
-}
-
-impl fmt::Debug for InvokeAggr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn(aggr) {}::{}", self.module, self.fun)
-    }
-}
-
 #[derive(Clone, Serialize)]
 pub struct InvokeAggrFn<'script> {
     pub start: Location,
@@ -1312,19 +1147,6 @@ pub struct InvokeAggrFn<'script> {
 }
 impl_expr!(InvokeAggrFn);
 
-impl<'script> fmt::Debug for InvokeAggrFn<'script> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn(aggr) {}::{}", self.module, self.fun)
-    }
-}
-
-impl<'script> PartialEq for InvokeAggrFn<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        self.module == other.module && self.fun == other.fun && self.args == other.args
-        //&& self.args == other.args FIXME why??!?
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TestExpr {
     pub start: Location,
@@ -1333,15 +1155,6 @@ pub struct TestExpr {
     pub test: String,
     pub extractor: Extractor,
 }
-impl BaseExpr for TestExpr {
-    fn s(&self) -> Location {
-        self.start
-    }
-
-    fn e(&self) -> Location {
-        self.end
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TestExpr1 {
@@ -1349,16 +1162,6 @@ pub struct TestExpr1 {
     pub end: Location,
     pub id: String,
     pub test: String,
-}
-
-impl BaseExpr for TestExpr1 {
-    fn s(&self) -> Location {
-        self.start
-    }
-
-    fn e(&self) -> Location {
-        self.end
-    }
 }
 
 impl<'script> Upable<'script> for TestExpr1 {
@@ -2205,23 +2008,6 @@ pub enum Path1<'script> {
     Meta(MetadataPath1<'script>),
 }
 
-impl<'script> BaseExpr for Path1<'script> {
-    fn s(&self) -> Location {
-        match self {
-            Path1::Local(e) => e.s(),
-            Path1::Meta(e) => e.start,
-            Path1::Event(e) => e.start,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            Path1::Local(e) => e.e(),
-            Path1::Meta(e) => e.end,
-            Path1::Event(e) => e.end,
-        }
-    }
-}
-
 impl<'script> Upable<'script> for Path1<'script> {
     type Target = Path<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -2255,22 +2041,6 @@ impl<'script> Path<'script> {
             Path::Const(path) | Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
-        }
-    }
-}
-impl<'script> BaseExpr for Path<'script> {
-    fn s(&self) -> Location {
-        match self {
-            Path::Const(e) | Path::Local(e) => e.s(),
-            Path::Meta(e) => e.s(),
-            Path::Event(e) => e.s(),
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            Path::Const(e) | Path::Local(e) => e.e(),
-            Path::Meta(e) => e.e(),
-            Path::Event(e) => e.e(),
         }
     }
 }
@@ -2406,46 +2176,6 @@ pub enum Segment<'script> {
     },
 }
 
-impl<'script> PartialEq for Segment<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        use Segment::*;
-        match (self, other) {
-            (Id { id: id1, .. }, Id { id: id2, .. }) => id1 == id2,
-            (Idx { idx: idx1, .. }, Idx { idx: idx2, .. }) => idx1 == idx2,
-            (Element { expr: expr1, .. }, Element { expr: expr2, .. }) => expr1 == expr2,
-            (
-                Range {
-                    range_start: start1,
-                    range_end: end1,
-                    ..
-                },
-                Range {
-                    range_start: start2,
-                    range_end: end2,
-                    ..
-                },
-            ) => start1 == start2 && end1 == end2,
-            _ => false,
-        }
-    }
-}
-
-impl<'script> BaseExpr for Segment<'script> {
-    fn s(&self) -> Location {
-        match self {
-            Self::Id { start, .. } | Self::Idx { start, .. } | Self::Element { start, .. } => {
-                *start
-            }
-            Self::Range { start_lower, .. } => *start_lower,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            Self::Id { end, .. } | Self::Idx { end, .. } | Self::Element { end, .. } => *end,
-            Self::Range { end_upper, .. } => *end_upper,
-        }
-    }
-}
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LocalPath1<'script> {
     pub start: Location,
@@ -2499,12 +2229,6 @@ pub struct LocalPath<'script> {
 }
 impl_expr!(LocalPath);
 
-impl<'script> PartialEq for LocalPath<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        self.idx == other.idx && self.is_const == other.is_const && self.segments == other.segments
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MetadataPath1<'script> {
     pub start: Location,
@@ -2530,12 +2254,6 @@ pub struct MetadataPath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr!(MetadataPath);
-
-impl<'script> PartialEq for MetadataPath<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        self.segments == other.segments
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EventPath1<'script> {
@@ -2563,12 +2281,6 @@ pub struct EventPath<'script> {
 }
 impl_expr!(EventPath);
 
-impl<'script> PartialEq for EventPath<'script> {
-    fn eq(&self, other: &Self) -> bool {
-        self.segments == other.segments
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum BinOpKind {
     Or,
@@ -2585,26 +2297,6 @@ pub enum BinOpKind {
     Mul,
     Div,
     Mod,
-}
-
-impl fmt::Display for BinOpKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Or => write!(f, "or"),
-            Self::And => write!(f, "and"),
-            Self::Eq => write!(f, "=="),
-            Self::NotEq => write!(f, "!="),
-            Self::Gte => write!(f, ">="),
-            Self::Gt => write!(f, ">"),
-            Self::Lte => write!(f, "<="),
-            Self::Lt => write!(f, "<"),
-            Self::Add => write!(f, "+"),
-            Self::Sub => write!(f, "-"),
-            Self::Mul => write!(f, "*"),
-            Self::Div => write!(f, "/"),
-            Self::Mod => write!(f, "%"),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2645,15 +2337,6 @@ pub enum UnaryOpKind {
     Plus,
     Minus,
     Not,
-}
-impl fmt::Display for UnaryOpKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Plus => write!(f, "+"),
-            Self::Minus => write!(f, "-"),
-            Self::Not => write!(f, "not"),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

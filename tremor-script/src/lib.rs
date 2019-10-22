@@ -30,20 +30,20 @@ mod ctx;
 mod datetime;
 pub mod errors;
 pub mod grok;
-#[allow(unused, dead_code)]
 pub mod highlighter;
 pub mod influx;
 pub mod interpreter;
 pub mod lexer;
-#[allow(unused, dead_code)]
+// We need this because of lalrpop
+#[allow(unused)]
 pub mod parser;
-#[allow(unused, dead_code)]
+
 pub mod pos;
 pub mod query;
 pub mod registry;
 pub mod script;
 mod std_lib;
-#[allow(unused, dead_code, clippy::transmute_ptr_to_ptr)]
+#[allow(clippy::transmute_ptr_to_ptr)]
 mod str_suffix;
 mod tilde;
 pub mod utils;

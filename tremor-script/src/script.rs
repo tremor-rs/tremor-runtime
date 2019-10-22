@@ -160,7 +160,6 @@ where
         h.finalize()
     }
 
-    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {

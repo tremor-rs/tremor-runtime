@@ -573,8 +573,6 @@ error_chain! {
     }
 }
 
-// We need this because of main and lib ... :/
-#[allow(dead_code)]
 // We need this since boxes are terrible
 #[allow(clippy::borrowed_box)]
 pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
@@ -585,8 +583,6 @@ pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
     Err(ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name).into())
 }
 
-// We need this because of main and lib ... :/
-#[allow(dead_code)]
 // We need this since boxes are terrible
 #[allow(clippy::borrowed_box)]
 pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(

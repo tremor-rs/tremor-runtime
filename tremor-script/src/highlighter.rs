@@ -15,7 +15,7 @@ use crate::ast::Warning;
 use crate::errors::{Error as ScriptError, *};
 use crate::lexer::{Token, TokenFuns, TokenSpan};
 use crate::pos::*;
-use lalrpop_util::ParseError;
+//use lalrpop_util::ParseError;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::io::Write;
@@ -286,7 +286,6 @@ pub trait Highlighter {
                     writeln!(self.get_writer(), "{:5} | ", line)?;
                     self.reset()?;
                 }
-                printed_error = true;
 
                 let len = if end.column > start.column {
                     end.column - start.column

@@ -319,7 +319,7 @@ macro_rules! tremor_fn_ {
                     fn this_mfa() -> MFA {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
-                    #[allow(dead_code)] // We want to expose this
+                    #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
                         to_runtime_error_ext(this_mfa(), error)
                     }
@@ -382,7 +382,7 @@ macro_rules! tremor_fn_ {
                     fn this_mfa() -> MFA {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
-                    #[allow(dead_code)] // We want to expose this
+                    #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
                         to_runtime_error_ext(this_mfa(), error)
                     }
@@ -445,7 +445,7 @@ macro_rules! tremor_fn_ {
                     fn this_mfa() -> MFA {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
-                    #[allow(dead_code)] // We want to expose this
+                    #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
                         to_runtime_error_ext(this_mfa(), error)
                     }

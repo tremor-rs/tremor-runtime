@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use crate::ast::*;
-use crate::lexer;
 use crate::lexer::Token;
 use crate::pos::Location;
-use crate::tilde::Extractor;
 use simd_json::BorrowedValue as Value;
 use std::borrow::Cow;
 

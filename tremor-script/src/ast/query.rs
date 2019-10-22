@@ -15,7 +15,6 @@
 use super::*;
 use crate::impl_expr;
 #[derive(Debug, PartialEq, Serialize)]
-#[allow(dead_code)]
 #[allow(clippy::module_name_repetitions)]
 pub struct Query1<'script> {
     pub stmts: Stmts1<'script>,
@@ -26,7 +25,6 @@ pub const GROUP_CONST_ID: usize = 1;
 pub const ARGS_CONST_ID: usize = 2;
 
 impl<'script> Query1<'script> {
-    #[allow(dead_code)]
     pub fn up_script<'registry>(
         self,
         reg: &'registry Registry,
@@ -216,12 +214,9 @@ pub struct ScriptDecl1<'script> {
     pub script: Script1<'script>,
 }
 
-impl<'script> ScriptDecl1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ScriptDecl<'script>> {
+impl<'script> Upable<'script> for ScriptDecl1<'script> {
+    type Target = ScriptDecl<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // Inject consts
         let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         helper.warnings.append(&mut warnings);
@@ -257,12 +252,9 @@ pub struct ScriptStmt1<'script> {
     pub params: Option<WithExprs1<'script>>,
 }
 
-impl<'script> ScriptStmt1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<ScriptStmt<'script>> {
+impl<'script> Upable<'script> for ScriptStmt1<'script> {
+    type Target = ScriptStmt<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         // helper.warnings.append(&mut warnings);
         Ok(ScriptStmt {
@@ -317,11 +309,9 @@ pub struct WindowDecl1<'script> {
     pub script: Option<Script1<'script>>,
 }
 
-impl<'script> WindowDecl1<'script> {
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<WindowDecl<'script>> {
+impl<'script> Upable<'script> for WindowDecl1<'script> {
+    type Target = WindowDecl<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let mut maybe_script = self
             .script
             .map(|s| s.up_script(helper.reg, helper.aggr_reg))
@@ -379,12 +369,9 @@ pub struct MutSelect1<'script> {
 }
 impl_expr!(MutSelect1);
 
-impl<'script> MutSelect1<'script> {
-    #[allow(dead_code)]
-    pub fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<MutSelect<'script>> {
+impl<'script> Upable<'script> for MutSelect1<'script> {
+    type Target = MutSelect<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if !helper.consts.is_empty() {
             return error_no_consts(&(self.start, self.end), &self.target);
         }
@@ -529,22 +516,6 @@ pub enum GroupBy<'script> {
         end: Location,
         expr: ImutExpr<'script>,
     },
-}
-impl<'script> BaseExpr for GroupBy<'script> {
-    fn s(&self) -> Location {
-        match self {
-            GroupBy::Expr { start, .. }
-            | GroupBy::Set { start, .. }
-            | GroupBy::Each { start, .. } => *start,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            GroupBy::Expr { end, .. } | GroupBy::Set { end, .. } | GroupBy::Each { end, .. } => {
-                *end
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

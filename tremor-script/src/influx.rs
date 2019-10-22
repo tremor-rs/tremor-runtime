@@ -57,7 +57,6 @@ fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
     Some(())
 }
 
-#[allow(dead_code)]
 pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(&mut output, v.get("measurement")?.as_str()?.as_bytes())?;

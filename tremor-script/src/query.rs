@@ -94,29 +94,7 @@ impl PartialOrd for rentals::Stmt {
         None // NOTE Here be dragons FIXME
     }
 }
-impl<'run, 'event, 'script> StmtRentalWrapper
-where
-    'script: 'event,
-    'event: 'run,
-{
-    #[allow(dead_code)] // FIXME remove this shit
-    fn with_stmt<'elide>(query: &Query, encumbered_stmt: crate::ast::Stmt<'elide>) -> Self {
-        StmtRentalWrapper {
-            stmt: Arc::new(rentals::Stmt::new(Arc::new(query.clone()), |_| {
-                // NOTE We are eliding the lifetime 'elide here which is the purpose
-                // of the rental and the rental wrapper, so we disabuse mem::trensmute
-                // to avoid lifetime elision/mapping warnings from the rust compiler which
-                // under ordinary conditions are correct, but under rental conditions are
-                // exactly what we desire to avoid
-                //
-                // This is *safe* as the rental guarantees that Stmt and Query lifetimes
-                // are compatible by definition in their rentals::{Query,Struct} co-definitions
-                //
-                unsafe { std::mem::transmute(encumbered_stmt) }
-            })),
-        }
-    }
-}
+
 #[derive(Debug, Clone)]
 pub struct Query {
     pub query: Arc<rentals::Query>,
@@ -208,7 +186,6 @@ where
         h.finalize()
     }
 
-    #[allow(dead_code)] // NOTE: Damn dual main and lib crate ...
     pub fn format_error(&self, e: Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
