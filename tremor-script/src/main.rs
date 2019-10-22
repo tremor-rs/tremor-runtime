@@ -142,20 +142,24 @@ fn main() -> Result<()> {
     #[allow(unused_mut)]
     let mut reg: Registry = registry::registry();
 
-    if let Some(modules) = matches.values_of("modules") {
-        use std::path::Path;
-        for module in modules {
-            if let Some(name) = Path::new(module)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string())
-            {
-                let mut code = String::new();
-                let mut input = File::open(&module)?;
-                input.read_to_string(&mut code)?;
+    #[cfg(feature = "fns")]
+    {
+        if let Some(modules) = matches.values_of("modules") {
+            use std::ffi::OsStr;
+            use std::path::Path;
+            for module in modules {
+                if let Some(name) = Path::new(module)
+                    .file_stem()
+                    .and_then(OsStr::to_str)
+                    .map(ToString::to_string)
+                {
+                    let mut code = String::new();
+                    let mut input = File::open(&module)?;
+                    input.read_to_string(&mut code)?;
 
-                reg.load_module(&name, &code)?;
-                dbg!(name);
+                    reg.load_module(&name, &code)?;
+                    dbg!(name);
+                }
             }
         }
     }

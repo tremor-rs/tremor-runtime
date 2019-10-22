@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{BaseExpr, Exprs, Warning};
+#[cfg(feature = "fns")]
+mod custom_fn;
+#[cfg(feature = "fns")]
+use crate::ast::Warning;
+#[cfg(feature = "fns")]
+pub use custom_fn::*;
+
+use crate::ast::BaseExpr;
 use crate::errors::*;
-use crate::lexer::{self, TokenFuns};
-use crate::parser::grammar;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
 use downcast_rs::{impl_downcast, DowncastSync};
@@ -24,7 +29,6 @@ use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
-use std::mem;
 use std::ops::RangeInclusive;
 
 pub trait TremorAggrFn: DowncastSync + Sync + Send {
@@ -64,90 +68,6 @@ pub trait TremorFn: Sync + Send {
     }
 }
 pub type FResult<T> = std::result::Result<T, FunctionError>;
-
-#[derive(Debug, Clone)]
-pub struct CustomFn {
-    //module: Arc<Script>,
-    pub body: Exprs<'static>,
-    pub args: Vec<String>,
-    pub locals: usize,
-}
-
-impl TremorFn for CustomFn {
-    fn invoke<'event>(
-        &self,
-        ctx: &EventContext,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>> {
-        use crate::ast::InvokeAggrFn;
-        use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack, LocalValue};
-        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-        const NO_CONSTS: [Value<'static>; 0] = [];
-        let mut this_local = LocalStack::with_size(self.locals);
-        for (i, arg) in args.iter().enumerate() {
-            this_local.values[i] = Some(LocalValue { v: (*arg).clone() });
-        }
-        let opts = ExecOpts {
-            result_needed: false,
-            aggr: AggrType::Tick,
-        };
-        let mut exprs = self.body.iter().peekable();
-        let env = Env {
-            context: ctx,
-            consts: &NO_CONSTS,
-            aggrs: &NO_AGGRS,
-        };
-        let mut no_event = Value::Null;
-        let mut no_meta = Value::Null;
-        #[allow(mutable_transmutes)]
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        unsafe {
-            while let Some(expr) = exprs.next() {
-                if exprs.peek().is_none() {
-                    match expr.run(
-                        opts.with_result(),
-                        &env,
-                        mem::transmute(&mut no_event),
-                        mem::transmute(&mut no_meta),
-                        &mut this_local,
-                    )? {
-                        // I don't like this!
-                        Cont::Cont(v) => return Ok(mem::transmute(v.into_owned())),
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    expr.run(
-                        opts,
-                        &env,
-                        mem::transmute(&mut no_event),
-                        mem::transmute(&mut no_meta),
-                        &mut this_local,
-                    )?;
-                }
-            }
-        }
-
-        /*
-        expr.invocable
-            .invoke(context, &argv1)
-            .map(Cow::Owned)
-            .map_err(|e| {
-                let r: Option<&Registry> = None;
-                e.into_err(self, self, r)
-            })
-        */
-        Ok(Value::I64(42))
-    }
-    fn snot_clone(&self) -> Box<dyn TremorFn> {
-        Box::new(self.clone())
-    }
-    fn arity(&self) -> RangeInclusive<usize> {
-        RangeInclusive::new(self.args.len(), self.args.len())
-    }
-    fn is_const(&self) -> bool {
-        false
-    }
-}
 
 #[allow(unused_variables)]
 pub fn registry() -> Registry {
@@ -215,6 +135,13 @@ pub enum FunctionError {
     BadType { mfa: MFA },
     Error(Error),
 }
+
+impl PartialEq for FunctionError {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
 impl From<Error> for FunctionError {
     fn from(error: Error) -> Self {
         Self::Error(error)
@@ -596,6 +523,8 @@ impl Registry {
 
     #[cfg(feature = "fns")]
     pub fn load_module(&mut self, name: &str, code: &str) -> Result<Vec<Warning>> {
+        use crate::lexer::{self, TokenFuns};
+        use crate::parser::grammar;
         if self.functions.contains_key(name) {
             return Err(format!("Module {} already exists.", name).into());
         }

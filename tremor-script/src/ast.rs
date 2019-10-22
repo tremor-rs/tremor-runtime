@@ -20,9 +20,7 @@ pub mod upable;
 use crate::errors::*;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
-use crate::registry::{
-    Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
-};
+use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
@@ -299,6 +297,7 @@ impl<'script> Script1<'script> {
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<Vec<Warning>> {
+        use crate::registry::CustomFn;
         let mut helper = Helper::new(reg, aggr_reg);
 
         for e in self.exprs {
