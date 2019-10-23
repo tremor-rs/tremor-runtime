@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use regex::Regex;
+use pretty_assertions::assert_eq;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;
@@ -27,7 +27,7 @@ macro_rules! test_cases {
 
                 tremor_runtime::functions::load()?;
                 let script_file = concat!("tests/script_errors/", stringify!($file), "/script.tremor");
-                let err_file = concat!("tests/script_errors/", stringify!($file), "/error.re");
+                let err_file = concat!("tests/script_errors/", stringify!($file), "/error.txt");
 
                 let mut file = File::open(script_file)?;
                 let mut contents = String::new();
@@ -39,9 +39,7 @@ macro_rules! test_cases {
                 let err = err.trim();
                 let s = Script::parse(&contents, &*FN_REGISTRY.lock()?);
                 if let Err(e) = s {
-                    let re = Regex::new(&err).unwrap();
-                    println!("Expecting re '{}' to match:\n{}", err, e);
-                    assert!(re.is_match(&format!("{}", e)));
+                    assert_eq!(err, format!("{}", e));
                 } else {
                     println!("Expected error, but got succeess");
                     assert!(false);

@@ -103,7 +103,6 @@ hyper = "0.10"  # chan't update this because of google
 grok = "1"
 
 [dev-dependencies]
-regex = "1"
 matches = "0.1"
 # criterion = "0.2"
 pretty_assertions = "0.6.1"
