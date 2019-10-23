@@ -98,5 +98,5 @@ test_cases!(
     regex,
     record_comprehension,
     string_concat,
-    unary,
+    unary
 );
