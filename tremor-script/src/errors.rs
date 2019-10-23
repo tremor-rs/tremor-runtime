@@ -620,7 +620,6 @@ pub fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    expected: ValueType,
 ) -> Result<T> {
     error_type_conflict_mult(outer, inner, got, vec![ValueType::Object])
 }
@@ -628,7 +627,6 @@ pub fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    expected: ValueType,
 ) -> Result<T> {
     error_type_conflict_mult(outer, inner, got, vec![ValueType::Array])
 }
@@ -637,7 +635,6 @@ pub fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    expected: ValueType,
 ) -> Result<T> {
     error_type_conflict_mult(outer, inner, got, vec![ValueType::String])
 }
@@ -646,7 +643,6 @@ pub fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    expected: ValueType,
 ) -> Result<T> {
     error_type_conflict_mult(outer, inner, got, vec![ValueType::I64])
 }

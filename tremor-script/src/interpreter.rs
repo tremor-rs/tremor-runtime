@@ -296,7 +296,7 @@ where
                         return error_array_out_of_bound(outer, segment, &path, idx..idx);
                     }
                 } else {
-                    return error_type_arr(outer, segment, current.value_type());
+                    return error_need_arr(outer, segment, current.value_type());
                 }
             }
             Segment::Element { expr, .. } => {
