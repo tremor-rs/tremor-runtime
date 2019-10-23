@@ -198,6 +198,7 @@ impl<'script> Script1<'script> {
                     consts.push(reduce2(expr)?);
                 }
                 #[allow(unreachable_code, unused_variables)]
+                #[cfg_attr(tarpaulin, skip)]
                 Expr1::FnDecl(_f) => {
                     return Err("Functions are not supported outside of modules.".into());
                 }
@@ -243,6 +244,7 @@ impl<'script> Script1<'script> {
     }
 
     #[cfg(feature = "fns")]
+    #[cfg_attr(tarpaulin, skip)]
     pub fn load_module<'registry>(
         self,
         name: &str,
@@ -603,6 +605,7 @@ impl<'script> Upable<'script> for Expr1<'script> {
             }
             Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             Expr1::Imut(i) => i.up(helper)?.into(),
+            #[cfg_attr(tarpaulin, skip)]
             Expr1::FnDecl(f) => {
                 return Err(ErrorKind::InvalidFn(f.extent().expand_lines(2), f.extent()).into())
             }
@@ -622,6 +625,7 @@ impl_expr!(FnDecl1);
 
 impl<'script> Upable<'script> for FnDecl1<'script> {
     type Target = FnDecl<'script>;
+    #[cfg_attr(tarpaulin, skip)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
@@ -1881,17 +1885,6 @@ impl<'script> PredicatePattern<'script> {
             | ArrayPatternEq { key, .. }
             | FieldPresent { key, .. }
             | FieldAbsent { key, .. } => &key,
-        }
-    }
-    pub fn lhs(&self) -> &str {
-        use PredicatePattern::*;
-        match self {
-            TildeEq { lhs, .. }
-            | Eq { lhs, .. }
-            | RecordPatternEq { lhs, .. }
-            | ArrayPatternEq { lhs, .. }
-            | FieldPresent { lhs, .. }
-            | FieldAbsent { lhs, .. } => &lhs,
         }
     }
 }

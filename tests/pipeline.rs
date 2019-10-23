@@ -65,6 +65,7 @@ macro_rules! test_cases {
                         }
                     }
                 }
+                assert!(out_json.is_empty());
                 Ok(())
             }
         )*
@@ -74,6 +75,7 @@ macro_rules! test_cases {
 test_cases!(
     default_rule,
     dimensions,
+    drop,
     example_rule,
     layered_limiting,
     lru,

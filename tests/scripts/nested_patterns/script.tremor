@@ -1,0 +1,4 @@
+match event of
+  case r = %{ arr ~= %[%{present rec}]} => r.arr
+  default => null
+end

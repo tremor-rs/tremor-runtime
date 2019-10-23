@@ -925,75 +925,62 @@ where
     'script: 'event,
     'event: 'run,
 {
-    match target {
-        Value::Array(ref a) => {
-            let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
-            let mut idx = 0;
-            for candidate in a {
-                'inner: for expr in &ap.exprs {
-                    match expr {
-                        ArrayPredicatePattern::Expr(e) => {
-                            let r = stry!(e.run(opts, env, event, meta, local));
-                            let vb: &Value = r.borrow();
+    if let Some(a) = target.as_array() {
+        let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
+        let mut idx = 0;
+        for candidate in a {
+            'inner: for expr in &ap.exprs {
+                match expr {
+                    ArrayPredicatePattern::Expr(e) => {
+                        let r = stry!(e.run(opts, env, event, meta, local));
+                        let vb: &Value = r.borrow();
 
-                            // NOTE: We are creating a new value here so we have to clone
-                            if val_eq(candidate, vb) && opts.result_needed {
-                                acc.push(Value::Array(vec![Value::Array(vec![
-                                    Value::I64(idx),
-                                    r.into_owned(),
-                                ])]));
-                            }
+                        // NOTE: We are creating a new value here so we have to clone
+                        if val_eq(candidate, vb) && opts.result_needed {
+                            acc.push(Value::Array(vec![Value::I64(idx), r.into_owned()]));
                         }
-                        ArrayPredicatePattern::Tilde(test) => {
-                            if let Ok(r) =
-                                test.extractor
-                                    .extract(opts.result_needed, &candidate, &env.context)
-                            {
-                                if opts.result_needed {
-                                    acc.push(Value::Array(vec![Value::Array(vec![
-                                        Value::I64(idx),
-                                        r,
-                                    ])]));
-                                }
-                            } else {
-                                continue 'inner;
+                    }
+                    ArrayPredicatePattern::Tilde(test) => {
+                        if let Ok(r) =
+                            test.extractor
+                                .extract(opts.result_needed, &candidate, &env.context)
+                        {
+                            if opts.result_needed {
+                                acc.push(Value::Array(vec![Value::I64(idx), r]));
                             }
+                        } else {
+                            continue 'inner;
                         }
-                        ArrayPredicatePattern::Record(rp) => {
-                            if let Some(r) = stry!(match_rp_expr(
-                                outer, opts, env, event, meta, local, candidate, rp,
-                            )) {
-                                if opts.result_needed {
-                                    acc.push(Value::Array(vec![Value::Array(vec![
-                                        Value::I64(idx),
-                                        r,
-                                    ])]))
-                                };
-                            } else {
-                                continue 'inner;
-                            }
+                    }
+                    ArrayPredicatePattern::Record(rp) => {
+                        if let Some(r) = stry!(match_rp_expr(
+                            outer, opts, env, event, meta, local, candidate, rp,
+                        )) {
+                            if opts.result_needed {
+                                acc.push(Value::Array(vec![Value::I64(idx), r]))
+                            };
+                        } else {
+                            continue 'inner;
                         }
-                        ArrayPredicatePattern::Array(ap) => {
-                            if let Some(r) = stry!(match_ap_expr(
-                                outer, opts, env, event, meta, local, candidate, ap,
-                            )) {
-                                if opts.result_needed {
-                                    acc.push(Value::Array(vec![Value::Array(vec![
-                                        Value::I64(idx),
-                                        r,
-                                    ])]));
-                                }
-                            } else {
-                                continue 'inner; // return Ok(Cont::Drop(Value::Bool(true))),
+                    }
+                    ArrayPredicatePattern::Array(ap) => {
+                        if let Some(r) = stry!(match_ap_expr(
+                            outer, opts, env, event, meta, local, candidate, ap,
+                        )) {
+                            if opts.result_needed {
+                                acc.push(Value::Array(vec![Value::I64(idx), r]));
                             }
+                        } else {
+                            continue 'inner; // return Ok(Cont::Drop(Value::Bool(true))),
                         }
                     }
                 }
-                idx += 1;
             }
-            Ok(Some(Value::Array(acc)))
+            idx += 1;
         }
-        _ => Ok(None),
+        Ok(Some(Value::Array(acc)))
+    } else {
+        Ok(None)
     }
 }
 

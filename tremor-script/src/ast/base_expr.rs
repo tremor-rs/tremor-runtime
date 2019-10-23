@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Don't cover this file it's only getters
+#![cfg_attr(tarpaulin, skip)]
+
 use super::*;
 use crate::pos::{Location, Range};
 

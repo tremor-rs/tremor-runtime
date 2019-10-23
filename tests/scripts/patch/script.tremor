@@ -5,8 +5,11 @@ let event = patch event of
   update "bb" =>  3,
   upsert "aa" => 4,
   upsert "dd" => 5,
+  move "dd" => "ff",
+  copy "ff" => "dd",
   erase "aa",
   merge => { "fleek": "flork" },
+  merge "cc" => {"flip": "flop"},
   insert "aa" => "bar"
 end;
 

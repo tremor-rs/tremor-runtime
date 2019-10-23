@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Don't cover this file it's only simple helpers
+#![cfg_attr(tarpaulin, skip)]
+
 use super::*;
 use std::fmt;
 
@@ -24,7 +27,6 @@ impl<'script> fmt::Debug for InvokeAggrFn<'script> {
 impl<'script> PartialEq for InvokeAggrFn<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.fun == other.fun && self.args == other.args
-        //&& self.args == other.args FIXME why??!?
     }
 }
 
