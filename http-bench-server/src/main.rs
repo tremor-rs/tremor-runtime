@@ -79,6 +79,7 @@ fn index(
         })
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() -> std::io::Result<()> {
     let data = web::Data::new(State {
         counter: AtomicUsize::new(0),

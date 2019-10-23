@@ -20,6 +20,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     let args: Vec<String> = env::args().collect();
     let programme = args[0].clone();

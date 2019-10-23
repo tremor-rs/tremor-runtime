@@ -72,6 +72,7 @@ use std::io::BufReader;
 use std::mem;
 use std::path::Path;
 
+#[cfg_attr(tarpaulin, skip)]
 fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
     let mut count = 0;
@@ -121,6 +122,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     Ok(count)
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     use std::ffi::OsStr;
     use std::io::Read;
@@ -151,6 +153,7 @@ fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     Ok(1)
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn run_dun() -> Result<()> {
     functions::load()?;
 
@@ -274,6 +277,7 @@ fn run_dun() -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     version::print();
     if let Err(ref e) = run_dun() {

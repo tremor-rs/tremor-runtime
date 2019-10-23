@@ -47,6 +47,7 @@ pub fn nanotime() -> u64 {
     (seconds * 1_000_000_000) + nanoseconds
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() -> Result<()> {
     let matches = App::new("tremor-query")
         .version("0.6.0")

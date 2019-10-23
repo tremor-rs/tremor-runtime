@@ -179,6 +179,7 @@ fn run(mut app: TremorApp) -> Result<()> {
     }
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() -> Result<()> {
     use clap::App;
     let yaml = load_yaml!("./cli.yaml");

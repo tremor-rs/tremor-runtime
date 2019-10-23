@@ -14,6 +14,7 @@
 
 extern crate lalrpop;
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     lalrpop::process_root().expect("Unable to initialize LALRPOP");
 
