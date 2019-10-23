@@ -1,4 +1,4 @@
-match {"a": "a multi line regular expression"} of
+match event of
   case %{ a ~= re|\
    a multi line \
    regular expression| } => "ok"

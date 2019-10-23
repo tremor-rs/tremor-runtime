@@ -1,0 +1,3 @@
+merge event of
+    { "cc": 2, "bb": 3, "aa": null }
+end

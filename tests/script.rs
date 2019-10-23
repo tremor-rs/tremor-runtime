@@ -37,7 +37,9 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
                 let script = Script::parse(&contents, &*FN_REGISTRY.lock()?)?;
 
+                println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
+                println!("Loading expected: {}", out_file);
                 let mut out_json = load_event_file(out_file)?;
 
                 out_json.reverse();
@@ -82,5 +84,14 @@ test_cases!(
     influx,
     json,
     jump,
-    passthrough
+    kv,
+    let_field,
+    logical,
+    simple_match,
+    merge,
+    multi_case,
+    multiline,
+    null,
+    passthrough,
+    patch
 );

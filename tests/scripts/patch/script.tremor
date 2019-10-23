@@ -1,0 +1,13 @@
+let bb = "snot";
+
+let event = patch event of
+  insert "cc" => patch {} of insert "fleek" => "florp" end,
+  update "bb" =>  3,
+  upsert "aa" => 4,
+  upsert "dd" => 5,
+  erase "aa",
+  merge => { "fleek": "flork" },
+  insert "aa" => "bar"
+end;
+
+emit patch merge event of { "foo": "bar" } end of update "foo" => "badger" end;
