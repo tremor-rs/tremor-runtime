@@ -93,5 +93,10 @@ test_cases!(
     multiline,
     null,
     passthrough,
-    patch
+    patch,
+    presence,
+    regex,
+    record_comprehension,
+    string_concat,
+    unary,
 );
