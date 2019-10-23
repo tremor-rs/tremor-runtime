@@ -92,7 +92,7 @@ where
                 is_const: false,
                 id,
             } => match local.values.get(*idx) {
-                Some(Some(l)) => Ok(Cow::Borrowed(&l.v)),
+                Some(Some(l)) => Ok(Cow::Borrowed(l)),
                 Some(None) => {
                     let path: Path = Path::Local(LocalPath {
                         id: id.clone(),
@@ -297,7 +297,7 @@ where
         let mut subrange: Option<(usize, usize)> = None;
         let mut current: &Value = match path {
             Path::Local(path) => match local.values.get(path.idx) {
-                Some(Some(l)) => &l.v,
+                Some(Some(l)) => l,
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
                 _ => return error_oops(self, "Unknown local variable"),
             },

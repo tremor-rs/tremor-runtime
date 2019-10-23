@@ -14,7 +14,6 @@
 
 use super::Helper;
 use crate::errors::*;
-use halfbrown::HashMap;
 
 pub trait Upable<'script> {
     type Target;
@@ -37,6 +36,8 @@ impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
     }
 }
 
+/*
+use halfbrown::HashMap;
 #[allow(clippy::implicit_hasher, clippy::use_self)]
 impl<'script, K, U: Upable<'script>> Upable<'script> for HashMap<K, U>
 where
@@ -49,3 +50,4 @@ where
             .collect()
     }
 }
+*/

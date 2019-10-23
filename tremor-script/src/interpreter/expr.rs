@@ -14,7 +14,7 @@
 
 use super::{
     merge_values, patch_value, resolve, set_local_shadow, test_guard, test_predicate_expr, Env,
-    ExecOpts, LocalStack, LocalValue, NULL,
+    ExecOpts, LocalStack, NULL,
 };
 use crate::ast::*;
 use crate::errors::*;
@@ -318,20 +318,19 @@ where
                 Path::Const(p) => return error_assign_to_const(self, p.id.to_string()),
                 Path::Local(lpath) => match local.values.get(lpath.idx) {
                     Some(Some(l)) => {
-                        let l: &mut LocalValue = mem::transmute(l);
+                        let l: &mut Value = mem::transmute(l);
                         if segments.is_empty() {
-                            l.v = value;
-                            return Ok(Cow::Borrowed(&l.v));
+                            *l = value;
+                            return Ok(Cow::Borrowed(l));
                         }
-
-                        &l.v
+                        l
                     }
                     Some(d) => {
-                        let d: &mut Option<LocalValue> = mem::transmute(d);
+                        let d: &mut Option<Value> = mem::transmute(d);
                         if segments.is_empty() {
-                            *d = Some(LocalValue { v: value });
+                            *d = Some(value);
                             if let Some(l) = d {
-                                return Ok(Cow::Borrowed(&l.v));
+                                return Ok(Cow::Borrowed(l));
                             } else {
                                 return error_oops(self, "Unreacable code");
                             }
@@ -455,10 +454,10 @@ where
                 // move the variable instead of cloning it
 
                 let value = if let Some(v) = local.values.get_mut(*idx) {
-                    let mut opt: Option<LocalValue> = None;
+                    let mut opt: Option<Value> = None;
                     std::mem::swap(v, &mut opt);
                     if let Some(v) = opt {
-                        v.v
+                        v
                     } else {
                         return error_oops(self, "Unknown local variable");
                     }

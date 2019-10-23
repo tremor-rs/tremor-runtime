@@ -71,13 +71,9 @@ where
     pub aggrs: &'run [InvokeAggrFn<'script>],
 }
 
-#[derive(Clone, Debug)]
-pub struct LocalValue<'value> {
-    pub v: Value<'value>,
-}
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {
-    pub values: Vec<Option<LocalValue<'stack>>>,
+    pub values: Vec<Option<Value<'stack>>>,
 }
 
 impl<'stack> LocalStack<'stack> {
@@ -85,12 +81,6 @@ impl<'stack> LocalStack<'stack> {
         Self {
             values: vec![None; size],
         }
-    }
-}
-
-impl<'value> Default for LocalValue<'value> {
-    fn default() -> Self {
-        Self { v: Value::Null }
     }
 }
 
@@ -117,13 +107,13 @@ impl ExecOpts {
 }
 
 #[inline]
+#[allow(clippy::cast_precision_loss)]
 fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     // FIXME Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
     // across builtin types if/when extending for 'lt' and 'gt' variants
     //
     use Value::*;
     let error = std::f64::EPSILON;
-    #[allow(clippy::cast_precision_loss)]
     match (lhs, rhs) {
         (Object(l), Object(r)) => {
             if l.len() == r.len() {
@@ -177,46 +167,37 @@ pub fn exec_binary<'run, 'event: 'run>(
             #[allow(clippy::if_not_else)]
             Some(static_bool!(!val_eq(l, r)))
         }
-        (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
-        (Gte, I64(l), F64(r)) => Some(static_bool!((*l as f64) >= *r)),
-        (Gte, F64(l), I64(r)) => Some(static_bool!(*l >= (*r as f64))),
-        (Gte, F64(l), F64(r)) => Some(static_bool!(*l >= *r)),
-        (Gte, String(l), String(r)) => Some(static_bool!(l >= r)),
         (Gt, I64(l), I64(r)) => Some(static_bool!(*l > *r)),
-        (Gt, I64(l), F64(r)) => Some(static_bool!((*l as f64) > *r)),
-        (Gt, F64(l), I64(r)) => Some(static_bool!(*l > (*r as f64))),
-        (Gt, F64(l), F64(r)) => Some(static_bool!(*l > *r)),
         (Gt, String(l), String(r)) => Some(static_bool!(l > r)),
+        (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
+        (Gte, String(l), String(r)) => Some(static_bool!(l >= r)),
         (Lt, I64(l), I64(r)) => Some(static_bool!(*l < *r)),
-        (Lt, I64(l), F64(r)) => Some(static_bool!((*l as f64) < *r)),
-        (Lt, F64(l), I64(r)) => Some(static_bool!(*l < (*r as f64))),
-        (Lt, F64(l), F64(r)) => Some(static_bool!(*l < *r)),
         (Lt, String(l), String(r)) => Some(static_bool!(l < r)),
         (Lte, I64(l), I64(r)) => Some(static_bool!(*l <= *r)),
-        (Lte, I64(l), F64(r)) => Some(static_bool!((*l as f64) <= *r)),
-        (Lte, F64(l), I64(r)) => Some(static_bool!(*l <= (*r as f64))),
-        (Lte, F64(l), F64(r)) => Some(static_bool!(*l <= *r)),
         (Lte, String(l), String(r)) => Some(static_bool!(l <= r)),
-
         (Add, String(l), String(r)) => Some(Cow::Owned(format!("{}{}", *l, *r).into())),
         (Add, I64(l), I64(r)) => Some(Cow::Owned(I64(*l + *r))),
-        (Add, I64(l), F64(r)) => Some(Cow::Owned(F64((*l as f64) + *r))),
-        (Add, F64(l), I64(r)) => Some(Cow::Owned(F64(*l + (*r as f64)))),
-        (Add, F64(l), F64(r)) => Some(Cow::Owned(F64(*l + *r))),
         (Sub, I64(l), I64(r)) => Some(Cow::Owned(I64(*l - *r))),
-        (Sub, I64(l), F64(r)) => Some(Cow::Owned(F64((*l as f64) - *r))),
-        (Sub, F64(l), I64(r)) => Some(Cow::Owned(F64(*l - (*r as f64)))),
-        (Sub, F64(l), F64(r)) => Some(Cow::Owned(F64(*l - *r))),
         (Mul, I64(l), I64(r)) => Some(Cow::Owned(I64(*l * *r))),
-        (Mul, I64(l), F64(r)) => Some(Cow::Owned(F64((*l as f64) * *r))),
-        (Mul, F64(l), I64(r)) => Some(Cow::Owned(F64(*l * (*r as f64)))),
-        (Mul, F64(l), F64(r)) => Some(Cow::Owned(F64(*l * *r))),
-        (Div, I64(l), I64(r)) => Some(Cow::Owned(F64((*l as f64) / (*r as f64)))),
-        (Div, I64(l), F64(r)) => Some(Cow::Owned(F64((*l as f64) / *r))),
-        (Div, F64(l), I64(r)) => Some(Cow::Owned(F64(*l / (*r as f64)))),
-        (Div, F64(l), F64(r)) => Some(Cow::Owned(F64(*l / *r))),
         (Mod, I64(l), I64(r)) => Some(Cow::Owned(I64(*l % *r))),
-        _ => None,
+
+        (op, l, r) => {
+            if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
+                match op {
+                    Gte => Some(static_bool!(l >= r)),
+                    Gt => Some(static_bool!(l > r)),
+                    Lt => Some(static_bool!(l < r)),
+                    Lte => Some(static_bool!(l <= r)),
+                    Add => Some(Cow::Owned(F64(l + r))),
+                    Sub => Some(Cow::Owned(F64(l - r))),
+                    Mul => Some(Cow::Owned(F64(l * r))),
+                    Div => Some(Cow::Owned(F64(l / r))),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -259,7 +240,7 @@ where
     let mut subrange: Option<(usize, usize)> = None;
     let mut current: &Value = match path {
         Path::Local(lpath) => match local.values.get(lpath.idx) {
-            Some(Some(l)) => &l.v,
+            Some(Some(l)) => l,
             Some(None) => {
                 return error_bad_key(outer, lpath, &path, lpath.id.to_string(), vec![]);
             }
@@ -1003,7 +984,7 @@ where
     #[allow(clippy::transmute_ptr_to_ptr)]
     let local: &mut LocalStack = unsafe { mem::transmute(local) };
     if let Some(d) = local.values.get_mut(idx) {
-        *d = Some(LocalValue { v });
+        *d = Some(v);
         Ok(())
     } else {
         error_oops(outer, "Unknown local variable")
