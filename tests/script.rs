@@ -70,6 +70,7 @@ macro_rules! test_cases {
 test_cases!(
     array_paths,
     array_pattern,
+    assing_and_path_match,
     base64,
     binary,
     cidr_multi,
@@ -94,6 +95,7 @@ test_cases!(
     multiline,
     nested_patterns,
     null,
+    only_const,
     passthrough,
     patch,
     presence,
