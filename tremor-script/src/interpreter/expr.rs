@@ -179,15 +179,10 @@ where
                 stry!(merge_values(self, &expr.expr, value, &replacement));
                 Ok(Cow::Borrowed(value))
             } else {
-                error_type_conflict(
-                    self,
-                    &expr.expr,
-                    replacement.value_type(),
-                    ValueType::Object,
-                )
+                error_need_obj(self, &expr.expr, replacement.value_type())
             }
         } else {
-            error_type_conflict(self, &expr.target, value.value_type(), ValueType::Object)
+            error_need_obj(self, &expr.target, value.value_type())
         }
     }
 
@@ -366,12 +361,7 @@ where
                         ) {
                             next
                         } else {
-                            return error_type_conflict(
-                                self,
-                                segment,
-                                current.value_type(),
-                                ValueType::Object,
-                            );
+                            return error_need_obj(self, segment, current.value_type());
                         };
                     }
                     Segment::Element { expr, .. } => {
@@ -387,12 +377,7 @@ where
                                 map.get_mut(&id).unwrap_or_else(|| unreachable!())
                             }
                         } else {
-                            return error_type_conflict(
-                                self,
-                                segment,
-                                current.value_type(),
-                                ValueType::Object,
-                            );
+                            return error_need_obj(self, segment, current.value_type());
                         }
                     }
                     Segment::Idx { .. } | Segment::Range { .. } => {

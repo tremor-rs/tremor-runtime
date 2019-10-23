@@ -43,7 +43,7 @@ where
     ) -> Result<Cow<'event, str>> {
         match stry!(self.run(opts, env, event, meta, local)).borrow() {
             Value::String(s) => Ok(s.clone()),
-            other => error_type_conflict(self, self, other.value_type(), ValueType::Object),
+            other => error_need_obj(self, self, other.value_type()),
         }
     }
 
@@ -602,15 +602,10 @@ where
                 stry!(merge_values(self, &expr.expr, &mut value, &replacement));
                 Ok(Cow::Owned(value))
             } else {
-                error_type_conflict(
-                    self,
-                    &expr.expr,
-                    replacement.value_type(),
-                    ValueType::Object,
-                )
+                error_need_obj(self, &expr.expr, replacement.value_type())
             }
         } else {
-            error_type_conflict(self, &expr.target, value.value_type(), ValueType::Object)
+            error_need_obj(self, &expr.target, value.value_type())
         }
     }
 }

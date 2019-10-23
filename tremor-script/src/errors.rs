@@ -616,6 +616,40 @@ pub fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Res
     Err(ErrorKind::NoConstsAllowed(outer.extent(), inner.extent()).into())
 }
 
+pub fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: ValueType,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Object])
+}
+pub fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: ValueType,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array])
+}
+
+pub fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: ValueType,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::String])
+}
+
+pub fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: ValueType,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64])
+}
 pub fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
