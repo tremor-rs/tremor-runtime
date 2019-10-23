@@ -1,4 +1,0 @@
-match { "test" : "foo:bar snot:badger" } of
-   case foo  = %{ test ~= kv|| } => foo
-  default => "ko"
-end;
