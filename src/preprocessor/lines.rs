@@ -18,7 +18,7 @@ use std::cmp::min;
 
 #[derive(Clone)]
 pub struct Lines {
-    separator: char,
+    separator: u8,
     max_length: usize,
     // to keep track of line fragments when partial data comes through
     fragment_length: usize,
@@ -29,7 +29,7 @@ impl Lines {
     // TODO have the params here as a config struct
     pub fn new(separator: char, max_length: usize) -> Self {
         Lines {
-            separator,
+            separator: separator as u8,
             max_length,
             fragment_length: 0,
             // allocating at once with enough capacity to ensure we don't do re-allocations
@@ -121,7 +121,7 @@ impl Preprocessor for Lines {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         // split incoming bytes by specifed line separator
         let mut events: Vec<Vec<u8>> = data
-            .split(|c| *c == self.separator as u8)
+            .split(|c| *c == self.separator)
             .map(Vec::from)
             .collect();
 
