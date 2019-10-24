@@ -168,8 +168,8 @@ UnaryExprImut: ImutExpr1<'input> = {
 
 /// Logical and bitwise unary expressions (not, !)
 UnarySimpleExprImut: ImutExpr1<'input> = {
-    <start:@L> "not" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: expr, start, end })),
-    <start:@L> "!" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::BitNot, expr: expr, start, end })),
+    <start:@L> "not" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: expr, start, end })),
+    <start:@L> "!" <expr:UnarySimpleExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::BitNot, expr: expr, start, end })),
     PresenceSimplExprImut => <>,
 }
 
