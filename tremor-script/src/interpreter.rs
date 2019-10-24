@@ -42,7 +42,6 @@ use simd_json::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
-use std::default::Default;
 use std::iter::Iterator;
 
 pub use self::expr::Cont;
