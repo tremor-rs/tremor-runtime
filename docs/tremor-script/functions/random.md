@@ -4,6 +4,7 @@ The `random` module contains functions for generating random values of various t
 
 The generated values are uniformly distributed over the specified type (and range, where applicable). Useful for doing [percentage drops](../recipes.md#percentage-drops-of-events) of events, for example.
 
+The random number generator under the hood is seeded based on tremor's event ingestion time and thus the output here is deterministic. Should we choose to replay a tremor data dump (something to be added in future tremor versions), we will always get the same value for an event.
 
 ### random::bool() -> bool
 

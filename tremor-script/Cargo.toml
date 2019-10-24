@@ -39,7 +39,7 @@ clap = "2.33.0"
 grok = "1"
 cidr-utils = "0.3"
 jumphash = "0.1"
-rand = "0.7"
+rand = { version = "0.7", features = ["small_rng"] }
 hdrhistogram = "6.3.4"
 xz2 = "0.1"
 

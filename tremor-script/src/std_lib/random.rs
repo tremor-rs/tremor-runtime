@@ -16,16 +16,12 @@ use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnW
 use crate::tremor_fn;
 use crate::EventContext;
 use rand::distributions::Alphanumeric;
-use rand::Rng;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use simd_json::{BorrowedValue as Value, ValueTrait};
 
 pub fn load(registry: &mut Registry) {
-    // The random number generator used for these functions is ThreadRng, which
-    // is initialized once per thread (and also periodically seeded by the system).
-    //
-    // TODO see if we can cache it across function calls too.
-    // also swap to SmallRng if we can -- should be faster.
-    // https://docs.rs/rand/0.7.0/rand/rngs/index.html#our-generators
+    // TODO see if we can cache the RNG here across function calls (or at least
+    // at the thread level, like via rand::thread_rng()
     //
     // also, `rng.gen_range()` calls here are optimized for a single sample from
     // the range. we will be sampling a lot during a typical use case, so swap it
@@ -40,7 +36,8 @@ pub fn load(registry: &mut Registry) {
             args: &[&Value<'event>],
         ) -> FResult<Value<'event>> {
             let this_mfa = || mfa("random", "integer", args.len());
-            let mut rng = rand::thread_rng();
+            // TODO add event id to the seed? also change ingest_ns() for tremor-script binary runs too
+            let mut rng = SmallRng::seed_from_u64(_ctx.ingest_ns());
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
@@ -102,7 +99,7 @@ pub fn load(registry: &mut Registry) {
             args: &[&Value<'event>],
         ) -> FResult<Value<'event>> {
             let this_mfa = || mfa("random", "float", args.len());
-            let mut rng = rand::thread_rng();
+            let mut rng = SmallRng::seed_from_u64(_ctx.ingest_ns());
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
@@ -156,14 +153,18 @@ pub fn load(registry: &mut Registry) {
     }
     registry
         .insert(tremor_fn! (random::bool(_context) {
-            Ok(Value::Bool(rand::thread_rng().gen()))
+            Ok(Value::Bool(
+                SmallRng::seed_from_u64(_context.ingest_ns())
+                    .gen()
+            ))
         }))
         // TODO support specifying range of characters as a second (optional) arg
         .insert(tremor_fn! (random::string(_context, _length) {
             if let Some(n) = _length.as_usize() {
                 // random string with chars uniformly distributed over ASCII letters and numbers
                 Ok(Value::String(
-                    rand::thread_rng().sample_iter(&Alphanumeric).take(n).collect()
+                 SmallRng::seed_from_u64(_context.ingest_ns())
+                    .sample_iter(&Alphanumeric).take(n).collect()
                 ))
             } else {
                 Err(FunctionError::BadType{mfa: this_mfa()})
