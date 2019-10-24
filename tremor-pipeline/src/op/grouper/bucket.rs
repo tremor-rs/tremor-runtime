@@ -211,12 +211,12 @@ impl Operator for Grouper {
             tags.insert("action".into(), "overflow".into());
             let mut m = Object::with_capacity(4);
             m.insert("measurement".into(), "bucketing".into());
-            m.insert("tags".into(), Value::Object(tags.clone()));
+            m.insert("tags".into(), Value::from(tags.clone()));
             let mut fields = Object::with_capacity(1);
             fields.insert("count".into(), b.pass.into());
-            m.insert("fields".into(), Value::Object(fields));
+            m.insert("fields".into(), Value::from(fields));
             m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly
-            res.push(Value::Object(m.clone()));
+            res.push(Value::from(m.clone()));
         }
         Ok(res)
     }

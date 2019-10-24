@@ -1,0 +1,7 @@
+# The compiler will know `missing_var` exists but we never set it
+# so we will get a runtime error when trying to access it
+match true of
+  case false => let missing_var = true
+  default => null
+end;
+missing_var

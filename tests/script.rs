@@ -68,6 +68,7 @@ macro_rules! test_cases {
 }
 
 test_cases!(
+    array_comprehension,
     array_paths,
     array_pattern,
     assing_and_path_match,

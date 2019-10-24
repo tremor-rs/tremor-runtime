@@ -114,7 +114,7 @@ where
                 ..
             } => match env.consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
-                _ => error_oops(self, "Unknown local variable"),
+                _ => error_oops(self, "Unknown const variable"),
             },
             ImutExpr::Unary(ref expr) => self.unary(opts, env, event, meta, local, expr),
             ImutExpr::Binary(ref expr) => self.binary(opts, env, event, meta, local, expr),
@@ -152,7 +152,6 @@ where
                 stry!(set_local_shadow(self, local, expr.key_id, Value::String(k)));
                 stry!(set_local_shadow(self, local, expr.val_id, v));
                 for e in cases {
-                    // FIXME: use test_gaurd_expr
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
                         let v = stry!(
                             self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)
@@ -179,7 +178,6 @@ where
                 stry!(set_local_shadow(self, local, expr.val_id, x));
 
                 for e in cases {
-                    // FIXME: use test_gaurd_expr
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
                         let v = stry!(
                             self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)

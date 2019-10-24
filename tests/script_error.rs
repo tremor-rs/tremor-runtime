@@ -20,7 +20,7 @@ use tremor_runtime::errors::*;
 use tremor_script::Script;
 
 macro_rules! test_cases {
-    ($($file:ident),*) => {
+    ($($file:ident),* ,) => {
         $(
             #[test]
             fn $file() -> Result<()> {
@@ -38,7 +38,7 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
                 let s = Script::parse(&contents, &*FN_REGISTRY.lock()?);
-                if let Err(e) = s {
+                if let Err(e) = dbg!(s) {
                     assert_eq!(err, format!("{}", e));
                 } else {
                     println!("Expected error, but got succeess");
@@ -50,4 +50,11 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(invalid_const_binary, invalid_const_unary);
+test_cases!(
+    function_error_1,
+    function_error_2,
+    function_error_3,
+    function_error_n,
+    invalid_const_binary,
+    invalid_const_unary,
+);

@@ -1,0 +1,1 @@
+Bad type passed to function record::from_array/1
