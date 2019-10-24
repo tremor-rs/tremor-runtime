@@ -125,22 +125,19 @@ impl Preprocessor for Lines {
             .map(Vec::from)
             .collect();
 
-        match events.pop() {
-            Some(last_event) => {
-                // if incoming data had at least one line separator boundary (anywhere)
-                // AND if the preprocessor has memory of line fragment from earlier,
-                // reconstruct the first event fully (by adding the buffer contents to it)
-                if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
-                    self.complete_fragment(&mut events[0]);
-                }
-
-                // if the incoming data did not end in a line boundary, last event is actually
-                // a fragment so we need to remmeber it for later (when more data arrives)
-                if !last_event.is_empty() {
-                    self.save_fragment(&last_event);
-                }
+        if let Some(last_event) => events.pop() {
+            // if incoming data had at least one line separator boundary (anywhere)
+            // AND if the preprocessor has memory of line fragment from earlier,
+            // reconstruct the first event fully (by adding the buffer contents to it)
+            if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
+                self.complete_fragment(&mut events[0]);
             }
-            None => unreachable!(),
+
+            // if the incoming data did not end in a line boundary, last event is actually
+            // a fragment so we need to remmeber it for later (when more data arrives)
+            if !last_event.is_empty() {
+                self.save_fragment(&last_event);
+            }
         }
 
         Ok(events

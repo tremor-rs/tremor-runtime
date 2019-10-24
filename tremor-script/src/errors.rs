@@ -512,11 +512,11 @@ error_chain! {
          */
         InvalidUnary(expr: Range, inner: Range, op: ast::UnaryOpKind, val: ValueType) {
             description("Invalid unary operation")
-                display("The unary operation operation `{}` is not defined for the type `{}`", op, t2s(*val))
+                display("The unary operation `{}` is not defined for the type `{}`", op, t2s(*val))
         }
         InvalidBinary(expr: Range, inner: Range, op: ast::BinOpKind, left: ValueType, right: ValueType) {
             description("Invalid binary operation")
-                display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
+                display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
         }
         InvalidBitshift(expr: Range, inner: Range) {
             description("Invalid value for bitshift")

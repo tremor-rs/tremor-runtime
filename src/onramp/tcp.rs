@@ -200,7 +200,6 @@ fn onramp_loop(
                         // TODO figure out why object insert is not working
                         //let mut test: HashMap<String, String> = HashMap::new();
                         //test.insert("num".to_string(), "42".to_string());
-                        //dbg!(&test);
                         //meta.insert(
                         //    "test".to_string(),
                         //    //simd_json::OwnedValue::from(test),

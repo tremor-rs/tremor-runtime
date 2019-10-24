@@ -247,72 +247,75 @@ where
     match (&op, lhs, rhs) {
         (Eq, Null, Null) => Ok(static_bool!(true)),
         (NotEq, Null, Null) => Ok(static_bool!(false)),
-        (And, Bool(l), Bool(r)) => Ok(static_bool!(*l && *r)),
-        (Or, Bool(l), Bool(r)) => Ok(static_bool!(*l || *r)),
-        (Xor, Bool(l), Bool(r)) => Ok(static_bool!(*l != *r)),
-
-        (BitAnd, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l & *r))),
-        (BitAnd, Bool(l), Bool(r)) => Ok(static_bool!(*l & *r)),
-        (BitOr, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l | *r))),
-        (BitOr, Bool(l), Bool(r)) => Ok(static_bool!(*l | *r)),
-        (BitXor, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l ^ *r))),
-        (BitXor, Bool(l), Bool(r)) => Ok(static_bool!(*l ^ *r)),
 
         // FIXME - do we want this?
         // This is to make sure that == in a expression
         // and a record pattern behaves the same.
         (Eq, l, r) => Ok(static_bool!(val_eq(l, r))),
-        (NotEq, l, r) => Ok(static_bool!(!val_eq(l, r))),
 
-        (Gte, I64(l), I64(r)) => Ok(static_bool!(*l >= *r)),
-        (Gte, I64(l), F64(r)) => Ok(static_bool!((*l as f64) >= *r)),
-        (Gte, F64(l), I64(r)) => Ok(static_bool!(*l >= (*r as f64))),
-        (Gte, F64(l), F64(r)) => Ok(static_bool!(*l >= *r)),
-        (Gte, String(l), String(r)) => Ok(static_bool!(l >= r)),
-        (Gt, I64(l), I64(r)) => Ok(static_bool!(*l > *r)),
-        (Gt, I64(l), F64(r)) => Ok(static_bool!((*l as f64) > *r)),
-        (Gt, F64(l), I64(r)) => Ok(static_bool!(*l > (*r as f64))),
-        (Gt, F64(l), F64(r)) => Ok(static_bool!(*l > *r)),
-        (Gt, String(l), String(r)) => Ok(static_bool!(l > r)),
-        (Lt, I64(l), I64(r)) => Ok(static_bool!(*l < *r)),
-        (Lt, I64(l), F64(r)) => Ok(static_bool!((*l as f64) < *r)),
-        (Lt, F64(l), I64(r)) => Ok(static_bool!(*l < (*r as f64))),
-        (Lt, F64(l), F64(r)) => Ok(static_bool!(*l < *r)),
-        (Lt, String(l), String(r)) => Ok(static_bool!(l < r)),
-        (Lte, I64(l), I64(r)) => Ok(static_bool!(*l <= *r)),
-        (Lte, I64(l), F64(r)) => Ok(static_bool!((*l as f64) <= *r)),
-        (Lte, F64(l), I64(r)) => Ok(static_bool!(*l <= (*r as f64))),
-        (Lte, F64(l), F64(r)) => Ok(static_bool!(*l <= *r)),
-        (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
+        (NotEq, l, r) =>
+        {
+            #[allow(clippy::if_not_else)]
+            Ok(static_bool!(!val_eq(l, r)))
+        }
 
-        // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
-        (RBitShiftSigned, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l >> *r))),
-        (RBitShiftUnsigned, I64(l), I64(r)) => Ok(Cow::Owned(I64((*l as u64 >> *r) as i64))),
-        //(LBitShift, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l << *r))),
-        (LBitShift, I64(l), I64(r)) => match (*l).checked_shl(*r as u32) {
-            Some(n) => Ok(Cow::Owned(I64(n))),
-            None => error_invalid_bitshift(outer, inner),
+        (op, Bool(l), Bool(r)) => match op {
+            And => Ok(static_bool!(*l && *r)),
+            Or => Ok(static_bool!(*l || *r)),
+            Xor => Ok(static_bool!(*l != *r)),
+            BitAnd => Ok(static_bool!(*l & *r)),
+            BitOr => Ok(static_bool!(*l | *r)),
+            BitXor => Ok(static_bool!(*l ^ *r)),
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
         },
-
-        (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
-        (Add, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l + *r))),
-        (Add, I64(l), F64(r)) => Ok(Cow::Owned(F64((*l as f64) + *r))),
-        (Add, F64(l), I64(r)) => Ok(Cow::Owned(F64(*l + (*r as f64)))),
-        (Add, F64(l), F64(r)) => Ok(Cow::Owned(F64(*l + *r))),
-        (Sub, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l - *r))),
-        (Sub, I64(l), F64(r)) => Ok(Cow::Owned(F64((*l as f64) - *r))),
-        (Sub, F64(l), I64(r)) => Ok(Cow::Owned(F64(*l - (*r as f64)))),
-        (Sub, F64(l), F64(r)) => Ok(Cow::Owned(F64(*l - *r))),
-        (Mul, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l * *r))),
-        (Mul, I64(l), F64(r)) => Ok(Cow::Owned(F64((*l as f64) * *r))),
-        (Mul, F64(l), I64(r)) => Ok(Cow::Owned(F64(*l * (*r as f64)))),
-        (Mul, F64(l), F64(r)) => Ok(Cow::Owned(F64(*l * *r))),
-        (Div, I64(l), I64(r)) => Ok(Cow::Owned(F64((*l as f64) / (*r as f64)))),
-        (Div, I64(l), F64(r)) => Ok(Cow::Owned(F64((*l as f64) / *r))),
-        (Div, F64(l), I64(r)) => Ok(Cow::Owned(F64(*l / (*r as f64)))),
-        (Div, F64(l), F64(r)) => Ok(Cow::Owned(F64(*l / *r))),
-        (Mod, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l % *r))),
-        _ => error_invalid_binary(outer, inner, op, lhs, rhs),
+        (op, String(l), String(r)) => match op {
+            Gt => Ok(static_bool!(l > r)),
+            Gte => Ok(static_bool!(l >= r)),
+            Lt => Ok(static_bool!(l < r)),
+            Lte => Ok(static_bool!(l <= r)),
+            Add => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+        },
+        (op, I64(l), I64(r)) => match op {
+            BitAnd => Ok(Cow::Owned(I64(*l & *r))),
+            BitOr => Ok(Cow::Owned(I64(*l | *r))),
+            BitXor => Ok(Cow::Owned(I64(*l ^ *r))),
+            Gt => Ok(static_bool!(*l > *r)),
+            Gte => Ok(static_bool!(*l >= *r)),
+            Lt => Ok(static_bool!(*l < *r)),
+            Lte => Ok(static_bool!(*l <= *r)),
+            Add => Ok(Cow::Owned(I64(*l + *r))),
+            Sub => Ok(Cow::Owned(I64(*l - *r))),
+            Mul => Ok(Cow::Owned(I64(*l * *r))),
+            Div => Ok(Cow::Owned(F64((*l as f64) / (*r as f64)))),
+            Mod => Ok(Cow::Owned(I64(*l % *r))),
+            // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
+            RBitShiftSigned => Ok(Cow::Owned(I64(*l >> *r))),
+            RBitShiftUnsigned => Ok(Cow::Owned(I64((*l as u64 >> *r) as i64))),
+            //(LBitShift, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l << *r))),
+            LBitShift => match (*l).checked_shl(*r as u32) {
+                Some(n) => Ok(Cow::Owned(I64(n))),
+                None => error_invalid_bitshift(outer, inner),
+            },
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+        },
+        (op, l, r) => {
+            if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
+                match op {
+                    Gte => Ok(static_bool!(l >= r)),
+                    Gt => Ok(static_bool!(l > r)),
+                    Lt => Ok(static_bool!(l < r)),
+                    Lte => Ok(static_bool!(l <= r)),
+                    Add => Ok(Cow::Owned(F64(l + r))),
+                    Sub => Ok(Cow::Owned(F64(l - r))),
+                    Mul => Ok(Cow::Owned(F64(l * r))),
+                    Div => Ok(Cow::Owned(F64(l / r))),
+                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+                }
+            } else {
+                error_invalid_binary(outer, inner, *op, lhs, rhs)
+            }
+        }
     }
 }
 
