@@ -50,7 +50,7 @@ use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
 pub use ctx::EventContext;
 use halfbrown::hashmap;
-use simd_json::borrowed::Value;
+use simd_json::borrowed::{Object, Value};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{BufReader, Read};

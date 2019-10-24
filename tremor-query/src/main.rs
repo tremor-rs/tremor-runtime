@@ -29,7 +29,6 @@ use clap::{App, Arg};
 // use halfbrown::hashmap;
 pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use chrono::{Timelike, Utc};
-use halfbrown::hashmap;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
