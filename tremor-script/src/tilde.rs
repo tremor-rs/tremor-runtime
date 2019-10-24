@@ -38,7 +38,7 @@ use dissect::Pattern;
 use glob;
 use kv;
 use regex::Regex;
-use simd_json::borrowed::Value;
+use simd_json::borrowed::{Object, Value};
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
@@ -371,7 +371,7 @@ impl Extractor {
                                 ))
                             })
                             .collect();
-                        Ok(Value::Object(matches.clone()))
+                        Ok(Value::from(matches.clone()))
                     } else {
                         Err(ExtractorError {
                             msg: "regular expression didn't match'".into(),
@@ -392,7 +392,7 @@ impl Extractor {
                         if !result_needed {
                             return Ok(Value::Null);
                         }
-                        Ok(Value::Object(r).into_static())
+                        Ok(Value::from(r).into_static())
                     } else {
                         Err(ExtractorError {
                             msg: "Failed to split kv list".into(),
@@ -439,7 +439,7 @@ impl Extractor {
                             return Ok(Value::Null);
                         }
 
-                        Ok(Value::Object(Cidr::from_str(s)?.into()))
+                        Ok(Value::from(Object::from(Cidr::from_str(s)?)))
                     } else {
                         Err(ExtractorError {
                             msg: "IP does not belong to any CIDR specified".into(),
@@ -451,13 +451,13 @@ impl Extractor {
                     if !result_needed {
                         return Ok(Value::Null);
                     };
-                    Ok(Value::Object(c.into()))
+                    Ok(Value::from(Object::from(c)))
                 }
                 Self::Dissect {
                     compiled: pattern, ..
                 } => {
                     if let Some(o) = pattern.run(s) {
-                        Ok(Value::Object(o))
+                        Ok(Value::from(o))
                     } else {
                         Err(ExtractorError {
                             msg: "No match".into(),

@@ -226,11 +226,11 @@ impl BInflux {
         }
         let mut result = Object::with_capacity(4);
         result.insert("measurement".into(), measurement);
-        result.insert("tags".into(), Value::Object(tags));
-        result.insert("fields".into(), Value::Object(fields));
+        result.insert("tags".into(), Value::from(tags));
+        result.insert("fields".into(), Value::from(fields));
         result.insert("timestamp".into(), timestamp);
 
-        Ok(Value::Object(result))
+        Ok(Value::from(result))
     }
 }
 

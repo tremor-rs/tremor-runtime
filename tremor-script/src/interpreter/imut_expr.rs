@@ -69,7 +69,7 @@ where
                     object.insert(name, result.into_owned());
                 }
 
-                Ok(Cow::Owned(Value::Object(object)))
+                Ok(Cow::Owned(Value::from(object)))
             }
             ImutExpr::List(ref list) => {
                 let mut r: Vec<Value<'event>> = Vec::with_capacity(list.exprs.len());

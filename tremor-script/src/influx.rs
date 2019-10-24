@@ -139,10 +139,10 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'
 
     let mut m = Object::with_capacity(4);
     m.insert_nocheck("measurement".into(), Value::String(measurement));
-    m.insert_nocheck("tags".into(), Value::Object(tags));
-    m.insert_nocheck("fields".into(), Value::Object(fields));
+    m.insert_nocheck("tags".into(), Value::from(tags));
+    m.insert_nocheck("fields".into(), Value::from(fields));
     m.insert_nocheck("timestamp".into(), timestamp.into());
-    Ok(Some(Value::Object(m)))
+    Ok(Some(Value::from(m)))
 }
 
 fn parse_string<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>)> {

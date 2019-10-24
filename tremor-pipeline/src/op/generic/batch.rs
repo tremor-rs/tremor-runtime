@@ -40,7 +40,7 @@ pub struct Batch {
 pub fn empty() -> LineValue {
     LineValue::new(vec![], |_| ValueAndMeta {
         value: Value::Array(vec![]),
-        meta: Value::Object(Object::default()),
+        meta: Value::from(Object::default()),
     })
 }
 
@@ -89,7 +89,7 @@ impl Operator for Batch {
                     let mut data = Object::with_capacity(2);
                     data.insert_nocheck("value".into(), other.value);
                     data.insert_nocheck("meta".into(), other.meta);
-                    e.insert_nocheck("data".into(), Value::Object(data));
+                    e.insert_nocheck("data".into(), Value::from(data));
                     //  "ingest_ns":1,
                     e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
                     //  "kind":null,
@@ -98,7 +98,7 @@ impl Operator for Batch {
                     //  "is_batch":false
                     e.insert_nocheck("is_batch".into(), is_batch.into());
                     // }
-                    a.push(Value::Object(e))
+                    a.push(Value::from(e))
                 };
                 Ok(())
             },

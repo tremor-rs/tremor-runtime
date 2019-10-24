@@ -594,7 +594,7 @@ impl ExecutableGraph {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
                                 value,
-                                meta: Value::Object(Object::default()),
+                                meta: Value::from(Object::default()),
                             }),
                             ingest_ns: timestamp,
                             kind: None,
@@ -612,7 +612,7 @@ impl ExecutableGraph {
                             id: 0,
                             data: LineValue::new(vec![], |_| ValueAndMeta {
                                 value,
-                                meta: Value::Object(Object::default()),
+                                meta: Value::from(Object::default()),
                             }),
                             ingest_ns: timestamp,
                             kind: None,
@@ -797,9 +797,6 @@ mod test {
         dbg!(&results);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
-        //if let simd_json::borrowed::Value::Object(value) = results[0].1.value.suffix() {
-        //    assert_eq!(value["class"], "default");
-        //}
         assert_eq!(results[0].1.data.suffix().meta["class"], "default");
         dbg!(&e.metrics);
         // We ignore the first, and the last three nodes because:

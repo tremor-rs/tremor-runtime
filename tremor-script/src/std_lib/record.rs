@@ -61,7 +61,7 @@ pub fn load(registry: &mut Registry) {
             }
             other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {:?}", other)))
         }).collect();
-        Ok(Value::Object(r?))
+        Ok(Value::from(r?))
         })).insert(tremor_const_fn!(record::select(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(|k| match k {
             Value::String(s) => Some(s.clone()),
@@ -74,16 +74,16 @@ pub fn load(registry: &mut Registry) {
                 None
             }
         }).collect();
-        Ok(Value::Object(r))
+        Ok(Value::from(r))
     }))
         .insert(tremor_const_fn!(record::merge(_context, _left: Object, _right: Object) {
-        Ok(Value::Object(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect()))
+        Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))
         })).insert(tremor_const_fn!(record::rename(_context, _target: Object, _renameings: Object) {
-            Ok(Value::Object(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
+            Ok(Value::from(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
                 (k1.clone(), v.clone())
             } else {
                 (k.clone(), v.clone())
-            }).collect()))
+            }).collect::<Object>()))
         }));
 }
 

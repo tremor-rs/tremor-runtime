@@ -138,7 +138,7 @@ mod test {
         let f = fun("type", "is_record");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        let v = Value::Object(Object::new());
+        let v = Value::from(Object::new());
         assert_val!(f(&[&v]), true);
     }
 
@@ -157,7 +157,7 @@ mod test {
         assert_val!(f(&[&v]), "string");
         let v = Value::Array(vec![]);
         assert_val!(f(&[&v]), "array");
-        let v = Value::Object(Object::new());
+        let v = Value::from(Object::new());
         assert_val!(f(&[&v]), "record");
     }
 }

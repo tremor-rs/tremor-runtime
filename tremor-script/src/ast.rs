@@ -781,7 +781,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                     ImutExpr::Literal(Literal {
                         start: r.start,
                         end: r.end,
-                        value: Value::Object(obj?),
+                        value: Value::from(obj?),
                     })
                 } else {
                     ImutExpr::Record(r)

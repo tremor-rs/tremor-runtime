@@ -43,8 +43,6 @@ pub mod query;
 pub mod registry;
 pub mod script;
 mod std_lib;
-#[allow(clippy::transmute_ptr_to_ptr)]
-mod str_suffix;
 mod tilde;
 pub mod utils;
 pub use ctx::EventContext;
@@ -82,8 +80,8 @@ pub struct ValueAndMeta<'event> {
 impl<'event> Default for ValueAndMeta<'event> {
     fn default() -> Self {
         ValueAndMeta {
-            value: Value::Object(Object::default()),
-            meta: Value::Object(Object::default()),
+            value: Value::from(Object::default()),
+            meta: Value::from(Object::default()),
         }
     }
 }
@@ -92,7 +90,7 @@ impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
     fn from(value: Value<'v>) -> ValueAndMeta<'v> {
         ValueAndMeta {
             value,
-            meta: Value::Object(Object::default()),
+            meta: Value::from(Object::default()),
         }
     }
 }
@@ -169,7 +167,7 @@ impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
         Self::new(vec![], |_| ValueAndMeta {
             value: v,
-            meta: Value::Object(Object::new()),
+            meta: Value::from(Object::new()),
         })
     }
 }
@@ -207,7 +205,7 @@ impl
     ) -> Self {
         Self::new(vec![], |_| ValueAndMeta {
             value: v.0,
-            meta: Value::Object(v.1),
+            meta: Value::from(v.1),
         })
     }
 }
@@ -338,8 +336,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Object::new());
-            let mut global_map = Value::Object(hashmap! {});
+            let mut event = simd_json::borrowed::Value::from(Object::new());
+            let mut global_map = Value::from(Object::new());
             let value = runnable.run(
                 &EventContext { at: 0 },
                 AggrType::Emit,
@@ -531,14 +529,14 @@ mod tests {
         dbg!();
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 std::borrow::Cow::Borrowed("out") => Value::Array(vec![I64(2), I64(4), I64(6), I64(8)]),
             })
         );
         dbg!();
         eval_global!(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 std::borrow::Cow::Borrowed("out") => Value::Array(vec![Value::Array(vec![I64(4), I64(6), I64(8), I64(10)])]),
             })
         );
@@ -568,13 +566,13 @@ mod tests {
         use simd_json::borrowed::Value::I64;
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 std::borrow::Cow::Borrowed("test") => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 std::borrow::Cow::Borrowed("test") => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
             })
         );

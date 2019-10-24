@@ -55,7 +55,8 @@ use std::io;
 use tremor_pipeline;
 
 use crate::errors::*;
-use halfbrown::{hashmap, HashMap};
+use halfbrown::HashMap;
+use simd_json::borrowed::{Object, Value};
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
@@ -219,11 +220,10 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
 
         match codec.decode(l.as_bytes().to_vec(), 0) {
             Ok(Some(ref json)) => {
-                let mut global_map = simd_json::borrowed::Value::Object(hashmap! {});
+                let mut global_map = Value::from(Object::new());
                 #[allow(mutable_transmutes)]
                 #[allow(clippy::transmute_ptr_to_ptr)]
-                let mut unwind_event: &mut simd_json::borrowed::Value =
-                    unsafe { std::mem::transmute(json.suffix()) };
+                let mut unwind_event: &mut Value = unsafe { std::mem::transmute(json.suffix()) };
                 match s.run(&context, AggrType::Emit, &mut unwind_event, &mut global_map) {
                     Ok(_result) => {
                         println!(

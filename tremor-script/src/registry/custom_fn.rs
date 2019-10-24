@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Nopt yet implemented - this is behind a feature flag
+#![cfg_attr(tarpaulin, skip)]
+
 use super::*;
 use crate::ast::Exprs;
 use crate::EventContext;

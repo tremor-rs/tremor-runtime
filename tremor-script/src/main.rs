@@ -40,8 +40,6 @@ mod pos;
 mod registry;
 mod script;
 mod std_lib;
-#[allow(clippy::transmute_ptr_to_ptr)]
-mod str_suffix;
 mod tilde;
 #[macro_use]
 extern crate rental;
@@ -228,10 +226,10 @@ fn main() -> Result<()> {
 
                 vec![simd_json::borrowed::Value::String(raw.into())]
             } else {
-                vec![simd_json::borrowed::Value::Object(hashmap! {})]
+                vec![simd_json::borrowed::Value::from(Object::new())]
             };
 
-            let mut global_map = Value::Object(hashmap! {});
+            let mut global_map = Value::from(Object::new());
             let mut event = events
                 .pop()
                 .ok_or_else(|| Error::from("At least one event needs to be specified"))?;

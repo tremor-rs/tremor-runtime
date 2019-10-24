@@ -21,13 +21,14 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;
 
+#[cfg_attr(tarpaulin, skip)]
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
     // let aggr_reg: AggrRegistry = registry::aggr_registry();
     let script = Script::parse(src, &reg)?;
 
-    let mut event = Value::Object(Object::new());
-    let mut meta = Value::Object(Object::new());
+    let mut event = Value::from(Object::new());
+    let mut meta = Value::from(Object::new());
     let value = script.run(
         &EventContext { at: 0 },
         AggrType::Emit,
@@ -42,6 +43,7 @@ fn eval(src: &str) -> Result<String> {
 }
 
 #[no_mangle]
+#[cfg_attr(tarpaulin, skip)]
 pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len: usize) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr.to_str().map_err(Error::from).and_then(|s| eval(s)) {

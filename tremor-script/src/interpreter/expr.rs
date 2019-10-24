@@ -357,7 +357,7 @@ where
                     Segment::Id { key, .. } => {
                         current = if let Ok(next) = key.lookup_or_insert_mut(
                             mem::transmute::<&Value, &mut Value>(current),
-                            || Value::Object(Object::with_capacity(halfbrown::VEC_LIMIT_UPPER)),
+                            || Value::from(Object::with_capacity(halfbrown::VEC_LIMIT_UPPER)),
                         ) {
                             next
                         } else {
@@ -366,13 +366,12 @@ where
                     }
                     Segment::Element { expr, .. } => {
                         let id = stry!(expr.eval_to_string(opts, env, event, meta, local));
-                        if let Value::Object(ref mut map) =
-                            mem::transmute::<&Value, &mut Value>(current)
-                        {
+                        let v: &mut Value = mem::transmute(current);
+                        if let Some(map) = v.as_object_mut() {
                             current = if let Some(v) = map.get_mut(&id) {
                                 v
                             } else {
-                                map.insert(id.clone(), Value::Object(Object::with_capacity(32)));
+                                map.insert(id.clone(), Value::from(Object::with_capacity(32)));
                                 // ALLOW: this is safe because we just added this element to the map.
                                 map.get_mut(&id).unwrap_or_else(|| unreachable!())
                             }

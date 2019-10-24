@@ -37,7 +37,6 @@ use crate::ast::*;
 use crate::errors::*;
 use crate::stry;
 use crate::EventContext;
-use halfbrown::hashmap;
 use simd_json::borrowed::{Object, Value};
 use simd_json::value::ValueTrait;
 use std::borrow::Borrow;
@@ -166,20 +165,25 @@ pub fn exec_binary<'run, 'event: 'run>(
             #[allow(clippy::if_not_else)]
             Some(static_bool!(!val_eq(l, r)))
         }
-        (Gt, I64(l), I64(r)) => Some(static_bool!(*l > *r)),
-        (Gt, String(l), String(r)) => Some(static_bool!(l > r)),
-        (Gte, I64(l), I64(r)) => Some(static_bool!(*l >= *r)),
-        (Gte, String(l), String(r)) => Some(static_bool!(l >= r)),
-        (Lt, I64(l), I64(r)) => Some(static_bool!(*l < *r)),
-        (Lt, String(l), String(r)) => Some(static_bool!(l < r)),
-        (Lte, I64(l), I64(r)) => Some(static_bool!(*l <= *r)),
-        (Lte, String(l), String(r)) => Some(static_bool!(l <= r)),
-        (Add, String(l), String(r)) => Some(Cow::Owned(format!("{}{}", *l, *r).into())),
-        (Add, I64(l), I64(r)) => Some(Cow::Owned(I64(*l + *r))),
-        (Sub, I64(l), I64(r)) => Some(Cow::Owned(I64(*l - *r))),
-        (Mul, I64(l), I64(r)) => Some(Cow::Owned(I64(*l * *r))),
-        (Mod, I64(l), I64(r)) => Some(Cow::Owned(I64(*l % *r))),
-
+        (op, String(l), String(r)) => match op {
+            Gt => Some(static_bool!(l > r)),
+            Gte => Some(static_bool!(l >= r)),
+            Lt => Some(static_bool!(l < r)),
+            Lte => Some(static_bool!(l <= r)),
+            Add => Some(Cow::Owned(format!("{}{}", *l, *r).into())),
+            _ => None,
+        },
+        (op, I64(l), I64(r)) => match op {
+            Gt => Some(static_bool!(*l > *r)),
+            Gte => Some(static_bool!(*l >= *r)),
+            Lt => Some(static_bool!(*l < *r)),
+            Lte => Some(static_bool!(*l <= *r)),
+            Add => Some(Cow::Owned(I64(*l + *r))),
+            Sub => Some(Cow::Owned(I64(*l - *r))),
+            Mul => Some(Cow::Owned(I64(*l * *r))),
+            Mod => Some(Cow::Owned(I64(*l % *r))),
+            _ => None,
+        },
         (op, l, r) => {
             if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
                 match op {
@@ -430,31 +434,28 @@ where
     }
 
     if !value.is_object() {
-        *value = Value::Object(hashmap! {});
+        *value = Value::from(Object::new());
     }
 
-    match value {
-        Value::Object(ref mut map) => {
-            match replacement {
-                Value::Object(rep) => {
-                    for (k, v) in rep {
-                        if v.is_null() {
-                            map.remove(k);
-                        } else if let Some(k) = map.get_mut(k) {
-                            stry!(merge_values(outer, inner, k, v))
-                        } else {
-                            //NOTE: We got to clone here since we're duplicating values
-                            map.insert(k.clone(), v.clone());
-                        }
-                    }
+    if let Some(ref mut map) = value.as_object_mut() {
+        if let Some(rep) = replacement.as_object() {
+            for (k, v) in rep {
+                if v.is_null() {
+                    map.remove(k);
+                } else if let Some(k) = map.get_mut(k) {
+                    stry!(merge_values(outer, inner, k, v))
+                } else {
+                    //NOTE: We got to clone here since we're duplicating values
+                    map.insert(k.clone(), v.clone());
                 }
-                other => return error_need_obj(outer, inner, other.value_type()),
             }
+            Ok(())
+        } else {
+            error_need_obj(outer, inner, replacement.value_type())
         }
-        other => return error_need_obj(outer, inner, other.value_type()),
+    } else {
+        error_need_obj(outer, inner, value.value_type())
     }
-
-    Ok(())
 }
 
 #[inline]
@@ -477,7 +478,7 @@ where
     for op in &expr.operations {
         // NOTE: This if is inside the for loop to prevent obj to be updated
         // between iterations and possibly lead to dangling pointers
-        if let Value::Object(ref mut obj) = value {
+        if let Some(ref mut obj) = value.as_object_mut() {
             match op {
                 PatchOperation::Insert { ident, expr } => {
                     let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
@@ -546,7 +547,7 @@ where
                             );
                         }
                         None => {
-                            let mut new_value = Value::Object(hashmap! {});
+                            let mut new_value = Value::from(Object::new());
                             stry!(merge_values(outer, expr, &mut new_value, &merge_spec));
                             obj.insert(new_key, new_value);
                         }
@@ -734,7 +735,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut acc = Value::Object(Object::with_capacity(if opts.result_needed {
+    let mut acc = Value::from(Object::with_capacity(if opts.result_needed {
         rp.fields.len()
     } else {
         0

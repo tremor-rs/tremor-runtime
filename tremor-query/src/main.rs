@@ -207,11 +207,8 @@ fn main() -> Result<()> {
 
         vec![simd_json::borrowed::Value::String(raw.into())]
     } else {
-        vec![simd_json::borrowed::Value::Object(hashmap! {})]
+        vec![simd_json::borrowed::Value::from(Object::default())]
     };
-
-    // let mut global_map = Value::Object(hashmap! {});
-    // let ctx = ();
 
     let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
 

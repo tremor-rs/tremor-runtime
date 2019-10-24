@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Note: We ignore the is_* functions for coverage as they effectively are
+// only lists
+
 use crate::errors::*;
 #[cfg_attr(
     feature = "cargo-clippy",
@@ -225,6 +228,7 @@ impl<'input> TokenFuns for Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     ///
+    #[cfg_attr(tarpaulin, skip)]
     fn is_ignorable(&self) -> bool {
         match *self {
             Token::DocComment(_)
@@ -237,6 +241,7 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
+    #[cfg_attr(tarpaulin, skip)]
     fn is_keyword(&self) -> bool {
         match *self {
             Token::Match
@@ -287,6 +292,7 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     // Is the token a literal, excluding list and record literals
+    #[cfg_attr(tarpaulin, skip)]
     fn is_literal(&self) -> bool {
         match *self {
             // Token::DontCare => true,
@@ -299,6 +305,7 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     // It's text-like or string-like notation such as String, char, regex ...
+    #[cfg_attr(tarpaulin, skip)]
     fn is_string_like(&self) -> bool {
         match *self {
             Token::StringLiteral(_)
@@ -310,6 +317,7 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     // Is the token a builtin delimiter symbol
+    #[cfg_attr(tarpaulin, skip)]
     fn is_symbol(&self) -> bool {
         match *self {
             Token::Colon
@@ -336,6 +344,7 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     // Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
+    #[cfg_attr(tarpaulin, skip)]
     fn is_operator(&self) -> bool {
         match *self {
             Token::Not
@@ -385,6 +394,7 @@ impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
 // }
 // Format a token for display
 //
+#[cfg_attr(tarpaulin, skip)]
 impl<'input> fmt::Display for Token<'input> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

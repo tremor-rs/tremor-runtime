@@ -93,7 +93,7 @@ impl TrickleScript {
                     .into());
                 }
             }
-            args = tremor_script::Value::Object(params);
+            args = tremor_script::Value::from(params);
         } else {
             return Err(ErrorKind::PipelineError(
                 "Trying to turn something into script define that isn't a script define".into(),
@@ -162,7 +162,7 @@ impl Operator for TrickleScript {
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
-                let mut o = Value::Object(hashmap! {
+                let mut o = Value::from(hashmap! {
                     "error".into() => Value::String(self.node.head().format_error(e).into()),
                 });
                 std::mem::swap(&mut o, unwind_event);
