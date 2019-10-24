@@ -125,7 +125,7 @@ impl Preprocessor for Lines {
             .map(Vec::from)
             .collect();
 
-        if let Some(last_event) => events.pop() {
+        if let Some(last_event) = events.pop() {
             // if incoming data had at least one line separator boundary (anywhere)
             // AND if the preprocessor has memory of line fragment from earlier,
             // reconstruct the first event fully (by adding the buffer contents to it)
