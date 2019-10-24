@@ -22,7 +22,7 @@ use tremor_script::utils::*;
 use tremor_script::{AggrType, EventContext, Return, Script};
 
 macro_rules! test_cases {
-    ($($file:ident),*) => {
+    ($($file:ident),* ,) => {
         $(
             #[test]
             fn $file() -> Result<()> {
@@ -32,6 +32,7 @@ macro_rules! test_cases {
                 let in_file = concat!("tests/scripts/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/scripts/", stringify!($file), "/out.xz");
 
+                println!("Loading script: {}", script_file);
                 let mut file = File::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
@@ -71,6 +72,7 @@ test_cases!(
     array_comprehension,
     array_paths,
     array_pattern,
+    assign_move,
     assing_and_path_match,
     base64,
     binary,
@@ -80,6 +82,7 @@ test_cases!(
     consts,
     datetime,
     dummy,
+    emit_port,
     eq,
     escape,
     glob,
@@ -105,5 +108,5 @@ test_cases!(
     regex,
     simple_match,
     string_concat,
-    unary
+    unary,
 );

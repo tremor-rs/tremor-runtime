@@ -51,10 +51,12 @@ macro_rules! test_cases {
 }
 
 test_cases!(
+    double_const,
     function_error_1,
     function_error_2,
     function_error_3,
     function_error_n,
     invalid_const_binary,
     invalid_const_unary,
+    invalid_extractor,
 );

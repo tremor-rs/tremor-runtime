@@ -380,6 +380,8 @@ where
                 }
             }
         }
+        // We know that we never get here, sadly rust doesn't
+        #[cfg_attr(tarpaulin, skip)]
         Ok(Return::Emit {
             value: Value::Null,
             port: None,
@@ -549,11 +551,15 @@ impl<'script> Upable<'script> for Expr1<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             Expr1::Const { start, end, .. } => {
+                // There is no code path that leads here,
+                // we still rather have an error in case we made
+                // an error then unreachable
+                #[cfg_attr(tarpaulin, skip)]
                 return Err(ErrorKind::InvalidConst(
                     Range::from((start, end)).expand_lines(2),
                     Range::from((start, end)),
                 )
-                .into())
+                .into());
             }
             Expr1::MatchExpr(m) => Expr::Match(Box::new(m.up(helper)?)),
             Expr1::Assign(a) => {
@@ -605,9 +611,12 @@ impl<'script> Upable<'script> for Expr1<'script> {
             }
             Expr1::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             Expr1::Imut(i) => i.up(helper)?.into(),
-            #[cfg_attr(tarpaulin, skip)]
             Expr1::FnDecl(f) => {
-                return Err(ErrorKind::InvalidFn(f.extent().expand_lines(2), f.extent()).into())
+                // There is no code path that leads here,
+                // we still rather have an error in case we made
+                // an error then unreachable
+                #[cfg_attr(tarpaulin, skip)]
+                return Err(ErrorKind::InvalidFn(f.extent().expand_lines(2), f.extent()).into());
             }
         })
     }

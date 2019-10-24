@@ -36,27 +36,6 @@ where
     EmitEvent(Option<String>),
 }
 
-impl<'run, 'event, 'script> Cont<'run, 'event>
-where
-    'script: 'event,
-    'event: 'run,
-{
-    pub fn into_value<O: BaseExpr, I: BaseExpr>(
-        self,
-        outer: &O,
-        inner: &I,
-    ) -> Result<Cow<'run, Value<'event>>> {
-        match self {
-            Cont::Cont(v) => Ok(v),
-            Cont::EmitEvent(_p) => {
-                Err(ErrorKind::InvalidEmit(outer.extent(), inner.extent()).into())
-            }
-            Cont::Emit(_v, _p) => Err(ErrorKind::InvalidEmit(outer.extent(), inner.extent()).into()),
-            Cont::Drop => Err(ErrorKind::InvalidDrop(outer.extent(), inner.extent()).into()),
-        }
-    }
-}
-
 macro_rules! demit {
     ($data:expr) => {
         match stry!($data) {
@@ -256,8 +235,8 @@ where
 
                         if opts.result_needed {
                             value_vec.push(v.into_owned());
-                            count += 1;
                         }
+                        count += 1;
                         continue 'comp_array_outer;
                     }
                 }

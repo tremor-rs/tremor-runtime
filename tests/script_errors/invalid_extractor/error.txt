@@ -1,0 +1,4 @@
+Invalid tilde predicate pattern: regex parse error:
+    (
+    ^
+error: unclosed group
