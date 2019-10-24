@@ -8,7 +8,15 @@ Online codecs, preprocessors can be chained to perform multiple operations in su
 
 ### lines
 
-Splits the input into lines (character 13 `\n`)
+Splits the input into lines (character 13 `\n` as line separator)
+
+### lines-null
+
+Splits the input into lines (null byte `\0` as line separator)
+
+### lines-pipe
+
+Splits the input into lines (pipe `|` as line separator)
 
 ### base64
 

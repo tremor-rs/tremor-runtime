@@ -57,7 +57,7 @@ onramp:
 
 ### udp
 
-The ump onramp allows receiving data via UDP datagrams.
+The udp onramp allows receiving data via UDP datagrams.
 
 Supported configuration options are:
 
@@ -157,10 +157,8 @@ The default [codec](../codecs) is `json`.
 
 Supported configuration options are:
 
-* `host` - The host to advertise as
-* `port` - The TCP port to listen on
-* `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
-* `ttl` - Set the socket's time-to-live ( default: 64 )
+* `host` - The IP to listen on
+* `port` - The Port to listen on
 
 Example:
 
@@ -175,8 +173,6 @@ onramp:
     config:
       host: "localhost"
       port: 9000
-      is_non_blocking: true
-      ttl: 32
 ```
 
 ### rest ( alpha )
