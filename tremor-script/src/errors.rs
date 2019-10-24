@@ -149,6 +149,7 @@ impl ErrorKind {
             | PatchKeyExists(outer, inner, _)
             | InvalidAssign(outer, inner)
             | InvalidBinary(outer, inner, _, _, _)
+            | InvalidBitshift(outer, inner)
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
             | InvalidConst(outer, inner)
@@ -503,19 +504,23 @@ error_chain! {
                 display("The expression can be read as a binary expression, please put the value you wan to emit in parentheses.")
         }
         BinaryDrop(expr: Range, inner: Range) {
-            description("Please enclose the value you want to rop")
+            description("Please enclose the value you want to drop")
                 display("The expression can be read as a binary expression, please put the value you wan to drop in parentheses.")
         }
         /*
          * Operators
          */
         InvalidUnary(expr: Range, inner: Range, op: ast::UnaryOpKind, val: ValueType) {
-            description("Invalid ynary operation")
+            description("Invalid unary operation")
                 display("The unary operation operation `{}` is not defined for the type `{}`", op, t2s(*val))
         }
         InvalidBinary(expr: Range, inner: Range, op: ast::BinOpKind, left: ValueType, right: ValueType) {
-            description("Invalid ynary operation")
+            description("Invalid binary operation")
                 display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
+        }
+        InvalidBitshift(expr: Range, inner: Range) {
+            description("Invalid value for bitshift")
+                display("RHS value is larger than or equal to the number of bits in LHS value")
         }
 
         /*
@@ -688,6 +693,11 @@ pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     )
     .into())
 }
+
+pub fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::InvalidBitshift(outer.extent(), inner.extent()).into())
+}
+
 pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
     Err(ErrorKind::NoClauseHit(outer.extent()).into())
 }

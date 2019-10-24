@@ -19,6 +19,8 @@ pub mod upable;
 use crate::errors::*;
 use crate::impl_expr;
 use crate::interpreter::{exec_binary, exec_unary};
+// TODO remove after testing
+//use crate::interpreter::exec_binary2
 use crate::pos::{Location, Range};
 use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::tilde::Extractor;
@@ -710,9 +712,18 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                     let end = b1.end;
                     let lhs = reduce2(b1.lhs)?;
                     let rhs = reduce2(b1.rhs)?;
+                    // TODO make this work
+                    //let value = if let Ok(v) = exec_binary2(&b1, &b1.lhs, b1.kind, &lhs, &rhs) {
                     let value = if let Some(v) = exec_binary(b1.kind, &lhs, &rhs) {
                         v.into_owned()
                     } else {
+                        // TODO handle bitshift vs general binary operator errors
+                        /*
+                        return Err(ErrorKind::InvalidBitshift(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                        )
+                        */
                         return Err(ErrorKind::InvalidBinary(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),

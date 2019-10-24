@@ -1,3 +1,6 @@
+# to bypass constant folding
+let a = 42;
+
 emit [
   "right bit shift (signed)",
   42 >> 0,
@@ -29,10 +32,11 @@ emit [
   42 << 0,
   42 << 2,
   -42 << 2,
-  42 << 63
+  42 << 63,
 
   # left bit shift (invalid)
-  #42 << 64
+  42 << 64,
+  a << 64
   #42 << -1
   #42 << 2.0
   #42 << "2"
