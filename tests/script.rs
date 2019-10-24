@@ -107,9 +107,11 @@ test_cases!(
     patch,
     presence,
     record_comprehension,
+    recordpattern_eq,
     record,
     regex,
     simple_match,
     string_concat,
+    subslice,
     unary,
 );

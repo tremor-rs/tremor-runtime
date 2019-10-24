@@ -138,7 +138,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::cast_precision_loss)]
 #[inline]
 pub fn exec_binary<'run, 'event: 'run>(
     op: BinOpKind,
@@ -149,7 +149,6 @@ pub fn exec_binary<'run, 'event: 'run>(
     // - snot badger - Darach
     use BinOpKind::*;
     use Value::*;
-    #[allow(clippy::cast_precision_loss)]
     match (&op, lhs, rhs) {
         (Eq, Null, Null) => Some(static_bool!(true)),
         (NotEq, Null, Null) => Some(static_bool!(false)),
@@ -237,7 +236,6 @@ pub fn resolve<'run, 'event, 'script, Expr>(
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-
     'script: 'event,
     'event: 'run,
 {
@@ -337,7 +335,13 @@ where
                             let idx = idx + start;
                             if idx >= end {
                                 // We exceed the sub range
-                                return Ok(Cow::Borrowed(&FALSE));
+                                let bad_idx = idx - start;
+                                return error_array_out_of_bound(
+                                    outer,
+                                    segment,
+                                    &path,
+                                    bad_idx..bad_idx,
+                                );
                             }
 
                             if let Some(v) = a.get(idx) {
@@ -378,13 +382,14 @@ where
                         let range_start = range_start + start;
                         let e = stry!(range_end.run(opts, env, event, meta, local));
                         if let Some(range_end) = e.as_usize() {
-                            let range_end = range_end + range_start;
-                            if range_end >= end {
+                            let range_end = range_end;
+                            if range_end > end {
                                 return error_array_out_of_bound(
                                     outer,
                                     segment,
                                     &path,
-                                    range_start..range_end,
+                                    // Compensate for range inclusiveness
+                                    range_start..(range_end - 1),
                                 );
                             } else {
                                 subrange = Some((range_start, range_end));

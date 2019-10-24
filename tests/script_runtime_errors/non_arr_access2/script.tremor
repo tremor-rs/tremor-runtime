@@ -1,0 +1,2 @@
+let k = 42;
+event.snot[k]
