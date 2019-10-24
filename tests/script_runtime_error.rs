@@ -52,7 +52,7 @@ macro_rules! test_cases {
                     let context = EventContext::from_ingest_ns(0);
                     let  mut meta = Value::from(Object::default());
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
-                    if let Err(e) = dbg!(s) {
+                    if let Err(e) = s {
                         assert_eq!(err, format!("{}", e));
                     } else {
                         println!("Expected error, but got succeess");
@@ -68,6 +68,7 @@ macro_rules! test_cases {
 
 test_cases!(
     bad_binary,
+    bad_index_access,
     bad_unary,
     function_error_1,
     function_error_2,
@@ -77,5 +78,8 @@ test_cases!(
     merge_target_no_object,
     missing_local,
     no_clause_hit,
+    non_arr_access,
+    non_obj_access,
+    obj_bad_key,
     undefined_local,
 );

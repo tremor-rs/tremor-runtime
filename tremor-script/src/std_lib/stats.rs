@@ -18,7 +18,7 @@ use crate::registry::{
 };
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
-use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
 use std::f64;
 use std::marker::Send;
@@ -436,7 +436,7 @@ impl TremorAggrFn for Hdr {
             );
         }
 
-        Ok(Value::from(Object::from(hashmap! {
+        Ok(Value::from(hashmap! {
             "count".into() => Value::from(self.histo.len()),
             "min".into() => Value::from(self.histo.min()),
             "max".into() => Value::from(self.histo.max()),
@@ -444,7 +444,7 @@ impl TremorAggrFn for Hdr {
             "stdev".into() => Value::F64(self.histo.stdev()),
             "var".into() => Value::F64(self.histo.stdev().powf(2.0)),
             "percentiles".into() => Value::from(p),
-        })))
+        }))
     }
     fn init(&mut self) {
         self.histo.reset();

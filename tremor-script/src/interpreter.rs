@@ -181,6 +181,7 @@ pub fn exec_binary<'run, 'event: 'run>(
             Add => Some(Cow::Owned(I64(*l + *r))),
             Sub => Some(Cow::Owned(I64(*l - *r))),
             Mul => Some(Cow::Owned(I64(*l * *r))),
+            Div => Some(Cow::Owned(F64((*l as f64) / (*r as f64)))),
             Mod => Some(Cow::Owned(I64(*l % *r))),
             _ => None,
         },
@@ -288,7 +289,8 @@ where
                     let idx = *idx as usize + start;
                     if idx >= end {
                         // We exceed the sub range
-                        return Ok(Cow::Borrowed(&FALSE));
+                        let bad_idx = idx - start;
+                        return error_array_out_of_bound(outer, segment, &path, bad_idx..bad_idx);
                     }
 
                     if let Some(c) = a.get(idx) {
