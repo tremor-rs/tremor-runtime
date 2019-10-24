@@ -228,16 +228,15 @@ pub fn exec_binary<'run, 'event: 'run>(
 // TODO replace exec_binary with this once this is working from ast too
 #[allow(clippy::cognitive_complexity)]
 #[inline]
-pub fn exec_binary2<'run, 'event, 'script, Expr, ImutExpr>(
+pub fn exec_binary2<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
-    inner: &'script ImutExpr,
+    inner: &'script Expr,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-    ImutExpr: BaseExpr,
     'script: 'event,
     'event: 'run,
 {

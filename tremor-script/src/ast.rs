@@ -18,7 +18,7 @@ mod support;
 pub mod upable;
 use crate::errors::*;
 use crate::impl_expr;
-use crate::interpreter::{exec_binary2, exec_unary};
+use crate::interpreter::{exec_binary, exec_unary};
 // TODO remove after testing
 //use crate::interpreter::exec_binary2
 use crate::pos::{Location, Range};
@@ -526,15 +526,6 @@ pub fn reduce2<'script>(expr: ImutExpr<'script>) -> Result<Value<'script>> {
     }
 }
 
-/*
-pub fn reduce3<'script>(expr: &ImutExpr<'script>) -> Result<Value<'script>> {
-    match expr {
-        ImutExpr::Literal(Literal { value: v, .. }) => Ok(*v),
-        other => Err(ErrorKind::NotConstant(other.extent(), other.extent().expand_lines(2)).into()),
-    }
-}
-*/
-
 // This is compile time only we don't care
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -719,11 +710,11 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                 } => {
                     let start = b1.start;
                     let end = b1.end;
-                    let lhs = reduce2(b1.lhs.clone())?;
-                    let rhs = reduce2(b1.rhs.clone())?;
+                    let lhs = reduce2(b1.lhs)?;
+                    let rhs = reduce2(b1.rhs)?;
                     // TODO make this work
-                    let value = if let Ok(v) = exec_binary2(&b1, &b1.lhs, b1.kind, &lhs, &rhs) {
-                        //let value = if let Some(v) = exec_binary(b1.kind, &lhs, &rhs) {
+                    //let value = if let Ok(v) = exec_binary2(&b1, &b1.lhs, b1.kind, &lhs, &rhs) {
+                    let value = if let Some(v) = exec_binary(b1.kind, &lhs, &rhs) {
                         v.into_owned()
                     } else {
                         // TODO handle bitshift vs general binary operator errors
