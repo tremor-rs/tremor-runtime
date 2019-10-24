@@ -167,6 +167,7 @@ pub fn exec_binary<'run, 'event: 'run>(
         (op, Bool(l), Bool(r)) => match op {
             And => Some(static_bool!(*l && *r)),
             Or => Some(static_bool!(*l || *r)),
+            #[allow(clippy::if_not_else)]
             Xor => Some(static_bool!(*l != *r)),
             BitAnd => Some(static_bool!(*l & *r)),
             BitOr => Some(static_bool!(*l | *r)),
@@ -262,6 +263,7 @@ where
         (op, Bool(l), Bool(r)) => match op {
             And => Ok(static_bool!(*l && *r)),
             Or => Ok(static_bool!(*l || *r)),
+            #[allow(clippy::if_not_else)]
             Xor => Ok(static_bool!(*l != *r)),
             BitAnd => Ok(static_bool!(*l & *r)),
             BitOr => Ok(static_bool!(*l | *r)),
