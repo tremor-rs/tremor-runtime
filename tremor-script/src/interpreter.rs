@@ -434,35 +434,24 @@ where
     'script: 'event,
     'event: 'run,
 {
-    if !replacement.is_object() {
-        //NOTE: We got to clone here since we're duplicating values
-        *value = replacement.clone();
-        return Ok(());
-    }
-
-    if !value.is_object() {
-        *value = Value::from(Object::new());
-    }
-
-    if let Some(ref mut map) = value.as_object_mut() {
-        if let Some(rep) = replacement.as_object() {
-            for (k, v) in rep {
-                if v.is_null() {
-                    map.remove(k);
-                } else if let Some(k) = map.get_mut(k) {
-                    stry!(merge_values(outer, inner, k, v))
-                } else {
-                    //NOTE: We got to clone here since we're duplicating values
-                    map.insert(k.clone(), v.clone());
-                }
+    if let (Some(rep), Some(map)) = (replacement.as_object(), value.as_object_mut()) {
+        for (k, v) in rep {
+            if v.is_null() {
+                map.remove(k);
+            } else if let Some(k) = map.get_mut(k) {
+                stry!(merge_values(outer, inner, k, v))
+            } else {
+                //NOTE: We got to clone here since we're duplicating values
+                map.insert(k.clone(), v.clone());
             }
-            Ok(())
-        } else {
-            error_need_obj(outer, inner, replacement.value_type())
         }
     } else {
-        error_need_obj(outer, inner, value.value_type())
+        // If one of the two isn't a map we can't merge so we simplhy
+        // write the replacement into the target.
+        // NOTE: We got to clone here since we're duplicating values
+        *value = replacement.clone();
     }
+    Ok(())
 }
 
 #[inline]
