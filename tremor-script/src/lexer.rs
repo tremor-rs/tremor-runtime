@@ -159,8 +159,13 @@ pub enum Token<'input> {
 
     // Op
     Not,
+    BitNot,
     And,
     Or,
+    Xor,
+    BitAnd,
+    BitOr,
+    BitXor,
     Eq,
     EqEq,
     NotEq,
@@ -170,6 +175,9 @@ pub enum Token<'input> {
     Gt,
     Lte,
     Lt,
+    RBitShiftSigned,
+    RBitShiftUnsigned,
+    LBitShift,
     Add,
     Sub,
     Mul,
@@ -348,8 +356,13 @@ impl<'input> TokenFuns for Token<'input> {
     fn is_operator(&self) -> bool {
         match *self {
             Token::Not
+            | Token::BitNot
             | Token::Or
+            | Token::Xor
             | Token::And
+            | Token::BitOr
+            | Token::BitXor
+            | Token::BitAnd
             | Token::Eq
             | Token::EqEq
             | Token::NotEq
@@ -359,6 +372,9 @@ impl<'input> TokenFuns for Token<'input> {
             | Token::Gt
             | Token::Lte
             | Token::Lt
+            | Token::RBitShiftSigned
+            | Token::RBitShiftUnsigned
+            | Token::LBitShift
             | Token::Add
             | Token::Sub
             | Token::Mul
@@ -477,6 +493,7 @@ impl<'input> fmt::Display for Token<'input> {
             //            Token::Question => write!(f, "?"),
             //            Token::Pipe => write!(f, "|"),
             Token::Not => write!(f, "not"),
+            Token::BitNot => write!(f, "!"),
             //            Token::Tilde => write!(f, "~"),
             // Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),
@@ -491,15 +508,22 @@ impl<'input> fmt::Display for Token<'input> {
             Token::RBracket => write!(f, "]"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
-            Token::Gte => write!(f, ">="),
+            Token::Xor => write!(f, "xor"),
+            Token::BitAnd => write!(f, "&"),
+            Token::BitOr => write!(f, "|"),
+            Token::BitXor => write!(f, "^"),
             Token::Eq => write!(f, "="),
             Token::EqEq => write!(f, "=="),
             Token::NotEq => write!(f, "!="),
             Token::TildeEq => write!(f, "~="),
             Token::Tilde => write!(f, "~"),
+            Token::Gte => write!(f, ">="),
             Token::Gt => write!(f, ">"),
             Token::Lte => write!(f, "<="),
             Token::Lt => write!(f, "<"),
+            Token::RBitShiftSigned => write!(f, ">>"),
+            Token::RBitShiftUnsigned => write!(f, ">>>"),
+            Token::LBitShift => write!(f, "<<"),
             Token::Mul => write!(f, "*"),
             Token::Div => write!(f, "/"),
             Token::Add => write!(f, "+"),
@@ -757,6 +781,9 @@ impl<'input> Lexer<'input> {
             "<=" => Ok(spanned2(start, end, Token::Lte)),
             ">" => Ok(spanned2(start, end, Token::Gt)),
             ">=" => Ok(spanned2(start, end, Token::Gte)),
+            "<<" => Ok(spanned2(start, end, Token::LBitShift)),
+            ">>" => Ok(spanned2(start, end, Token::RBitShiftSigned)),
+            ">>>" => Ok(spanned2(start, end, Token::RBitShiftUnsigned)),
             _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
@@ -828,6 +855,7 @@ impl<'input> Lexer<'input> {
             "false" => Token::BoolLiteral(false),
             "and" => Token::And,
             "or" => Token::Or,
+            "xor" => Token::Xor,
             "not" => Token::Not,
             "drop" => Token::Drop,
             "emit" => Token::Emit,
@@ -1423,6 +1451,10 @@ impl<'input> Iterator for Lexer<'input> {
                     '[' => Some(Ok(spanned2(start, start, Token::LBracket))),
                     ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
                     '/' => Some(Ok(spanned2(start, start, Token::Div))),
+                    // TODO account for extractors which use | to mark format boundaries
+                    //'|' => Some(Ok(spanned2(start, start, Token::BitOr))),
+                    '^' => Some(Ok(spanned2(start, start, Token::BitXor))),
+                    '&' => Some(Ok(spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
                     '-' => Some(self.sb(start)),
                     '#' => Some(self.cx(start)),
@@ -1431,6 +1463,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),
+                    // TODO account for bitwise not operator
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
                     ch if is_ident_start(ch) => Some(self.id(start)),
@@ -1601,9 +1634,16 @@ mod tests {
         lex_ok! {
         " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
+        // TODO fix this
+        //lex_ok! { " !1 ", " ~  " => Token::BitNot, "  ~ " => Token::IntLiteral(1), };
 
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
+        lex_ok! { " xor ", " ~ " => Token::Xor, };
+        lex_ok! { " & ", " ~ " => Token::BitAnd, };
+        // TODO enable
+        //lex_ok! { " | ", " ~ " => Token::BitOr, };
+        lex_ok! { " ^ ", " ~ " => Token::BitXor, };
         lex_ok! { " = ", " ~ " => Token::Eq, };
         lex_ok! { " == ", " ~ " => Token::EqEq, };
         lex_ok! { " != ", " ~ " => Token::NotEq, };
@@ -1611,6 +1651,9 @@ mod tests {
         lex_ok! { " > ", " ~ " => Token::Gt, };
         lex_ok! { " <= ", " ~ " => Token::Lte, };
         lex_ok! { " < ", " ~ " => Token::Lt, };
+        lex_ok! { " >> ", " ~ " => Token::RBitShiftSigned, };
+        lex_ok! { " >>> ", " ~ " => Token::RBitShiftUnsigned, };
+        lex_ok! { " << ", " ~ " => Token::LBitShift, };
         lex_ok! { " + ", " ~ " => Token::Add, };
         lex_ok! { " - ", " ~ " => Token::Sub, };
         lex_ok! { " * ", " ~ " => Token::Mul, };

@@ -1,5 +1,6 @@
 .DS_Store
 /target*
+*/target*
 **/*.rs.bk
 .rpm
 /window/target*

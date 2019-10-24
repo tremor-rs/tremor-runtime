@@ -60,8 +60,30 @@ impl TrickleOperator {
                         })
                     }
                     ("generic", "backpressure") => {
-                        Box::new(op::generic::backpressure::Backpressure {
-                            config: op::generic::backpressure::Config {
+                        use op::generic::backpressure::*;
+                        let outputs = op
+                            .params
+                            .as_ref()
+                            .and_then(|v| v.get("outputs"))
+                            .and_then(Value::as_array)
+                            .and_then(|os| {
+                                os.iter()
+                                    .map(|o| o.as_str().map(ToString::to_string))
+                                    .collect::<Option<Vec<String>>>()
+                            })
+                            .unwrap_or_default();
+                        let steps = op
+                            .params
+                            .as_ref()
+                            .and_then(|v| v.get("steps"))
+                            .and_then(Value::as_array)
+                            .and_then(|a| {
+                                a.iter().map(|x| x.as_u64()).collect::<Option<Vec<u64>>>()
+                            })
+                            .ok_or_else(|| error_missing_config("timeout"))?;
+                        Box::new(Backpressure {
+                            outputs: outputs.iter().cloned().map(Output::from).collect(),
+                            config: Config {
                                 // FIXME hygienic error handling
                                 timeout: op
                                     .params
@@ -69,18 +91,21 @@ impl TrickleOperator {
                                     .and_then(|v| v.get("timeout"))
                                     .and_then(Value::cast_f64)
                                     .ok_or_else(|| error_missing_config("timeout"))?,
-                                steps: op
+                                steps: steps.clone(),
+                                outputs: op
                                     .params
                                     .as_ref()
-                                    .and_then(|v| v.get("steps"))
+                                    .and_then(|v| v.get("outputs"))
                                     .and_then(Value::as_array)
-                                    .and_then(|a| {
-                                        a.iter().map(|x| x.as_u64()).collect::<Option<Vec<u64>>>()
+                                    .and_then(|os| {
+                                        os.iter()
+                                            .map(|o| o.as_str().map(ToString::to_string))
+                                            .collect::<Option<Vec<String>>>()
                                     })
-                                    .ok_or_else(|| error_missing_config("timeout"))?,
+                                    .unwrap_or_default(),
                             },
-                            backoff: 0,
-                            last_pass: 0,
+                            steps,
+                            next: 0,
                         })
                     }
                     ("generic", "batch") => {

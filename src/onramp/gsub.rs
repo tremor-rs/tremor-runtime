@@ -41,12 +41,13 @@ pub struct Config {
     #[serde(default = "dflt::d_false")]
     pub sync: bool,
 }
+impl ConfigImpl for Config {}
 
 impl onramp::Impl for GSub {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Self { config }))
+            let config: Config = Config::new(config)?;
+            Ok(Box::new(GSub { config }))
         } else {
             Err("Missing config for gsub onramp".into())
         }

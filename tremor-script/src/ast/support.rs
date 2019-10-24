@@ -75,13 +75,20 @@ impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Or => write!(f, "or"),
+            Self::Xor => write!(f, "xor"),
             Self::And => write!(f, "and"),
+            Self::BitOr => write!(f, "|"),
+            Self::BitXor => write!(f, "^"),
+            Self::BitAnd => write!(f, "&"),
             Self::Eq => write!(f, "=="),
             Self::NotEq => write!(f, "!="),
             Self::Gte => write!(f, ">="),
             Self::Gt => write!(f, ">"),
             Self::Lte => write!(f, "<="),
             Self::Lt => write!(f, "<"),
+            Self::RBitShiftSigned => write!(f, ">>"),
+            Self::RBitShiftUnsigned => write!(f, ">>>"),
+            Self::LBitShift => write!(f, "<<"),
             Self::Add => write!(f, "+"),
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
@@ -97,6 +104,7 @@ impl fmt::Display for UnaryOpKind {
             Self::Plus => write!(f, "+"),
             Self::Minus => write!(f, "-"),
             Self::Not => write!(f, "not"),
+            Self::BitNot => write!(f, "!"),
         }
     }
 }

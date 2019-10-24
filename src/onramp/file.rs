@@ -32,6 +32,8 @@ pub struct Config {
     pub close_on_done: bool,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct File {
     pub config: Config,
 }
@@ -39,8 +41,8 @@ pub struct File {
 impl onramp::Impl for File {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Self { config }))
+            let config: Config = Config::new(config)?;
+            Ok(Box::new(File { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }

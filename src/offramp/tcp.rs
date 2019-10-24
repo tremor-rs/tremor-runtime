@@ -22,7 +22,6 @@
 
 use crate::offramp::prelude::*;
 use halfbrown::HashMap;
-use serde_yaml;
 use std::io::Write;
 use std::net::TcpStream;
 
@@ -45,10 +44,12 @@ pub struct Config {
     pub is_no_delay: bool,
 }
 
+impl ConfigImpl for Config {}
+
 impl offramp::Impl for Tcp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let stream = TcpStream::connect((config.host.as_str(), config.port))?;
             stream.set_nonblocking(config.is_non_blocking)?;
             stream.set_ttl(config.ttl)?;

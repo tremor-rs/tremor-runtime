@@ -152,8 +152,7 @@ pub fn exec_binary<'run, 'event: 'run>(
     match (&op, lhs, rhs) {
         (Eq, Null, Null) => Some(static_bool!(true)),
         (NotEq, Null, Null) => Some(static_bool!(false)),
-        (And, Bool(l), Bool(r)) => Some(static_bool!(*l && *r)),
-        (Or, Bool(l), Bool(r)) => Some(static_bool!(*l || *r)),
+
         // FIXME - do we want this?
         // This is to make sure that == in a expression
         // and a record pattern behaves the same.
@@ -164,6 +163,16 @@ pub fn exec_binary<'run, 'event: 'run>(
             #[allow(clippy::if_not_else)]
             Some(static_bool!(!val_eq(l, r)))
         }
+
+        (op, Bool(l), Bool(r)) => match op {
+            And => Some(static_bool!(*l && *r)),
+            Or => Some(static_bool!(*l || *r)),
+            Xor => Some(static_bool!(*l != *r)),
+            BitAnd => Some(static_bool!(*l & *r)),
+            BitOr => Some(static_bool!(*l | *r)),
+            BitXor => Some(static_bool!(*l ^ *r)),
+            _ => None,
+        },
         (op, String(l), String(r)) => match op {
             Gt => Some(static_bool!(l > r)),
             Gte => Some(static_bool!(l >= r)),
@@ -173,6 +182,9 @@ pub fn exec_binary<'run, 'event: 'run>(
             _ => None,
         },
         (op, I64(l), I64(r)) => match op {
+            BitAnd => Some(Cow::Owned(I64(*l & *r))),
+            BitOr => Some(Cow::Owned(I64(*l | *r))),
+            BitXor => Some(Cow::Owned(I64(*l ^ *r))),
             Gt => Some(static_bool!(*l > *r)),
             Gte => Some(static_bool!(*l >= *r)),
             Lt => Some(static_bool!(*l < *r)),
@@ -182,6 +194,10 @@ pub fn exec_binary<'run, 'event: 'run>(
             Mul => Some(Cow::Owned(I64(*l * *r))),
             Div => Some(Cow::Owned(F64((*l as f64) / (*r as f64)))),
             Mod => Some(Cow::Owned(I64(*l % *r))),
+            // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
+            RBitShiftSigned => Some(Cow::Owned(I64(*l >> *r))),
+            RBitShiftUnsigned => Some(Cow::Owned(I64((*l as u64 >> *r) as i64))),
+            LBitShift => Some(Cow::Owned(I64(*l << *r))),
             _ => None,
         },
         (op, l, r) => {
@@ -220,6 +236,9 @@ pub fn exec_unary<'run, 'event: 'run>(
         (Plus, F64(x)) => Some(Cow::Owned(F64(*x))),
         (Not, Bool(true)) => Some(static_bool!(false)), // This is not true
         (Not, Bool(false)) => Some(static_bool!(true)), // this is not false
+        (BitNot, I64(x)) => Some(Cow::Owned(I64(!x))),
+        (BitNot, Bool(true)) => Some(static_bool!(false)), // This is not true
+        (BitNot, Bool(false)) => Some(static_bool!(true)), // this is not false
         _ => None,
     }
 }

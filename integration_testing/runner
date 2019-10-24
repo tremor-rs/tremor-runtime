@@ -118,7 +118,7 @@ then
     basictests=$(ls -d ${BASEDIR}/basic/*.test | sed -e 's/\.test$//g' -e "s;^${BASEDIR}/basic/;;g")
 else
     basictests=$tests
-fi 
+fi
 
 for test in $basictests
 do

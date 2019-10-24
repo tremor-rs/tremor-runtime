@@ -96,13 +96,13 @@ impl From<crossbeam_channel::RecvError> for Error {
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
-        Self::from(format!("poison Error: {:?}", e))
+        Self::from(format!("Poison Error: {:?}", e))
     }
 }
 
 impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
     fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Self {
-        Self::from("Ernatal Error".to_string())
+        Self::from("Rental Error".to_string())
     }
 }
 

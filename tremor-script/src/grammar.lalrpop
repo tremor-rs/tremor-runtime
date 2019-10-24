@@ -207,7 +207,7 @@ SimpleExpr: Expr1<'input> = {
     ExprImut => <>.into(),
 }
 
-/// Part of the expressions that are always imutable
+/// Part of the expressions that are always immutable
 AlwaysImutExpr: ImutExpr1<'input> = {
     <pp:Patch> => ImutExpr1::Patch(Box::new(pp)),
     <pp:Merge> => ImutExpr1::Merge(Box::new(pp)),
@@ -221,7 +221,7 @@ AlwaysImutExpr: ImutExpr1<'input> = {
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
-// Imutable exprssions are used in parts of the lgnauge that are not suposed to
+// Immutable expressions are used in parts of the language that are not supposed to
 // modify the event, locals, or metadata.
 
 /// Expression root
@@ -231,13 +231,38 @@ ExprImut: ImutExpr1<'input> = {
 
 /// Logical or
 OrExprImut: ImutExpr1<'input> = {
-    <o:BinOp<BinOr, ExprImut, AndExprImut>> => <>,
+    /// TODO should be OrExprImut?
+    <o:BinOp<BinOr, ExprImut, XorExprImut>> => <>,
+    XorExprImut => <>,
+}
+
+/// Logical xor
+XorExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinXor, XorExprImut, AndExprImut>> => <>,
     AndExprImut => <>,
 }
 
 /// Logical and
 AndExprImut: ImutExpr1<'input> = {
-    BinOp<BinAnd, AndExprImut, EqExprImut> => <>,
+    BinOp<BinAnd, AndExprImut, BitOrExprImut> => <>,
+    BitOrExprImut => <>,
+}
+
+/// Bitwise or
+BitOrExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
+    BitXorExprImut => <>,
+}
+
+/// Bitwise xor
+BitXorExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitXor, BitXorExprImut, BitAndExprImut>> => <>,
+    BitAndExprImut => <>,
+}
+
+/// Bitwise and
+BitAndExprImut: ImutExpr1<'input> = {
+    <o:BinOp<BinBitAnd, BitAndExprImut, EqExprImut>> => <>,
     EqExprImut => <>,
 }
 
@@ -249,7 +274,13 @@ EqExprImut: ImutExpr1<'input> = {
 
 /// Relational compairison operators
 CmpExprImut: ImutExpr1<'input> = {
-    BinOp<BinCmp, CmpExprImut, AddExprImut> => <>,
+    BinOp<BinCmp, CmpExprImut, BitShiftExprImut> => <>,
+    BitShiftExprImut => <>,
+}
+
+/// Bit shift operators (>>, >>>, <<)
+BitShiftExprImut: ImutExpr1<'input> = {
+    BinOp<BinBitShift, BitShiftExprImut, AddExprImut> => <>,
     AddExprImut => <>,
 }
 
@@ -273,20 +304,22 @@ UnaryExprImut: ImutExpr1<'input> = {
 }
 
 
-/// Logical unary expressions (not)
+/// Logical and bitwise unary expressions (not, !)
 UnarySimpleExprImut: ImutExpr1<'input> = {
     <start:@L> "not" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: expr, start, end })),
+    <start:@L> "!" <expr:PresenceSimplExprImut> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::BitNot, expr: expr, start, end })),
     PresenceSimplExprImut => <>,
 }
 
 /// Presence operations (present, absent)
 PresenceSimplExprImut: ImutExpr1<'input> = {
     <start:@L> "present" <path:Path> <end:@L> => ImutExpr1::Present{path, start, end},
+    /// TODO link to !?
     <start:@L> "absent" <path:Path> <end:@L> => ImutExpr1::Unary(Box::new(UnaryExpr1 { kind: UnaryOpKind::Not, expr: ImutExpr1::Present{path, start, end}, start, end })),
     SimpleExprImut => <>,
 }
 
-/// Imutable languag constructs that can be used without having to worry aobut
+/// Immutable language constructs that can be used without having to worry aobut
 /// sideeffects
 
 ComplexExprImut: ImutExpr1<'input> = {
@@ -873,7 +906,7 @@ Sep<L, T, D>: L = {
     <item:T> D? => vec![item],
 }
 
-/// Generaic helper for binary operations
+/// Generic helper for binary operations
 #[inline]
 BinOp<Op, Current, Next>: ImutExpr1<'input> = {
     <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => ImutExpr1::Binary(Box::new(BinExpr1 {
@@ -888,8 +921,20 @@ BinOp<Op, Current, Next>: ImutExpr1<'input> = {
 BinOr: BinOpKind = {
     "or" => BinOpKind::Or,
 }
+BinXor: BinOpKind = {
+    "xor" => BinOpKind::Xor,
+}
 BinAnd: BinOpKind = {
     "and" => BinOpKind::And,
+}
+BinBitOr: BinOpKind = {
+    "|" => BinOpKind::BitOr,
+}
+BinBitXor: BinOpKind = {
+    "^" => BinOpKind::BitXor,
+}
+BinBitAnd: BinOpKind = {
+    "&" => BinOpKind::BitAnd,
 }
 BinEq: BinOpKind = {
     "==" => BinOpKind::Eq,
@@ -900,6 +945,11 @@ BinCmp: BinOpKind = {
     ">" => BinOpKind::Gt,
     "<=" => BinOpKind::Lte,
     "<" => BinOpKind::Lt,
+}
+BinBitShift: BinOpKind = {
+    ">>" => BinOpKind::RBitShiftSigned,
+    ">>>" => BinOpKind::RBitShiftUnsigned,
+    "<<" => BinOpKind::LBitShift,
 }
 BinAdd: BinOpKind = {
     "+" => BinOpKind::Add,
@@ -927,6 +977,7 @@ extern {
         "nil" => Token::Nil,
         "and" => Token::And,
         "or" => Token::Or,
+        "xor" => Token::Xor,
         "not" => Token::Not,
         "drop" => Token::Drop,
         "emit" => Token::Emit,
@@ -966,6 +1017,13 @@ extern {
         ">" => Token::Gt,
         "<=" => Token::Lte,
         "<" => Token::Lt,
+        ">>" => Token::RBitShiftSigned,
+        ">>>" => Token::RBitShiftUnsigned,
+        "<<" => Token::LBitShift,
+        "!" => Token::BitNot,
+        "|" => Token::BitOr,
+        "^" => Token::BitXor,
+        "&" => Token::BitAnd,
         "+" => Token::Add,
         "-" => Token::Sub,
         "*" => Token::Mul,

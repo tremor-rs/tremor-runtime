@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
+use crate::ConfigImpl;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -23,9 +24,11 @@ pub struct Config {
     pub name: String,
 }
 
+impl ConfigImpl for Config {}
+
 op!(EventHistoryFactory(node) {
     if let Some(map) = &node.config {
-        let config: Config = serde_yaml::from_value(map.clone())?;
+        let config: Config = Config::new(map)?;
         Ok(Box::new(EventHistory {
             config,
             id: node.id.clone(),

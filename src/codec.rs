@@ -21,6 +21,7 @@ pub mod msgpack;
 pub mod null;
 pub mod statsd;
 pub mod string;
+pub mod yaml;
 
 pub trait Codec: Send {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
@@ -36,6 +37,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
+        "yaml" => Ok(Box::new(yaml::YAML {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }

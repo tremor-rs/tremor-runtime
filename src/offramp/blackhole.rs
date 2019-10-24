@@ -27,7 +27,6 @@ use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
-use serde_yaml;
 use std::fmt::Display;
 use std::io::{self, stdout, Read, Write};
 use std::process;
@@ -45,6 +44,8 @@ pub struct Config {
     pub warmup_secs: u64,
 }
 
+impl ConfigImpl for Config {}
+
 /// A null offramp that records histograms
 pub struct Blackhole {
     // config: Config,
@@ -61,7 +62,7 @@ pub struct Blackhole {
 impl offramp::Impl for Blackhole {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let now_ns = nanotime();
             Ok(Box::new(Self {
                 // config: config.clone(),

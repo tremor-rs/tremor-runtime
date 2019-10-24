@@ -32,6 +32,8 @@ pub struct Config {
     */
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Udp {
     pub config: Config,
 }
@@ -39,8 +41,8 @@ pub struct Udp {
 impl onramp::Impl for Udp {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Self { config }))
+            let config: Config = Config::new(config)?;
+            Ok(Box::new(Udp { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }

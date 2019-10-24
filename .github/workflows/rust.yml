@@ -129,33 +129,3 @@ jobs:
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
           file: ./cobertura.xml
-  # code-coverage:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v1
-  #     - name: Install deps
-  #       run: sudo apt-get install -y libssl1.0-dev libssl1.0
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: nightly
-  #         override: true
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: test
-  #         args: --no-fail-fast --all
-  #       env:
-  #         'CARGO_INCREMENTAL': '0'
-  #         'RUSTFLAGS': '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
-  #     - id: coverage
-  #       uses: actions-rs/grcov@v0.1
-  #     - uses: actions/upload-artifact@master
-  #       with:
-  #         name: coverage-report
-  #         path: ${{ steps.coverage.outputs.report }}
-      # - name: Upload to codecov
-      #   uses: codecov/codecov-action@v1.0.2
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }} #required
-      #     file: ${{ steps.coverage.outputs.report }}
-      #     #flags: unittests #optional
-      #     #name: codecov-umbrella #optional

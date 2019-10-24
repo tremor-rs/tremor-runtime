@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// FIXME: make util crate! .unwrap()
+
 use chrono::{Timelike, Utc};
 use std::time::Duration;
+pub use tremor_pipeline::ConfigImpl;
 
 pub fn duration_to_millis(at: Duration) -> u64 {
     (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)

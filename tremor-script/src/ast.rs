@@ -2286,7 +2286,13 @@ impl_expr!(EventPath);
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum BinOpKind {
     Or,
+    Xor,
     And,
+
+    BitOr,
+    BitXor,
+    BitAnd,
+
     Eq,
     NotEq,
 
@@ -2294,6 +2300,11 @@ pub enum BinOpKind {
     Gt,
     Lte,
     Lt,
+
+    RBitShiftSigned,
+    RBitShiftUnsigned,
+    LBitShift,
+
     Add,
     Sub,
     Mul,
@@ -2339,6 +2350,7 @@ pub enum UnaryOpKind {
     Plus,
     Minus,
     Not,
+    BitNot,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

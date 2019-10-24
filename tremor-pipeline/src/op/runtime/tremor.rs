@@ -20,7 +20,7 @@ use tremor_script::{self, interpreter::AggrType, EventContext, Return, Script};
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {
-        let config: Config = serde_yaml::from_value(map.clone())?;
+        let config: Config = Config::new(map)?;
 
         match tremor_script::Script::parse(&config.script, &*FN_REGISTRY.lock()?) {
             Ok(runtime) =>
@@ -48,6 +48,7 @@ op!(TremorFactory(node) {
 struct Config {
     script: String,
 }
+impl ConfigImpl for Config {}
 
 #[derive(Debug)]
 pub struct Tremor {
@@ -65,7 +66,7 @@ impl Operator for Tremor {
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
         let mut event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
         // unwind_event => the event
-        // event_meta => mneta
+        // event_meta => meta
         let value = self.runtime.run(
             &context,
             AggrType::Emit,

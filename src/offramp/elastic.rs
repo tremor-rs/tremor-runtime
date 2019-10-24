@@ -39,7 +39,6 @@ use halfbrown::HashMap;
 // use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
-use serde_yaml;
 use simd_json::json;
 use std::str;
 use std::sync::mpsc::channel;
@@ -55,6 +54,8 @@ pub struct Config {
     #[serde(default = "dflt::d_4")]
     pub concurrency: usize,
 }
+
+impl ConfigImpl for Config {}
 
 #[derive(Clone)]
 struct Destination {
@@ -76,7 +77,7 @@ pub struct Elastic {
 impl offramp::Impl for Elastic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients: Result<Vec<Destination>> = config
                 .endpoints
                 .iter()
@@ -155,7 +156,6 @@ impl Elastic {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
-
             // TODO: Handle contraflow for notification
             if let Err(e) = tx.send(r) {
                 error!("Failed to send reply: {}", e)
@@ -167,7 +167,28 @@ impl Elastic {
     fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                //TODO: how do we handle this?
+                let mut m = Object::new();
+                m.insert("error".into(), "Dropped data due to es overload".into());
+
+                let insight = Event {
+                    is_batch: false,
+                    id: 0,
+                    data: (Value::Null, m).into(),
+                    ingest_ns: nanotime(),
+                    kind: None,
+                };
+
+                let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+                    .pipelines
+                    .iter()
+                    .map(|(i, p)| (i.clone(), p.clone()))
+                    .collect();
+                for (pid, p) in pipelines {
+                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
+
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
             }

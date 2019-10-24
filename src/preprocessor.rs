@@ -13,6 +13,8 @@
 // limitations under the License.
 
 mod gelf;
+mod lines;
+
 use crate::errors::*;
 use base64;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
@@ -27,7 +29,10 @@ pub trait Preprocessor: Sync + Send {
 #[deny(clippy::ptr_arg)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
-        "lines" => Ok(Box::new(Lines {})),
+        // TODO once preprocessors allow configuration, remove multiple entries for lines here
+        "lines" => Ok(Box::new(lines::Lines::new('\n', 1_048_576))),
+        "lines-null" => Ok(Box::new(lines::Lines::new('\0', 1_048_576))),
+        "lines-pipe" => Ok(Box::new(lines::Lines::new('|', 1_048_576))),
         "base64" => Ok(Box::new(Base64 {})),
         "gzip" => Ok(Box::new(Gzip {})),
         "decompress" => Ok(Box::new(Decompress {})),
@@ -81,14 +86,6 @@ pub(crate) struct Nulls {}
 impl Preprocessor for Nulls {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct Lines {}
-impl Preprocessor for Lines {
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(data.split(|c| *c == b'\n').map(Vec::from).collect())
     }
 }
 

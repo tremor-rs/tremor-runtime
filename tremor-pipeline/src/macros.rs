@@ -37,8 +37,15 @@ macro_rules! op {
 }
 
 #[macro_export]
-macro_rules! sjv {
-    ($e:expr) => {
-        tremor_script::LineValue::new(Box::new(vec![]), |_| $e)
-    };
+macro_rules! metamap {
+    { $($key:expr => $value:expr),+ } => {
+        {
+            // TODO figure out why `crate::` does not work here
+            let mut m = simd_json::value::borrowed::Object::new();
+            $(
+                m.insert($key.into(), simd_json::OwnedValue::from($value));
+            )+
+            m
+        }
+     };
 }

@@ -22,7 +22,6 @@
 
 use crate::offramp::prelude::*;
 use halfbrown::HashMap;
-use serde_yaml;
 use std::fs::File as FSFile;
 use std::io::Write;
 
@@ -39,12 +38,14 @@ pub struct Config {
     pub file: String,
 }
 
+impl ConfigImpl for Config {}
+
 impl offramp::Impl for File {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            let file = FSFile::create(&config.file)?;
-            Ok(Box::new(Self {
+            let config: Config = Config::new(config)?;
+            let file = FSFile::create(config.file)?;
+            Ok(Box::new(File {
                 file,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],

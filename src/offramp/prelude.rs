@@ -20,6 +20,7 @@ pub use crate::offramp::{self, Offramp};
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
+pub use crate::utils::ConfigImpl;
 pub use crate::utils::{duration_to_millis, nanotime};
 pub use crate::{Event, OpConfig};
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};

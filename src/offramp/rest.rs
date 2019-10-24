@@ -15,7 +15,6 @@
 use crate::offramp::prelude::*;
 use crate::rest::HttpC;
 use halfbrown::HashMap;
-use serde_yaml;
 use std::str;
 use std::sync::mpsc::channel;
 use std::time::Instant;
@@ -36,6 +35,8 @@ pub struct Config {
     pub headers: HashMap<String, String>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Rest {
     client_idx: usize,
     clients: Vec<HttpC>,
@@ -49,7 +50,7 @@ pub struct Rest {
 impl offramp::Impl for Rest {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients = config
                 .endpoints
                 .iter()
@@ -94,12 +95,12 @@ impl Rest {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = channel();
+        let config = self.config.clone();
         let pipelines: Vec<(TremorURL, PipelineAddr)> = self
             .pipelines
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
-        let config = self.config.clone();
         self.pool.execute(move || {
             let r = Self::flush(&destination, config, payload);
             let mut m = Object::new();
@@ -134,7 +135,30 @@ impl Rest {
     fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                //TODO: how do we handle this?
+                let mut m = Object::new();
+                m.insert(
+                    "error".into(),
+                    "Dropped data due to REST endpoint overload".into(),
+                );
+
+                let insight = Event {
+                    is_batch: false,
+                    id: 0,
+                    data: (Value::Null, m).into(),
+                    ingest_ns: nanotime(),
+                    kind: None,
+                };
+
+                let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+                    .pipelines
+                    .iter()
+                    .map(|(i, p)| (i.clone(), p.clone()))
+                    .collect();
+                for (pid, p) in pipelines {
+                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
                 error!("Dropped data due to overload");
                 Err("Dropped data due to overload".into())
             }

@@ -60,9 +60,7 @@ mod macros;
 pub mod op;
 pub mod query;
 
-pub use op::{InitializableOperator, Operator};
-pub type MetaValue = simd_json::value::owned::Value;
-pub type MetaMap = simd_json::value::owned::Object;
+pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub type PortIndexMap =
     HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
 pub type ExecPortIndexMap = HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
