@@ -1,4 +1,5 @@
 ignore:
   - "tremor-script/src/ast/support.rs"  # This is a pure support file
   - "tremor-script/src/ast/base_expr.rs"  # This are only getters
+  - "tremor-script/src/astregistry/custom_fn.rs" # behind a feature flag - not used
   - "**/errors.rs"  # Just lots of error strings

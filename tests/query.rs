@@ -31,22 +31,25 @@ fn to_pipe(query: &str) -> Result<ExecutableGraph> {
 
 macro_rules! test_cases {
 
-    ($($file:ident),*) => {
+    ($($file:ident),* ,) => {
         $(
             #[test]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
-                let pipeline_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
+                let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
 
-                let mut file = File::open(pipeline_file)?;
+                println!("Loading query: {}", query_file);
+                let mut file = File::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
                 let mut pipeline = to_pipe(&contents)?;
 
+                println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
+                println!("Loading expected: {}", out_file);
                 let mut out_json = load_event_file(out_file)?;
 
                 out_json.reverse();
@@ -85,10 +88,17 @@ test_cases!(
     layered_limiting,
     lru,
     merge,
+    grou_by_time,
+    // grou_by_size, .unwrap() this case fails because we have a issue w/ sized windows and group by
+    // we keep this around as a reminder to resolve this in some way or the other
+    // the current issue is that windows contain all groups so a sized
+    // window of 10 that has 2 groups will emit both groups if the SUM of events reaches
+    // 10, not emit a group when this group reaches 10 events
     multi_dimensions,
     mutate,
     patch,
     rewrite_root,
     passthrough,
-    tremor_map
+    tremor_map,
+    window_by_two,
 );
