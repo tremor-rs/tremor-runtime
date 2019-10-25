@@ -140,106 +140,16 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
 
 #[allow(clippy::cognitive_complexity, clippy::cast_precision_loss)]
 #[inline]
-pub fn exec_binary<'run, 'event: 'run>(
-    op: BinOpKind,
-    lhs: &Value<'event>,
-    rhs: &Value<'event>,
-) -> Option<Cow<'run, Value<'event>>> {
-    // Lazy Heinz doesn't want to write that 10000 times
-    // - snot badger - Darach
-    use BinOpKind::*;
-    use Value::*;
-    match (&op, lhs, rhs) {
-        (Eq, Null, Null) => Some(static_bool!(true)),
-        (NotEq, Null, Null) => Some(static_bool!(false)),
-
-        // FIXME - do we want this?
-        // This is to make sure that == in a expression
-        // and a record pattern behaves the same.
-        (Eq, l, r) => Some(static_bool!(val_eq(l, r))),
-
-        (NotEq, l, r) =>
-        {
-            #[allow(clippy::if_not_else)]
-            Some(static_bool!(!val_eq(l, r)))
-        }
-
-        (op, Bool(l), Bool(r)) => match op {
-            And => Some(static_bool!(*l && *r)),
-            Or => Some(static_bool!(*l || *r)),
-            #[allow(clippy::if_not_else)]
-            Xor => Some(static_bool!(*l != *r)),
-            BitAnd => Some(static_bool!(*l & *r)),
-            BitOr => Some(static_bool!(*l | *r)),
-            BitXor => Some(static_bool!(*l ^ *r)),
-            _ => None,
-        },
-        (op, String(l), String(r)) => match op {
-            Gt => Some(static_bool!(l > r)),
-            Gte => Some(static_bool!(l >= r)),
-            Lt => Some(static_bool!(l < r)),
-            Lte => Some(static_bool!(l <= r)),
-            Add => Some(Cow::Owned(format!("{}{}", *l, *r).into())),
-            _ => None,
-        },
-        (op, I64(l), I64(r)) => match op {
-            BitAnd => Some(Cow::Owned(I64(*l & *r))),
-            BitOr => Some(Cow::Owned(I64(*l | *r))),
-            BitXor => Some(Cow::Owned(I64(*l ^ *r))),
-            Gt => Some(static_bool!(*l > *r)),
-            Gte => Some(static_bool!(*l >= *r)),
-            Lt => Some(static_bool!(*l < *r)),
-            Lte => Some(static_bool!(*l <= *r)),
-            Add => Some(Cow::Owned(I64(*l + *r))),
-            Sub => Some(Cow::Owned(I64(*l - *r))),
-            Mul => Some(Cow::Owned(I64(*l * *r))),
-            Div => Some(Cow::Owned(F64((*l as f64) / (*r as f64)))),
-            Mod => Some(Cow::Owned(I64(*l % *r))),
-            // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
-            // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
-            RBitShiftSigned => Some(Cow::Owned(I64(*l >> *r))),
-            RBitShiftUnsigned => Some(Cow::Owned(I64((*l as u64 >> *r) as i64))),
-            //(LBitShift, I64(l), I64(r)) => Some(Cow::Owned(I64(*l << *r))),
-            LBitShift => match (*l).checked_shl(*r as u32) {
-                Some(n) => Some(Cow::Owned(I64(n))),
-                None => None,
-            },
-            _ => None,
-        },
-        (op, l, r) => {
-            if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
-                match op {
-                    Gte => Some(static_bool!(l >= r)),
-                    Gt => Some(static_bool!(l > r)),
-                    Lt => Some(static_bool!(l < r)),
-                    Lte => Some(static_bool!(l <= r)),
-                    Add => Some(Cow::Owned(F64(l + r))),
-                    Sub => Some(Cow::Owned(F64(l - r))),
-                    Mul => Some(Cow::Owned(F64(l * r))),
-                    Div => Some(Cow::Owned(F64(l / r))),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        }
-    }
-}
-
-// TODO replace exec_binary with this once this is working from ast too - remove skip once replaced
-#[cfg_attr(tarpaulin, skip)]
-#[allow(clippy::cognitive_complexity)]
-#[inline]
-pub fn exec_binary2<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
-    inner: &'script Expr,
+pub fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
+    outer: &'run OuterExpr,
+    inner: &'run InnerExpr,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
-    Expr: BaseExpr,
-    'script: 'event,
+    OuterExpr: BaseExpr,
+    InnerExpr: BaseExpr,
     'event: 'run,
 {
     // Lazy Heinz doesn't want to write that 10000 times
@@ -292,9 +202,9 @@ where
             Mul => Ok(Cow::Owned(I64(*l * *r))),
             Div => Ok(Cow::Owned(F64((*l as f64) / (*r as f64)))),
             Mod => Ok(Cow::Owned(I64(*l % *r))),
-            // TODO use shl functions in https://doc.rust-lang.org/std/primitive.i64.html
             RBitShiftSigned => Ok(Cow::Owned(I64(*l >> *r))),
             RBitShiftUnsigned => Ok(Cow::Owned(I64((*l as u64 >> *r) as i64))),
+            // TODO switch right bit shift to use shl functions too
             //(LBitShift, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l << *r))),
             LBitShift => match (*l).checked_shl(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),

@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO rename exec_binary2 to exec_binary after it works in ast too
 use super::{
-    exec_binary2, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
+    exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
@@ -262,13 +261,7 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         let lhs = stry!(expr.lhs.run(opts, env, event, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, meta, local));
-        /*
-        match exec_binary(expr.kind, &lhs, &rhs) {
-            Some(v) => Ok(v),
-            None => error_invalid_binary(self, &expr.lhs, expr.kind, &lhs, &rhs),
-        }
-        */
-        exec_binary2(self, &expr.lhs, expr.kind, &lhs, &rhs)
+        exec_binary(self, expr, expr.kind, &lhs, &rhs)
     }
 
     fn unary(
@@ -281,6 +274,7 @@ where
         expr: &'script UnaryExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let rhs = stry!(expr.expr.run(opts, env, event, meta, local));
+        // TODO align this implemenation to be similar to exec_binary?
         match exec_unary(expr.kind, &rhs) {
             Some(v) => Ok(v),
             None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs),
