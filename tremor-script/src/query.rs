@@ -15,47 +15,14 @@
 use crate::ast::Warning;
 use crate::errors::*;
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
-use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
 use crate::pos::Range;
 use crate::prelude::*;
 use rental::rental;
-use serde::Serialize;
-use simd_json::borrowed::Value;
 use std::boxed::Box;
 use std::io::Write;
 use std::sync::Arc;
 
-#[derive(Debug, Serialize, PartialEq)]
-pub enum Return<'event> {
-    Emit {
-        value: Value<'event>,
-        port: Option<String>,
-    },
-    Drop,
-    EmitEvent {
-        port: Option<String>,
-    },
-}
-
-impl<'run, 'event> From<Cont<'run, 'event>> for Return<'event>
-where
-    'event: 'run,
-{
-    // This clones the data since we're returning it out of the scope of the
-    // esecution - we might want to investigate if we can get rid of this in some cases.
-    fn from(v: Cont<'run, 'event>) -> Self {
-        match v {
-            Cont::Cont(value) => Return::Emit {
-                value: value.into_owned(),
-                port: None,
-            },
-            Cont::Emit(value, port) => Return::Emit { value, port },
-            Cont::EmitEvent(port) => Return::EmitEvent { port },
-            Cont::Drop => Return::Drop,
-        }
-    }
-}
 #[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
 pub struct StmtRentalWrapper {
     pub stmt: Arc<rentals::Stmt>,
@@ -146,6 +113,8 @@ where
         })
     }
 
+    // Simple highlighter nothing to see here.
+    #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
         script.push('\n');
@@ -205,6 +174,7 @@ mod test {
     use super::*;
     use crate::highlighter;
 
+    #[cfg_attr(tarpaulin, skip)]
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
