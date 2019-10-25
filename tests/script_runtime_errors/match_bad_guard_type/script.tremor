@@ -1,0 +1,3 @@
+match true of
+  case true when "snot" => true
+end
