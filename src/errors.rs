@@ -27,6 +27,7 @@ use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
 use rdkafka;
 use rental;
+use reqwest;
 use rmp_serde;
 use serde_json;
 use serde_yaml;
@@ -103,6 +104,12 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
 impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
     fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Self {
         Self::from("Rental Error".to_string())
+    }
+}
+
+impl From<reqwest::UrlError> for Error {
+    fn from(e: reqwest::UrlError) -> Self {
+        Self::from(format!("Reqwest Url Error: {:?}", e))
     }
 }
 

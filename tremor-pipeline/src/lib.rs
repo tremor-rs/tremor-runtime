@@ -114,41 +114,12 @@ pub enum NodeKind {
     Operator,
 }
 
-// TODO add copy here?
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct EventOriginUri {
-    scheme: String,
-    host: String,
-    port: Option<u16>,
-    path: String,
-}
-
-impl EventOriginUri {
-    pub fn parse(url: &str) -> Result<Self> {
-        match Url::parse(url) {
-            Ok(r) => {
-                let host = r
-                    .host_str()
-                    // TODO add an error kind here
-                    .ok_or_else(|| Error::from("EventOriginUri Parse Error: Missing host"))?;
-                Ok(Self {
-                    scheme: r.scheme().to_string(),
-                    host: host.to_string(),
-                    port: r.port(),
-                    path: r.path().to_string(),
-                })
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     pub id: u64,
     pub data: tremor_script::LineValue,
     pub ingest_ns: u64,
-    pub origin_uri: Option<EventOriginUri>,
+    pub origin_uri: Option<Url>,
     pub kind: Option<SignalKind>,
     pub is_batch: bool,
 }

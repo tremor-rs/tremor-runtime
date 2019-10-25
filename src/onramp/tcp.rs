@@ -245,6 +245,8 @@ fn onramp_loop(
                                     //let origin_uri_str = "tremor-tcp:/127.0.0.1:9001";
                                     //let origin_uri_str = "tremor-tcp://:9001";
                                     //let origin_uri_str = "tremor-tcp://127.0.0.1:9001";
+                                    // TODO send origin_uri as Url struct down the pipeline,
+                                    // (avoid parsing from string like here)
                                     let origin_uri_str = format!(
                                         "tremor-tcp://{}:{}",
                                         client_addr.ip(),

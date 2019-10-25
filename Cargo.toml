@@ -56,7 +56,9 @@ serde_yaml = "0.8"
 simd-json = {version = "0.1", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
-url = "1.7" # we can't update because of deps ...
+# url version needs to be aligned with that in tremor-pipeline
+# TODO simplify
+url = { version = "2.1", features = ["serde"] }
 
 log = "0.4"
 serde_derive = "1"

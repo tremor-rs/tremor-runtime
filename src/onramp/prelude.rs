@@ -24,7 +24,8 @@ pub use simd_json::OwnedValue;
 // TODO pub here too?
 use std::mem;
 pub use std::thread;
-pub use tremor_pipeline::{Event, EventOriginUri};
+pub use tremor_pipeline::Event;
+pub use url::Url;
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
@@ -122,10 +123,8 @@ pub fn send_event2(
         for d in data {
             match codec.decode(d, *ingest_ns) {
                 Ok(Some(data)) => {
-                    // TODO send origin_uri as string instead of struct down the pipeline and parse
-                    // the string only when requested from tremor-script. should be cheaper and
-                    // will also make tremor context changes easier
-                    let origin_uri = match tremor_pipeline::EventOriginUri::parse(origin_uri_str) {
+                    // TODO avoid parse here by accepting origin_uri as Url struct in this function
+                    let origin_uri = match Url::parse(origin_uri_str) {
                         Ok(r) => Some(r),
                         Err(e) => {
                             error!(

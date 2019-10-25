@@ -42,7 +42,7 @@ error_chain! {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
     }
     foreign_links {
-        YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
+        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);
         SerdeError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
