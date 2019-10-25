@@ -82,23 +82,25 @@ macro_rules! test_cases {
 }
 
 test_cases!(
-    default_rule,
-    dimensions,
-    example_rule,
-    layered_limiting,
-    lru,
-    merge,
-    grou_by_time,
     // grou_by_size, .unwrap() this case fails because we have a issue w/ sized windows and group by
     // we keep this around as a reminder to resolve this in some way or the other
     // the current issue is that windows contain all groups so a sized
     // window of 10 that has 2 groups will emit both groups if the SUM of events reaches
     // 10, not emit a group when this group reaches 10 events
+    default_rule,
+    dimensions,
+    example_rule,
+    grou_by_time,
+    layered_limiting,
+    lru,
+    merge,
     multi_dimensions,
     mutate,
+    passthrough,
     patch,
     rewrite_root,
-    passthrough,
+    script_params,
+    script_params_overwrite,
     tremor_map,
     window_by_two,
 );
