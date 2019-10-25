@@ -86,4 +86,11 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(const_in_select, let_in_select, local_in_select,);
+test_cases!(
+    const_in_select,
+    let_in_select,
+    local_in_having,
+    local_in_select,
+    local_in_where,
+    local_in_group_by,
+);
