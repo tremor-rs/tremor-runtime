@@ -241,11 +241,22 @@ fn onramp_loop(
                                     );
                                     */
                                     // TODO remove later. temp code for testing
-                                    send_event(
+                                    //let origin_uri_str = "tremor-tcp";
+                                    //let origin_uri_str = "tremor-tcp:/127.0.0.1:9001";
+                                    //let origin_uri_str = "tremor-tcp://:9001";
+                                    //let origin_uri_str = "tremor-tcp://127.0.0.1:9001";
+                                    let origin_uri_str = format!(
+                                        "tremor-tcp://{}:{}",
+                                        client_addr.ip(),
+                                        client_addr.port()
+                                    );
+                                    dbg!(&origin_uri_str);
+                                    send_event2(
                                         &pipelines,
                                         preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
+                                        &origin_uri_str,
                                         id,
                                         buffer[0..n].to_vec(),
                                     );

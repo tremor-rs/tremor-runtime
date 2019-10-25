@@ -121,6 +121,7 @@ impl Operator for Batch {
                 id: self.event_id,
                 data,
                 ingest_ns: self.first_ns,
+                origin_uri: None,
                 kind: None,
                 is_batch: true,
             };
@@ -148,6 +149,7 @@ impl Operator for Batch {
                     id: self.event_id,
                     data,
                     ingest_ns: self.first_ns,
+                    origin_uri: None,
                     kind: None,
                     is_batch: true,
                 };
@@ -185,6 +187,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -198,6 +201,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("badger").into(),
             kind: None,
         };
@@ -218,6 +222,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -244,6 +249,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -264,6 +270,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
+            origin_uri: None,
             data: Value::from("badger").into(),
             kind: None,
         };
@@ -285,6 +292,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -296,6 +304,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -322,6 +331,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -335,6 +345,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
+            origin_uri: None,
             data: Value::Null.into(),
             kind: None,
         };
@@ -351,6 +362,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };
@@ -362,6 +374,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
+            origin_uri: None,
             data: Value::from("snot").into(),
             kind: None,
         };

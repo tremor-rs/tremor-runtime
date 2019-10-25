@@ -113,9 +113,9 @@ impl Rest {
             let insight = Event {
                 is_batch: false,
                 id: 0,
-
                 data: (Value::Null, m).into(),
                 ingest_ns: nanotime(),
+                origin_uri: None,
                 kind: None,
             };
 
@@ -146,6 +146,7 @@ impl Rest {
                     id: 0,
                     data: (Value::Null, m).into(),
                     ingest_ns: nanotime(),
+                    origin_uri: None,
                     kind: None,
                 };
 

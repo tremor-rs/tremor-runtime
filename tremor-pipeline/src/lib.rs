@@ -52,6 +52,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tremor_script::prelude::*;
 use tremor_script::query::*;
+use url::Url;
 
 pub mod config;
 pub mod errors;
@@ -113,11 +114,41 @@ pub enum NodeKind {
     Operator,
 }
 
+// TODO add copy here?
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventOriginUri {
+    scheme: String,
+    host: String,
+    port: Option<u16>,
+    path: String,
+}
+
+impl EventOriginUri {
+    pub fn parse(url: &str) -> Result<Self> {
+        match Url::parse(url) {
+            Ok(r) => {
+                let host = r
+                    .host_str()
+                    // TODO add an error kind here
+                    .ok_or_else(|| Error::from("EventOriginUri Parse Error: Missing host"))?;
+                Ok(Self {
+                    scheme: r.scheme().to_string(),
+                    host: host.to_string(),
+                    port: r.port(),
+                    path: r.path().to_string(),
+                })
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     pub id: u64,
     pub data: tremor_script::LineValue,
     pub ingest_ns: u64,
+    pub origin_uri: Option<EventOriginUri>,
     pub kind: Option<SignalKind>,
     pub is_batch: bool,
 }
@@ -595,6 +626,8 @@ impl ExecutableGraph {
                                 meta: Value::from(Object::default()),
                             }),
                             ingest_ns: timestamp,
+                            // TODO update this to point to tremor instance producing the metrics?
+                            origin_uri: None,
                             kind: None,
                             is_batch: false,
                         },
@@ -613,6 +646,8 @@ impl ExecutableGraph {
                                 meta: Value::from(Object::default()),
                             }),
                             ingest_ns: timestamp,
+                            // TODO update this to point to tremor instance producing the metrics?
+                            origin_uri: None,
                             kind: None,
                             is_batch: false,
                         },
@@ -786,6 +821,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::from(json!({"snot": "badger"})).into(),
             kind: None,
         };
@@ -829,6 +865,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::Null.into(),
             kind: None,
         };
@@ -852,6 +889,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
+            origin_uri: None,
             data: Value::Null.into(),
             kind: None,
         };
@@ -859,6 +897,7 @@ mod test {
             is_batch: false,
             id: 2,
             ingest_ns: 2,
+            origin_uri: None,
             data: Value::Null.into(),
             kind: None,
         };

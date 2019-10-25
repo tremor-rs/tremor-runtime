@@ -23,6 +23,7 @@ halfbrown = "0.1"
 log = "0.4"
 rental = "0.5"
 regex = "1"
+url = "2.1"
 
 [dev-dependencies]
 criterion = "0.3.0"

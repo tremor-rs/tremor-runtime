@@ -27,6 +27,7 @@ pub struct Lines {
 
 impl Lines {
     // TODO have the params here as a config struct
+    // also break lines on string (eg: \r\n)
     pub fn new(separator: char, max_length: usize) -> Self {
         Lines {
             separator: separator as u8,
@@ -57,6 +58,7 @@ impl Lines {
 
         if total_fragment_length <= self.max_length {
             self.buffer.extend_from_slice(v);
+            // TODO evaluate if the overhead of trace logging is worth it
             trace!(
                 "Saved line fragment of length {} to preprocessor buffer: {:?}",
                 v.len(),

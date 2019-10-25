@@ -20,6 +20,7 @@ use error_chain::*;
 use regex;
 use serde_yaml;
 use std;
+use url;
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
         Self::from(format!("Poison Error: {:?}", e))
@@ -28,6 +29,11 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
 impl From<regex::Error> for Error {
     fn from(e: regex::Error) -> Self {
         Self::from(format!("Regex Error: {:?}", e))
+    }
+}
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Self::from(format!("Url Parse Error: {:?}", e))
     }
 }
 

@@ -484,6 +484,9 @@ impl Operator for TrickleSelect {
                         Event {
                             id: event.id,
                             ingest_ns: event.ingest_ns,
+                            // TODO make this work - need Copy on event.origin_uri
+                            //origin_uri: event.origin_uri,
+                            origin_uri: None,
                             is_batch: event.is_batch,
                             kind: event.kind,
                             data: (result, event_meta.clone()).into(),

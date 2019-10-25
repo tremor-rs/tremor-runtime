@@ -3778,6 +3778,7 @@ dependencies = [
  "serde_yaml 0.8.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.1.25 (git+https://github.com/simd-lite/simdjson-rs?branch=from-object)",
  "tremor-script 0.1.0",
+ "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "window 0.1.0",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

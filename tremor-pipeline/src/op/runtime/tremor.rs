@@ -62,6 +62,7 @@ impl Operator for Tremor {
     #[allow(mutable_transmutes)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
+        dbg!(&event.origin_uri);
         let data = event.data.suffix();
         let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
         let mut event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
