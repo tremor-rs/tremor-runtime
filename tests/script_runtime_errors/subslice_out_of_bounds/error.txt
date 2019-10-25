@@ -1,1 +1,3 @@
-Trying to access an index that is out of range 1..3
+Error: 
+    1 | event[1:4]
+      |       ^^^ Trying to access an index that is out of range 1..3

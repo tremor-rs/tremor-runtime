@@ -1,1 +1,3 @@
-The binary operation `+` is not defined for the type `array` and `array`
+Error: 
+    1 | [1] + [2]
+      | ^^^^^^^^^ The binary operation `+` is not defined for the type `array` and `array`

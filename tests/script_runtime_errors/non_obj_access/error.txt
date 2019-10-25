@@ -1,1 +1,3 @@
-Conflicting types, got integer but expected record
+Error: 
+    1 | event.snot.badger
+      |            ^^^^^^ Conflicting types, got integer but expected record

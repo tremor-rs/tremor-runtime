@@ -1,1 +1,3 @@
-Trying to access a non existing event key `badger`
+Error: 
+    1 | event.badger
+      |       ^^^^^^ Trying to access a non existing event key `badger`

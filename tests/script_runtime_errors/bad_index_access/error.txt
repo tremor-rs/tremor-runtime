@@ -1,1 +1,3 @@
-Conflicting types, got array but expected string
+Error: 
+    2 | event[a]
+      |       ^ Conflicting types, got array but expected string

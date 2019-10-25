@@ -18,6 +18,7 @@ use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::utils::*;
 use tremor_script::{AggrType, EventContext, Script};
 
@@ -53,7 +54,13 @@ macro_rules! test_cases {
                     let  mut meta = Value::from(Object::default());
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
                     if let Err(e) = s {
-                        assert_eq!(err, format!("{}", e));
+                        let mut h = Dumb::new();
+                        script.format_error_with(&mut h, &e)?;
+                        h.finalize()?;
+                        let got = h.to_string();
+                        let got = got.trim();
+                        println!("{}", got);
+                        assert_eq!(err, got);
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);

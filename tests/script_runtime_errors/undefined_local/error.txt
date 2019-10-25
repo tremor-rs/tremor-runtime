@@ -1,1 +1,3 @@
-Trying to access a non existing local key `missing_var`
+Error: 
+    7 | missing_var
+      | ^^^^^^^^^^^ Trying to access a non existing local key `missing_var`

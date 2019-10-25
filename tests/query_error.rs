@@ -18,12 +18,10 @@ use std::io::prelude::*;
 use std::path::Path;
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
-use tremor_pipeline::Event;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
-use tremor_script::utils::*;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();

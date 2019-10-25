@@ -1,1 +1,3 @@
-Bad type passed to function math::max/2
+Error: 
+    1 | math::max("snot", 7)
+      | ^^^^^^^^^^^^^^^^^^^^ Bad type passed to function math::max/2

@@ -1,1 +1,3 @@
-Conflicting types, got integer but expected array
+Error: 
+    2 | event.snot[k]
+      |            ^ Conflicting types, got integer but expected array

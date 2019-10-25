@@ -17,6 +17,7 @@ use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::Script;
 
 macro_rules! test_cases {
@@ -39,8 +40,14 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
                 let s = Script::parse(&contents, &*FN_REGISTRY.lock()?);
-                if let Err(e) = dbg!(s) {
-                    assert_eq!(err, format!("{}", e));
+                if let Err(e) = s {
+                    let mut h = Dumb::new();
+                    Script::format_error_from_script(&contents, &mut h, &e)?;
+                    h.finalize()?;
+                    let got = h.to_string();
+                    let got = got.trim();
+                    println!("{}", got);
+                    assert_eq!(err, got);
                 } else {
                     println!("Expected error, but got succeess");
                     assert!(false);

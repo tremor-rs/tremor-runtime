@@ -1,1 +1,3 @@
-Conflicting types, got integer but expected record
+Error: 
+    1 | merge 7 of {"snot": "badger"} end
+      |       ^ Conflicting types, got integer but expected record

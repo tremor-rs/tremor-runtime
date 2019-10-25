@@ -1,1 +1,3 @@
-The unary operation `-` is not defined for the type `boolean`
+Error: 
+    1 | - false
+      | ^^^^^^^ The unary operation `-` is not defined for the type `boolean`
