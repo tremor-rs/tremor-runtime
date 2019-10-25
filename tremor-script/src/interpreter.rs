@@ -202,10 +202,14 @@ where
             Mul => Ok(Cow::Owned(I64(*l * *r))),
             Div => Ok(Cow::Owned(F64((*l as f64) / (*r as f64)))),
             Mod => Ok(Cow::Owned(I64(*l % *r))),
-            RBitShiftSigned => Ok(Cow::Owned(I64(*l >> *r))),
-            RBitShiftUnsigned => Ok(Cow::Owned(I64((*l as u64 >> *r) as i64))),
-            // TODO switch right bit shift to use shl functions too
-            //(LBitShift, I64(l), I64(r)) => Ok(Cow::Owned(I64(*l << *r))),
+            RBitShiftSigned => match (*l).checked_shr(*r as u32) {
+                Some(n) => Ok(Cow::Owned(I64(n))),
+                None => error_invalid_bitshift(outer, inner),
+            },
+            RBitShiftUnsigned => match (*l as u64).checked_shr(*r as u32) {
+                Some(n) => Ok(Cow::Owned(I64(n as i64))),
+                None => error_invalid_bitshift(outer, inner),
+            },
             LBitShift => match (*l).checked_shl(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),
                 None => error_invalid_bitshift(outer, inner),
