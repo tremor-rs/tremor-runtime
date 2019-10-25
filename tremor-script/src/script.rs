@@ -125,6 +125,7 @@ where
         })
     }
 
+    #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         h.highlight(tokens)
@@ -136,17 +137,12 @@ where
         e: &Error,
     ) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        match e.context() {
-            (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
-                h.finalize()
-            }
-
-            _other => {
-                write!(h.get_writer(), "Error: {}", e)?;
-                h.finalize()
-            }
+        if let (Some(Range(start, end)), _) = e.context() {
+            h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
+        } else {
+            write!(h.get_writer(), "Error: {}", e)?;
         }
+        h.finalize()
     }
 
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {

@@ -39,6 +39,7 @@ use glob;
 use kv;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
+use simd_json::value::ValueTrait;
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
@@ -266,6 +267,7 @@ pub struct ExtractorError {
     pub msg: String,
 }
 
+#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for ExtractorError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.msg)
@@ -354,8 +356,8 @@ impl Extractor {
         'script: 'event,
         'event: 'run,
     {
-        match v {
-            Value::String(ref s) => match self {
+        if let Some(s) = v.as_str() {
+            match self {
                 Self::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
                         if !result_needed {
@@ -494,10 +496,11 @@ impl Extractor {
                     };
                     Ok(Value::from(d))
                 }
-            },
-            _ => Err(ExtractorError {
+            }
+        } else {
+            Err(ExtractorError {
                 msg: "Extractors are currently only supported against Strings".into(),
-            }),
+            })
         }
     }
 }

@@ -114,6 +114,7 @@ test_cases!(
     lexer_unterminated_extractor2,
     lexer_unterminated_ident2,
     lexer_unterminated_string2,
+    unknown_extractor,
 );
 
 ignored_cases!(
