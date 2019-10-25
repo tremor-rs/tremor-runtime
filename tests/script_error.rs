@@ -58,6 +58,45 @@ macro_rules! test_cases {
     };
 }
 
+macro_rules! ignored_cases {
+    ($($file:ident),* ,) => {
+        $(
+            #[test]
+            #[ignore]
+            fn $file() -> Result<()> {
+
+                tremor_runtime::functions::load()?;
+                let script_file = concat!("tests/script_errors/", stringify!($file), "/script.tremor");
+                let err_file = concat!("tests/script_errors/", stringify!($file), "/error.txt");
+
+                println!("Loading script: {}", script_file);
+                let mut file = File::open(script_file)?;
+                let mut contents = String::new();
+                file.read_to_string(&mut contents)?;
+
+                let mut file = File::open(err_file)?;
+                let mut err = String::new();
+                file.read_to_string(&mut err)?;
+                let err = err.trim();
+                let s = Script::parse(&contents, &*FN_REGISTRY.lock()?);
+                if let Err(e) = s {
+                    let mut h = Dumb::new();
+                    Script::format_error_from_script(&contents, &mut h, &e)?;
+                    h.finalize()?;
+                    let got = h.to_string();
+                    let got = got.trim();
+                    println!("{}", got);
+                    assert_eq!(err, got);
+                } else {
+                    println!("Expected error, but got succeess");
+                    assert!(false);
+                }
+                Ok(())
+            }
+        )*
+    };
+}
+
 test_cases!(
     double_const,
     function_error_1,
@@ -67,4 +106,24 @@ test_cases!(
     invalid_const_binary,
     invalid_const_unary,
     invalid_extractor,
+    lexer_diamond,
+    lexer_double_minus,
+    lexer_ngt,
+    lexer_triple_colon,
+    lexer_unterminated_extractor,
+    lexer_unterminated_extractor2,
+    lexer_unterminated_ident2,
+    lexer_unterminated_string2,
+);
+
+ignored_cases!(
+    lexer_bad_float,
+    lexer_bad_hex,
+    lexer_bad_hex2,
+    lexer_bad_hex3,
+    lexer_unterminated_heredoc,
+    lexer_unterminated_heredoc2,
+    lexer_unterminated_ident,
+    lexer_unterminated_string,
+    lexer_bad_int,
 );

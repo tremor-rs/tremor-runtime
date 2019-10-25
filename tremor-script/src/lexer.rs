@@ -35,18 +35,6 @@ pub trait ParserSource {
     fn start_index(&self) -> BytePos;
 }
 
-impl<'a, S> ParserSource for &'a S
-where
-    S: ?Sized + ParserSource,
-{
-    fn src(&self) -> &str {
-        (**self).src()
-    }
-    fn start_index(&self) -> BytePos {
-        (**self).start_index()
-    }
-}
-
 impl ParserSource for str {
     fn src(&self) -> &str {
         self
@@ -598,16 +586,8 @@ pub struct Tokenizer<'input> {
 impl<'input> Tokenizer<'input> {
     fn new(input: &'input str) -> Self {
         let lexer = Lexer::new(input);
-        let start = Location {
-            line: 0,
-            column: 0,
-            absolute: 0,
-        };
-        let end = Location {
-            line: 0,
-            column: 0,
-            absolute: 0,
-        };
+        let start = Location::default();
+        let end = Location::default();
         Tokenizer {
             eos: false,
             iter: lexer.peekable(),

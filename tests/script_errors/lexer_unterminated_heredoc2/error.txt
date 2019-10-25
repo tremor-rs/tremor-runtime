@@ -1,0 +1,4 @@
+Error: 
+    1 | """
+    2 | this is a heredoc
+      | ^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate a here doc with with a closing '"""'
