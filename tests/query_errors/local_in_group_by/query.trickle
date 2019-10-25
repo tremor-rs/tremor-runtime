@@ -1,0 +1,5 @@
+select
+event
+from in
+group by set(a + b)
+into out;
