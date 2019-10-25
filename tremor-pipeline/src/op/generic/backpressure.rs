@@ -200,6 +200,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1,
@@ -216,6 +217,7 @@ mod test {
         // Without a timeout event sent a second event,
         // it too should pass
         let event2 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 2,
             ingest_ns: 2,
@@ -242,6 +244,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
@@ -262,6 +265,7 @@ mod test {
         m.insert("time".into(), 200.0.into());
         m.insert("backpressure-output".into(), "out".into());
         let mut insight = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
@@ -278,6 +282,7 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 2,
             ingest_ns: 2_000_000 - 1,
@@ -294,6 +299,7 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000,
@@ -310,6 +316,7 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000 + 1,
@@ -338,6 +345,7 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 2,
@@ -351,6 +359,7 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight_reset = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 2,
@@ -390,6 +399,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
@@ -406,6 +416,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event2 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 2,
             ingest_ns: 1_000_001,
@@ -427,6 +438,7 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
@@ -446,6 +458,7 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 2,
             ingest_ns: 2_000_000 - 1,
@@ -462,6 +475,7 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000,
@@ -478,6 +492,7 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
+            origin_uri: None,
             is_batch: false,
             id: 3,
             ingest_ns: 2_000_000 + 1,

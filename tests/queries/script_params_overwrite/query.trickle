@@ -1,5 +1,3 @@
-define grouper::bucket operator bucket;
-
 define script badger
 with
   value = "snot"

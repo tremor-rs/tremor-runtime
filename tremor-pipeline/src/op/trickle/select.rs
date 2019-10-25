@@ -654,6 +654,7 @@ mod test {
 
     fn test_event(s: u64) -> Event {
         Event {
+            origin_uri: None,
             is_batch: false,
             id: s,
             ingest_ns: s * 1_000_000_000,

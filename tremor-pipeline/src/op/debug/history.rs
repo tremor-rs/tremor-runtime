@@ -114,6 +114,7 @@ mod test {
             id: "badger".into(),
         };
         let event = Event {
+            origin_uri: None,
             is_batch: false,
             id: 1,
             ingest_ns: 1,

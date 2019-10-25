@@ -153,6 +153,19 @@ pub struct Event {
     pub is_batch: bool,
 }
 
+impl Default for Event {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            data: Value::Null.into(),
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+        }
+    }
+}
+
 impl Event {
     pub fn value_meta_iter(&self) -> ValueMetaIter {
         ValueMetaIter {

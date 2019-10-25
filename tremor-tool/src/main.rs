@@ -341,11 +341,10 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         flow.enqueue(
             "in1",
             tremor_pipeline::Event {
-                is_batch: false,
                 id: num as u64,
                 ingest_ns: utils::nanotime(),
                 data,
-                kind: None,
+                ..tremor_pipeline::Event::default()
             },
             &mut eventset,
         )?;
