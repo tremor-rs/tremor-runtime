@@ -10,7 +10,8 @@ let event = patch event of
   erase "aa",
   merge => { "fleek": "flork" },
   merge "cc" => {"flip": "flop"},
-  insert "aa" => "bar"
+  insert "aa" => "bar",
+  merge "xx" => {"cake": "cookie"}
 end;
 
 emit patch merge event of { "foo": "bar" } end of update "foo" => "badger" end;

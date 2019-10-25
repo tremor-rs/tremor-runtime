@@ -8,7 +8,9 @@
   "ss": "snot" != "badger",
   "aa1": [1,2,3] == [1,2,3],
   "aa2": [1,2,3] != [3,2,1],
+  "aa3": [1,2,3] != [1,2],
   "rr1": { "snot": "badger" } == { "snot": "badger" },
   "rr2": { "snot": "badger" } != { "badger": "snot" },
-  "rr3": { "snot": 1 } == { "snot": 1.0 },
+  "rr3": { "snot": "badger" } != { "snot": "badger", "badger": "snot" },
+  "rr4": { "snot": 1 } == { "snot": 1.0 },
 }

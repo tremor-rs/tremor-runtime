@@ -226,7 +226,8 @@ pub fn exec_binary<'run, 'event: 'run>(
     }
 }
 
-// TODO replace exec_binary with this once this is working from ast too
+// TODO replace exec_binary with this once this is working from ast too - remove skip once replaced
+#[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::cognitive_complexity)]
 #[inline]
 pub fn exec_binary2<'run, 'event, 'script, Expr>(
@@ -576,7 +577,7 @@ where
 
 #[inline]
 fn patch_value<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+    _outer: &'script Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
@@ -591,6 +592,7 @@ where
     'script: 'event,
     'event: 'run,
 {
+    let patch_expr = expr;
     for op in &expr.operations {
         // NOTE: This if is inside the for loop to prevent obj to be updated
         // between iterations and possibly lead to dangling pointers
@@ -600,7 +602,7 @@ where
                     let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
                     let new_value = stry!(expr.run(opts, env, event, meta, local));
                     if obj.contains_key(&new_key) {
-                        return error_patch_key_exists(outer, expr, new_key.to_string());
+                        return error_patch_key_exists(patch_expr, ident, new_key.to_string());
                     } else {
                         obj.insert(new_key, new_value.into_owned());
                     }
@@ -611,7 +613,11 @@ where
                     if obj.contains_key(&new_key) {
                         obj.insert(new_key, new_value.into_owned());
                     } else {
-                        return error_patch_update_key_missing(outer, expr, new_key.to_string());
+                        return error_patch_update_key_missing(
+                            patch_expr,
+                            expr,
+                            new_key.to_string(),
+                        );
                     }
                 }
                 PatchOperation::Upsert { ident, expr } => {
@@ -628,7 +634,7 @@ where
                     let to = stry!(to.eval_to_string(opts, env, event, meta, local));
 
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(outer, expr, to.to_string());
+                        return error_patch_key_exists(patch_expr, expr, to.to_string());
                     }
                     if let Some(old) = obj.remove(&from) {
                         obj.insert(to, old);
@@ -639,7 +645,7 @@ where
                     let to = stry!(to.eval_to_string(opts, env, event, meta, local));
 
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(outer, expr, to.to_string());
+                        return error_patch_key_exists(patch_expr, expr, to.to_string());
                     }
                     if let Some(old) = obj.get(&from) {
                         let old = old.clone();
@@ -652,19 +658,19 @@ where
 
                     match obj.get_mut(&new_key) {
                         Some(value @ Value::Object(_)) => {
-                            stry!(merge_values(outer, expr, value, &merge_spec));
+                            stry!(merge_values(patch_expr, expr, value, &merge_spec));
                         }
                         Some(other) => {
                             return error_patch_merge_type_conflict(
-                                outer,
-                                expr,
+                                patch_expr,
+                                ident,
                                 new_key.to_string(),
                                 &other,
                             );
                         }
                         None => {
                             let mut new_value = Value::from(Object::new());
-                            stry!(merge_values(outer, expr, &mut new_value, &merge_spec));
+                            stry!(merge_values(patch_expr, expr, &mut new_value, &merge_spec));
                             obj.insert(new_key, new_value);
                         }
                     }
@@ -672,11 +678,11 @@ where
                 PatchOperation::TupleMerge { expr } => {
                     let merge_spec = stry!(expr.run(opts, env, event, meta, local));
 
-                    stry!(merge_values(outer, expr, value, &merge_spec));
+                    stry!(merge_values(patch_expr, expr, value, &merge_spec));
                 }
             }
         } else {
-            return error_need_obj(outer, &expr.target, value.value_type());
+            return error_need_obj(patch_expr, &expr.target, value.value_type());
         }
     }
     Ok(())
