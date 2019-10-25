@@ -1,1 +1,1 @@
-The unary operation operation `not` is not defined for the type `string`
+The unary operation `not` is not defined for the type `string`
