@@ -107,6 +107,7 @@ grok = "1"
 matches = "0.1"
 # criterion = "0.2"
 pretty_assertions = "0.6.1"
+regex = "1"
 
 [features]
 default = ["mssql", "kafka", "bench" ]

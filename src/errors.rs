@@ -143,6 +143,7 @@ error_chain! {
         DateTimeParseError(chrono::ParseError);
         SnappyError(snap::Error);
         AddrParseError(std::net::AddrParseError);
+        RegexError(regex::Error);
     }
 
     errors {

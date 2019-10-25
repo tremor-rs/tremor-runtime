@@ -29,6 +29,7 @@ macro_rules! test_cases {
                 let script_file = concat!("tests/script_errors/", stringify!($file), "/script.tremor");
                 let err_file = concat!("tests/script_errors/", stringify!($file), "/error.txt");
 
+                println!("Loading script: {}", script_file);
                 let mut file = File::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
