@@ -3,4 +3,6 @@ ignore:
   - "tremor-script/src/ast/base_expr.rs"  # This are only getters
   - "tremor-script/src/registry/custom_fn.rs" # behind a feature flag - not used
   - "**/errors.rs"  # Just lots of error strings
-  - "depricated/**"
+  - "depricated/**" # depricated code, for storage not running - inactive
+  - "**/main.rs" # main files are cli entry points
+  - "**/args.rs" # Files for clap argument parsing

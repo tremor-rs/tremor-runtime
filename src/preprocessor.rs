@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod gelf;
+pub(crate) use gelf::GELF;
 mod lines;
 
 use crate::errors::*;
@@ -38,7 +39,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "gzip" => Ok(Box::new(Gzip {})),
         "decompress" => Ok(Box::new(Decompress {})),
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
-        "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
+        "gelf-chunking" => Ok(Box::new(GELF::default())),
         "gelf-chunking-tcp" => Ok(Box::new(gelf::GELF::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
         "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),

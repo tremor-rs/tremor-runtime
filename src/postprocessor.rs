@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod gelf;
+pub(crate) use gelf::GELF;
 
 use crate::errors::*;
 use base64;
@@ -37,7 +38,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "lz4" => Ok(Box::new(CompressLz4 {})),
         "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
         "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
-        "gelf-chunking" => Ok(Box::new(gelf::GELF::default())),
+        "gelf-chunking" => Ok(Box::new(GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
 }
