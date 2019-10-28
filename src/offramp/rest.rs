@@ -14,9 +14,9 @@
 
 use crate::offramp::prelude::*;
 use crate::rest::HttpC;
+use crossbeam_channel::bounded;
 use halfbrown::HashMap;
 use std::str;
-use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
 use tremor_script::prelude::*;
@@ -94,7 +94,7 @@ impl Rest {
     fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
-        let (tx, rx) = channel();
+        let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let pipelines: Vec<(TremorURL, PipelineAddr)> = self
             .pipelines

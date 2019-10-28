@@ -39,9 +39,9 @@ use halfbrown::HashMap;
 // use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
+use crossbeam_channel::bounded;
 use simd_json::json;
 use std::str;
-use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
 use tremor_script::prelude::*;
@@ -128,7 +128,7 @@ impl Elastic {
     fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
-        let (tx, rx) = channel();
+        let (tx, rx) = bounded(1);
         let pipelines: Vec<(TremorURL, PipelineAddr)> = self
             .pipelines
             .iter()
