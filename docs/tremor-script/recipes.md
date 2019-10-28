@@ -48,7 +48,7 @@ Here we extract the `log_level`  and validate of that the it is one of `ERROR`, 
 
 ## Replacing a field with an extraction
 
-When extracting a field to merge with with the event and wanting to remove  the extracted field we can take advantage of the `merge` expressions behaviour that it will treat `null` in merged objects as a command to delete the data by setting the field to replace to `null` before merging.
+When extracting a field to merge with with the event and wanting to remove  the extracted field we can take advantage of the `merge` expressions behaviour that it will treat `null` in merged records as a command to delete the data by setting the field to replace to `null` before merging.
 
 ```tremor
 # event = %{"message": "John Doe"}
@@ -81,8 +81,8 @@ end;
 To make boolean decisions we can match on `true` or `false`.
 
 ```tremor
-match type::is_object(event) of
-  case true => let event_type = "object"
+match type::is_record(event) of
+  case true => let event_type = "record"
   case false => let event_type = "other"
 end
 ```
