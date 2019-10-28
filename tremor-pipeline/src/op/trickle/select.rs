@@ -199,7 +199,8 @@ impl WindowTrait for TumblingWindowOnTime {
             .as_ref()
             .and_then(|script| script.suffix().script.as_ref())
             .map(|script| {
-                let context = EventContext::from_ingest_ns(event.ingest_ns);
+                // TODO avoid origin_uri clone here
+                let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
                 let (mut unwind_event, mut event_meta) = event.data.parts();
                 let value = script.run(
                     &context,
@@ -264,7 +265,8 @@ impl WindowTrait for TumblingWindowOnNumber {
             .as_ref()
             .and_then(|script| script.suffix().script.as_ref())
             .map(|script| {
-                let context = EventContext::from_ingest_ns(event.ingest_ns);
+                // TODO avoid origin_uri clone here
+                let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
                 let (mut unwind_event, mut event_meta) = event.data.parts();
                 let value = script.run(
                     &context,
@@ -371,7 +373,8 @@ impl Operator for TrickleSelect {
         consts[WINDOW_CONST_ID] = Value::Null;
         consts[GROUP_CONST_ID] = Value::Null;
         consts[ARGS_CONST_ID] = Value::Null;
-        let ctx = EventContext::from_ingest_ns(event.ingest_ns);
+        // TODO avoid origin_uri clone here
+        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
         //
         // Before any select processing, we filter by where clause

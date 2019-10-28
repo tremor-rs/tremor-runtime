@@ -30,7 +30,10 @@ fn eval(src: &str) -> Result<String> {
     let mut event = Value::from(Object::new());
     let mut meta = Value::from(Object::new());
     let value = script.run(
-        &EventContext { at: 0 },
+        &EventContext {
+            at: 0,
+            origin_uri: None,
+        },
         AggrType::Emit,
         &mut event,
         &mut meta,

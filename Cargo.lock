@@ -3778,7 +3778,6 @@ dependencies = [
  "serde_yaml 0.8.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.1.25 (git+https://github.com/simd-lite/simdjson-rs?branch=from-object)",
  "tremor-script 0.1.0",
- "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "window 0.1.0",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -3850,7 +3849,7 @@ dependencies = [
  "tokio-threadpool 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.1.0",
  "tremor-script 0.1.0",
- "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "yup-oauth2 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -3890,6 +3889,7 @@ dependencies = [
  "simd-json 0.1.25 (git+https://github.com/simd-lite/simdjson-rs?branch=from-object)",
  "termcolor 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-xid 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -4097,7 +4097,6 @@ dependencies = [
  "idna 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "matches 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "percent-encoding 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

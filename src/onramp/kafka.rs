@@ -164,13 +164,17 @@ fn onramp_loop(
                     .collect();
                 match errors.as_slice() {
                     [None] => good_topics.push(topic),
-                    [Some(e)] => {
-                        error!("Kafka error for topic '{}': {:?}. Not subscring!", topic, e)
-                    }
-                    _ => error!("Unknown kafka error for topic '{}'. Not subscring!", topic),
+                    [Some(e)] => error!(
+                        "Kafka error for topic '{}': {:?}. Not subscribing!",
+                        topic, e
+                    ),
+                    _ => error!(
+                        "Unknown kafka error for topic '{}'. Not subscribing!",
+                        topic
+                    ),
                 }
             }
-            Err(e) => error!("Kafka error for topic '{}': {}. Not subscring!", topic, e),
+            Err(e) => error!("Kafka error for topic '{}': {}. Not subscribing!", topic, e),
         };
     }
 
@@ -226,6 +230,8 @@ fn onramp_loop(
                             &mut preprocessors,
                             &mut codec,
                             &mut ingest_ns,
+                            // TODO proper origin uri here
+                            None,
                             id,
                             data.to_vec(),
                         );

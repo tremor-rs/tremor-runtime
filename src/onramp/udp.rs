@@ -24,7 +24,7 @@ const ONRAMP: Token = Token(0);
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// The port to listen on.
-    pub port: u32,
+    pub port: u16,
     pub host: String,
     /*
     #[serde(default = "dflt::d_false")]
@@ -98,13 +98,21 @@ fn onramp_loop(
         for _event in events.iter() {
             loop {
                 use std::io::ErrorKind;
-                match socket.recv(&mut buf) {
-                    Ok(n) => {
+                match socket.recv_from(&mut buf) {
+                    Ok((n, sender_addr)) => {
+                        let origin_uri = tremor_pipeline::EventOriginUri {
+                            scheme: "tremor-udp".to_string(),
+                            host: sender_addr.ip().to_string(),
+                            // TODO use server-side receive port here?
+                            port: Some(sender_addr.port()),
+                            path: config.port.to_string(), // captures receive port
+                        };
                         send_event(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
                             &mut ingest_ns,
+                            Some(origin_uri),
                             id,
                             buf[0..n].to_vec(),
                         );

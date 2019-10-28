@@ -29,7 +29,7 @@ const BUFFER_SIZE_BYTES: usize = 8192;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
-    pub port: u32,
+    pub port: u16,
     pub host: String,
     //#[serde(default = "dflt_bsize")]
     //pub buffer_size_bytes: usize,
@@ -168,45 +168,9 @@ fn onramp_loop(
                     }) = connections[token.0]
                     {
                         // TODO test re-connections
+                        // TODO store host/port info from here in TremorTcpConnection struct
+                        // so that we don't have to look it up on every event?
                         let client_addr = stream.peer_addr()?;
-
-                        /* .unwrap() implement based on URI
-                        let mut meta = tremor_pipeline::metamap! {
-                            "source_id" => token.0.to_string(),
-                            "source_ip" => client_addr.ip().to_string(),
-                            "source_port" => client_addr.port()
-                        };
-                        */
-
-                        /*
-                        // TODO remove, since we do this via metamap macro now
-                        let mut meta = tremor_pipeline::MetaMap::new();
-                        meta.insert(
-                            "source_id".to_string(),
-                            // TODO see if this is the best way to achieve this
-                            //simd_json::OwnedValue::from(token.0.to_string()),
-                            simd_json::value::owned::Value::String(token.0.to_string()),
-                        );
-                        meta.insert(
-                            "source_ip".to_string(),
-                            //simd_json::OwnedValue::from(client_addr.ip().to_string()),
-                            simd_json::value::owned::Value::String(client_addr.ip().to_string()),
-                        );
-                        meta.insert(
-                            "source_port".to_string(),
-                            simd_json::OwnedValue::from(client_addr.port()),
-                            //simd_json::value::owned::Value::I64(client_addr.port() as i64),
-                        );
-                        // TODO figure out why object insert is not working
-                        //let mut test: HashMap<String, String> = HashMap::new();
-                        //test.insert("num".to_string(), "42".to_string());
-                        //meta.insert(
-                        //    "test".to_string(),
-                        //    //simd_json::OwnedValue::from(test),
-                        //    simd_json::value::owned::Value::Object(test),
-                        //);
-                        */
-
                         loop {
                             match stream.read(&mut buffer) {
                                 Ok(0) => {
@@ -230,35 +194,19 @@ fn onramp_loop(
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
-                                    /*
+                                    let origin_uri = tremor_pipeline::EventOriginUri {
+                                        scheme: "tremor-tcp".to_string(),
+                                        host: client_addr.ip().to_string(),
+                                        port: Some(client_addr.port()),
+                                        // captures server port and connection id
+                                        path: format!("{}/{}", config.port, token.0),
+                                    };
                                     send_event(
-                                        &pipelines,
-                                        &mut preprocessors,
-                                        &mut codec,
-                                        &mut ingest_ns,
-                                        id,
-                                        buffer[0..n].to_vec(),
-                                    );
-                                    */
-                                    // TODO remove later. temp code for testing
-                                    //let origin_uri_str = "tremor-tcp";
-                                    //let origin_uri_str = "tremor-tcp:/127.0.0.1:9001";
-                                    //let origin_uri_str = "tremor-tcp://:9001";
-                                    //let origin_uri_str = "tremor-tcp://127.0.0.1:9001";
-                                    // TODO send origin_uri as Url struct down the pipeline,
-                                    // (avoid parsing from string like here)
-                                    let origin_uri_str = format!(
-                                        "tremor-tcp://{}:{}",
-                                        client_addr.ip(),
-                                        client_addr.port()
-                                    );
-                                    dbg!(&origin_uri_str);
-                                    send_event2(
                                         &pipelines,
                                         preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
-                                        &origin_uri_str,
+                                        Some(origin_uri),
                                         id,
                                         buffer[0..n].to_vec(),
                                     );

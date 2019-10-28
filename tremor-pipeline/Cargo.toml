@@ -23,9 +23,6 @@ halfbrown = "0.1"
 log = "0.4"
 rental = "0.5"
 regex = "1"
-# url version needs to be aligned with that in tremor-runtime
-# TODO simplify
-url = { version = "2.1", features = ["serde"] }
 
 [dev-dependencies]
 criterion = "0.3.0"

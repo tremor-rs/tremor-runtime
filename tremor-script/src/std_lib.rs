@@ -20,6 +20,7 @@ mod float;
 mod integer;
 mod json;
 mod math;
+mod origin;
 mod random;
 mod re;
 mod record;
@@ -40,6 +41,7 @@ pub fn load(registry: &mut Registry) {
     integer::load(registry);
     json::load(registry);
     math::load(registry);
+    origin::load(registry);
     random::load(registry);
     re::load(registry);
     record::load(registry);

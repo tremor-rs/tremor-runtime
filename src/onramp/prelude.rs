@@ -24,8 +24,7 @@ pub use simd_json::OwnedValue;
 // TODO pub here too?
 use std::mem;
 pub use std::thread;
-pub use tremor_pipeline::Event;
-pub use url::Url;
+pub use tremor_pipeline::{Event, EventOriginUri};
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
@@ -64,6 +63,7 @@ pub fn send_event(
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     ingest_ns: &mut u64,
+    origin_uri: Option<tremor_pipeline::EventOriginUri>,
     id: u64,
     data: Vec<u8>,
 ) {
@@ -76,72 +76,8 @@ pub fn send_event(
                         id,
                         data,
                         ingest_ns: *ingest_ns,
-                        origin_uri: None,
-                        kind: None,
-                    };
-                    let len = pipelines.len();
-                    for (input, addr) in &pipelines[..len - 1] {
-                        if let Some(input) = input.instance_port() {
-                            if let Err(e) = addr.addr.send(PipelineMsg::Event {
-                                input: input.into(),
-                                event: event.clone(),
-                            }) {
-                                error!("[Onramp] failed to send to pipeline: {}", e);
-                            }
-                        }
-                    }
-                    let (input, addr) = &pipelines[len - 1];
-                    if let Some(input) = input.instance_port() {
-                        if let Err(e) = addr.addr.send(PipelineMsg::Event {
-                            input: input.into(),
-                            event,
-                        }) {
-                            error!("[Onramp] failed to send to pipeline: {}", e);
-                        }
-                    }
-                }
-                Ok(None) => (),
-                Err(e) => error!("[Codec] {}", e),
-            }
-        }
-    };
-}
-
-// TODO replace send_event with this after testing
-// We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(clippy::borrowed_box)]
-pub fn send_event2(
-    pipelines: &[(TremorURL, PipelineAddr)],
-    preprocessors: &mut Preprocessors,
-    codec: &mut Box<dyn Codec>,
-    ingest_ns: &mut u64,
-    origin_uri_str: &str,
-    id: u64,
-    data: Vec<u8>,
-) {
-    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
-        for d in data {
-            match codec.decode(d, *ingest_ns) {
-                Ok(Some(data)) => {
-                    // TODO avoid parse here by accepting origin_uri as Url struct in this function
-                    let origin_uri = match Url::parse(origin_uri_str) {
-                        Ok(r) => Some(r),
-                        Err(e) => {
-                            error!(
-                                "[Onramp] failed to set event's origin uri from string `{}`: {}",
-                                origin_uri_str, e
-                            );
-                            None
-                        }
-                    };
-                    // TODO remove
-                    dbg!(&origin_uri);
-                    let event = tremor_pipeline::Event {
-                        is_batch: false,
-                        id,
-                        data,
-                        ingest_ns: *ingest_ns,
-                        origin_uri,
+                        // TODO avoid the clone here
+                        origin_uri: origin_uri.clone(),
                         kind: None,
                     };
                     let len = pipelines.len();

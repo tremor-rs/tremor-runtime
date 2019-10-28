@@ -31,7 +31,7 @@ pub struct Config {
     pub host: String,
     /// port to listen to, defaults to 8000
     #[serde(default = "dflt_port")]
-    pub port: u32,
+    pub port: u16,
     pub resources: Vec<EndpointConfig>,
 }
 
@@ -54,7 +54,7 @@ fn dflt_host() -> String {
     String::from("0.0.0.0")
 }
 
-fn dflt_port() -> u32 {
+fn dflt_port() -> u16 {
     8000
 }
 
@@ -242,6 +242,8 @@ fn onramp_loop(
                         &mut preprocessors,
                         &mut codec,
                         &mut ingest_ns,
+                        // TODO proper origin uri here
+                        None,
                         0,
                         data,
                     );

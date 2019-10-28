@@ -52,7 +52,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tremor_script::prelude::*;
 use tremor_script::query::*;
-use url::Url;
 
 pub mod config;
 pub mod errors;
@@ -62,6 +61,7 @@ pub mod op;
 pub mod query;
 
 pub use op::{ConfigImpl, InitializableOperator, Operator};
+pub use tremor_script::prelude::EventOriginUri;
 pub type PortIndexMap =
     HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
 pub type ExecPortIndexMap = HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
@@ -119,7 +119,7 @@ pub struct Event {
     pub id: u64,
     pub data: tremor_script::LineValue,
     pub ingest_ns: u64,
-    pub origin_uri: Option<Url>,
+    pub origin_uri: Option<tremor_script::EventOriginUri>,
     pub kind: Option<SignalKind>,
     pub is_batch: bool,
 }

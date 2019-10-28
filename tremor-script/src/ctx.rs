@@ -12,17 +12,85 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::*;
+use std::fmt;
+use url::Url;
+
+// TODO add Copy here?
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EventOriginUri {
+    pub scheme: String,
+    pub host: String,
+    pub port: Option<u16>,
+    pub path: String,
+    // TODO add query_string here?
+}
+
+// TODO add tests for this struct
+impl EventOriginUri {
+    pub fn parse(url: &str) -> Result<Self> {
+        match Url::parse(url) {
+            Ok(r) => {
+                let host = r
+                    .host_str()
+                    // TODO add an error kind here
+                    .ok_or_else(|| Error::from("EventOriginUri Parse Error: Missing host"))?;
+                Ok(Self {
+                    scheme: r.scheme().to_string(),
+                    host: host.to_string(),
+                    port: r.port(),
+                    path: r.path().to_string(),
+                })
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn scheme(&self) -> &str {
+        &self.scheme
+    }
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+    pub fn port(&self) -> &Option<u16> {
+        &self.port
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+impl fmt::Display for EventOriginUri {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let r = write!(f, "{}://{}", self.scheme, self.host);
+        if let Some(port) = self.port {
+            write!(f, ":{}", port)?;
+        }
+        write!(f, "/{}", self.path)?;
+        r
+    }
+}
+
+// TODO check if we need all of these derives here still
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize)]
 pub struct EventContext {
     pub at: u64,
+    pub origin_uri: Option<EventOriginUri>,
 }
 
 impl EventContext {
+    pub fn new(ingest_ns: u64, origin_uri: Option<EventOriginUri>) -> Self {
+        Self {
+            at: ingest_ns,
+            origin_uri,
+        }
+    }
+
     pub fn ingest_ns(&self) -> u64 {
         self.at
     }
 
-    pub fn from_ingest_ns(ingest_ns: u64) -> Self {
-        Self { at: ingest_ns }
+    pub fn origin_uri(&self) -> &Option<EventOriginUri> {
+        &self.origin_uri
     }
 }

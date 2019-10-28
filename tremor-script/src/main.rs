@@ -235,14 +235,20 @@ fn main() -> Result<()> {
                 .ok_or_else(|| Error::from("At least one event needs to be specified"))?;
             for event in &mut events {
                 runnable.run(
-                    &EventContext { at: 0 },
+                    &EventContext {
+                        at: 0,
+                        origin_uri: None,
+                    },
                     AggrType::Tick,
                     event,
                     &mut global_map,
                 )?;
             }
             let expr = runnable.run(
-                &EventContext { at: 0 },
+                &EventContext {
+                    at: 0,
+                    origin_uri: None,
+                },
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,

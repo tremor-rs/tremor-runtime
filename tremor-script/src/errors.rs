@@ -36,6 +36,7 @@ pub use simd_json::ValueType;
 use simd_json::{BorrowedValue as Value, ValueTrait};
 use std::num;
 use std::ops::{Range as IRange, RangeInclusive};
+use url;
 
 #[macro_export]
 macro_rules! stry {
@@ -65,6 +66,11 @@ impl From<std::option::NoneError> for Error {
     }
 }
 */
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Self::from(format!("Url Parse Error: {:?}", e))
+    }
+}
 
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {

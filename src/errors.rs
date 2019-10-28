@@ -107,12 +107,6 @@ impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
     }
 }
 
-impl From<reqwest::UrlError> for Error {
-    fn from(e: reqwest::UrlError) -> Self {
-        Self::from(format!("Reqwest Url Error: {:?}", e))
-    }
-}
-
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Self) -> bool {

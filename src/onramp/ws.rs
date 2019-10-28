@@ -27,7 +27,7 @@ type ActixResult<T> = std::result::Result<T, ActixError>;
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// The port to listen on.
-    pub port: u32,
+    pub port: u16,
     /// Host to listen on
     pub host: String,
 }
@@ -199,7 +199,16 @@ fn onramp_loop(
                 Err(e) => return Err(format!("Crossbream receive error: {}", e).into()),
                 Ok(WsOnrampMessage::Data(mut ingest_ns, data)) => {
                     id += 1;
-                    send_event(&pipelines, &mut no_pp, &mut codec, &mut ingest_ns, id, data);
+                    send_event(
+                        &pipelines,
+                        &mut no_pp,
+                        &mut codec,
+                        &mut ingest_ns,
+                        // TODO proper origin uri here
+                        None,
+                        id,
+                        data
+                    );
                 }
             }
         }

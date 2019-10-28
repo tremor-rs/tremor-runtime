@@ -49,7 +49,7 @@ macro_rules! test_cases {
                 let err = err.trim();
 
                 if let Some(mut json) =  in_json.pop() {
-                    let context = EventContext::from_ingest_ns(0);
+                    let context = EventContext::new(0, None);
                     let  mut meta = Value::from(Object::default());
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
                     if let Err(e) = s {
@@ -96,8 +96,7 @@ macro_rules! ignore_cases {
                 let _err = err.trim();
 
                 if let Some(mut json) =  in_json.pop() {
-
-                    let context = EventContext::from_ingest_ns(0);
+                    let context = EventContext::new(0, None);
                     let  mut meta = Value::from(Object::default());
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
                     if let Err(e) = s {

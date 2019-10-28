@@ -45,7 +45,7 @@ pub mod script;
 mod std_lib;
 mod tilde;
 pub mod utils;
-pub use ctx::EventContext;
+pub use ctx::{EventContext, EventOriginUri};
 pub use interpreter::AggrType;
 pub mod prelude;
 

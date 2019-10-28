@@ -42,6 +42,7 @@ jumphash = "0.1"
 rand = { version = "0.7", features = ["small_rng"] }
 hdrhistogram = "6.3.4"
 xz2 = "0.1"
+url = "1.7"
 
 [build-dependencies]
 lalrpop = "0.17"

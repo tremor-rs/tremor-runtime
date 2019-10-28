@@ -48,7 +48,7 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, mut json) in in_json.into_iter().enumerate() {
 
-                    let context = EventContext::from_ingest_ns(id as u64);
+                    let context = EventContext::new(id as u64, None);
                     let  mut meta = Value::from(Object::default());
                     match script.run(&context, AggrType::Tick, &mut json, &mut meta)? {
                         Return::Drop => (),
