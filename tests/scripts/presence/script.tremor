@@ -1,7 +1,10 @@
 const c = 7;
 let data = { "exists": 1 };
 let e = "exists";
+let ne = "does't";
 let arr = [1, 2, 3];
+let good_idx = 1;
+let bad_idx = 42;
 {
   "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" default => "ko" end,
   "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" default => "ko" end,
@@ -16,9 +19,14 @@ let arr = [1, 2, 3];
   "present-const": present c,
   "present-local-not": present cake,
   "present-local": present data,
-  "present-local-nested": present data[e],
+  "present-local-nested1": present data["exists"],
+  "present-local-nested2": present data[e],
   "present-local-nested-not": present data["does't"],
+  "present-local-nested-not": present data[ne],
   "present-local-arr": present arr[1],
+  "present-local-arr2": present arr[good_idx],
   "present-local-arr-range": present arr[1:2],
+  "present-local-arr-range-not": present arr[1:42],
   "present-local-arr-not": present arr[42],
+  "present-local-arr-not2": present arr[bad_idx],
 }
