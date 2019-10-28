@@ -669,7 +669,15 @@ mod tests {
             .find(m, f)
             .expect("could not find function")
             .clone();
-        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext { at: 0, origin_uri: None }, &args) }
+        move |args: &[&Value]| -> FResult<Value> {
+            f.invoke(
+                &EventContext {
+                    at: 0,
+                    origin_uri: None,
+                },
+                &args,
+            )
+        }
     }
     #[test]
     pub fn call_a_function_from_a_registry_works() {
@@ -687,7 +695,15 @@ mod tests {
         let one = Value::from(1);
         let two = Value::from(2);
 
-        assert!(f.invoke(&EventContext { at: 0, origin_uri: None }, &[&one, &two]).is_err());
+        assert!(f
+            .invoke(
+                &EventContext {
+                    at: 0,
+                    origin_uri: None
+                },
+                &[&one, &two]
+            )
+            .is_err());
     }
 
     #[test]
@@ -697,7 +713,15 @@ mod tests {
         });
 
         let one = Value::from("1");
-        assert!(f.invoke(&EventContext { at: 0, origin_uri: None }, &[&one]).is_err());
+        assert!(f
+            .invoke(
+                &EventContext {
+                    at: 0,
+                    origin_uri: None
+                },
+                &[&one]
+            )
+            .is_err());
     }
 
     #[test]
@@ -714,7 +738,13 @@ mod tests {
         let three = Value::from(3);
         assert_eq!(
             Ok(Value::from(5)),
-            f.invoke(&EventContext { at: 0, origin_uri: None }, &[&two, &three])
+            f.invoke(
+                &EventContext {
+                    at: 0,
+                    origin_uri: None
+                },
+                &[&two, &three]
+            )
         );
     }
 
@@ -729,7 +759,13 @@ mod tests {
 
         assert_eq!(
             Ok(Value::from(6)),
-            f.invoke(&EventContext { at: 0, origin_uri: None }, &[&one, &two, &three])
+            f.invoke(
+                &EventContext {
+                    at: 0,
+                    origin_uri: None
+                },
+                &[&one, &two, &three]
+            )
         );
     }
 
