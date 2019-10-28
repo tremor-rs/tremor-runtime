@@ -92,6 +92,7 @@ test_cases!(
     dimensions,
     example_rule,
     grou_by_time,
+    having_filter,
     layered_limiting,
     lru,
     merge,
@@ -100,8 +101,9 @@ test_cases!(
     passthrough,
     patch,
     rewrite_root,
-    script_params,
     script_params_overwrite,
+    script_params,
     tremor_map,
+    where_filter,
     window_by_two,
 );

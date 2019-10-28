@@ -48,6 +48,7 @@ rental! {
     }
 }
 
+#[cfg_attr(tarpaulin, skip)]
 impl PartialEq for rentals::Stmt {
     fn eq(&self, other: &rentals::Stmt) -> bool {
         self.suffix() == other.suffix()
@@ -56,6 +57,7 @@ impl PartialEq for rentals::Stmt {
 
 impl Eq for rentals::Stmt {}
 
+#[cfg_attr(tarpaulin, skip)]
 impl PartialOrd for rentals::Stmt {
     fn partial_cmp(&self, _other: &rentals::Stmt) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
@@ -174,17 +176,11 @@ mod test {
     use super::*;
     use crate::highlighter;
 
-    #[cfg_attr(tarpaulin, skip)]
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
         if let Err(e) = Query::parse(query, &reg, &aggr_reg) {
-            let mut h = highlighter::Dumb::new();
-            if let Err(e) = Query::format_error_from_script(&query, &mut h, &e) {
-                eprintln!("Error: {}", e);
-            } else {
-                eprintln!("{}", h.to_string());
-            }
+            eprintln!("{}", e);
             assert!(false)
         } else {
             assert!(true)

@@ -22,6 +22,7 @@ use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+use tremor_script::highlighter::{Dumb, Highlighter};
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -69,15 +70,27 @@ macro_rules! test_cases {
                     file.read_to_string(&mut err)?;
                     let err = err.trim();
 
-                    let s = to_pipe(&contents);
-                    if let Err(e) = dbg!(s) {
-                        assert_eq!(err, format!("{}", e));
-                    } else {
-                        println!("Expected error, but got succeess");
-                        assert!(false);
-                    }
-                }
-
+                    match to_pipe(&contents) {
+                        Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) =>{
+                            let e = tremor_script::errors::Error(e, o);
+                            let mut h = Dumb::new();
+                            tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
+                            h.finalize()?;
+                            let got = h.to_string();
+                            let got = got.trim();
+                            println!("{}", got);
+                            assert_eq!(err, got);
+                        }
+                        Err(e) =>{
+                            println!("got wrong error: {:?}", e);
+                            assert!(false);
+                        }
+                        _ =>{
+                            println!("Expected error, but got succeess");
+                            assert!(false);
+                        }
+                    };
+                };
                 Ok(())
             }
         )*

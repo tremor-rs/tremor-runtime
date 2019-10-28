@@ -1,1 +1,5 @@
-Local variables are not allowed here
+Error: 
+    1 | select
+    2 | a + b
+      | ^^^^^ Local variables are not allowed here
+    3 | from in into out;
