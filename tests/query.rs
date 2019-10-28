@@ -106,4 +106,5 @@ test_cases!(
     tremor_map,
     where_filter,
     window_by_two,
+    window_by_two_scripted,
 );

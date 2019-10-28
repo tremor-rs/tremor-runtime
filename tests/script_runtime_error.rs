@@ -49,15 +49,11 @@ macro_rules! test_cases {
                 let err = err.trim();
 
                 if let Some(mut json) =  in_json.pop() {
-
                     let context = EventContext::from_ingest_ns(0);
                     let  mut meta = Value::from(Object::default());
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
                     if let Err(e) = s {
-                        let mut h = Dumb::new();
-                        script.format_error_with(&mut h, &e)?;
-                        h.finalize()?;
-                        let got = h.to_string();
+                        let got = script.format_error(&e);
                         let got = got.trim();
                         println!("{}", got);
                         assert_eq!(err, got);
