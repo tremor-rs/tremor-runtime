@@ -31,6 +31,7 @@ pub struct CustomFn {
 }
 
 impl TremorFn for CustomFn {
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn invoke<'event>(
         &self,
         ctx: &EventContext,
@@ -56,8 +57,6 @@ impl TremorFn for CustomFn {
         };
         let mut no_event = Value::Null;
         let mut no_meta = Value::Null;
-        #[allow(mutable_transmutes)]
-        #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {

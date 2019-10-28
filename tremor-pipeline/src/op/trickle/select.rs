@@ -355,8 +355,7 @@ impl TrickleSelect {
 }
 
 impl Operator for TrickleSelect {
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    #[allow(mutable_transmutes)]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
@@ -402,11 +401,7 @@ impl Operator for TrickleSelect {
         let mut group_values = vec![];
         {
             let data = event.data.suffix();
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            #[allow(mutable_transmutes)]
             let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            #[allow(mutable_transmutes)]
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
                 group_by.generate_groups(&ctx, &unwind_event, &event_meta, &mut group_values)?
@@ -505,13 +500,7 @@ impl Operator for TrickleSelect {
 
         if let Some(this) = self.windows.first() {
             let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
-            let data = event.data.suffix();
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            #[allow(mutable_transmutes)]
-            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            #[allow(mutable_transmutes)]
-            let event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            let (unwind_event, event_meta) = event.data.parts();
             consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
 
             for group in group_values {

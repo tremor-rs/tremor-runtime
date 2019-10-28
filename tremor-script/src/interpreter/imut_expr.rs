@@ -534,6 +534,7 @@ where
             })
     }
 
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn emit_aggr(
         &'script self,
         opts: ExecOpts,
@@ -546,7 +547,6 @@ where
 
         unsafe {
             // FIXME?
-            #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
             let invocable: &mut TremorAggrFnWrapper =
                 mem::transmute(&env.aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {

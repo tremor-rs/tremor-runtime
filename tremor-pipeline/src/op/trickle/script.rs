@@ -44,6 +44,7 @@ pub struct TrickleScript {
 }
 
 impl TrickleScript {
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub fn with_stmt(
         id: String,
         defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
@@ -114,8 +115,6 @@ impl TrickleScript {
             std::mem::transmute(script)
         });
 
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
         let script_ref: &mut tremor_script::ast::ScriptDecl =
             unsafe { mem::transmute(script.suffix()) };
         script_ref.script.consts = vec![Value::Null, Value::Null, Value::Null];
@@ -131,16 +130,13 @@ impl TrickleScript {
 }
 
 impl Operator for TrickleScript {
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
 
         let data = event.data.suffix();
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
         let mut unwind_event: &mut tremor_script::Value<'_> =
             unsafe { std::mem::transmute(&data.value) };
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
         let mut event_meta: &mut tremor_script::Value<'_> =
             unsafe { std::mem::transmute(&data.meta) };
 

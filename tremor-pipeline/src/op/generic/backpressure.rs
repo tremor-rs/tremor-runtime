@@ -30,7 +30,6 @@ use crate::{ConfigImpl, Event, Operator};
 use simd_json::value::borrowed::Value;
 use simd_json::ValueTrait;
 use std::borrow::Cow;
-use std::mem;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -68,7 +67,7 @@ impl From<Config> for Backpressure {
     fn from(config: Config) -> Self {
         let steps = config.steps.iter().map(|v| *v * 1_000_000).collect();
         let outputs = config.outputs.iter().cloned().map(Output::from).collect();
-        Backpressure {
+        Self {
             config,
             outputs,
             steps,
@@ -140,10 +139,8 @@ impl Operator for Backpressure {
             }
         }
         if let Some(out) = output {
-            let meta = &event.data.suffix().meta;
+            let (_, meta) = event.data.parts();
 
-            #[allow(mutable_transmutes)]
-            let meta: &mut Value = unsafe { mem::transmute(meta) };
             if let Some(meta) = meta.as_object_mut() {
                 meta.insert("backpressure-output".into(), out.clone().into());
             };

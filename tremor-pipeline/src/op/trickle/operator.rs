@@ -160,8 +160,6 @@ impl TrickleOperator {
 }
 
 impl Operator for TrickleOperator {
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    #[allow(mutable_transmutes)]
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, event)
     }

@@ -174,7 +174,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::highlighter;
 
     fn parse(query: &str) {
         let reg = crate::registry();

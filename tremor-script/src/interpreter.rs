@@ -960,6 +960,7 @@ where
 }
 
 #[inline]
+#[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
 pub fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     local: &'run LocalStack<'event>,
@@ -974,8 +975,6 @@ where
     use std::mem;
     // This is icky do we want it?
     // it is only used
-    #[allow(mutable_transmutes)]
-    #[allow(clippy::transmute_ptr_to_ptr)]
     let local: &mut LocalStack = unsafe { mem::transmute(local) };
     if let Some(d) = local.values.get_mut(idx) {
         *d = Some(v);

@@ -114,6 +114,7 @@ where
         error_no_clause_hit(self)
     }
 
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn patch_in_place(
         &'script self,
         opts: ExecOpts,
@@ -127,13 +128,12 @@ where
         // NOTE: Is this good? I don't like it.
         let value = stry!(expr.target.run(opts, env, event, meta, local,));
         let v: &Value = value.borrow();
-        #[allow(mutable_transmutes)]
-        #[allow(clippy::transmute_ptr_to_ptr)]
         let v: &mut Value = unsafe { mem::transmute(v) };
         stry!(patch_value(self, opts, env, event, meta, local, v, expr));
         Ok(Cow::Borrowed(v))
     }
 
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn merge_in_place(
         &'script self,
         opts: ExecOpts,
@@ -147,8 +147,6 @@ where
         // NOTE: Is this good? I don't like it.
         let value_cow = stry!(expr.target.run(opts, env, event, meta, local));
         let value: &Value = value_cow.borrow();
-        #[allow(mutable_transmutes)]
-        #[allow(clippy::transmute_ptr_to_ptr)]
         let value: &mut Value = unsafe { mem::transmute(value) };
 
         if value.is_object() {
@@ -246,8 +244,7 @@ where
         Ok(Cont::Cont(Cow::Owned(Value::Array(value_vec))))
     }
 
-    #[allow(mutable_transmutes)]
-    #[allow(clippy::transmute_ptr_to_ptr)]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn assign(
         &'script self,
         opts: ExecOpts,

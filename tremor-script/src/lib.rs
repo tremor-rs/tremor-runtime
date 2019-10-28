@@ -112,9 +112,8 @@ rental! {
 }
 
 impl rentals::Value {
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub fn parts(&self) -> (&mut Value, &mut Value) {
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        #[allow(mutable_transmutes)]
         unsafe {
             let data = self.suffix();
             let unwind_event: &mut Value<'_> = std::mem::transmute(&data.value);

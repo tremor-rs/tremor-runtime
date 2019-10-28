@@ -58,8 +58,7 @@ pub struct Tremor {
 }
 
 impl Operator for Tremor {
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    #[allow(mutable_transmutes)]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::from_ingest_ns(event.ingest_ns);
         dbg!(&event.origin_uri);
