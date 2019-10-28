@@ -52,7 +52,7 @@ pub struct Config {
     pub binary: bool,
 }
 
-/// An offramp that write a given file
+/// An offramp that writes to a websocket endpoint
 pub struct Ws {
     addr: Option<WsAddr>,
     config: Config,
