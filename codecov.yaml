@@ -2,6 +2,7 @@ ignore:
   - "tremor-script/src/ast/support.rs"  # This is a pure support file
   - "tremor-script/src/ast/base_expr.rs"  # This are only getters
   - "tremor-script/src/registry/custom_fn.rs" # behind a feature flag - not used
+  - "http-bench-server/**" # test tool only
   - "**/errors.rs"  # Just lots of error strings
   - "depricated/**" # depricated code, for storage not running - inactive
   - "**/main.rs" # main files are cli entry points
