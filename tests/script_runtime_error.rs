@@ -132,6 +132,8 @@ test_cases!(
     function_error_n,
     merge_new_no_object,
     merge_target_no_object,
+    merge_in_place_new_no_object,
+    merge_in_place_target_no_object,
     missing_local,
     match_no_clause_hit,
     match_bad_guard_type,
