@@ -7,20 +7,24 @@ Stmts ::=
     Stmt ';' Stmts
     | Stmt ';'
 
-Stmt ::= CreateWindowDefn
+Stmt ::= DefineWindowDefn
     | CreateStreamDefn
+    | DefineOperatorDefn
     | CreateOperatorDefn
+    | DefineScriptDefn
     | CreateScriptDefn
     | SelectStmt
 
 CreateStreamDefn ::= 'create' 'stream' Id
 
-CreateWindowDefn ::= 'create' WindowKind 'window' Id
-    | 'create' WindowKind 'window' Id WithParams
+DefineWindowDefn ::= 'define' WindowKind 'window' Id WithParams
+    | 'define' WindowKind 'window' Id WithPartialParams EmbeddedScript
 
 WindowKind ::= 'tumbling' | 'sliding'
 
 WithParams ::= 'with' Params 'end'
+
+WithPartialParams ::= 'with' Params
 
 Params ::=
     Param ',' Params
@@ -29,11 +33,21 @@ Params ::=
 Param ::=
     Id '=' Expr
 
-CreateOperatorDefn ::= 'create' Id '::' Id 'operator' Id
-    | 'create' Id '::' Id 'operator' Id WithParams
+DefineOperatorDefn ::= 'define' Id '::' Id 'operator' Id
+    | 'define' Id '::' Id 'operator' Id WithParams
 
-CreateScriptDefn ::= 'create' 'script' Id EmbeddedScript
-    | 'create' 'script' Id WithParams EmbeddedScript
+CreateOperatorDefn ::= 'create' 'operator' Id
+    | 'create' 'operator' Id WithParams
+    | 'create' 'operator' Id as Id
+    | 'create' 'operator' Id as Id WithParams
+
+DefineScriptDefn ::= 'define' 'script' Id EmbeddedScript
+    | 'define' 'script' Id WithPartialParams EmbeddedScript
+
+CreateScriptDefn ::= 'create' 'script' Id
+    | 'create' 'script' Id WithPartialParams
+    | 'create' 'script' Id 'as' Id
+    | 'create' 'script' Id 'as' Id WithPartialParams 
 
 EmbeddedScript ::= 'script' Script 'end'
 

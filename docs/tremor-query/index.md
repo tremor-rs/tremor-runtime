@@ -137,7 +137,7 @@ Stream definition grammar:
 
 ```trickle
 create stream passthrough;
-select event from into passthrough; # select default public 'in' stream into passthrough
+select event from in into passthrough; # select default public 'in' stream into passthrough
 select event from passthrough into out; # select passthrough into default public 'out' stream
 ```
 
@@ -151,12 +151,16 @@ it closes. The window can emit synthetic events upon closing. The window
 reopens for its next cycle when it closes.
 
 Window definition grammar:
-![](grammar/diagram/CreateWindowDefn.png)
+![](grammar/diagram/DefineWindowDefn.png)
+
+![](grammar/diagram/WithParams.png)
+![](grammar/diagram/WithPartialParams.png)
+![](grammar/diagram/EmbeddedScript.png)
 
 For example a 15 second tumbling window can be defined as follows
 
 ```trickle
-create tumbling window fifteen_secs
+define tumbling window fifteen_secs
 with
     interval = datetime::with_seconds(15),
 end;
@@ -170,11 +174,18 @@ legacy yaml format share the same DAG model and pipeline formats, they are
 interoperable at runtime and are backwards compatible:
 
 Operator definition grammar:
+![](grammar/diagram/DefineOperatorDefn.png)
+![](grammar/diagram/WithParams.png)
+
+Creating an operator:
 ![](grammar/diagram/CreateOperatorDefn.png)
+![](grammar/diagram/WithParams.png)
 
 ```trickle
 # create a bucketing operator
-create grouper::bucket operator kfc;
+define grouper::bucket operator kfc;
+
+create operator kfc;
 
 # ...
 
@@ -191,10 +202,19 @@ both the query language and scripting language dialects with better syntax
 highlighting and error checking built in for ease of operator productivity over
 the legacy yaml syntax.
 
-```trickle
-create grouper::bucket operator kfc;
+Script definition grammar:
+![](grammar/diagram/DefineScriptDefn.png)
+![](grammar/diagram/WithPartialParams.png)
+![](grammar/diagram/EmbeddedScript.png)
 
-create script categorize
+Script an operator:
+![](grammar/diagram/CreateScriptDefn.png)
+![](grammar/diagram/WithParams.png)
+
+```trickle
+define grouper::bucket operator kfc;
+
+define script categorize
 script
   let $rate = 1;
   let $class = event.`group`;
@@ -202,9 +222,11 @@ script
 end;
 
 
+create script categorize;
 # Stream ingested data into categorize script
 select event from in into categorize;
 
+create operator kfc;
 # Stream scripted events into kfc bucket operator
 select event from categorize into kfc;
 
@@ -256,7 +278,7 @@ Select operations can be windowed by __applying__ a window to the inbound
 data stream.
 
 ```trickle
-create tumbling window fifteen_secs
+define tumbling window fifteen_secs
 with
     interval = datetime::with_seconds(15),
 end;
@@ -269,7 +291,7 @@ In the above operation, we emit a synthetic count every fifteen seconds if ast l
 Select operations can be grouped through defining a `group by` clause
 
 ```trickle
-create tumbling window fifteen_secs
+define tumbling window fifteen_secs
 with
     interval = datetime::with_seconds(15),
 end;
