@@ -338,7 +338,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::from(Object::new());
             let mut global_map = Value::from(Object::new());
             let value = runnable.run(
-                &EventContext { at: 0 },
+                &EventContext { at: 0, origin_uri: None },
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,
@@ -372,7 +372,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Object::new());
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(
-                &EventContext { at: 0 },
+                &EventContext { at: 0, origin_uri: None },
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,
@@ -400,7 +400,7 @@ mod tests {
             let mut event = simd_json::borrowed::Value::Object(Object::new());
             let mut global_map = Value::Object(hashmap! {});
             let _value = runnable.run(
-                &EventContext { at: 0 },
+                &EventContext { at: 0, origin_uri: None },
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,

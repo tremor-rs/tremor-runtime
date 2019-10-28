@@ -590,7 +590,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("foobar".to_string().into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
@@ -609,7 +612,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("a:b c:d".to_string().into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
@@ -630,7 +636,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(hashmap! {
                         "a".into() => "b".into(),
@@ -651,7 +660,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("INFO".to_string().into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Bool(true))
                 );
@@ -669,7 +681,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok("🚀sneaky rocket!".into())
                 );
@@ -687,7 +702,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("John".to_string().into()),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(hashmap! {
                         "name".into() => Value::from("John")
@@ -707,7 +725,7 @@ mod test {
             Extractor::Grok { .. } => {
                 let output = ex.extract(true, &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                ), &EventContext{at: 0});
+                ), &EventContext{at: 0, origin_uri: None});
 
                 assert_eq!(
                     output,
@@ -735,7 +753,14 @@ mod test {
         match ex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &EventContext { at: 0 }),
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Ok(Value::Object(hashmap! (
                         "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                         "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
@@ -747,7 +772,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("192.168.1.0/24"),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(hashmap! (
                                         "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
@@ -758,7 +786,14 @@ mod test {
                 );
 
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &EventContext { at: 0 }),
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
                                 "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
@@ -769,7 +804,10 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
-                        &EventContext { at: 0 }
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
                     Ok(Value::Object(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::I64(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
@@ -784,7 +822,14 @@ mod test {
         match rex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    rex.extract(true, &Value::from("10.22.0.254"), &EventContext { at: 0 }),
+                    rex.extract(
+                        true,
+                        &Value::from("10.22.0.254"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Ok(Value::Object(hashmap! (
                             "prefix".into() => Value::from(vec![Value::I64(10), 22.into(), 0.into(), 254.into()]),
                             "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()]),
@@ -792,7 +837,14 @@ mod test {
                 );
 
                 assert_eq!(
-                    rex.extract(true, &Value::from("99.98.97.96"), &EventContext { at: 0 }),
+                    rex.extract(
+                        true,
+                        &Value::from("99.98.97.96"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Err(ExtractorError {
                         msg: "IP does not belong to any CIDR specified".into()
                     })
@@ -812,7 +864,10 @@ mod test {
                     &Value::from(
                         "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
                     ),
-                    &EventContext { at: 0 }
+                    &EventContext {
+                        at: 0,
+                        origin_uri: None
+                    }
                 ),
                 Ok(Value::Object(hashmap! (
                        "measurement".into() => "wea ther".into(),
@@ -834,7 +889,10 @@ mod test {
                 ex.extract(
                     true,
                     &Value::from("2019-06-20 00:00:00"),
-                    &EventContext { at: 0 }
+                    &EventContext {
+                        at: 0,
+                        origin_uri: None
+                    }
                 ),
                 Ok(Value::I64(1_560_988_800_000_000_000))
             ),

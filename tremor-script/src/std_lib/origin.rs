@@ -59,7 +59,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_fn! (origin::port(context) {
             if let Some(ref uri) = context.origin_uri {
                 Ok(match uri.port() {
-                    Some(n) => Value::I64(*n as i64),
+                    Some(n) => Value::I64(i64::from(*n)),
                     // TODO would be nice to support this?
                     //None => Value::from(None),
                     None => Value::Null,
