@@ -24,7 +24,8 @@ pub trait Postprocessor: Send {
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
-#[deny(clippy::ptr_arg)]
+// just a lookup
+#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     match name {
         "lines" => Ok(Box::new(Lines {})),

@@ -14,14 +14,20 @@
 
 use std::{convert, f64};
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_true() -> bool {
     true
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_false() -> bool {
     false
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_0<T>() -> T
 where
     T: convert::From<u8>,
@@ -29,6 +35,8 @@ where
     T::from(0)
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_1<T>() -> T
 where
     T: convert::From<u8>,
@@ -36,10 +44,14 @@ where
     T::from(1)
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_inf() -> f64 {
     f64::INFINITY
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_4<T>() -> T
 where
     T: convert::From<u8>,
@@ -47,6 +59,8 @@ where
     T::from(4)
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_100<T>() -> T
 where
     T: convert::From<u8>,
@@ -54,6 +68,8 @@ where
     T::from(100)
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_1000<T>() -> T
 where
     T: convert::From<u16>,
@@ -61,14 +77,20 @@ where
     T::from(1000)
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_none<T>() -> Option<T> {
     None
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d_ttl() -> u32 {
     64
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn d<T>() -> T
 where
     T: Default,
@@ -76,6 +98,8 @@ where
     T::default()
 }
 
+// just a default
+#[cfg_attr(tarpaulin, skip)]
 pub fn dflt<T: Default>() -> T {
     T::default()
 }

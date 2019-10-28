@@ -48,6 +48,8 @@ pub trait Onramp: Send {
     fn default_codec(&self) -> &str;
 }
 
+// just a lookup
+#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
     match name {
         "blaster" => blaster::Blaster::from_config(config),

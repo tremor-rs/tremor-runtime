@@ -26,7 +26,8 @@ pub trait Preprocessor: Sync + Send {
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
-#[deny(clippy::ptr_arg)]
+// just a lookup
+#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         // TODO once preprocessors allow configuration, remove multiple entries for lines here

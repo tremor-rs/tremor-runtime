@@ -28,6 +28,8 @@ pub trait Codec: Send {
     fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
 }
 
+// just a lookup
+#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
         "json" => Ok(Box::new(json::JSON {})),

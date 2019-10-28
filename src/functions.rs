@@ -24,20 +24,5 @@ pub fn load() -> Result<()> {
         .insert(tremor_fn!(system::instance(_context) {
             Ok(Value::from(instance!()))
         }));
-    /*
-       .insert(
-           tremor_fn!(logstash::grok(_context, _pattern: String, _text: String) {
-               let recognizer = grok::resolve(_pattern.to_string());
-               match recognizer.matches(_text.to_string().as_bytes().to_vec()) {
-                   Ok(v) => {
-                       // TODO
-                       Ok(v.into())
-                   },
-                   _ => Err(to_runtime_error(format!("{} for pattern: `{}` and text `{}`", "logstash::grok failure", _pattern, _text))),
-               }
-           }),
-       );
-    */
     Ok(())
-    // TODO: ingest_ns requires us to go away from a global registry.
 }
