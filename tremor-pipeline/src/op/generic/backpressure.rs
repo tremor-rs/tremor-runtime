@@ -127,7 +127,6 @@ impl Operator for Backpressure {
         for n in 0..self.outputs.len() {
             let id = (self.next + n) % self.outputs.len();
             let o = &mut self.outputs[id];
-            dbg!(&o.next, &event.ingest_ns);
             if o.next <= event.ingest_ns {
                 // :/ need pipeline lifetime to fix
                 output = Some(o.output.clone());
@@ -447,8 +446,6 @@ mod test {
         op.on_contraflow(&mut insight);
         assert_eq!(op.outputs[0].backoff, 1_000_000);
         assert_eq!(op.outputs[0].next, 2_000_000);
-
-        dbg!(&op);
 
         // The first event was sent at exactly 1ms
         // our we should block all eventsup to
