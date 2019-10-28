@@ -52,20 +52,20 @@ pub fn unpublish_artefact(
 
 pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
     let url = build_url(&["onramp", &id])?;
-    let result = data
-        .world
+    data.world
         .repo
         .find_onramp(&url)
         .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?
-        .ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))?;
-
-    let result: Result<OnRampWrap> = Ok(OnRampWrap {
-        artefact: result.artefact,
-        instances: result
-            .instances
-            .iter()
-            .filter_map(tremor_runtime::url::TremorURL::instance)
-            .collect(),
-    });
-    reply(&req, &data, result, false, 200)
+        .ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))
+        .map(|result| {
+            Ok(OnRampWrap {
+                artefact: result.artefact,
+                instances: result
+                    .instances
+                    .iter()
+                    .filter_map(tremor_runtime::url::TremorURL::instance)
+                    .collect(),
+            })
+        })
+        .and_then(|result| reply(&req, &data, result, false, 200))
 }

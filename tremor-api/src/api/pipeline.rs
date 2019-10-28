@@ -91,8 +91,6 @@ pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -
             false,
             200,
         ),
-        _ => Err(error::ErrorNotFound(
-            r#"{"error": "Artefact is a pipeline"}"#,
-        )),
+        _ => Err(error::ErrorNotFound(r#"{"error": "Artefact is a query"}"#)),
     }
 }

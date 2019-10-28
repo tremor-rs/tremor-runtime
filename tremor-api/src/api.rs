@@ -26,8 +26,6 @@ pub mod onramp;
 pub mod pipeline;
 pub mod version;
 
-mod resource_models;
-
 pub type HTTPResult = Result<HttpResponse, error::Error>;
 
 #[derive(Clone)]
@@ -40,13 +38,17 @@ pub enum ResourceType {
     Json,
     Yaml,
 }
+impl ToString for ResourceType {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Yaml => "application/yaml".to_string(),
+            Self::Json => "application/json".to_string(),
+        }
+    }
+}
 
 pub fn content_type(req: &HttpRequest) -> Option<ResourceType> {
-    let ct: &str = match req.headers().get("Content-type") {
-        Some(x) => x.to_str().ok()?,
-        None => req.content_type(),
-    };
-    match ct {
+    match req.content_type() {
         "application/yaml" => Some(ResourceType::Yaml),
         "application/json" => Some(ResourceType::Json),
         _ => None,
@@ -92,30 +94,16 @@ pub fn handle_errors(e: TremorError) -> error::Error {
     }
 }
 pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: u16) -> HTTPResult {
-    let (t, r) = match t {
-        ResourceType::Yaml => (
-            "application/yaml",
-            serde_yaml::to_string(d).map_err(|e| {
-                error::ErrorInternalServerError(format!("yaml encoder failed: {}", e))
-            }),
-        ),
-        ResourceType::Json => (
-            "application/json",
-            serde_json::to_string(d).map_err(|e| {
-                error::ErrorInternalServerError(format!("json encoder failed: {}", e))
-            }),
-        ),
+    let body = match t {
+        ResourceType::Yaml => serde_yaml::to_string(d)
+            .map_err(|e| error::ErrorInternalServerError(format!("yaml encoder failed: {}", e)))?,
+
+        ResourceType::Json => serde_json::to_string(d)
+            .map_err(|e| error::ErrorInternalServerError(format!("json encoder failed: {}", e)))?,
     };
-    match r {
-        Ok(b) => Ok(HttpResponse::build(c(ok_code)).content_type(t).body(b)),
-        Err(e) => {
-            error!("Unhandled error: {}", e);
-            Err(error::ErrorInternalServerError(format!(
-                "Internal server error: {}",
-                e
-            )))
-        }
-    }
+    Ok(HttpResponse::build(c(ok_code))
+        .content_type(t.to_string())
+        .body(body))
 }
 
 pub fn reply<T: Serialize>(
@@ -125,15 +113,11 @@ pub fn reply<T: Serialize>(
     persist: bool,
     ok_code: u16,
 ) -> HTTPResult {
-    match result_in {
-        Ok(r) => {
-            if persist && data.world.save_config().is_err() {
-                return Err(error::ErrorInternalServerError("failed to save state"));
-            };
-            serialize(accept(&req), &r, ok_code)
-        }
-        Err(e) => Err(handle_errors(e)),
-    }
+    let r = result_in.map_err(handle_errors)?;
+    if persist && data.world.save_config().is_err() {
+        return Err(error::ErrorInternalServerError("failed to save state"));
+    };
+    serialize(accept(&req), &r, ok_code)
 }
 
 fn decode<T>(req: &HttpRequest, data_raw: &str) -> Result<T, error::Error>
@@ -150,17 +134,7 @@ where
 }
 
 pub fn build_url(path: &[&str]) -> Result<TremorURL, error::Error> {
-    let mut url = String::new();
-    for p in path {
-        url.push('/');
-        url.push_str(p);
-    }
-    if let Ok(u) = TremorURL::parse(&url) {
-        Ok(u)
-    } else {
-        Err(error::ErrorBadRequest(format!(
-            "Could not decode Tremor URL: {}",
-            url
-        )))
-    }
+    let url = format!("/{}", path.join("/"));
+    TremorURL::parse(&url)
+        .map_err(|_e| error::ErrorBadRequest(format!("Could not decode Tremor URL: {}", url)))
 }

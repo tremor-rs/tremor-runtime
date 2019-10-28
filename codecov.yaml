@@ -6,3 +6,4 @@ ignore:
   - "depricated/**" # depricated code, for storage not running - inactive
   - "**/main.rs" # main files are cli entry points
   - "**/args.rs" # Files for clap argument parsing
+  - "tremor-api/**" # This is done vie EQC and coytoee tests - sadly they do not count

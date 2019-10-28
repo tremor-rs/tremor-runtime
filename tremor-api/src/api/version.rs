@@ -12,10 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::api::{reply, resource_models as rm, State};
+use crate::api::{reply, State};
 use actix_web::{web::Data, HttpRequest, Responder};
+use tremor_runtime::version::VERSION;
+
+#[derive(Serialize, Deserialize)]
+pub struct Version {
+    version: String,
+}
+impl Version {
+    pub fn new() -> Self {
+        Self {
+            version: VERSION.to_string(),
+        }
+    }
+}
 
 pub fn get((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    let payload = rm::Version::new();
-    reply(&req, &data, Ok(payload), false, 200)
+    reply(&req, &data, Ok(Version::new()), false, 200)
 }
