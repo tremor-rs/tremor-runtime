@@ -19,20 +19,22 @@ use halfbrown::hashmap;
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (origin::as_uri_string(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.to_string().into()))
             } else {
                 Ok(Value::Null)
             }
         }))
         .insert(tremor_fn! (origin::as_uri_record(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(Value::Object(
                     hashmap! {
                         "scheme".into() => Value::from(uri.scheme().to_string()),
                         "host".into() => Value::from(uri.host().to_string()),
                         "port".into() => match uri.port() {
                             Some(n) => Value::from(*n),
+                            // TODO would be nice to support this?
+                            //None => Value::from(None),
                             None => Value::Null,
                         },
                         "path".into() => Value::from(uri.path().to_string()),
@@ -43,25 +45,23 @@ pub fn load(registry: &mut Registry) {
             }
         }))
         .insert(tremor_fn! (origin::scheme(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.scheme().to_string().into()))
             } else {
                 Ok(Value::Null)
             }
         }))
         .insert(tremor_fn! (origin::host(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.host().to_string().into()))
             } else {
                 Ok(Value::Null)
             }
         }))
         .insert(tremor_fn! (origin::port(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(match uri.port() {
                     Some(n) => Value::I64(i64::from(*n)),
-                    // TODO would be nice to support this?
-                    //None => Value::from(None),
                     None => Value::Null,
                 })
             } else {
@@ -69,7 +69,7 @@ pub fn load(registry: &mut Registry) {
             }
         }))
         .insert(tremor_fn! (origin::path(context) {
-            if let Some(ref uri) = context.origin_uri {
+            if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.path().to_string().into()))
             } else {
                 Ok(Value::Null)
