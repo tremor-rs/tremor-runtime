@@ -175,7 +175,11 @@ where
             And => Ok(static_bool!(*l && *r)),
             Or => Ok(static_bool!(*l || *r)),
             #[allow(clippy::if_not_else)]
-            Xor => Ok(static_bool!(*l != *r)),
+            Xor =>
+            {
+                #[allow(clippy::if_not_else)]
+                Ok(static_bool!(*l != *r))
+            }
             BitAnd => Ok(static_bool!(*l & *r)),
             BitOr => Ok(static_bool!(*l | *r)),
             BitXor => Ok(static_bool!(*l ^ *r)),

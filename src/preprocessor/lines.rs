@@ -29,7 +29,7 @@ impl Lines {
     // TODO have the params here as a config struct
     // also break lines on string (eg: \r\n)
     pub fn new(separator: char, max_length: usize) -> Self {
-        Lines {
+        Self {
             separator: separator as u8,
             max_length,
             fragment_length: 0,

@@ -51,7 +51,7 @@ impl onramp::Impl for Tcp {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Tcp { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for tcp onramp".into())
         }
@@ -70,6 +70,9 @@ impl TremorTcpConnection {
     }
 }
 
+// We got to allow this because of the way that the onramp works
+// by creating new instances during runtime.
+#[allow(clippy::needless_pass_by_value)]
 fn onramp_loop(
     rx: &Receiver<onramp::Msg>,
     config: &Config,
