@@ -1886,6 +1886,18 @@ impl<'script> PredicatePattern<'script> {
             | FieldAbsent { key, .. } => &key,
         }
     }
+
+    fn lhs(&self) -> &Cow<'script, str> {
+        use PredicatePattern::*;
+        match self {
+            TildeEq { lhs, .. }
+            | Eq { lhs, .. }
+            | RecordPatternEq { lhs, .. }
+            | ArrayPatternEq { lhs, .. }
+            | FieldPresent { lhs, .. }
+            | FieldAbsent { lhs, .. } => &lhs,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RecordPattern1<'script> {
@@ -1898,6 +1910,64 @@ impl<'script> Upable<'script> for RecordPattern1<'script> {
     type Target = RecordPattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let fields = self.fields.up(helper)?;
+        let present_fields: Vec<Cow<str>> = fields
+            .iter()
+            .filter_map(|f| {
+                if let PredicatePattern::FieldPresent { lhs, .. } = f {
+                    Some(lhs.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let absent_fields: Vec<Cow<str>> = fields
+            .iter()
+            .filter_map(|f| {
+                if let PredicatePattern::FieldAbsent { lhs, .. } = f {
+                    Some(lhs.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for present in &present_fields {
+            let duplicated = fields.iter().any(|f| {
+                if let PredicatePattern::FieldPresent { .. } = f {
+                    false
+                } else {
+                    f.lhs() == present
+                }
+            });
+            if duplicated {
+                let extent = (self.start, self.end).into();
+                helper.warnings.push(Warning {
+                    inner: extent,
+                    outer: extent.expand_lines(2),
+                    msg: format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also oberwrite the result of th extractor.", present),
+                })
+            }
+        }
+
+        for absent in &absent_fields {
+            let duplicated = fields.iter().any(|f| {
+                if let PredicatePattern::FieldAbsent { .. } = f {
+                    false
+                } else {
+                    f.lhs() == absent
+                }
+            });
+            if duplicated {
+                let extent = (self.start, self.end).into();
+                helper.warnings.push(Warning {
+                    inner: extent,
+                    outer: extent.expand_lines(2),
+                    msg: format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                })
+            }
+        }
+
         Ok(RecordPattern {
             start: self.start,
             end: self.end,
