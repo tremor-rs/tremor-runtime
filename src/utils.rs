@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FIXME: make util crate! .unwrap()
-
 use chrono::{Timelike, Utc};
 use std::time::Duration;
 pub use tremor_pipeline::ConfigImpl;

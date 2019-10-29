@@ -45,7 +45,7 @@ impl offramp::Impl for File {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let file = FSFile::create(config.file)?;
-            Ok(Box::new(File {
+            Ok(Box::new(Self {
                 file,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],

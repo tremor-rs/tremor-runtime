@@ -31,6 +31,8 @@ impl Default for GELF {
 }
 
 impl GELF {
+    // We cut i and n to u8 but check that n <= 128 before so it is safe.
+    #[allow(clippy::cast_possible_truncation)]
     fn encode_gelf(&mut self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let chunks = data.chunks(self.chunk_size - 12);
         let n = chunks.len();

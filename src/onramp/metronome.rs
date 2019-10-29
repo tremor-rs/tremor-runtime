@@ -35,7 +35,7 @@ impl onramp::Impl for Metronome {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Metronome { config }))
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for metronome onramp".into())
         }
