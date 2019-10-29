@@ -131,9 +131,12 @@ impl TrickleScript {
 
 impl Operator for TrickleScript {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        // TODO avoid origin_uri clone here
-        let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
+    fn on_event(
+        &mut self,
+        _port: &str,
+        mut event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+        let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
         let data = event.data.suffix();
         let mut unwind_event: &mut tremor_script::Value<'_> =
@@ -147,6 +150,9 @@ impl Operator for TrickleScript {
             &mut unwind_event, // event
             &mut event_meta,   // $
         );
+
+        // move origin_uri back to event again
+        event.origin_uri = context.origin_uri;
 
         match value {
             Ok(Return::EmitEvent { port }) => {
