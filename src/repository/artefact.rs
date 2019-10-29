@@ -464,7 +464,7 @@ impl Artefact for Binding {
                             }
                             (_, _) => {
                                 return Err(
-                                    "links require the from of onramp -> pipeline or pipelein -> offramp"
+                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline"
                                         .into(),
                                 );
                             }
