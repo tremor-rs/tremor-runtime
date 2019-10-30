@@ -22,7 +22,7 @@ pub struct EventOriginUri {
     pub scheme: String,
     pub host: String,
     pub port: Option<u16>,
-    pub path: String,
+    pub path: Vec<String>,
     // TODO add query_string here?
 }
 
@@ -39,7 +39,7 @@ impl EventOriginUri {
                     scheme: r.scheme().to_string(),
                     host: host.to_string(),
                     port: r.port(),
-                    path: r.path().to_string(),
+                    path: r.path().split('/').map(String::from).collect(),
                 })
             }
             Err(e) => Err(e.into()),
@@ -55,7 +55,7 @@ impl EventOriginUri {
     pub fn port(&self) -> &Option<u16> {
         &self.port
     }
-    pub fn path(&self) -> &str {
+    pub fn path(&self) -> &Vec<String> {
         &self.path
     }
 }
@@ -66,7 +66,7 @@ impl fmt::Display for EventOriginUri {
         if let Some(port) = self.port {
             write!(f, ":{}", port)?;
         }
-        write!(f, "/{}", self.path)?;
+        write!(f, "/{}", self.path.join("/"))?;
         r
     }
 }

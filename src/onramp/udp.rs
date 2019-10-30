@@ -103,9 +103,8 @@ fn onramp_loop(
                         let origin_uri = tremor_pipeline::EventOriginUri {
                             scheme: "tremor-udp".to_string(),
                             host: sender_addr.ip().to_string(),
-                            // TODO use server-side receive port here?
                             port: Some(sender_addr.port()),
-                            path: config.port.to_string(), // captures receive port
+                            path: vec![config.port.to_string()], // captures receive port
                         };
                         send_event(
                             &pipelines,

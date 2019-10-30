@@ -202,7 +202,7 @@ fn onramp_loop(
                                         host: client_addr.ip().to_string(),
                                         port: Some(client_addr.port()),
                                         // captures server port and connection id
-                                        path: format!("{}/{}", config.port, token.0),
+                                        path: vec![config.port.to_string(), token.0.to_string()],
                                     };
                                     send_event(
                                         &pipelines,
