@@ -15,6 +15,7 @@
 use crate::onramp::prelude::*;
 //NOTE: This is required for StreamHander's stream
 use crate::utils::nanotime;
+use hostname::get_hostname;
 use serde_yaml::Value;
 use simd_json::json;
 use std::time::Duration;
@@ -48,6 +49,8 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
+    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
+
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
 
@@ -83,14 +86,19 @@ fn onramp_loop(
         let data =
             serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
         let mut ingest_ns = nanotime();
+        let origin_uri = tremor_pipeline::EventOriginUri {
+            scheme: "tremor-metronome".to_string(),
+            host: hostname.clone(),
+            port: None,
+            path: vec![config.interval.to_string()],
+        };
         if let Ok(data) = data {
             send_event(
                 &pipelines,
                 &mut preprocessors,
                 &mut codec,
                 &mut ingest_ns,
-                // TODO proper origin uri here
-                None,
+                Some(origin_uri),
                 id,
                 data,
             );

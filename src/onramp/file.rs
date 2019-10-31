@@ -14,6 +14,7 @@
 
 use crate::dflt;
 use crate::onramp::prelude::*;
+use hostname::get_hostname;
 use serde_yaml::Value;
 use std::fs::File as FSFile;
 use std::io::{BufRead, BufReader};
@@ -55,6 +56,7 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
+    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
     let source_data_file = FSFile::open(&config.source)?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -93,13 +95,18 @@ fn onramp_loop(
         };
 
         let mut ingest_ns = nanotime();
+        let origin_uri = tremor_pipeline::EventOriginUri {
+            scheme: "tremor-file".to_string(),
+            host: hostname.clone(),
+            port: None,
+            path: vec![config.source.clone()],
+        };
         send_event(
             &pipelines,
             &mut preprocessors,
             &mut codec,
             &mut ingest_ns,
-            // TODO proper origin uri here
-            None,
+            Some(origin_uri),
             id,
             line?.as_bytes().to_vec(),
         );

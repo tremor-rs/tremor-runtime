@@ -105,7 +105,7 @@ pub enum HttpMethod {
 
 #[derive(Clone)]
 struct OnrampState {
-    tx: Sender<Response>,
+    tx: Sender<RestOnrampMessage>,
     config: Config,
 }
 
@@ -154,8 +154,18 @@ fn handler(
         body,
         method: req.method().as_str().to_owned(),
     };
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-rest".to_string(),
+        host: req
+            .connection_info()
+            .remote()
+            .map_or("tremor-rest-client.remote".to_string(), |s| s.to_string()),
+        port: None,
+        // TODO add server port here (like for tcp onramp) -- can be done via OnrampState
+        path: vec![String::default()],
+    };
 
-    if let Err(_e) = tx.send(response) {
+    if let Err(_e) = tx.send((origin_uri, response)) {
         Box::new(result(Err("Failed to send to pipeline".into())))
     } else {
         let status = StatusCode::from_u16(match *req.method() {
@@ -202,7 +212,7 @@ fn onramp_loop(
     mut codec: std::boxed::Box<dyn codec::Codec>,
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
-    let (tx, dr) = bounded::<Response>(1);
+    let (tx, dr) = bounded::<RestOnrampMessage>(1);
     thread::Builder::new()
         .name(format!("onramp-rest-{}", "???"))
         .spawn(move || {
@@ -234,7 +244,7 @@ fn onramp_loop(
             continue;
         } else {
             match dr.try_recv() {
-                Ok(data) => {
+                Ok((origin_uri, data)) => {
                     let data = json!(data).encode().into_bytes();
                     let mut ingest_ns = nanotime();
                     send_event(
@@ -242,8 +252,7 @@ fn onramp_loop(
                         &mut preprocessors,
                         &mut codec,
                         &mut ingest_ns,
-                        // TODO proper origin uri here
-                        None,
+                        Some(origin_uri),
                         0,
                         data,
                     );
@@ -268,3 +277,5 @@ pub struct Response {
     body: Vec<u8>,
     method: String,
 }
+
+type RestOnrampMessage = (tremor_pipeline::EventOriginUri, Response);

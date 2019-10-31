@@ -14,6 +14,7 @@
 
 use crate::dflt;
 use crate::onramp::prelude::*;
+use hostname::get_hostname;
 use serde_yaml::Value;
 use std::fs::File;
 use std::io::{BufRead, Read};
@@ -80,6 +81,7 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
+    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
@@ -108,7 +110,7 @@ fn onramp_loop(
             };
             continue;
         } else {
-            // TODO better sleep perha
+            // TODO better sleep perhaps
             if let Some(ival) = config.interval {
                 thread::sleep(Duration::from_nanos(ival));
             }
@@ -137,13 +139,18 @@ fn onramp_loop(
 
         if let Some(data) = acc.consuming.pop() {
             let mut ingest_ns = nanotime();
+            let origin_uri = tremor_pipeline::EventOriginUri {
+                scheme: "tremor-blaster".to_string(),
+                host: hostname.clone(),
+                port: None,
+                path: vec![config.source.clone()],
+            };
             send_event(
                 &pipelines,
                 &mut preprocessors,
                 &mut codec,
                 &mut ingest_ns,
-                // TODO proper origin uri here
-                None,
+                Some(origin_uri),
                 id,
                 data,
             );

@@ -101,10 +101,7 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = match get_hostname() {
-        Some(h) => h,
-        None => "tremor-host.local".to_string(),
-    };
+    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
     let context = LoggingConsumerContext;
     let tid = 0; //TODO: get a good thread id
     let mut client_config = ClientConfig::new();
@@ -139,6 +136,14 @@ fn onramp_loop(
         .iter()
         .map(std::string::String::as_str)
         .collect();
+
+    // for use in event origin uri
+    let first_broker: Vec<String> = config.brokers[0].split(':').map(String::from).collect();
+    let first_broker_host = &first_broker[0];
+    let first_broker_port = match &first_broker.get(1) {
+        Some(n) => Some(n.parse::<u16>()?),
+        None => None,
+    };
 
     let stream = consumer.start();
 
@@ -225,13 +230,23 @@ fn onramp_loop(
                     if let Ok(data) = data {
                         id += 1;
                         let mut ingest_ns = nanotime();
+                        let origin_uri = tremor_pipeline::EventOriginUri {
+                            scheme: "tremor-kafka".to_string(),
+                            // picking the first host for these
+                            host: first_broker_host.clone(),
+                            port: first_broker_port.clone(),
+                            path: vec![
+                                m.topic().to_string(),
+                                m.partition().to_string(),
+                                m.offset().to_string(),
+                            ],
+                        };
                         send_event(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
                             &mut ingest_ns,
-                            // TODO proper origin uri here
-                            None,
+                            Some(origin_uri),
                             id,
                             data.to_vec(),
                         );

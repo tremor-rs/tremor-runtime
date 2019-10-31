@@ -48,7 +48,7 @@ impl onramp::Impl for Ws {
 }
 
 enum WsOnrampMessage {
-    Data(u64, Vec<u8>),
+    Data(u64, tremor_pipeline::EventOriginUri, Vec<u8>),
 }
 
 /// websocket connection is long running connection, it easier
@@ -56,11 +56,20 @@ enum WsOnrampMessage {
 struct TremorWebSocket {
     preprocessors: Preprocessors,
     tx: Sender<WsOnrampMessage>,
+    origin_uri: tremor_pipeline::EventOriginUri,
 }
 
 impl TremorWebSocket {
-    fn new(tx: Sender<WsOnrampMessage>, preprocessors: Preprocessors) -> Self {
-        Self { tx, preprocessors }
+    fn new(
+        tx: Sender<WsOnrampMessage>,
+        preprocessors: Preprocessors,
+        origin_uri: tremor_pipeline::EventOriginUri,
+    ) -> Self {
+        Self {
+            tx,
+            preprocessors,
+            origin_uri,
+        }
     }
 }
 
@@ -86,7 +95,11 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                     handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.into_bytes())
                 {
                     for d in data {
-                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(ingest_ns, d)) {
+                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(
+                            ingest_ns,
+                            self.origin_uri.clone(),
+                            d,
+                        )) {
                             error!("Websocket onramp message error: {}", e)
                         }
                     }
@@ -98,7 +111,11 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                 let mut ingest_ns = nanotime();
                 if let Ok(data) = handle_pp(&mut self.preprocessors, &mut ingest_ns, bin.to_vec()) {
                     for d in data {
-                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(ingest_ns, d)) {
+                        if let Err(e) = self.tx.send(WsOnrampMessage::Data(
+                            ingest_ns,
+                            self.origin_uri.clone(),
+                            d,
+                        )) {
                             error!("Websocket onramp message error: {}", e)
                         }
                     }
@@ -130,15 +147,27 @@ struct WsServerState {
 // The signature is enforced by a forign trait.
 #[allow(clippy::needless_pass_by_value)]
 fn ws_index(
-    r: HttpRequest,
+    req: HttpRequest,
     stream: web::Payload,
     data: web::Data<WsServerState>,
 ) -> ActixResult<HttpResponse> {
     info!("Starting websocket handler");
+
     let preprocessors = make_preprocessors(&data.preprocessors)?;
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-ws".to_string(),
+        host: req
+            .connection_info()
+            .remote()
+            .map_or("tremor-ws-client.remote".to_string(), |s| s.to_string()),
+        port: None,
+        // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
+        path: vec![String::default()],
+    };
+
     ws::start(
-        TremorWebSocket::new(data.tx.clone(), preprocessors),
-        &r,
+        TremorWebSocket::new(data.tx.clone(), preprocessors, origin_uri),
+        &req,
         stream,
     )
 }
@@ -197,15 +226,14 @@ fn onramp_loop(
             },
             recv(main_rx) -> msg => match msg {
                 Err(e) => return Err(format!("Crossbream receive error: {}", e).into()),
-                Ok(WsOnrampMessage::Data(mut ingest_ns, data)) => {
+                Ok(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) => {
                     id += 1;
                     send_event(
                         &pipelines,
                         &mut no_pp,
                         &mut codec,
                         &mut ingest_ns,
-                        // TODO proper origin uri here
-                        None,
+                        Some(origin_uri),
                         id,
                         data
                     );
