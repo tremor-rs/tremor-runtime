@@ -58,6 +58,14 @@ impl EventOriginUri {
     pub fn path(&self) -> &Vec<String> {
         &self.path
     }
+
+    pub fn host_port(&self) -> String {
+        if let Some(port) = self.port() {
+            format!("{}:{}", self.host(), port)
+        } else {
+            self.host().to_string()
+        }
+    }
 }
 
 impl fmt::Display for EventOriginUri {

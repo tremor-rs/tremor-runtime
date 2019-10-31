@@ -60,6 +60,7 @@ impl onramp::Impl for Tcp {
 
 struct TremorTcpConnection {
     stream: TcpStream,
+    origin_uri: tremor_pipeline::EventOriginUri,
     preprocessors: Preprocessors,
 }
 
@@ -136,8 +137,17 @@ fn onramp_loop(
                         Ok((stream, client_addr)) => {
                             debug!("Accepted connection from client: {}", client_addr);
 
+                            let origin_uri = tremor_pipeline::EventOriginUri {
+                                scheme: "tremor-tcp".to_string(),
+                                host: client_addr.ip().to_string(),
+                                port: Some(client_addr.port()),
+                                // TODO also add token_num here?
+                                path: vec![config.port.to_string()], // captures server port
+                            };
+
                             let tcp_connection = TremorTcpConnection {
                                 stream,
+                                origin_uri,
                                 preprocessors: make_preprocessors(&preprocessors)?,
                             };
 
@@ -167,19 +177,17 @@ fn onramp_loop(
                 token => {
                     if let Some(TremorTcpConnection {
                         ref mut stream,
+                        ref origin_uri,
                         ref mut preprocessors,
                     }) = connections[token.0]
                     {
-                        // TODO test re-connections
-                        // TODO store host/port info from here in TremorTcpConnection struct
-                        // so that we don't have to look it up on every event?
-                        let client_addr = stream.peer_addr()?;
                         loop {
                             match stream.read(&mut buffer) {
                                 Ok(0) => {
+                                    // TODO test re-connections
                                     debug!(
                                         "Connection closed by client: {}",
-                                        client_addr.to_string()
+                                        origin_uri.host_port()
                                     );
                                     connections[token.0] = None;
 
@@ -197,19 +205,12 @@ fn onramp_loop(
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
-                                    let origin_uri = tremor_pipeline::EventOriginUri {
-                                        scheme: "tremor-tcp".to_string(),
-                                        host: client_addr.ip().to_string(),
-                                        port: Some(client_addr.port()),
-                                        // captures server port and connection id
-                                        path: vec![config.port.to_string(), token.0.to_string()],
-                                    };
                                     send_event(
                                         &pipelines,
                                         preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
-                                        Some(origin_uri),
+                                        Some(origin_uri.clone()),
                                         id,
                                         buffer[0..n].to_vec(),
                                     );
