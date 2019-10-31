@@ -111,7 +111,7 @@ fn onramp_loop(
                             &mut preprocessors,
                             &mut codec,
                             &mut ingest_ns,
-                            Some(origin_uri),
+                            origin_uri,
                             id,
                             buf[0..n].to_vec(),
                         );

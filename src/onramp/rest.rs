@@ -252,7 +252,7 @@ fn onramp_loop(
                         &mut preprocessors,
                         &mut codec,
                         &mut ingest_ns,
-                        Some(origin_uri),
+                        origin_uri,
                         0,
                         data,
                     );
