@@ -159,7 +159,8 @@ fn ws_index(
         host: req
             .connection_info()
             .remote()
-            .map_or("tremor-ws-client.remote".to_string(), |s| s.to_string()),
+            .unwrap_or("tremor-ws-client.remote")
+            .to_string(),
         port: None,
         // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
         path: vec![String::default()],

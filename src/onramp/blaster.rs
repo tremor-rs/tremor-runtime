@@ -81,7 +81,7 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
+    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data

@@ -210,10 +210,13 @@ where
                 Some(n) => Ok(Cow::Owned(I64(n))),
                 None => error_invalid_bitshift(outer, inner),
             },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             RBitShiftUnsigned => match (*l as u64).checked_shr(*r as u32) {
+                #[allow(clippy::cast_possible_wrap)]
                 Some(n) => Ok(Cow::Owned(I64(n as i64))),
                 None => error_invalid_bitshift(outer, inner),
             },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             LBitShift => match (*l).checked_shl(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),
                 None => error_invalid_bitshift(outer, inner),
@@ -254,11 +257,9 @@ pub fn exec_unary<'run, 'event: 'run>(
         (Minus, F64(x)) => Some(Cow::Owned(F64(-*x))),
         (Plus, I64(x)) => Some(Cow::Owned(I64(*x))),
         (Plus, F64(x)) => Some(Cow::Owned(F64(*x))),
-        (Not, Bool(true)) => Some(static_bool!(false)), // This is not true
-        (Not, Bool(false)) => Some(static_bool!(true)), // this is not false
+        (Not, Bool(true)) | (BitNot, Bool(true)) => Some(static_bool!(false)), // This is not true
+        (Not, Bool(false)) | (BitNot, Bool(false)) => Some(static_bool!(true)), // this is not false
         (BitNot, I64(x)) => Some(Cow::Owned(I64(!x))),
-        (BitNot, Bool(true)) => Some(static_bool!(false)), // This is not true
-        (BitNot, Bool(false)) => Some(static_bool!(true)), // this is not false
         _ => None,
     }
 }

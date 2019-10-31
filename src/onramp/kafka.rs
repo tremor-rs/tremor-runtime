@@ -101,7 +101,7 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or("tremor-host.local".to_string());
+    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let context = LoggingConsumerContext;
     let tid = 0; //TODO: get a good thread id
     let mut client_config = ClientConfig::new();
@@ -233,8 +233,8 @@ fn onramp_loop(
                         let origin_uri = tremor_pipeline::EventOriginUri {
                             scheme: "tremor-kafka".to_string(),
                             // picking the first host for these
-                            host: first_broker_host.clone(),
-                            port: first_broker_port.clone(),
+                            host: first_broker_host.to_string(),
+                            port: first_broker_port,
                             path: vec![
                                 m.topic().to_string(),
                                 m.partition().to_string(),

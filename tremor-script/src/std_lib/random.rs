@@ -32,12 +32,12 @@ pub fn load(registry: &mut Registry) {
     impl TremorFn for RandomInteger {
         fn invoke<'event, 'c>(
             &self,
-            _ctx: &'c EventContext,
+            ctx: &'c EventContext,
             args: &[&Value<'event>],
         ) -> FResult<Value<'event>> {
             let this_mfa = || mfa("random", "integer", args.len());
             // TODO add event id to the seed? also change ingest_ns() for tremor-script binary runs too
-            let mut rng = SmallRng::seed_from_u64(_ctx.ingest_ns());
+            let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
@@ -95,11 +95,11 @@ pub fn load(registry: &mut Registry) {
     impl TremorFn for RandomFloat {
         fn invoke<'event, 'c>(
             &self,
-            _ctx: &'c EventContext,
+            ctx: &'c EventContext,
             args: &[&Value<'event>],
         ) -> FResult<Value<'event>> {
             let this_mfa = || mfa("random", "float", args.len());
-            let mut rng = SmallRng::seed_from_u64(_ctx.ingest_ns());
+            let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
