@@ -121,6 +121,7 @@ macro_rules! ignore_cases {
 
 test_cases!(
     bad_binary,
+    bad_bitshift,
     bad_index_type,
     bad_unary,
     arr_bad_idx,

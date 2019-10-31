@@ -107,6 +107,7 @@ fn onramp_loop(
                 use std::io::ErrorKind;
                 match socket.recv_from(&mut buf) {
                     Ok((n, sender_addr)) => {
+                        // TODO add a method in origin_uri for changes like this?
                         origin_uri.host = sender_addr.ip().to_string();
                         origin_uri.port = Some(sender_addr.port());
                         send_event(

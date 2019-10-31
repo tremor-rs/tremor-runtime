@@ -122,6 +122,7 @@ fn onramp_loop(
                     match base64::decode(&body.data.unwrap_or_default()) {
                         Ok(decoded) => {
                             let mut ingest_ns = nanotime();
+                            // TODO add a method in origin_uri for changes like this?
                             origin_uri.path.push(body.message_id.unwrap_or_default());
                             send_event(
                                 &pipelines,
