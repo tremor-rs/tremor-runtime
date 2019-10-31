@@ -1,0 +1,11 @@
+emit [
+  system::ingest_ns(),
+
+	origin::scheme(),
+  origin::host(),
+  origin::port(),
+  origin::path(),
+
+  origin::as_uri_string(),
+  origin::as_uri_record()
+]

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::errors::*;
+use std::default;
 use std::fmt;
 use url::Url;
 
@@ -23,7 +24,8 @@ pub struct EventOriginUri {
     pub host: String,
     pub port: Option<u16>,
     pub path: Vec<String>,
-    // TODO add query_string here?
+    // implement query params if we find a good usecase for it
+    //pub query: Hashmap<String, String>
 }
 
 // TODO add tests for this struct
@@ -79,10 +81,22 @@ impl fmt::Display for EventOriginUri {
     }
 }
 
+impl default::Default for EventOriginUri {
+    fn default() -> Self {
+        Self {
+            scheme: "tremor-script".to_string(),
+            host: "localhost".to_string(),
+            port: None,
+            path: vec![String::default()],
+        }
+    }
+}
+
 // TODO check if we need all of these derives here still
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize)]
 pub struct EventContext {
     pub at: u64,
+    // TODO make this non-optional?
     pub origin_uri: Option<EventOriginUri>,
 }
 

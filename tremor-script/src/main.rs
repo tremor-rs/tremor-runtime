@@ -48,7 +48,7 @@ use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
-pub use ctx::EventContext;
+pub use ctx::{EventContext, EventOriginUri};
 use halfbrown::hashmap;
 use simd_json::borrowed::{Object, Value};
 use std::fs::File;
@@ -236,8 +236,8 @@ fn main() -> Result<()> {
             for event in &mut events {
                 runnable.run(
                     &EventContext {
-                        at: 0,
-                        origin_uri: None,
+                        at: 0, // TODO add a value here?
+                        origin_uri: Some(EventOriginUri::default()),
                     },
                     AggrType::Tick,
                     event,
@@ -246,8 +246,8 @@ fn main() -> Result<()> {
             }
             let expr = runnable.run(
                 &EventContext {
-                    at: 0,
-                    origin_uri: None,
+                    at: 0, // TODO add a value here?
+                    origin_uri: Some(EventOriginUri::default()),
                 },
                 AggrType::Emit,
                 &mut event,
