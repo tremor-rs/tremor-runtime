@@ -206,6 +206,7 @@ where
             Mul => Ok(Cow::Owned(I64(*l * *r))),
             Div => Ok(Cow::Owned(F64((*l as f64) / (*r as f64)))),
             Mod => Ok(Cow::Owned(I64(*l % *r))),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             RBitShiftSigned => match (*l).checked_shr(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),
                 None => error_invalid_bitshift(outer, inner),
