@@ -56,7 +56,6 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let source_data_file = FSFile::open(&config.source)?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -67,6 +66,13 @@ fn onramp_loop(
         Box::new(BufReader::new(XzDecoder::new(source_data_file)))
     } else {
         Box::new(BufReader::new(source_data_file))
+    };
+
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-file".to_string(),
+        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        port: None,
+        path: vec![config.source.clone()],
     };
 
     for line in reader.lines() {
@@ -95,18 +101,12 @@ fn onramp_loop(
         };
 
         let mut ingest_ns = nanotime();
-        let origin_uri = tremor_pipeline::EventOriginUri {
-            scheme: "tremor-file".to_string(),
-            host: hostname.clone(),
-            port: None,
-            path: vec![config.source.clone()],
-        };
         send_event(
             &pipelines,
             &mut preprocessors,
             &mut codec,
             &mut ingest_ns,
-            origin_uri,
+            &origin_uri,
             id,
             line?.as_bytes().to_vec(),
         );

@@ -49,10 +49,15 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
+
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-metronome".to_string(),
+        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        port: None,
+        path: vec![config.interval.to_string()],
+    };
 
     loop {
         if pipelines.is_empty() {
@@ -86,19 +91,13 @@ fn onramp_loop(
         let data =
             serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
         let mut ingest_ns = nanotime();
-        let origin_uri = tremor_pipeline::EventOriginUri {
-            scheme: "tremor-metronome".to_string(),
-            host: hostname.clone(),
-            port: None,
-            path: vec![config.interval.to_string()],
-        };
         if let Ok(data) = data {
             send_event(
                 &pipelines,
                 &mut preprocessors,
                 &mut codec,
                 &mut ingest_ns,
-                origin_uri,
+                &origin_uri,
                 id,
                 data,
             );

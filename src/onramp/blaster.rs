@@ -81,7 +81,6 @@ fn onramp_loop(
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
@@ -96,6 +95,13 @@ fn onramp_loop(
         .collect();
     acc.elements = elements?;
     acc.consuming = acc.elements.clone();
+
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-blaster".to_string(),
+        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        port: None,
+        path: vec![config.source.clone()],
+    };
 
     let iters = config.iters;
     let mut id = 0;
@@ -139,18 +145,12 @@ fn onramp_loop(
 
         if let Some(data) = acc.consuming.pop() {
             let mut ingest_ns = nanotime();
-            let origin_uri = tremor_pipeline::EventOriginUri {
-                scheme: "tremor-blaster".to_string(),
-                host: hostname.clone(),
-                port: None,
-                path: vec![config.source.clone()],
-            };
             send_event(
                 &pipelines,
                 &mut preprocessors,
                 &mut codec,
                 &mut ingest_ns,
-                origin_uri,
+                &origin_uri,
                 id,
                 data,
             );

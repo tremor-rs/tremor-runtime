@@ -61,6 +61,13 @@ fn onramp_loop(
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
 
+    let mut origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-udp".to_string(),
+        host: String::default(),
+        port: None,
+        path: vec![config.port.to_string()], // captures receive port
+    };
+
     info!("[UDP Onramp] listening on {}:{}", config.host, config.port);
     let poll = Poll::new()?;
 
@@ -100,18 +107,14 @@ fn onramp_loop(
                 use std::io::ErrorKind;
                 match socket.recv_from(&mut buf) {
                     Ok((n, sender_addr)) => {
-                        let origin_uri = tremor_pipeline::EventOriginUri {
-                            scheme: "tremor-udp".to_string(),
-                            host: sender_addr.ip().to_string(),
-                            port: Some(sender_addr.port()),
-                            path: vec![config.port.to_string()], // captures receive port
-                        };
+                        origin_uri.host = sender_addr.ip().to_string();
+                        origin_uri.port = Some(sender_addr.port());
                         send_event(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
                             &mut ingest_ns,
-                            origin_uri,
+                            &origin_uri,
                             id,
                             buf[0..n].to_vec(),
                         );

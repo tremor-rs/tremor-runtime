@@ -154,6 +154,7 @@ fn handler(
         body,
         method: req.method().as_str().to_owned(),
     };
+    // TODO cache parts of this and update host only on new request
     let origin_uri = tremor_pipeline::EventOriginUri {
         scheme: "tremor-rest".to_string(),
         host: req
@@ -253,7 +254,7 @@ fn onramp_loop(
                         &mut preprocessors,
                         &mut codec,
                         &mut ingest_ns,
-                        origin_uri,
+                        &origin_uri,
                         0,
                         data,
                     );

@@ -63,7 +63,7 @@ pub fn send_event(
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     ingest_ns: &mut u64,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: &tremor_pipeline::EventOriginUri,
     id: u64,
     data: Vec<u8>,
 ) {
@@ -76,7 +76,7 @@ pub fn send_event(
                         id,
                         data,
                         ingest_ns: *ingest_ns,
-                        // TODO avoid the clone here. also make it non-optional here too?
+                        // TODO make origin_uri non-optional here too?
                         origin_uri: Some(origin_uri.clone()),
                         kind: None,
                     };

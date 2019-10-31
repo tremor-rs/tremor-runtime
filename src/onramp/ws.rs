@@ -97,6 +97,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                     for d in data {
                         if let Err(e) = self.tx.send(WsOnrampMessage::Data(
                             ingest_ns,
+                            // TODO possible to avoid clone here? we clone again inside send_event
                             self.origin_uri.clone(),
                             d,
                         )) {
@@ -113,6 +114,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for TremorWebSocket {
                     for d in data {
                         if let Err(e) = self.tx.send(WsOnrampMessage::Data(
                             ingest_ns,
+                            // TODO possible to avoid clone here? we clone again inside send_event
                             self.origin_uri.clone(),
                             d,
                         )) {
@@ -234,7 +236,7 @@ fn onramp_loop(
                         &mut no_pp,
                         &mut codec,
                         &mut ingest_ns,
-                        origin_uri,
+                        &origin_uri,
                         id,
                         data
                     );

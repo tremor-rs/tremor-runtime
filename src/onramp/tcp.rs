@@ -210,7 +210,7 @@ fn onramp_loop(
                                         preprocessors,
                                         &mut codec,
                                         &mut ingest_ns,
-                                        origin_uri.clone(),
+                                        origin_uri,
                                         id,
                                         buffer[0..n].to_vec(),
                                     );

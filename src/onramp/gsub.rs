@@ -65,6 +65,13 @@ fn onramp_loop(
     let mut id = 0;
     let subscription_name = config.subscription.clone();
 
+    let mut origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-gsub".to_string(),
+        host: "google-pub".to_string(),
+        port: None,
+        path: vec![subscription_name.clone()],
+    };
+
     //    thread::spawn(move || {
     let hub = pubsub_api(&config.service_account.to_string())?;
     let projects = hub.projects();
@@ -115,21 +122,13 @@ fn onramp_loop(
                     match base64::decode(&body.data.unwrap_or_default()) {
                         Ok(decoded) => {
                             let mut ingest_ns = nanotime();
-                            let origin_uri = tremor_pipeline::EventOriginUri {
-                                scheme: "tremor-gsub".to_string(),
-                                host: "google-pub".to_string(),
-                                port: None,
-                                path: vec![
-                                    config.subscription.clone(),
-                                    body.message_id.unwrap_or_default(),
-                                ],
-                            };
+                            origin_uri.path.push(body.message_id.unwrap_or_default());
                             send_event(
                                 &pipelines,
                                 &mut preprocessors,
                                 &mut codec,
                                 &mut ingest_ns,
-                                origin_uri,
+                                &origin_uri,
                                 id,
                                 decoded,
                             );
