@@ -356,9 +356,6 @@ const HIST_MAX_CACHE_SIZE: usize = 8192;
 const HIST_INITIAL_CACHE_SIZE: usize = 128;
 impl std::default::Default for Hdr {
     fn default() -> Self {
-        #[allow(clippy::result_unwrap_used)]
-        //let mut h = Histogram::new_with_bounds(1, 32, 2).unwrap();
-        //h.auto(true);
         Self {
             //ALLOW: this values have been tested so an error can never be returned
             histo: None,
@@ -505,6 +502,7 @@ impl TremorAggrFn for Hdr {
                     } else {
                         // If not append it's cache
                         self.cache.extend(&other.cache);
+                        self.max = max(self.max, other.max);
                     }
                 }
             }
@@ -542,6 +540,7 @@ impl TremorAggrFn for Hdr {
                         error: format!("failed to init historgrams: {:?}", e),
                     }
                 })?;
+            histo.auto(true);
             for v in self.cache.drain(..) {
                 histo.record(v).map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),
