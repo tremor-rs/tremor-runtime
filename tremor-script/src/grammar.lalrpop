@@ -386,7 +386,7 @@ Float: Value<'input> = {
     <literal:"float"> => Value::from(literal.0),
 }
 
-                                                                                                                                                                                                                                                                                                  StringLiteral: StringLit1<'input> = {
+StringLiteral: StringLit1<'input> = {
     <start:@L> <doc:"heredoc"> <end:@L> =>   StringLit1 {
         start,
         end,

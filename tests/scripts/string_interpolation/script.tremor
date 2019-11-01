@@ -1,0 +1,8 @@
+{
+    "pre_{event.class}": event.answer,
+    "{event.class}_post": event.answer + 1,
+    "aro_{event.class}_und": event.answer + 2,
+    "int_{event.class}_er_{event.answer}_lev_{event.answer}_ing": event.class,
+    "concatina_{event.class}{event.answer}{event.answer}{event.class}{event.class}_ing": event.class,
+
+}

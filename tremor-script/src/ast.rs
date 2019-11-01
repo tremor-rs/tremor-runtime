@@ -491,6 +491,9 @@ pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprs1<'s
 
 impl<'script> From<StrLitElements<'script>> for StringLit1<'script> {
     fn from(mut es: StrLitElements<'script>) -> StringLit1<'script> {
+        es.0.reverse();
+        es.1.reverse();
+
         let string = if es.0.len() == 1 {
             es.0.pop().unwrap_or_default()
         } else {
@@ -751,7 +754,8 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                 if s.exprs.is_empty() {
                     lit.up(helper)?
                 } else {
-                    let mut args = vec![lit];
+                    let mut args = vec![dbg!(lit)];
+                    //                    args.reverse();
                     args.append(&mut s.exprs);
                     ImutExpr1::Invoke(Invoke1 {
                         start: s.start,

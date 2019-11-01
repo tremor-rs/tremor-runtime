@@ -112,6 +112,7 @@ test_cases!(
     regex,
     simple_match,
     string_concat,
+    string_interpolation,
     subslice,
     unary,
 );
