@@ -20,6 +20,7 @@ use halfbrown::hashmap;
 use hdrhistogram::Histogram;
 use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
+use std::cmp::max;
 use std::f64;
 use std::marker::Send;
 use std::ops::RangeInclusive;
@@ -344,21 +345,24 @@ impl TremorAggrFn for Stdev {
 
 #[derive(Clone)]
 struct Hdr {
-    histo: Histogram<u64>,
-    //cache: Vec<u64>,
+    histo: Option<Histogram<u64>>,
+    cache: Vec<u64>,
     percentiles: Vec<(String, f64)>,
     percentiles_set: bool,
+    max: u64,
 }
 
+const HIST_MAX_CACHE_SIZE: usize = 8192;
+const HIST_INITIAL_CACHE_SIZE: usize = 128;
 impl std::default::Default for Hdr {
     fn default() -> Self {
         #[allow(clippy::result_unwrap_used)]
-        let mut h = Histogram::new_with_bounds(1, 32, 2).unwrap();
-        h.auto(true);
+        //let mut h = Histogram::new_with_bounds(1, 32, 2).unwrap();
+        //h.auto(true);
         Self {
             //ALLOW: this values have been tested so an error can never be returned
-            histo: h,
-            //cache: Vec::with_capacity(10_000),
+            histo: None,
+            cache: Vec::with_capacity(HIST_INITIAL_CACHE_SIZE),
             percentiles: vec![
                 ("0.5".to_string(), 0.5),
                 ("0.9".to_string(), 0.9),
@@ -369,6 +373,7 @@ impl std::default::Default for Hdr {
                 ("0.99999".to_string(), 0.99999),
             ],
             percentiles_set: false,
+            max: 0,
         }
     }
 }
@@ -377,6 +382,7 @@ unsafe impl Send for Hdr {}
 unsafe impl Sync for Hdr {}
 
 impl TremorAggrFn for Hdr {
+    #[allow(clippy::result_unwrap_used)]
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
             if !self.percentiles_set {
@@ -400,22 +406,29 @@ impl TremorAggrFn for Hdr {
             if v < 0.0 {
                 return Ok(());
             }
-
-            self.histo
-                .record(v as u64)
-                .map_err(|e| FunctionError::RuntimeError {
+            let v = v as u64;
+            if let Some(ref mut histo) = self.histo {
+                histo.record(v).map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),
                     error: format!("failed to record value: {:?}", e),
                 })?;
-            // if let Some(ref mut histo) = self.histo {
-            // } else {
-            //     self.cache.push(v as u64)
-            //     if self.cache.len() == 10_000 {
-            //         let mut h = Histogram::new_with_bounds(1, u64::max_value() >> 1, 2).unwrap();
-            //         h.
-            //         self.histo.map(|h| h.record )
-            //     }
-            // }
+            } else {
+                if v > self.max {
+                    self.max = v;
+                }
+                self.cache.push(v);
+                if self.cache.len() == HIST_MAX_CACHE_SIZE {
+                    let mut histo: Histogram<u64> =
+                        Histogram::new_with_bounds(1, self.max, 2).unwrap();
+                    histo.auto(true);
+                    for v in self.cache.drain(..) {
+                        histo.record(v).map_err(|e| FunctionError::RuntimeError {
+                            mfa: mfa("stats", "hdr", 2),
+                            error: format!("failed to record value: {:?}", e),
+                        })?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -428,12 +441,66 @@ impl TremorAggrFn for Hdr {
                 self.percentiles = other.percentiles.clone();
                 self.percentiles_set = true;
             };
-            self.histo
-                .add(&other.histo)
-                .map_err(|e| FunctionError::RuntimeError {
-                    mfa: mfa("stats", "hdr", 2),
-                    error: format!("failed to merge historgrams: {:?}", e),
-                })?;
+
+            if let Some(ref mut histo) = self.histo {
+                //  If this is a histogram and we merge
+                if let Some(ref other) = other.histo {
+                    // If the other was also a histogram merge them
+                    histo.add(other).map_err(|e| FunctionError::RuntimeError {
+                        mfa: mfa("stats", "hdr", 2),
+                        error: format!("failed to merge historgrams: {:?}", e),
+                    })?;
+                } else {
+                    // if the other was still a cache add it's values
+                    for v in &other.cache {
+                        histo.record(*v).map_err(|e| FunctionError::RuntimeError {
+                            mfa: mfa("stats", "hdr", 2),
+                            error: format!("failed to record value: {:?}", e),
+                        })?;
+                    }
+                }
+            } else {
+                // If we were a cache
+                if let Some(ref other) = other.histo {
+                    // If the other was a histogram clone it and empty our values
+                    let mut histo = other.clone();
+                    for v in self.cache.drain(..) {
+                        histo.record(v).map_err(|e| FunctionError::RuntimeError {
+                            mfa: mfa("stats", "hdr", 2),
+                            error: format!("failed to record value: {:?}", e),
+                        })?;
+                    }
+                    self.histo = Some(histo)
+                } else {
+                    // If both are caches
+                    if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
+                        // If the cache size exceeds our maximal cache size drain them into a histogram
+                        self.max = max(self.max, other.max);
+                        let mut histo: Histogram<u64> = Histogram::new_with_bounds(1, self.max, 2)
+                            .map_err(|e| FunctionError::RuntimeError {
+                                mfa: mfa("stats", "hdr", 2),
+                                error: format!("failed to init historgrams: {:?}", e),
+                            })?;
+                        histo.auto(true);
+                        for v in self.cache.drain(..) {
+                            histo.record(v).map_err(|e| FunctionError::RuntimeError {
+                                mfa: mfa("stats", "hdr", 2),
+                                error: format!("failed to record value: {:?}", e),
+                            })?;
+                        }
+                        for v in &other.cache {
+                            histo.record(*v).map_err(|e| FunctionError::RuntimeError {
+                                mfa: mfa("stats", "hdr", 2),
+                                error: format!("failed to record value: {:?}", e),
+                            })?;
+                        }
+                        self.histo = Some(histo);
+                    } else {
+                        // If not append it's cache
+                        self.cache.extend(&other.cache);
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -444,25 +511,57 @@ impl TremorAggrFn for Hdr {
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         let mut p = hashmap! {};
-        for (pcn, percentile) in &self.percentiles {
-            p.insert(
-                pcn.clone().into(),
-                Value::from(self.histo.value_at_percentile(percentile * 100.0)),
-            );
+        if let Some(histo) = &self.histo {
+            for (pcn, percentile) in &self.percentiles {
+                p.insert(
+                    pcn.clone().into(),
+                    Value::from(histo.value_at_percentile(percentile * 100.0)),
+                );
+            }
+            Ok(Value::from(hashmap! {
+                "count".into() => Value::from(histo.len()),
+                "min".into() => Value::from(histo.min()),
+                "max".into() => Value::from(histo.max()),
+                "mean".into() => Value::F64(histo.mean()),
+                "stdev".into() => Value::F64(histo.stdev()),
+                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                "percentiles".into() => Value::from(p),
+            }))
+        } else {
+            let mut histo: Histogram<u64> =
+                Histogram::new_with_bounds(1, self.max, 2).map_err(|e| {
+                    FunctionError::RuntimeError {
+                        mfa: mfa("stats", "hdr", 2),
+                        error: format!("failed to init historgrams: {:?}", e),
+                    }
+                })?;
+            for v in self.cache.drain(..) {
+                histo.record(v).map_err(|e| FunctionError::RuntimeError {
+                    mfa: mfa("stats", "hdr", 2),
+                    error: format!("failed to record value: {:?}", e),
+                })?;
+            }
+            for (pcn, percentile) in &self.percentiles {
+                p.insert(
+                    pcn.clone().into(),
+                    Value::from(histo.value_at_percentile(percentile * 100.0)),
+                );
+            }
+            Ok(Value::from(hashmap! {
+                "count".into() => Value::from(histo.len()),
+                "min".into() => Value::from(histo.min()),
+                "max".into() => Value::from(histo.max()),
+                "mean".into() => Value::F64(histo.mean()),
+                "stdev".into() => Value::F64(histo.stdev()),
+                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                "percentiles".into() => Value::from(p),
+            }))
         }
-
-        Ok(Value::from(hashmap! {
-            "count".into() => Value::from(self.histo.len()),
-            "min".into() => Value::from(self.histo.min()),
-            "max".into() => Value::from(self.histo.max()),
-            "mean".into() => Value::F64(self.histo.mean()),
-            "stdev".into() => Value::F64(self.histo.stdev()),
-            "var".into() => Value::F64(self.histo.stdev().powf(2.0)),
-            "percentiles".into() => Value::from(p),
-        }))
     }
     fn init(&mut self) {
-        self.histo.reset();
+        self.histo = None;
+        self.max = 0;
+        self.cache.clear();
     }
     fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
