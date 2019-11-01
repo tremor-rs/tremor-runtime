@@ -345,6 +345,7 @@ impl TremorAggrFn for Stdev {
 #[derive(Clone)]
 struct Hdr {
     histo: Histogram<u64>,
+    //cache: Vec<u64>,
     percentiles: Vec<(String, f64)>,
     percentiles_set: bool,
 }
@@ -352,9 +353,12 @@ struct Hdr {
 impl std::default::Default for Hdr {
     fn default() -> Self {
         #[allow(clippy::result_unwrap_used)]
+        let mut h = Histogram::new_with_bounds(1, 32, 2).unwrap();
+        h.auto(true);
         Self {
             //ALLOW: this values have been tested so an error can never be returned
-            histo: Histogram::new_with_bounds(1, u64::max_value() >> 1, 2).unwrap(),
+            histo: h,
+            //cache: Vec::with_capacity(10_000),
             percentiles: vec![
                 ("0.5".to_string(), 0.5),
                 ("0.9".to_string(), 0.9),
@@ -396,12 +400,22 @@ impl TremorAggrFn for Hdr {
             if v < 0.0 {
                 return Ok(());
             }
+
             self.histo
                 .record(v as u64)
                 .map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),
                     error: format!("failed to record value: {:?}", e),
                 })?;
+            // if let Some(ref mut histo) = self.histo {
+            // } else {
+            //     self.cache.push(v as u64)
+            //     if self.cache.len() == 10_000 {
+            //         let mut h = Histogram::new_with_bounds(1, u64::max_value() >> 1, 2).unwrap();
+            //         h.
+            //         self.histo.map(|h| h.record )
+            //     }
+            // }
         }
         Ok(())
     }
