@@ -754,8 +754,7 @@ impl<'script> Upable<'script> for ImutExpr1<'script> {
                 if s.exprs.is_empty() {
                     lit.up(helper)?
                 } else {
-                    let mut args = vec![dbg!(lit)];
-                    //                    args.reverse();
+                    let mut args = vec![lit];
                     args.append(&mut s.exprs);
                     ImutExpr1::Invoke(Invoke1 {
                         start: s.start,
