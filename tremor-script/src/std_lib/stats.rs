@@ -381,6 +381,11 @@ impl std::default::Default for Hdr {
 unsafe impl Send for Hdr {}
 unsafe impl Sync for Hdr {}
 
+impl Hdr {
+    fn max(&self) -> u64 {
+        max(self.max, 4)
+    }
+}
 impl TremorAggrFn for Hdr {
     #[allow(clippy::result_unwrap_used)]
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
@@ -419,7 +424,7 @@ impl TremorAggrFn for Hdr {
                 self.cache.push(v);
                 if self.cache.len() == HIST_MAX_CACHE_SIZE {
                     let mut histo: Histogram<u64> =
-                        Histogram::new_with_bounds(1, self.max, 2).unwrap();
+                        Histogram::new_with_bounds(1, self.max(), 2).unwrap();
                     histo.auto(true);
                     for v in self.cache.drain(..) {
                         histo.record(v).map_err(|e| FunctionError::RuntimeError {
@@ -476,10 +481,12 @@ impl TremorAggrFn for Hdr {
                     if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
                         // If the cache size exceeds our maximal cache size drain them into a histogram
                         self.max = max(self.max, other.max);
-                        let mut histo: Histogram<u64> = Histogram::new_with_bounds(1, self.max, 2)
-                            .map_err(|e| FunctionError::RuntimeError {
-                                mfa: mfa("stats", "hdr", 2),
-                                error: format!("failed to init historgrams: {:?}", e),
+                        let mut histo: Histogram<u64> =
+                            Histogram::new_with_bounds(1, self.max(), 2).map_err(|e| {
+                                FunctionError::RuntimeError {
+                                    mfa: mfa("stats", "hdr", 2),
+                                    error: format!("failed to init historgrams: {:?}", e),
+                                }
                             })?;
                         histo.auto(true);
                         for v in self.cache.drain(..) {
@@ -529,7 +536,7 @@ impl TremorAggrFn for Hdr {
             }))
         } else {
             let mut histo: Histogram<u64> =
-                Histogram::new_with_bounds(1, self.max, 2).map_err(|e| {
+                Histogram::new_with_bounds(1, self.max(), 2).map_err(|e| {
                     FunctionError::RuntimeError {
                         mfa: mfa("stats", "hdr", 2),
                         error: format!("failed to init historgrams: {:?}", e),
