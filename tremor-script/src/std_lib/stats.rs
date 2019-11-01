@@ -391,12 +391,13 @@ impl TremorAggrFn for Hdr {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args[0].as_u64() {
-            // if self.n == 0 {
-            // FIXME error
-            // }
+        if let Some(v) = args[0].cast_f64() {
+            // .unwrao() we need a histogram w/ float support
+            if v < 0.0 {
+                return Ok(());
+            }
             self.histo
-                .record(v)
+                .record(v as u64)
                 .map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),
                     error: format!("failed to record value: {:?}", e),
