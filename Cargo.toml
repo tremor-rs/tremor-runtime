@@ -70,6 +70,7 @@ openssl = "0.10"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
 http = "0.1.18"
+indexmap = { version = "1", features=["serde-1"] }
 
 crossbeam-channel = "0.3"
 
@@ -108,6 +109,7 @@ matches = "0.1"
 # criterion = "0.2"
 pretty_assertions = "0.6.1"
 regex = "1"
+env_logger = "0.6"
 
 [features]
 default = ["mssql", "kafka", "bench" ]

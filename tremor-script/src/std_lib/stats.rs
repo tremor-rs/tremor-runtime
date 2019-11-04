@@ -408,7 +408,10 @@ impl TremorAggrFn for Hdr {
             if v < 0.0 {
                 return Ok(());
             }
-            let v = v as u64;
+
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_sign_loss)]
+            let v = v as u64; // FIXME TODO add f64 support to HDR Histogram create -  oss
             if let Some(ref mut histo) = self.histo {
                 histo.record(v).map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),

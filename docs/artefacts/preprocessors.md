@@ -36,6 +36,26 @@ Supported formats:
 * snappy
 * lz4
 
+### gzip
+
+Decompress GZ compressed payload
+
+### zlib
+
+Decompress Zlib ( deflate ) compressed payload
+
+### xz
+
+Decompress Xz2 ( 7z ) compressed payload
+
+### snappy
+
+Decompress framed snappy compressed payload ( does not support raw snappy )
+
+### lz4
+
+Decompress Lz4 compressed payload
+
 ### gelf-chunking
 
 Reassembles messages that were split apart using the [GELF chunking protocol](https://docs.graylog.org/en/3.0/pages/gelf.html#gelf-via-udp). The message content is decompressed after reassembly so no additional decompression is needed.

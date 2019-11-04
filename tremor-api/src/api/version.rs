@@ -21,7 +21,7 @@ pub struct Version {
     version: String,
 }
 impl Version {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             version: VERSION.to_string(),
         }
@@ -29,5 +29,5 @@ impl Version {
 }
 
 pub fn get((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    reply(&req, &data, Ok(Version::new()), false, 200)
+    reply(&req, &data, Ok(Version::default()), false, 200)
 }

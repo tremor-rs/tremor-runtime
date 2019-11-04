@@ -26,6 +26,10 @@ pub struct Lines {
 }
 
 impl Lines {
+    pub fn default() -> Self {
+        Self::new('\n', 4096)
+    }
+
     // TODO have the params here as a config struct
     // also break lines on string (eg: \r\n)
     pub fn new(separator: char, max_length: usize) -> Self {
@@ -149,4 +153,3 @@ impl Preprocessor for Lines {
     }
 }
 
-// TODO add tests

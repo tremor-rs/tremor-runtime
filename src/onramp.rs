@@ -27,7 +27,7 @@ mod kafka;
 mod metronome;
 mod prelude;
 mod rest;
-mod tcp;
+pub mod tcp;
 mod udp;
 mod ws;
 
@@ -35,7 +35,7 @@ pub trait Impl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Msg {
     Connect(Vec<(TremorURL, PipelineAddr)>),
     Disconnect { id: TremorURL, tx: Sender<bool> },

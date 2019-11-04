@@ -105,7 +105,9 @@ fn onramp_loop(
     loop {
         while pipelines.is_empty() {
             match rx.recv()? {
-                onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
+                onramp::Msg::Connect(mut ps) => {
+                    pipelines.append(&mut ps);
+                }
                 onramp::Msg::Disconnect { tx, .. } => {
                     tx.send(true)?;
                     return Ok(());
@@ -252,6 +254,7 @@ impl Onramp for Tcp {
             })?;
         Ok(tx)
     }
+    
     fn default_codec(&self) -> &str {
         "json"
     }

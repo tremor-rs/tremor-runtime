@@ -29,13 +29,13 @@ pub trait Postprocessor: Send {
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     match name {
-        "lines" => Ok(Box::new(Lines {})),
-        "base64" => Ok(Box::new(Base64 {})),
-        "gzip" => Ok(Box::new(CompressGzip {})),
-        "zlib" => Ok(Box::new(CompressZlib {})),
-        "xz2" => Ok(Box::new(CompressXz2 {})),
-        "snappy" => Ok(Box::new(CompressSnappy {})),
-        "lz4" => Ok(Box::new(CompressLz4 {})),
+        "lines" => Ok(Box::new(Lines::default())),
+        "base64" => Ok(Box::new(Base64::default())),
+        "gzip" => Ok(Box::new(Gzip::default())),
+        "zlib" => Ok(Box::new(Zlib::default())),
+        "xz2" => Ok(Box::new(Xz2::default())),
+        "snappy" => Ok(Box::new(Snappy::default())),
+        "lz4" => Ok(Box::new(Lz4::default())),
         "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
         "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(GELF::default())),
@@ -43,7 +43,8 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     }
 }
 
-pub(crate) struct Lines {}
+#[derive(Default)]
+pub struct Lines {}
 impl Postprocessor for Lines {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut framed = data.to_vec(); // FIXME PERF TODO prefer to in-place extend
@@ -52,15 +53,17 @@ impl Postprocessor for Lines {
     }
 }
 
-pub(crate) struct Base64 {}
+#[derive(Default)]
+pub struct Base64 {}
 impl Postprocessor for Base64 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::encode(&data).as_bytes().to_vec()])
     }
 }
 
-pub(crate) struct CompressGzip {}
-impl Postprocessor for CompressGzip {
+#[derive(Default)]
+pub struct Gzip {}
+impl Postprocessor for Gzip {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
         use std::io::Write;
@@ -70,8 +73,9 @@ impl Postprocessor for CompressGzip {
     }
 }
 
-pub(crate) struct CompressZlib {}
-impl Postprocessor for CompressZlib {
+#[derive(Default)]
+pub struct Zlib {}
+impl Postprocessor for Zlib {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         use std::io::Write;
@@ -81,8 +85,9 @@ impl Postprocessor for CompressZlib {
     }
 }
 
-pub(crate) struct CompressXz2 {}
-impl Postprocessor for CompressXz2 {
+#[derive(Default)]
+pub struct Xz2 {}
+impl Postprocessor for Xz2 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Write;
         use xz2::write::XzEncoder as Encoder;
@@ -92,21 +97,23 @@ impl Postprocessor for CompressXz2 {
     }
 }
 
-pub(crate) struct CompressSnappy {}
-impl Postprocessor for CompressSnappy {
+#[derive(Default)]
+pub struct Snappy {}
+impl Postprocessor for Snappy {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use snap::Encoder;
-        let len: usize = data.len();
-        let max_compress_len: usize = snap::max_compress_len(len);
-        let mut compressed = Vec::with_capacity(max_compress_len);
-        let mut encoder = Encoder::new();
-        encoder.compress(data, compressed.as_mut())?;
+        use snap::Writer;
+        use std::io::Write;
+        let mut writer = Writer::new(vec![]);
+        writer.write_all(data)?;
+        let compressed = writer.into_inner().expect("snappy compression failed");
+        dbg!(&compressed);
         Ok(vec![compressed])
     }
 }
 
-pub(crate) struct CompressLz4 {}
-impl Postprocessor for CompressLz4 {
+#[derive(Default)]
+pub struct Lz4 {}
+impl Postprocessor for Lz4 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         use std::io::Write;
@@ -117,7 +124,7 @@ impl Postprocessor for CompressLz4 {
     }
 }
 
-pub(crate) struct AttachIngresTS {}
+pub struct AttachIngresTS {}
 impl Postprocessor for AttachIngresTS {
     fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Write;
@@ -130,7 +137,7 @@ impl Postprocessor for AttachIngresTS {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct LengthPrefix {}
+pub struct LengthPrefix {}
 impl Postprocessor for LengthPrefix {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Write;

@@ -87,6 +87,10 @@ impl TremorURL {
         Self::parse(&format!("/onramp/{}", id))
     }
 
+    pub fn from_offramp_id(id: &str) -> Result<Self> {
+        Self::parse(&format!("/offramp/{}", id))
+    }
+
     pub fn parse(url: &str) -> Result<Self> {
         let (r, relative) = Self::parse_url(url, false)?;
 
