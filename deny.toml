@@ -13,12 +13,12 @@ allow = [
     "BSD-3-Clause",
     "BSL-1.0",
     "ISC",
-    "LLVM-exception",
     "MIT",
     "Unlicense",
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
+    "OpenSSL",
 ]
 
 #
@@ -57,13 +57,20 @@ license_files = [
   { path = "LICENSE", hash = 0x3154a1c7 },
 ]
 
-[[licenses.ignore]]
-# ring has a rather complicated LICENSE file due to reasons spelled out
-# in said LICENSE file, but is basically OpenSSL for older parts, and ISC
-# for newer parts
+# ring has a rather complicated license file, and unfortunately does not
+# provide an SPDX expression in the `license` toml
+[[licenses.clarify]]
 name = "ring"
-license_files = [
-  { path = "LICENSE", hash = 0xbd0eed23 },
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
 ]
 
 # This is MIT, Apache, ISC tripple licensed
