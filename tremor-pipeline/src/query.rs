@@ -193,7 +193,7 @@ impl Query {
                     select_num += 1;
                     let mut from = resolve_output_port(&s.from);
                     if from.id == "in" && from.port != "out" {
-                        let name: Cow<'static, str> = from.port.into();
+                        let name: Cow<'static, str> = from.port;
 
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
@@ -215,7 +215,7 @@ impl Query {
                     }
                     let mut into = resolve_input_port(&s.into);
                     if into.id == "out" && into.port != "in" {
-                        let name: Cow<'static, str> = into.port.into();
+                        let name: Cow<'static, str> = into.port;
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),

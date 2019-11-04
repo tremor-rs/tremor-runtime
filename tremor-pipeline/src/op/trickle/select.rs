@@ -512,11 +512,11 @@ impl Operator for TrickleSelect {
                 let (_, aggrs) = groups
                     .entry(group_str.clone())
                     .or_insert_with(|| (group.clone_static(), aggregates.clone()));
-                let mut group1 = group.clone_static();
-                if let Some(g) = group1.as_array_mut() {
+                let mut group_clone_static  = group.clone_static();
+                if let Some(g) = group_clone_static.as_array_mut() {
                     g.push(Value::from(group_str));
                 }
-                consts[GROUP_CONST_ID] = group1;
+                consts[GROUP_CONST_ID] = group_clone_static;
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
