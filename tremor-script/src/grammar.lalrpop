@@ -845,6 +845,7 @@ RecordPattern: RecordPattern1<'input> = {
 
 ArrayPattern: ArrayPattern1<'input> = {
     <start:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <end:@L> => ArrayPattern1 { exprs, start, end },
+    <start:@L> "%[" "]" <end:@L> => ArrayPattern1 { exprs: vec![], start, end },
 }
 
 ArrayPredicatePattern: ArrayPredicatePattern1<'input> = {
