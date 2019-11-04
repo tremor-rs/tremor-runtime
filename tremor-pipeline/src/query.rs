@@ -211,7 +211,7 @@ impl Query {
                         }
                         from.id = name.clone();
                         from.had_port = false;
-                        from.port = "in".into();
+                        from.port = "out".into();
                     }
                     let mut into = resolve_input_port(&s.into);
                     if into.id == "out" && into.port != "in" {
