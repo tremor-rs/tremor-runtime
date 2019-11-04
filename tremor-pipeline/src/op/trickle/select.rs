@@ -512,7 +512,7 @@ impl Operator for TrickleSelect {
                 let (_, aggrs) = groups
                     .entry(group_str.clone())
                     .or_insert_with(|| (group.clone_static(), aggregates.clone()));
-                let mut group_clone_static  = group.clone_static();
+                let mut group_clone_static = group.clone_static();
                 if let Some(g) = group_clone_static.as_array_mut() {
                     g.push(Value::from(group_str));
                 }
