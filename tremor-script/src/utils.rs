@@ -19,7 +19,8 @@ use std::io::prelude::*;
 use xz2::read::XzDecoder;
 
 pub fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
-    let mut w = Vec::new();
+    // ballpark size of a 'sensible' message
+    let mut w = Vec::with_capacity(512);
     sorted_serialize_(j, &mut w)?;
     Ok(std::str::from_utf8(&w)?.to_string())
 }

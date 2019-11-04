@@ -21,6 +21,7 @@ use std::mem;
 use std::sync::Arc;
 use tremor_script::interpreter::Env;
 use tremor_script::query::StmtRentalWrapper;
+use tremor_script::utils::sorsorted_serialize;
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
@@ -507,10 +508,15 @@ impl Operator for TrickleSelect {
 
             for group in group_values {
                 let group = Value::Array(group);
+                let group_str = sorsorted_serialize(&group)?;
                 let (_, aggrs) = groups
-                    .entry(group.encode())
+                    .entry(group_str.clone())
                     .or_insert_with(|| (group.clone_static(), aggregates.clone()));
-                consts[GROUP_CONST_ID] = group.clone_static();
+                let mut group1 = group.clone_static();
+                if let Some(g) = group1.as_array_mut() {
+                    g.push(Value::from(group_str));
+                }
+                consts[GROUP_CONST_ID] = group1;
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
@@ -549,7 +555,12 @@ impl Operator for TrickleSelect {
                 // PERF: we could skip that if we're having only one group
                 let event = event.clone();
                 let group = Value::Array(group);
-                consts[GROUP_CONST_ID] = group.clone_static();
+                let group_str = sorsorted_serialize(&group)?;
+                let mut group1 = group.clone_static();
+                if let Some(g) = group1.as_array_mut() {
+                    g.push(Value::from(group_str));
+                }
+                consts[GROUP_CONST_ID] = group1;
 
                 let env = Env {
                     context: &ctx,

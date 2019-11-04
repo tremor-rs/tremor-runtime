@@ -389,12 +389,10 @@ impl Query {
             }
         }
 
-        /*
-                println!(
-                    "{:?}",
-                    petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
-                );
-        */
+        println!(
+            "{:?}",
+            petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
+        );
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
             Err(ErrorKind::CyclicGraphError(format!(
