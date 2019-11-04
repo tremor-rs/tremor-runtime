@@ -115,4 +115,6 @@ test_cases!(
     string_interpolation,
     subslice,
     unary,
+    // regression
+    empty_array_pattern,
 );
