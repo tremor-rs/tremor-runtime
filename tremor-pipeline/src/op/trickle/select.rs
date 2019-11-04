@@ -545,35 +545,43 @@ impl Operator for TrickleSelect {
             //
             // FIXME: This can be nicer, got to look at run for tremor script
 
-            let env = Env {
-                context: &ctx,
-                consts: &consts,
-                aggrs: &NO_AGGRS,
-            };
-            let (unwind_event, event_meta) = event.data.parts();
+            for group in group_values {
+                // PERF: we could skip that if we're having only one group
+                let event = event.clone();
+                let group = Value::Array(group);
+                consts[GROUP_CONST_ID] = group.clone_static();
 
-            let value = stmt
-                .target
-                .run(opts, &env, unwind_event, &event_meta, &local_stack)?;
-
-            *unwind_event = value.into_owned();
-            if let Some(guard) = &stmt.maybe_having {
-                let test = guard.run(opts, &env, unwind_event, &Value::Null, &local_stack)?;
-                match test.into_owned() {
-                    Value::Bool(true) => (),
-                    Value::Bool(false) => {
-                        return Ok(vec![]);
-                    }
-                    other => {
-                        return tremor_script::errors::query_guard_not_bool(
-                            stmt.borrow(),
-                            guard,
-                            &other,
-                        )?;
-                    }
+                let env = Env {
+                    context: &ctx,
+                    consts: &consts,
+                    aggrs: &NO_AGGRS,
                 };
+
+                let (unwind_event, event_meta) = event.data.parts();
+
+                let value = stmt
+                    .target
+                    .run(opts, &env, unwind_event, &event_meta, &local_stack)?;
+
+                *unwind_event = value.into_owned();
+                if let Some(guard) = &stmt.maybe_having {
+                    let test = guard.run(opts, &env, unwind_event, &Value::Null, &local_stack)?;
+                    match test.into_owned() {
+                        Value::Bool(true) => (),
+                        Value::Bool(false) => {
+                            return Ok(vec![]);
+                        }
+                        other => {
+                            return tremor_script::errors::query_guard_not_bool(
+                                stmt.borrow(),
+                                guard,
+                                &other,
+                            )?;
+                        }
+                    };
+                }
+                events.push(("out".into(), event));
             }
-            events.push(("out".into(), event));
         }
         Ok(events)
     }
