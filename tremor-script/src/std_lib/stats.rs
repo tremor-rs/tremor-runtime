@@ -424,7 +424,11 @@ impl TremorAggrFn for Hdr {
                 self.cache.push(v);
                 if self.cache.len() == HIST_MAX_CACHE_SIZE {
                     let mut histo: Histogram<u64> =
-                        Histogram::new_with_bounds(1, self.max(), 2).unwrap();
+                        Histogram::new_with_bounds(1, self.max(), 2)
+                            .map_err(|e| FunctionError::RuntimeError {
+                                mfa: mfa("stats", "hdr", 2),
+                                error: format!("failed to allocate hdr storage: {:?}", e),
+                            })?;
                     histo.auto(true);
                     for v in self.cache.drain(..) {
                         histo.record(v).map_err(|e| FunctionError::RuntimeError {

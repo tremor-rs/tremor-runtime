@@ -254,7 +254,7 @@ impl Onramp for Tcp {
             })?;
         Ok(tx)
     }
-    
+
     fn default_codec(&self) -> &str {
         "json"
     }

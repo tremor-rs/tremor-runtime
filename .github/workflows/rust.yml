@@ -49,7 +49,7 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Check Formating
+      - name: Check Formatting
         run: cargo fmt --all -- --check
   tests:
     runs-on: ubuntu-latest

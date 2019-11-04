@@ -105,8 +105,8 @@ impl Postprocessor for Snappy {
         use std::io::Write;
         let mut writer = Writer::new(vec![]);
         writer.write_all(data)?;
+        // ALLOW
         let compressed = writer.into_inner().expect("snappy compression failed");
-        dbg!(&compressed);
         Ok(vec![compressed])
     }
 }

@@ -152,4 +152,3 @@ impl Preprocessor for Lines {
             .collect::<Vec<Vec<u8>>>())
     }
 }
-

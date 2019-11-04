@@ -43,7 +43,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
 }
 
 pub fn unpublish_artefact(
-    (req, data, id): (HttpRequest, Data<State>, Path<(String)>),
+    (req, data, id): (HttpRequest, Data<State>, Path<String>),
 ) -> HTTPResult {
     let url = build_url(&["onramp", &id])?;
     let result = data.world.repo.unpublish_onramp(&url);
