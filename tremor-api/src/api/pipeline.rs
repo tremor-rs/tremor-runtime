@@ -53,9 +53,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     reply(&req, &data, result, true, 201)
 }
 
-pub fn unpublish_artefact(
-    (req, data, id): (HttpRequest, Data<State>, Path<String>),
-) -> HTTPResult {
+pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
     let url = build_url(&["pipeline", &id])?;
     let result = data
         .world

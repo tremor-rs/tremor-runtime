@@ -54,9 +54,7 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
     reply(&req, &data, result.map(|a| a.binding), true, 201)
 }
 
-pub fn unpublish_artefact(
-    (req, data, id): (HttpRequest, Data<State>, Path<String>),
-) -> HTTPResult {
+pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
     let url = build_url(&["binding", &id])?;
     let result = data.world.repo.unpublish_binding(&url);
     reply(&req, &data, result.map(|a| a.binding), true, 200)
