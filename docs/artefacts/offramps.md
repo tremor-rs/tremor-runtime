@@ -96,8 +96,8 @@ Example:
 
 ```yaml
 onramp:
-  - id: metronome
-    type: metronome
+  - id: ws
+    type: ws
     config:
       url: "ws://localhost:1234"
 ```

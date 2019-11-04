@@ -191,8 +191,49 @@ impl Query {
                         had_port: false,
                     };
                     select_num += 1;
-                    let from = resolve_output_port(&s.from);
-                    let into = resolve_input_port(&s.into);
+                    let mut from = resolve_output_port(&s.from);
+                    if from.id == "in" && from.port != "out" {
+                        let name: Cow<'static, str> = from.port.into();
+
+                        if !nodes.contains_key(&name) {
+                            let id = pipe_graph.add_node(NodeConfig {
+                                id: name.clone(),
+                                kind: NodeKind::Input,
+                                op_type: "passthrough".to_string(),
+                                config: None,
+                                defn: None,
+                                node: None,
+                            });
+                            nodes.insert(name.clone(), id);
+                            let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+                            pipe_ops.insert(id, op);
+                            inputs.insert(name.clone(), id);
+                        }
+                        from.id = name.clone();
+                        from.had_port = false;
+                        from.port = "in".into();
+                    }
+                    let mut into = resolve_input_port(&s.into);
+                    if into.id == "out" && into.port != "in" {
+                        let name: Cow<'static, str> = into.port.into();
+                        if !nodes.contains_key(&name) {
+                            let id = pipe_graph.add_node(NodeConfig {
+                                id: name.clone(),
+                                kind: NodeKind::Output,
+                                op_type: "passthrough".to_string(),
+                                config: None,
+                                defn: None,
+                                node: None,
+                            });
+                            nodes.insert(name.clone(), id);
+                            let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+                            pipe_ops.insert(id, op);
+                            outputs.push(id);
+                        }
+                        into.id = name.clone();
+                        into.had_port = false;
+                        into.port = "in".into();
+                    }
 
                     links.entry(from).or_default().push(select_in.clone());
                     links.entry(select_out).or_default().push(into);
