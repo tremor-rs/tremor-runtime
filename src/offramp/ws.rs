@@ -136,13 +136,12 @@ impl Offramp for Ws {
             }
         }
         // If after that we're not connected yet we try to reconnect
-        if self.addr.is_none() {
-            if event.ingest_ns - self.downed_at > 1_000_000_000 {
-                self.downed_at = event.ingest_ns;
-                let url = self.config.url.clone();
-                let tx = self.tx.clone();
-                let txe = self.tx.clone();
-                thread::Builder::new()
+        if self.addr.is_none() && event.ingest_ns - self.downed_at > 1_000_000_000 {
+            self.downed_at = event.ingest_ns;
+            let url = self.config.url.clone();
+            let tx = self.tx.clone();
+            let txe = self.tx.clone();
+            thread::Builder::new()
                 .name(format!("offramp-ws-actix-loop-{}", "???"))
                 .spawn(move || -> io::Result<()> {
                     let sys = actix::System::new("ws-offramp");
@@ -175,7 +174,6 @@ impl Offramp for Ws {
                     warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
                     r
                 })?;
-            }
         }
         if let Some(addr) = &self.addr {
             for value in event.value_iter() {
