@@ -9,13 +9,11 @@ jobs:
       - uses: actions/checkout@v1
       - name: Check license headers
         run: ./checks/copyright.sh
-      # - name: Prep cargo cache
-      #   run: mkdir ~/.cargo
-      # - uses: actions/cache@v1
-      #   id: cache
-      #   with:
-      #     path: ~/.cargo
-      #     key: ${{ runner.os }}
+      - uses: actions/cache@v1
+        id: cache-registry
+        with:
+          path: ~/.cargo/registry
+          key: license-${{ runner.os }}
       - uses: actions/cache@v1
         id: build-cache
         with:
@@ -89,9 +87,9 @@ jobs:
           path: target
           key: test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
-        run: cargo build --all --verbose
+        run: cargo build --all
       - name: Run tests
-        run: cargo test --all --verbose
+        run: cargo test --all
       - name: Run Integration Tests
         run: make it
   api-tests:
