@@ -18,6 +18,29 @@ mod test {
     use tremor_runtime::postprocessor::Postprocessor;
     use tremor_runtime::preprocessor::Preprocessor;
 
+    macro_rules! assert_decompress {
+        ($internal:expr, $which:ident, $magic:expr) => {
+            // Assert pre and post processors have a sensible default() ctor
+            let mut inbound = tremor_runtime::preprocessor::Decompress::default();
+            let mut outbound = tremor_runtime::postprocessor::$which::default();
+
+            // Fake ingest_ns and egress_ns
+            let mut ingest_ns = 0u64;
+            let egress_ns = 1u64;
+
+            let r = outbound.process(ingest_ns, egress_ns, $internal);
+            let ext = &r?[0];
+            let ext = ext.as_slice();
+            // Assert actual encoded form is as expected ( magic code only )
+            assert_eq!($magic, decode_magic(&ext));
+
+            let r = inbound.process(&mut ingest_ns, &ext);
+            let out = &r?[0];
+            let out = out.as_slice();
+            // Assert actual decoded form is as expected
+            assert_eq!(&$internal, &out);
+        };
+    }
     macro_rules! assert_simple_symmetric {
         ($internal:expr, $which:ident, $magic:expr) => {
             // Assert pre and post processors have a sensible default() ctor
@@ -126,6 +149,7 @@ mod test {
     fn test_gzip() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Gzip, "gzip");
+        assert_decompress!(int, Lz4, "lz4");
         Ok(())
     }
 
@@ -133,6 +157,7 @@ mod test {
     fn test_zlib() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Zlib, "zlib");
+        assert_decompress!(int, Lz4, "lz4");
         Ok(())
     }
 
@@ -140,6 +165,7 @@ mod test {
     fn test_snappy() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Snappy, "snap");
+        assert_decompress!(int, Lz4, "lz4");
         Ok(())
     }
 
@@ -147,6 +173,7 @@ mod test {
     fn test_xz2() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Xz2, "xz2");
+        assert_decompress!(int, Lz4, "lz4");
         Ok(())
     }
 
@@ -154,6 +181,7 @@ mod test {
     fn test_lz4() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Lz4, "lz4");
+        assert_decompress!(int, Lz4, "lz4");
         Ok(())
     }
 }

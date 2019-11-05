@@ -267,7 +267,7 @@ impl Preprocessor for LengthPrefix {
 }
 #[cfg(test)]
 mod test {
-    use crate::errors::*;
+    use super::*;
     use crate::postprocessor::{self as post, Postprocessor};
     use crate::preprocessor::{self as pre, Preprocessor};
 
@@ -285,6 +285,48 @@ mod test {
         assert!(recv.is_empty());
         let recv = pre_p.process(&mut it, end)?;
         assert_eq!(recv[0], data);
+        Ok(())
+    }
+
+    const LOOKUP_TABLE: [&'static str; 15] = [
+        "lines",
+        "lines-null",
+        "lines-pipe",
+        "base64",
+        "gzip",
+        "zlib",
+        "xz2",
+        "snappy",
+        "lz4",
+        "decompress",
+        "remove-empty",
+        "gelf-chunking",
+        "gelf-chunking-tcp",
+        "ingest-ns",
+        "length-prefixerd",
+    ];
+
+    #[test]
+    fn test_lookup() -> Result<()> {
+        for t in LOOKUP_TABLE.iter() {
+            assert!(lookup(t).is_ok());
+        }
+        let t = "snot";
+        assert!(lookup(&t).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter_empty() -> Result<()> {
+        let mut pre = FilterEmpty::default();
+        assert_eq!(Ok(vec![]), pre.process(&mut 0u64, &vec![]));
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter_null() -> Result<()> {
+        let mut pre = FilterEmpty::default();
+        assert_eq!(Ok(vec![]), pre.process(&mut 0u64, &vec![]));
         Ok(())
     }
 }
