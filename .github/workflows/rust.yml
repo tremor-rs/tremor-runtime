@@ -10,12 +10,13 @@ jobs:
       - name: Check license headers
         run: ./checks/copyright.sh
       - uses: actions/cache@v1
-        id: cargo-cache
+        id: cache
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - name: Install clippy-deny
-        run: cargo install cargo-deny
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo install -f cargo-deny
       - name: Check dependencies
         run: cargo deny check
   sanity:
@@ -67,7 +68,7 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cargo-cach
+        id: cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
@@ -103,7 +104,7 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cargo-cach
+        id: cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
@@ -131,7 +132,7 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cargo-cach
+        id: cargo
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
@@ -157,7 +158,7 @@ jobs:
           toolchain: nightly
           override: true
       - uses: actions/cache@v1
-        id: cargo-cach
+        id: cargo-cach-coverage
         with:
           path: ~/.cargo
           key: ${{ runner.os }}

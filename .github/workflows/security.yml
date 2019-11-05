@@ -8,12 +8,12 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - uses: actions/cache@v1
-        id: cargo-cache
+        id: cache
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
           path: target
           key: ${{ runner.os }}-${{ hashFiles('../Cargo.lock') }}
