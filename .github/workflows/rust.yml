@@ -13,7 +13,7 @@ jobs:
         id: cache-cargo-deny
         with:
           path: ~/cargo-deny/
-          key: cargo-deny-${{ runner.os }}-0.3.0
+          key: cargo-deny-${{ runner.os }}-0.3.0a
       - name: restore cache
         if: steps.cache-cargo-deny.outputs.cache-hit == 'true'
         run: cp ~/cargo-deny/* ~/.cargo/bin
