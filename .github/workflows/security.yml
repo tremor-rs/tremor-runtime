@@ -8,14 +8,14 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cache
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
         id: cache
         with:
-          path: ~/.cargo
+          path: target
           key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - uses: actions-rs/audit-check@v1
         with:

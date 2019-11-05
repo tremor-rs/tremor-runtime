@@ -10,7 +10,7 @@ jobs:
       - name: Check license headers
         run: ./checks/copyright.sh
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cache
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
@@ -67,14 +67,14 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
-          path: ~/.cargo
+          path: target
           key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: cargo build --all --verbose
@@ -103,14 +103,14 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
-          path: ~/.cargo
+          path: target
           key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
@@ -131,14 +131,14 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
-          path: ~/.cargo
+          path: target
           key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Install clippy
         run: rustup component add clippy
@@ -157,14 +157,14 @@ jobs:
           toolchain: nightly
           override: true
       - uses: actions/cache@v1
-        id: cache
+        id: cargo-cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
-          path: ~/.cargo
+          path: target
           key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
