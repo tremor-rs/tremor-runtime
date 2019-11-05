@@ -126,7 +126,7 @@ jobs:
         run: ./checks/api.sh -t
       - name: Run eqc tests
         run: ./checks/api.sh -e
-  clippy_check:
+  clippy-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -136,20 +136,16 @@ jobs:
         with:
           toolchain: stable
           override: true
-      # - name: Prep cargo cache
-      #   run: mkdir ~/.cargo
-      # - uses: actions/cache@v1
-      #   id: cargo
-      #   with:
-      #     path: ~/.cargo
-      #     key: ${{ runner.os }}
-      - name: Prep target cache
-        run: mkdir target
+      - uses: actions/cache@v1
+        id: cache-registry
+        with:
+          path: ~/.cargo/registry
+          key: clippy-check-registry-${{ runner.os }}
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: clippy-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: clippy-check-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
