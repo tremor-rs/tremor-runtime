@@ -73,3 +73,53 @@ impl HttpC {
     //     self.client.head(endpoint.into())
     // }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    const ECHO: &'static str = "https://postman-echo.com";
+
+    // NOTE We use postman's echo service for convenience
+
+    #[test]
+    fn test_get_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = rest_cli.get("/get")?.send()?;
+        assert_eq!(200, res.status());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_post_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.post("/post")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_put_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.put("/put")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_patch_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.patch("/patch")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_delete_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.delete("/delete")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+}
