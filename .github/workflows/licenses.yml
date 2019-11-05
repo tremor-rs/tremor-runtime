@@ -7,13 +7,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - uses: actions/cache@v1
-        id: cache
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}-0.3.0
+      # - uses: actions/cache@v1
+      #   id: cache
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}-0.3.0
       - name: Install clippy-deny
-        if: steps.cache.outputs.cache-hit != 'true'
+        # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
       - name: Check dependencies
         run: cargo deny check

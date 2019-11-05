@@ -9,15 +9,20 @@ jobs:
       - uses: actions/checkout@v1
       - name: Check license headers
         run: ./checks/copyright.sh
-      - name: Prep cargo cache
-        run: mkdir ~/.cargo
+      # - name: Prep cargo cache
+      #   run: mkdir ~/.cargo
+      # - uses: actions/cache@v1
+      #   id: cache
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}
       - uses: actions/cache@v1
-        id: cache
+        id: build-cache
         with:
-          path: ~/.cargo
-          key: ${{ runner.os }}
+          path: target
+          key: clippy-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install clippy-deny
-        if: steps.cache.outputs.cache-hit != 'true'
+        # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
       - name: Check dependencies
         run: cargo deny check
@@ -69,20 +74,20 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Prep cargo cache
-        run: mkdir ~/.cargo
-      - uses: actions/cache@v1
-        id: cach
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}
+      # - name: Prep cargo cache
+      #   run: mkdir ~/.cargo
+      # - uses: actions/cache@v1
+      #   id: cach
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}
       - name: Prep target cache
         run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build --all --verbose
       - name: Run tests
@@ -109,20 +114,20 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Prep cargo cache
-        run: mkdir ~/.cargo
-      - uses: actions/cache@v1
-        id: cach
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}
+      # - name: Prep cargo cache
+      #   run: mkdir ~/.cargo
+      # - uses: actions/cache@v1
+      #   id: cach
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}
       - name: Prep target cache
         run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: api-tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
@@ -141,20 +146,20 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Prep cargo cache
-        run: mkdir ~/.cargo
-      - uses: actions/cache@v1
-        id: cargo
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}
+      # - name: Prep cargo cache
+      #   run: mkdir ~/.cargo
+      # - uses: actions/cache@v1
+      #   id: cargo
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}
       - name: Prep target cache
         run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: clippy-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
@@ -171,18 +176,18 @@ jobs:
         with:
           toolchain: nightly
           override: true
-      - name: Prep cargo cache
-        run: mkdir ~/.cargo
-      - uses: actions/cache@v1
-        id: cargo-cach-coverage
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}
+      # - name: Prep cargo cache
+      #   run: mkdir ~/.cargo
+      # - uses: actions/cache@v1
+      #   id: cargo-cach-coverage
+      #   with:
+      #     path: ~/.cargo
+      #     key: ${{ runner.os }}
       # - uses: actions/cache@v1
       #   id: build-cache
       #   with:
       #     path: target
-      #     key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      #     key: tarpaulin-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
       - name: run tarpaulin

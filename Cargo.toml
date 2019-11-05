@@ -124,6 +124,6 @@ ws-echo = []
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
 
-[patch.crates-io]
-simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = 'from-object' }
+#[patch.crates-io]
+#simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = 'from-object' }
 
