@@ -230,6 +230,8 @@ jobs:
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
       - name: run tarpaulin
+        env:
+          RUSTC_WRAPPER: sccache
         run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/* --all
       - uses: codecov/codecov-action@v1.0.2
         with:
