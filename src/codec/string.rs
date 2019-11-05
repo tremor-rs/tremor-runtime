@@ -41,9 +41,9 @@ impl Codec for String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use simd_json::json;
     use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
-    use simd_json::json;
 
     #[test]
     fn test_string_codec() -> Result<()> {
