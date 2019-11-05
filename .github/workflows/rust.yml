@@ -14,13 +14,13 @@ jobs:
         with:
           path: ~/cargo-deny/
           key: cargo-deny-${{ runner.os }}-0.3.0a
-      - name: restore cache
+      - name: restore sccache
         if: steps.cache-cargo-deny.outputs.cache-hit == 'true'
         run: cp ~/cargo-deny/* ~/.cargo/bin
       - name: Install clippy-deny
         if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
-      - name: Make cache
+      - name: Make sccache cache folder
         if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny
       - name: Check dependencies
@@ -85,13 +85,13 @@ jobs:
         with:
           path: ~/sccache
           key: sccache-${{ runner.os }}
-      - name: restore cache
+      - name: restore sccache
         if: steps.cache-sccache.outputs.cache-hit == 'true'
         run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make cache
+      - name: Make sccache cache folder
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
@@ -138,13 +138,13 @@ jobs:
         with:
           path: ~/sccache
           key: sccache-${{ runner.os }}
-      - name: restore cache
+      - name: restore sccache
         if: steps.cache-sccache.outputs.cache-hit == 'true'
         run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make cache
+      - name: Make sccache cache folder
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
@@ -179,13 +179,13 @@ jobs:
         with:
           path: ~/sccache
           key: sccache-${{ runner.os }}
-      - name: restore cache
+      - name: restore sccache
         if: steps.cache-sccache.outputs.cache-hit == 'true'
         run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make cache
+      - name: Make sccache cache folder
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Install clippy
@@ -206,18 +206,27 @@ jobs:
         with:
           toolchain: nightly
           override: true
-      # - name: Prep cargo cache
-      #   run: mkdir ~/.cargo
-      # - uses: actions/cache@v1
-      #   id: cargo-cach-coverage
-      #   with:
-      #     path: ~/.cargo
-      #     key: ${{ runner.os }}
-      # - uses: actions/cache@v1
-      #   id: build-cache
-      #   with:
-      #     path: target
-      #     key: tarpaulin-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/cache@v1
+        id: cache-build
+        with:
+          path: ~/.cache/sccache
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            sccache-cache-${{ runner.os }}-
+      - uses: actions/cache@v1
+        id: cache-sccache
+        with:
+          path: ~/sccache
+          key: sccache-${{ runner.os }}
+      - name: restore sccache
+        if: steps.cache-sccache.outputs.cache-hit == 'true'
+        run: cp ~/sccache/* ~/.cargo/bin
+      - name: install sccache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: cargo install sccache
+      - name: Make sccache cache folder
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
       - name: run tarpaulin
