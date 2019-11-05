@@ -34,3 +34,25 @@ impl Codec for JSON {
         Ok(v)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use simd_json::BorrowedValue;
+    use simd_json::OwnedValue;
+    use simd_json::json;
+
+    #[test]
+    fn test_json_codec() -> Result<()> {
+        let seed: OwnedValue = json!({ "snot": "badger" });
+        let seed: BorrowedValue = seed.into();
+
+        let mut codec = JSON {};
+        let as_raw = codec.encode(&seed)?;
+        let as_json = codec.decode(as_raw, 0);
+
+        let _ = dbg!(as_json);
+
+        Ok(())
+    }
+}

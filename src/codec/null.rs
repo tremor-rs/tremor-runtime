@@ -27,3 +27,24 @@ impl Codec for Null {
         Ok(vec![])
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use simd_json::BorrowedValue;
+    use simd_json::OwnedValue;
+
+    #[test]
+    fn test_null_codec() -> Result<()> {
+        let seed: OwnedValue = OwnedValue::Null;
+        let seed: BorrowedValue = seed.into();
+
+        let mut codec = Null {};
+        let as_raw = codec.encode(&seed)?;
+        let as_json = codec.decode(as_raw, 0);
+
+        let _ = dbg!(as_json);
+
+        Ok(())
+    }
+}
