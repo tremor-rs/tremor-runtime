@@ -1,0 +1,31 @@
+name: Tests
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v1
+      
+    - uses: actions/setup-node@v1
+      with:
+        node-version: '12.x'
+
+    - run: npm ci
+
+    - name: Prettier Format Check
+      run: npm run format-check
+
+    - name: Build & Test
+      run: npm run test
