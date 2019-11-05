@@ -20,7 +20,7 @@ jobs:
       - name: Install clippy-deny
         if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
-      - name: Make sccache cache folder
+      - name: Prepare sccache command bin for cache
         if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny
       - name: Check dependencies
@@ -91,7 +91,7 @@ jobs:
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make sccache cache folder
+      - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
@@ -144,7 +144,7 @@ jobs:
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make sccache cache folder
+      - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
@@ -185,7 +185,7 @@ jobs:
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make sccache cache folder
+      - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Install clippy
@@ -224,7 +224,7 @@ jobs:
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
-      - name: Make sccache cache folder
+      - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: install tarpaulin
