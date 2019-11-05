@@ -15,13 +15,13 @@ jobs:
           path: ~/cargo-deny/
           key: cargo-deny-${{ runner.os }}-0.3.0
       - name: restore cache
-        if: steps.cargo-deny.outputs.cache-hit == 'true'
+        if: steps.cache-cargo-deny.outputs.cache-hit == 'true'
         run: cp ~/cargo-deny/* ~/.cargo/bin
       - name: Install clippy-deny
-        if: steps.cargo-deny.outputs.cache-hit != 'true'
+        if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
       - name: Make cache
-        if: steps.cargo-deny.outputs.cache-hit != 'true'
+        if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
         run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny/*
       - name: Check dependencies
         run: cargo deny check
@@ -77,17 +77,23 @@ jobs:
         id: cache-build
         with:
           path: ~/.cache/sccache
-          key: sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            sccache-${{ runner.os }}-
+            sccache-cache-${{ runner.os }}-
       - uses: actions/cache@v1
         id: cache-sccache
         with:
-          path: ~/.cargo/bin/sccache
+          path: ~/sccache
           key: sccache-${{ runner.os }}
+      - name: restore cache
+        if: steps.cache-sccache.outputs.cache-hit == 'true'
+        run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
+      - name: Make cache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
       - name: Build
         env:
           RUSTC_WRAPPER: sccache
@@ -124,22 +130,23 @@ jobs:
         id: cache-build
         with:
           path: ~/.cache/sccache
-          key: sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            sccache-${{ runner.os }}-
+            sccache-cache-${{ runner.os }}-
       - uses: actions/cache@v1
         id: cache-sccache
         with:
-          path: ~/.cargo/bin/sccache
+          path: ~/sccache
           key: sccache-${{ runner.os }}
-      - uses: actions/cache@v1
-        id: cache-cargo-deny
-        with:
-          path: ~/.cargo/bin/cargo-deny
-          key: cargo-deny-${{ runner.os }}-0.3.0
+      - name: restore cache
+        if: steps.cache-sccache.outputs.cache-hit == 'true'
+        run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
+      - name: Make cache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
       - name: Build
         env:
           RUSTC_WRAPPER: sccache
@@ -164,22 +171,23 @@ jobs:
         id: cache-build
         with:
           path: ~/.cache/sccache
-          key: sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            sccache-${{ runner.os }}-
+            sccache-cache-${{ runner.os }}-
       - uses: actions/cache@v1
         id: cache-sccache
         with:
-          path: ~/.cargo/bin/sccache
+          path: ~/sccache
           key: sccache-${{ runner.os }}
-      - uses: actions/cache@v1
-        id: cache-cargo-deny
-        with:
-          path: ~/.cargo/bin/cargo-deny
-          key: cargo-deny-${{ runner.os }}-0.3.0
+      - name: restore cache
+        if: steps.cache-sccache.outputs.cache-hit == 'true'
+        run: cp ~/sccache/* ~/.cargo/bin
       - name: install sccache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: cargo install sccache
+      - name: Make cache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
