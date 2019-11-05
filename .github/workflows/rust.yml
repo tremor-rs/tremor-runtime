@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v1
       - name: Check license headers
         run: ./checks/copyright.sh
-      - uses: 
+      - uses: wayfair-incubator/cache@master
         id: cache-cargo-deny
         with:
           path: ~/cargo-deny/
