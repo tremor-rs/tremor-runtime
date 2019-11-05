@@ -9,6 +9,8 @@ jobs:
       - uses: actions/checkout@v1
       - name: Check license headers
         run: ./checks/copyright.sh
+      - name: Prep cargo cache
+        run: mkdir ~/.cargo
       - uses: actions/cache@v1
         id: cache
         with:
@@ -67,11 +69,15 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Prep cargo cache
+        run: mkdir ~/.cargo
       - uses: actions/cache@v1
         id: cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
+      - name: Prep target cache
+        run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
@@ -103,11 +109,15 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Prep cargo cache
+        run: mkdir ~/.cargo
       - uses: actions/cache@v1
         id: cach
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
+      - name: Prep target cache
+        run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
@@ -131,11 +141,15 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Prep cargo cache
+        run: mkdir ~/.cargo
       - uses: actions/cache@v1
         id: cargo
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
+      - name: Prep target cache
+        run: mkdir target
       - uses: actions/cache@v1
         id: build-cache
         with:
@@ -157,6 +171,8 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - name: Prep cargo cache
+        run: mkdir ~/.cargo
       - uses: actions/cache@v1
         id: cargo-cach-coverage
         with:
