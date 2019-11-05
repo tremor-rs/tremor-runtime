@@ -28,3 +28,20 @@ pub fn nanotime() -> u64 {
 
     (seconds * 1_000_000_000) + nanoseconds
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::errors::*;
+
+    #[test]
+    fn test_duration_to_millis() -> Result<()> {
+        let d = duration_to_millis(Duration::from_secs(1));
+        assert_eq!(d, 1000u64);
+
+        let d = duration_to_millis(Duration::from_millis(1));
+        assert_eq!(d, 1u64);
+
+        Ok(())
+    }
+}

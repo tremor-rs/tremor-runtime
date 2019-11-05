@@ -34,3 +34,14 @@ pub fn log() {
         info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn for_coverage_only() {
+        print();
+        log();
+    }
+}
