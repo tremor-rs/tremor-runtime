@@ -210,7 +210,7 @@ jobs:
         id: cache-build
         with:
           path: ~/.cache/sccache
-          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: sccache-cache-tarpaulin-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             sccache-cache-${{ runner.os }}-
       - uses: wayfair-incubator/cache@v900
