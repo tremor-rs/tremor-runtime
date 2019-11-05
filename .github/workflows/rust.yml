@@ -22,7 +22,7 @@ jobs:
         run: cargo install -f cargo-deny
       - name: Make cache
         if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
-        run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny/*
+        run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny
       - name: Check dependencies
         run: cargo deny check
   sanity:
@@ -93,7 +93,7 @@ jobs:
         run: cargo install sccache
       - name: Make cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
         env:
           RUSTC_WRAPPER: sccache
@@ -146,7 +146,7 @@ jobs:
         run: cargo install sccache
       - name: Make cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
         env:
           RUSTC_WRAPPER: sccache
@@ -187,7 +187,7 @@ jobs:
         run: cargo install sccache
       - name: Make cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache/*
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
