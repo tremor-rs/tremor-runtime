@@ -55,6 +55,7 @@ pub struct Config {
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
     addr: Option<WsAddr>,
+    downed_at: u64,
     config: Config,
     pipelines: HashMap<TremorURL, PipelineAddr>,
     postprocessors: Postprocessors,
@@ -107,6 +108,7 @@ impl offramp::Impl for Ws {
                     r
                 })?;
             Ok(Box::new(Self {
+                downed_at: 0,
                 addr: None,
                 config,
                 pipelines: HashMap::new(),
@@ -129,14 +131,18 @@ impl Offramp for Ws {
         // We eat up the entire buffer
         while let Ok(addr) = self.rx.try_recv() {
             self.addr = addr;
+            if self.addr.is_none() {
+                self.downed_at = event.ingest_ns;
+            }
         }
         // If after that we're not connected yet we try to reconnect
         if self.addr.is_none() {
-            std::thread::sleep(Duration::from_secs(1));
-            let url = self.config.url.clone();
-            let tx = self.tx.clone();
-            let txe = self.tx.clone();
-            thread::Builder::new()
+            if event.ingest_ns - self.downed_at > 1_000_000_000 {
+                self.downed_at = event.ingest_ns;
+                let url = self.config.url.clone();
+                let tx = self.tx.clone();
+                let txe = self.tx.clone();
+                thread::Builder::new()
                 .name(format!("offramp-ws-actix-loop-{}", "???"))
                 .spawn(move || -> io::Result<()> {
                     let sys = actix::System::new("ws-offramp");
@@ -169,6 +175,7 @@ impl Offramp for Ws {
                     warn!("[WS Offramp] Transient thread terminated due to upstream error ... reconnecting");
                     r
                 })?;
+            }
         }
         if let Some(addr) = &self.addr {
             for value in event.value_iter() {
