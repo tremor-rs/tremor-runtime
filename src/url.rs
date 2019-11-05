@@ -256,8 +256,17 @@ impl Serialize for TremorURL {
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
-    fn url() {
+    fn bad_url() -> Result<()> {
+        match TremorURL::parse("snot://") {
+            Err(_) => Ok(()),
+            Ok(_) => Err("expected a bad url".into()),
+        }
+    }
+
+    #[test]
+    fn url() -> Result<()> {
         let url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")
             .expect("failed to parse url");
 
@@ -266,10 +275,11 @@ mod test {
         assert_eq!(Some("main".to_owned()), url.artefact());
         assert_eq!(Some("01".to_owned()), url.instance());
         assert_eq!(Some("in".to_owned()), url.instance_port());
+        Ok(())
     }
 
     #[test]
-    fn short_url() {
+    fn short_url() -> Result<()> {
         let url = TremorURL::parse("/pipeline/main/01/in").expect("failed to parse url");
 
         assert_eq!(Scope::Port, url.scope());
@@ -277,5 +287,22 @@ mod test {
         assert_eq!(Some("main".to_owned()), url.artefact());
         assert_eq!(Some("01".to_owned()), url.instance());
         assert_eq!(Some("in".to_owned()), url.instance_port());
+        Ok(())
+    }
+
+    #[test]
+    fn from_onramp_id() -> Result<()> {
+        let url = TremorURL::from_onramp_id("test")?;
+        assert_eq!(Some(ResourceType::Onramp), url.resource_type());
+        assert_eq!(Some("test".to_owned()), url.artefact());
+        Ok(())
+    }
+
+    #[test]
+    fn from_offramp_id() -> Result<()> {
+        let url = TremorURL::from_offramp_id("test")?;
+        assert_eq!(Some(ResourceType::Offramp), url.resource_type());
+        assert_eq!(Some("test".to_owned()), url.artefact());
+        Ok(())
     }
 }
