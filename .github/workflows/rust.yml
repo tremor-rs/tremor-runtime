@@ -18,7 +18,7 @@ jobs:
         id: build-cache
         with:
           path: target
-          key: clippy-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: clippy-deny-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install clippy-deny
         # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
@@ -72,13 +72,11 @@ jobs:
         with:
           toolchain: stable
           override: true
-      # - name: Prep cargo cache
-      #   run: mkdir ~/.cargo
-      # - uses: actions/cache@v1
-      #   id: cach
-      #   with:
-      #     path: ~/.cargo
-      #     key: ${{ runner.os }}
+      - uses: actions/cache@v1
+        id: cache-registry
+        with:
+          path: ~/.cargo/registry
+          key: license-${{ runner.os }}
       - name: Prep target cache
         run: mkdir target
       - uses: actions/cache@v1
