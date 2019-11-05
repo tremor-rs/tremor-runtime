@@ -84,15 +84,15 @@ jobs:
         run: cargo install sccache
       - name: Build
         env:
-          RUSTC_WRAPPER: ~/.cargo/bin/sccache
+          RUSTC_WRAPPER: sccache
         run: cargo build --all
       - name: Run tests
         env:
-          RUSTC_WRAPPER: ~/.cargo/bin/sccache
+          RUSTC_WRAPPER: sccache
         run: cargo test --all
       - name: Run Integration Tests
         env:
-          RUSTC_WRAPPER: ~/.cargo/bin/sccache
+          RUSTC_WRAPPER: sccache
         run: make it
   api-tests:
     runs-on: ubuntu-latest
@@ -136,7 +136,7 @@ jobs:
         run: cargo install sccache
       - name: Build
         env:
-          RUSTC_WRAPPER: ~/.cargo/bin/sccache
+          RUSTC_WRAPPER: sccache
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
         run: ./checks/api.sh -c
@@ -178,7 +178,7 @@ jobs:
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
         env:
-          RUSTC_WRAPPER: ~/.cargo/bin/sccache
+          RUSTC_WRAPPER: sccache
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all
