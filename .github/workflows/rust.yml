@@ -80,13 +80,27 @@ jobs:
       - uses: actions/cache@v1
         id: build-cache
         with:
-          path: target
-          key: tests-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          path: ~/.cache/sccache
+          key: tests-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/cache@v1
+        id: cache-sccache
+        with:
+          path: ~/.cargo/bin/sccache
+          key: sccache-${{ runner.os }}
+      - name: install sccache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: cargo install sccache
       - name: Build
+        env:
+          RUSTC_WRAPPER: ~/.cargo/bin/sccache
         run: cargo build --all
       - name: Run tests
+        env:
+          RUSTC_WRAPPER: ~/.cargo/bin/sccache
         run: cargo test --all
       - name: Run Integration Tests
+        env:
+          RUSTC_WRAPPER: ~/.cargo/bin/sccache
         run: make it
   api-tests:
     runs-on: ubuntu-latest
@@ -113,11 +127,6 @@ jobs:
         with:
           path: ~/.cargo/registry
           key: api-tests-registry-${{ runner.os }}
-      - uses: actions/cache@v1
-        id: build-cache
-        with:
-          path: target
-          key: api-tests-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
