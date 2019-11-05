@@ -161,11 +161,11 @@ jobs:
         with:
           path: ~/.cargo
           key: ${{ runner.os }}
-      - uses: actions/cache@v1
-        id: build-cache
-        with:
-          path: target
-          key: ${{ runner.os }}-${{ hashFiles('../Cargo.lock') }}
+      # - uses: actions/cache@v1
+      #   id: build-cache
+      #   with:
+      #     path: target
+      #     key: ${{ runner.os }}-${{ hashFiles('../Cargo.lock') }}
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
       - name: run tarpaulin
