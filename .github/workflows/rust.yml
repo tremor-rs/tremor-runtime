@@ -75,7 +75,7 @@ jobs:
         id: cache
         with:
           path: ~/.cargo
-          key: ${{ runner.os }}-${{ hashFiles("Cargo.lock") }}
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: cargo build --all --verbose
       - name: Run tests
@@ -111,7 +111,7 @@ jobs:
         id: cache
         with:
           path: ~/.cargo
-          key: ${{ runner.os }}-${{ hashFiles("Cargo.lock") }}
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
@@ -139,7 +139,7 @@ jobs:
         id: cache
         with:
           path: ~/.cargo
-          key: ${{ runner.os }}-${{ hashFiles("Cargo.lock") }}
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Install clippy
         run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
@@ -165,7 +165,7 @@ jobs:
         id: cache
         with:
           path: ~/.cargo
-          key: ${{ runner.os }}-${{ hashFiles("Cargo.lock") }}
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: install tarpaulin
         run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
       - name: run tarpaulin
