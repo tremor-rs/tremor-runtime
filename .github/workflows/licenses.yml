@@ -8,12 +8,17 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - uses: actions/cache@v1
-        id: cache
+        id: cache-registry
         with:
           path: ~/.cargo/registry
-          key: ${{ runner.os }}-0.3.0
-      - name: Install clippy-deny
-        if: steps.cache.outputs.cache-hit != 'true'
+          key: license-${{ runner.os }}
+      - uses: actions/cache@v1
+        id: cache-bin
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-${{ runner.os }}-0.3.0
+      - name: Install cargo-deny
+        if: steps.cache-bin.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
       - name: Check dependencies
         run: cargo deny check
