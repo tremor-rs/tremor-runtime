@@ -13,12 +13,12 @@ jobs:
         id: cache-registry
         with:
           path: ~/.cargo/registry
-          key: license-${{ runner.os }}
+          key: license-registry-${{ runner.os }}
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: clippy-deny-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: license-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install clippy-deny
         # if: steps.cache.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
@@ -76,14 +76,12 @@ jobs:
         id: cache-registry
         with:
           path: ~/.cargo/registry
-          key: license-${{ runner.os }}
-      - name: Prep target cache
-        run: mkdir target
+          key: tests-registry-${{ runner.os }}
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: tests-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build --all
       - name: Run tests
@@ -110,20 +108,16 @@ jobs:
         with:
           toolchain: stable
           override: true
-      # - name: Prep cargo cache
-      #   run: mkdir ~/.cargo
-      # - uses: actions/cache@v1
-      #   id: cach
-      #   with:
-      #     path: ~/.cargo
-      #     key: ${{ runner.os }}
-      - name: Prep target cache
-        run: mkdir target
+      - uses: actions/cache@v1
+        id: cache-registry
+        with:
+          path: ~/.cargo/registry
+          key: api-tests-registry-${{ runner.os }}
       - uses: actions/cache@v1
         id: build-cache
         with:
           path: target
-          key: api-tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: api-tests-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
