@@ -12,11 +12,17 @@ jobs:
       - uses: actions/cache@v1
         id: cache-cargo-deny
         with:
-          path: ~/.cargo/bin/cargo-deny
+          path: ~/cargo-deny/
           key: cargo-deny-${{ runner.os }}-0.3.0
+      - name: restore cache
+        if: steps.cargo-deny.outputs.cache-hit == 'true'
+        run: cp ~/cargo-deny/* ~/.cargo/bin
       - name: Install clippy-deny
         if: steps.cargo-deny.outputs.cache-hit != 'true'
         run: cargo install -f cargo-deny
+      - name: Make cache
+        if: steps.cargo-deny.outputs.cache-hit != 'true'
+        run: mkdir ~/cargo-deny; cp ~/.cargo/bin/cargo-deny ~/cargo-deny/*
       - name: Check dependencies
         run: cargo deny check
   sanity:
