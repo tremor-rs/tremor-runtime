@@ -118,6 +118,7 @@ impl Elastic {
         let start = Instant::now();
         let res = client.request(BulkRequest::new(payload)).send()?;
         for item in res.into_response::<BulkErrorsResponse>()? {
+            // TODO update error metric here?
             error!("Elastic Search item error: {:?}", item);
         }
         let d = start.elapsed();
@@ -140,6 +141,7 @@ impl Elastic {
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());
             } else {
+                // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
                 m.insert("error".into(), "Failed to send to ES".into());
             };

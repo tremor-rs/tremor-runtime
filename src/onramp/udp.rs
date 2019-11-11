@@ -135,7 +135,12 @@ fn onramp_loop(
 }
 
 impl Onramp for Udp {
-    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        _metrics_reporter: RampMetricsReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
         let codec = codec::lookup(codec)?;

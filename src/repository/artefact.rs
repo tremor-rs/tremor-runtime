@@ -14,6 +14,7 @@
 
 use crate::codec;
 use crate::errors::*;
+use crate::metrics::RampMetricsReporter;
 use crate::offramp;
 use crate::onramp;
 use crate::registry::ServantId;
@@ -227,6 +228,8 @@ impl Artefact for OfframpArtefact {
         } else {
             vec![]
         };
+        let metrics_reporter =
+            RampMetricsReporter::new(servant_id.clone(), self.metrics_interval_s);
         let res = world
             .system
             .send(offramp::Create {
@@ -234,6 +237,7 @@ impl Artefact for OfframpArtefact {
                 codec,
                 offramp,
                 postprocessors,
+                metrics_reporter,
             })
             .wait()??;
         Ok(res)
@@ -321,6 +325,8 @@ impl Artefact for OnrampArtefact {
         } else {
             vec![]
         };
+        let metrics_reporter =
+            RampMetricsReporter::new(servant_id.clone(), self.metrics_interval_s);
         let res = world
             .system
             .send(onramp::Create {
@@ -328,6 +334,7 @@ impl Artefact for OnrampArtefact {
                 preprocessors,
                 codec,
                 stream,
+                metrics_reporter,
             })
             .wait()??;
         Ok(res)

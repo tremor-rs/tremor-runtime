@@ -79,6 +79,7 @@ fn onramp_loop(
     config: &Config,
     preprocessors: Vec<String>,
     mut codec: Box<dyn Codec>,
+    mut metrics_reporter: &mut RampMetricsReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -106,7 +107,12 @@ fn onramp_loop(
         while pipelines.is_empty() {
             match rx.recv()? {
                 onramp::Msg::Connect(mut ps) => {
-                    pipelines.append(&mut ps);
+                    // TODO better destructuring here
+                    if ps[0].0 == *METRICS_PIPELINE {
+                        metrics_reporter.set_metrics_pipeline(ps[0].0.clone(), ps[0].1.clone());
+                    } else {
+                        pipelines.append(&mut ps);
+                    }
                 }
                 onramp::Msg::Disconnect { tx, .. } => {
                     tx.send(true)?;
@@ -207,10 +213,21 @@ fn onramp_loop(
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
-                                    send_event(
+                                    //send_event(
+                                    //    &pipelines,
+                                    //    preprocessors,
+                                    //    &mut codec,
+                                    //    &mut ingest_ns,
+                                    //    origin_uri,
+                                    //    id,
+                                    //    buffer[0..n].to_vec(),
+                                    //);
+                                    // TODO renme to send_event after test
+                                    send_event2(
                                         &pipelines,
                                         preprocessors,
                                         &mut codec,
+                                        &mut metrics_reporter,
                                         &mut ingest_ns,
                                         origin_uri,
                                         id,
@@ -240,7 +257,12 @@ fn onramp_loop(
 }
 
 impl Onramp for Tcp {
-    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        mut metrics_reporter: RampMetricsReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
         let preprocessors = preprocessors.to_vec();
@@ -248,7 +270,9 @@ impl Onramp for Tcp {
         thread::Builder::new()
             .name(format!("onramp-tcp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
+                if let Err(e) =
+                    onramp_loop(&rx, &config, preprocessors, codec, &mut metrics_reporter)
+                {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

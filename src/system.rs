@@ -423,7 +423,15 @@ impl World {
                     id.clone(),
                 )?;
                 self.repo.bind_onramp(id)?;
-                self.reg.publish_onramp(id, servant)
+                // We link to the metrics pipeline
+                let res = self.reg.publish_onramp(id, servant)?;
+                let mut id = id.clone();
+                id.set_port("metrics".to_owned());
+                let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
+                    .into_iter()
+                    .collect();
+                self.link_onramp(&id, m)?;
+                Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
@@ -490,7 +498,17 @@ impl World {
                     id.clone(),
                 )?;
                 self.repo.bind_offramp(id)?;
-                self.reg.publish_offramp(id, servant)
+                // We link to the metrics pipeline
+                let res = self.reg.publish_offramp(id, servant)?;
+                // TODO remove
+                //let mut id = id.clone();
+                //id.set_port("metrics".to_owned());
+                //let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
+                let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
+                    .into_iter()
+                    .collect();
+                self.link_offramp(&id, m)?;
+                Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),

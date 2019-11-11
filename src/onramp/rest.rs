@@ -75,7 +75,12 @@ impl onramp::Impl for Rest {
 }
 
 impl Onramp for Rest {
-    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        _metrics_reporter: RampMetricsReporter,
+    ) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
         let codec = codec::lookup(&codec)?;

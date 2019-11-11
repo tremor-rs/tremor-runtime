@@ -18,6 +18,7 @@ pub use crate::dflt::{self, *};
 pub use crate::errors::*;
 pub use crate::offramp::{self, Offramp};
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
+pub use crate::repository::ServantId;
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
 pub use crate::utils::ConfigImpl;

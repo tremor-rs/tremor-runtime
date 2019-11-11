@@ -14,9 +14,9 @@
 
 use crate::codec::Codec;
 use crate::errors::*;
+use crate::metrics::RampMetricsReporter;
 use crate::registry::ServantId;
-use crate::system::PipelineAddr;
-use crate::system::Stop;
+use crate::system::{PipelineAddr, Stop, METRICS_PIPELINE};
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use actix::prelude::*;
@@ -112,6 +112,7 @@ pub struct Create {
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
     pub postprocessors: Vec<String>,
+    pub metrics_reporter: RampMetricsReporter,
 }
 
 impl fmt::Debug for Create {
@@ -137,14 +138,29 @@ impl Handler<Create> for Manager {
             for m in rx {
                 match m {
                     Msg::Event { event, input } => {
+                        req.metrics_reporter.periodic_flush(event.ingest_ns);
+
+                        req.metrics_reporter.increment_in();
                         // TODO FIXME implement postprocessors
-                        if let Err(e) = req.offramp.on_event(&req.codec, input.into(), event) {
-                            info!("[Offramp::{}] On Event error: {}", offramp_id, e);
-                        };
+                        match req.offramp.on_event(&req.codec, input.into(), event) {
+                            Ok(_) => req.metrics_reporter.increment_out(),
+                            Err(e) => {
+                                req.metrics_reporter.increment_error();
+                                error!("[Offramp::{}] On Event error: {}", offramp_id, e);
+                            }
+                        }
                     }
                     Msg::Connect { id, addr } => {
-                        info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
-                        req.offramp.add_pipeline(id, addr);
+                        if id == *METRICS_PIPELINE {
+                            info!(
+                                "[Offramp::{}] Connecting system metrics pipeline {}",
+                                offramp_id, id
+                            );
+                            req.metrics_reporter.set_metrics_pipeline(id, addr);
+                        } else {
+                            info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
+                            req.offramp.add_pipeline(id, addr);
+                        }
                     }
                     Msg::Disconnect { id, tx } => {
                         info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);

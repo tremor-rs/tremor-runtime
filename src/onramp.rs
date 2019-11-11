@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::errors::*;
+use crate::metrics::RampMetricsReporter;
 use crate::repository::ServantId;
 use crate::system::{PipelineAddr, Stop};
 use crate::url::TremorURL;
@@ -44,7 +45,12 @@ pub enum Msg {
 pub type Addr = Sender<Msg>;
 
 pub trait Onramp: Send {
-    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<Addr>;
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        metrics_reporter: RampMetricsReporter,
+    ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
@@ -80,6 +86,7 @@ pub struct Create {
     pub stream: Box<dyn Onramp>,
     pub codec: String,
     pub preprocessors: Vec<String>,
+    pub metrics_reporter: RampMetricsReporter,
 }
 
 impl fmt::Debug for Create {
@@ -95,7 +102,8 @@ impl Message for Create {
 impl Handler<Create> for Manager {
     type Result = Result<Addr>;
     fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
-        req.stream.start(&req.codec, &req.preprocessors)
+        req.stream
+            .start(&req.codec, &req.preprocessors, req.metrics_reporter)
     }
 }
 

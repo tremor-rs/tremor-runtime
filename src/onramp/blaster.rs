@@ -160,7 +160,12 @@ fn onramp_loop(
 }
 
 impl Onramp for Blaster {
-    fn start(&mut self, codec: &str, preprocessors: &[String]) -> Result<onramp::Addr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        _metrics_reporter: RampMetricsReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let data2 = self.data.clone();
         let config2 = self.config.clone();
