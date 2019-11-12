@@ -100,6 +100,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampMetricsReporter,
 ) -> Result<()> {
     let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let context = LoggingConsumerContext;
@@ -243,6 +244,7 @@ fn onramp_loop(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut metrics_reporter,
                             &mut ingest_ns,
                             &origin_uri,
                             id,
@@ -267,7 +269,7 @@ impl Onramp for Kafka {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        _metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampMetricsReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
@@ -276,7 +278,7 @@ impl Onramp for Kafka {
         thread::Builder::new()
             .name(format!("onramp-kafka-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

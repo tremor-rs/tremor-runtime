@@ -68,58 +68,6 @@ pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
-    ingest_ns: &mut u64,
-    origin_uri: &tremor_pipeline::EventOriginUri,
-    id: u64,
-    data: Vec<u8>,
-) {
-    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
-        for d in data {
-            match codec.decode(d, *ingest_ns) {
-                Ok(Some(data)) => {
-                    let event = tremor_pipeline::Event {
-                        is_batch: false,
-                        id,
-                        data,
-                        ingest_ns: *ingest_ns,
-                        // TODO make origin_uri non-optional here too?
-                        origin_uri: Some(origin_uri.clone()),
-                        kind: None,
-                    };
-                    let len = pipelines.len();
-                    for (input, addr) in &pipelines[0..len - 1] {
-                        if let Some(input) = input.instance_port() {
-                            if let Err(e) = addr.addr.send(PipelineMsg::Event {
-                                input: input.into(),
-                                event: event.clone(),
-                            }) {
-                                error!("[Onramp] failed to send to pipeline: {}", e);
-                            }
-                        }
-                    }
-                    let (input, addr) = &pipelines[len - 1];
-                    if let Some(input) = input.instance_port() {
-                        if let Err(e) = addr.addr.send(PipelineMsg::Event {
-                            input: input.into(),
-                            event,
-                        }) {
-                            error!("[Onramp] failed to send to pipeline: {}", e);
-                        }
-                    }
-                }
-                Ok(None) => (),
-                Err(e) => error!("[Codec] {}", e),
-            }
-        }
-    };
-}
-
-// We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(clippy::borrowed_box)]
-pub fn send_event2(
-    pipelines: &[(TremorURL, PipelineAddr)],
-    preprocessors: &mut Preprocessors,
-    codec: &mut Box<dyn Codec>,
     metrics_reporter: &mut RampMetricsReporter,
     ingest_ns: &mut u64,
     origin_uri: &tremor_pipeline::EventOriginUri,

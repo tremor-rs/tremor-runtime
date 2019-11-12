@@ -55,6 +55,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampMetricsReporter,
 ) -> Result<()> {
     let source_data_file = FSFile::open(&config.source)?;
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
@@ -105,6 +106,7 @@ fn onramp_loop(
             &pipelines,
             &mut preprocessors,
             &mut codec,
+            &mut metrics_reporter,
             &mut ingest_ns,
             &origin_uri,
             id,
@@ -127,7 +129,7 @@ impl Onramp for File {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        _metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampMetricsReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
@@ -136,7 +138,7 @@ impl Onramp for File {
         thread::Builder::new()
             .name(format!("onramp-file-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

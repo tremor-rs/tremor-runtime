@@ -54,6 +54,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampMetricsReporter,
 ) -> Result<()> {
     // Limit of a UDP package
     let mut buf = [0; 65535];
@@ -114,6 +115,7 @@ fn onramp_loop(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut metrics_reporter,
                             &mut ingest_ns,
                             &origin_uri,
                             id,
@@ -139,7 +141,7 @@ impl Onramp for Udp {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        _metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampMetricsReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
@@ -148,7 +150,7 @@ impl Onramp for Udp {
         thread::Builder::new()
             .name(format!("onramp-udp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

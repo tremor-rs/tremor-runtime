@@ -79,7 +79,7 @@ impl Onramp for Rest {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        _metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampMetricsReporter,
     ) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
@@ -88,7 +88,7 @@ impl Onramp for Rest {
         let preprocessors = preprocessors.to_vec();
         thread::Builder::new()
             .name(format!("onramp-rest-{}", "???"))
-            .spawn(move || onramp_loop(&rx, config, preprocessors, codec))?;
+            .spawn(move || onramp_loop(&rx, config, preprocessors, codec, metrics_reporter))?;
 
         Ok(tx)
     }
@@ -217,6 +217,7 @@ fn onramp_loop(
     config: Config,
     preprocessors: Vec<String>,
     mut codec: std::boxed::Box<dyn codec::Codec>,
+    mut metrics_reporter: RampMetricsReporter,
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
     let (tx, dr) = bounded::<RestOnrampMessage>(1);
@@ -258,6 +259,7 @@ fn onramp_loop(
                         &pipelines,
                         &mut preprocessors,
                         &mut codec,
+                        &mut metrics_reporter,
                         &mut ingest_ns,
                         &origin_uri,
                         0,

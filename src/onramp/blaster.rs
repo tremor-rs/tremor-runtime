@@ -80,6 +80,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampMetricsReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
@@ -149,6 +150,7 @@ fn onramp_loop(
                 &pipelines,
                 &mut preprocessors,
                 &mut codec,
+                &mut metrics_reporter,
                 &mut ingest_ns,
                 &origin_uri,
                 id,
@@ -164,7 +166,7 @@ impl Onramp for Blaster {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        _metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampMetricsReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let data2 = self.data.clone();
@@ -173,7 +175,9 @@ impl Onramp for Blaster {
         let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-blaster-{}", "???"))
-            .spawn(move || onramp_loop(&rx, data2, &config2, preprocessors, codec))?;
+            .spawn(move || {
+                onramp_loop(&rx, data2, &config2, preprocessors, codec, metrics_reporter)
+            })?;
         Ok(tx)
     }
 

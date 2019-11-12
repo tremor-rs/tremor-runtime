@@ -213,17 +213,7 @@ fn onramp_loop(
                                         n,
                                         String::from_utf8_lossy(&buffer[0..n])
                                     );
-                                    //send_event(
-                                    //    &pipelines,
-                                    //    preprocessors,
-                                    //    &mut codec,
-                                    //    &mut ingest_ns,
-                                    //    origin_uri,
-                                    //    id,
-                                    //    buffer[0..n].to_vec(),
-                                    //);
-                                    // TODO renme to send_event after test
-                                    send_event2(
+                                    send_event(
                                         &pipelines,
                                         preprocessors,
                                         &mut codec,
