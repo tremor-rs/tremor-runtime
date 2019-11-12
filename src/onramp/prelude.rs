@@ -168,11 +168,13 @@ pub fn send_event2(
                 }
                 Ok(None) => (),
                 Err(e) => {
-                    // TODO add metric on preprocessor failures too?
                     metrics_reporter.increment_error();
                     error!("[Codec] {}", e);
                 }
             }
         }
+    } else {
+        // record preprocessor failures too
+        metrics_reporter.increment_error();
     };
 }
