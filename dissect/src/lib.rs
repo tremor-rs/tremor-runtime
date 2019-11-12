@@ -285,6 +285,7 @@ fn handle_scapes(s: &str) -> Result<String, Error> {
     Ok(res)
 }
 impl Pattern {
+    #[allow(clippy::too_many_lines)]
     pub fn compile(mut pattern: &str) -> Result<Self, Error> {
         fn parse_extractor(mut extractor: &str, idx: usize) -> Result<Command, Error> {
             if extractor.is_empty() {
@@ -428,6 +429,7 @@ impl Pattern {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn run(&self, mut data: &str) -> Option<Object<'static>> {
         #[allow(clippy::too_many_arguments)]
         fn insert(
