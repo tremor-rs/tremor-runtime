@@ -57,22 +57,18 @@ impl RampMetricsReporter {
     }
 
     // TODO inline useful on these?
-    // TODO remove all the debugs here
     #[inline]
     pub fn increment_in(&mut self) {
-        dbg!("in+");
         self.metrics.r#in += 1;
     }
 
     #[inline]
     pub fn increment_out(&mut self) {
-        dbg!("out+");
         self.metrics.out += 1;
     }
 
     #[inline]
     pub fn increment_error(&mut self) {
-        dbg!("error+");
         self.metrics.error += 1;
     }
 
@@ -86,7 +82,6 @@ impl RampMetricsReporter {
     }
 
     fn flush(&mut self, timestamp: u64) {
-        dbg!("flush");
         self.send_metric(timestamp, "in", self.metrics.r#in);
         self.send_metric(timestamp, "out", self.metrics.out);
         self.send_metric(timestamp, "error", self.metrics.error);

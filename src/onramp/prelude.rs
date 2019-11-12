@@ -32,15 +32,6 @@ pub use tremor_pipeline::{Event, EventOriginUri};
 pub use tremor_script::prelude::*;
 //pub use tremor_script::LineValue;
 
-// TODO remove. old test version
-/*
-static mut LAST_METRICS_FLUSH: u64 = 0;
-
-const METRICS_INTERVAL_S: u64 = 10;
-
-const METRICS_INTERVAL: u64 = METRICS_INTERVAL_S * 1_000_000_000;
-*/
-
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
         .iter()
@@ -139,6 +130,9 @@ pub fn send_event2(
         for d in data {
             match codec.decode(d, *ingest_ns) {
                 Ok(Some(data)) => {
+                    metrics_reporter.periodic_flush(*ingest_ns);
+                    metrics_reporter.increment_out();
+
                     let event = tremor_pipeline::Event {
                         is_batch: false,
                         id,
@@ -150,63 +144,6 @@ pub fn send_event2(
                     };
 
                     let len = pipelines.len();
-
-                    /*
-                    // TODO work around unsafe
-                    if unsafe { event.ingest_ns - LAST_METRICS_FLUSH } > METRICS_INTERVAL {
-                        // metrics tags
-                        // TODO update with right values
-                        let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::new();
-                        //tags.insert("onramp".into(), "tremor:///onramp/main/01".into());
-                        tags.insert("onramp".into(), onramp_url.to_string().into());
-                        //tags.insert("direction".into(), "output".into());
-                        tags.insert("port".into(), "out".into()); // error port to mark errors?
-                        let value: Value = json!({
-                            "measurement": "onramp_events",
-                            "tags": tags,
-                            "fields": {
-                                "count": id + 1
-                            },
-                            "timestamp": *ingest_ns
-                        })
-                        .into();
-
-                        // full metrics payload
-                        // TODO update with right values
-                        let _metrics_event = tremor_pipeline::Event {
-                            is_batch: false,
-                            id: 0,
-                            data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta {
-                                value,
-                                meta: Value::from(Object::default()),
-                            }),
-                            ingest_ns: *ingest_ns,
-                            origin_uri: None,
-                            kind: None,
-                        };
-
-                        // first pipeline link is always with the system metrics pipeline
-                        // TODO improve this
-                        let (_metrics_input, _metrics_addr) = &pipelines[0];
-                        if let Some(_input) = _metrics_input.instance_port() {
-                            //if let Err(e) = metrics_addr.addr.send(PipelineMsg::Event {
-                            //    input: input.into(),
-                            //    event: metrics_event,
-                            //}) {
-                            //    error!("[Onramp] failed to send to metrics pipeline: {}", e);
-                            //}
-                        }
-
-                        // TODO work around unsafe
-                        unsafe {
-                            LAST_METRICS_FLUSH = event.ingest_ns;
-                        }
-                    }
-                    */
-
-                    metrics_reporter.periodic_flush(*ingest_ns);
-
-                    metrics_reporter.increment_out();
 
                     for (input, addr) in &pipelines[0..len - 1] {
                         if let Some(input) = input.instance_port() {
