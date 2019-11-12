@@ -22,9 +22,16 @@ use tremor_script::prelude::*;
 pub static mut INSTANCE: &str = "tremor";
 
 #[derive(Debug)]
+pub struct RampMetrics {
+    r#in: u64,
+    out: u64,
+    error: u64,
+}
+
+#[derive(Debug)]
 pub struct RampMetricsReporter {
     artefact_url: TremorURL,
-    metrics: HashMap<Cow<'static, str>, u64>,
+    metrics: RampMetrics,
     metrics_pipeline: Option<(TremorURL, PipelineAddr)>,
     flush_interval: Option<u64>, // as nano-seconds
     last_flush_ns: u64,
@@ -34,10 +41,11 @@ impl RampMetricsReporter {
     pub fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,
-            metrics: [("in".into(), 0), ("out".into(), 0), ("error".into(), 0)]
-                .iter()
-                .cloned()
-                .collect(),
+            metrics: RampMetrics {
+                r#in: 0,
+                out: 0,
+                error: 0,
+            },
             metrics_pipeline: None,
             flush_interval: flush_interval_s.map(|n| n * 1_000_000_000),
             last_flush_ns: 0,
@@ -52,33 +60,25 @@ impl RampMetricsReporter {
     // TODO remove all the debugs here
     #[inline]
     pub fn increment_in(&mut self) {
-        //dbg!("in+");
-        self.bump_metric("in");
+        dbg!("in+");
+        self.metrics.r#in += 1;
     }
 
     #[inline]
     pub fn increment_out(&mut self) {
-        //dbg!("out+");
-        self.bump_metric("out");
+        dbg!("out+");
+        self.metrics.out += 1;
     }
 
     #[inline]
     pub fn increment_error(&mut self) {
-        //dbg!("error+");
-        self.bump_metric("error");
-    }
-
-    #[inline]
-    fn bump_metric(&mut self, port: &str) {
-        if let Some(count) = self.metrics.get_mut(port.into()) {
-            *count += 1;
-        }
+        dbg!("error+");
+        self.metrics.error += 1;
     }
 
     #[inline]
     pub fn periodic_flush(&mut self, timestamp: u64) {
         if let Some(interval) = self.flush_interval {
-            //dbg!("periodic flush check");
             if timestamp - self.last_flush_ns > interval {
                 self.flush(timestamp);
             }
@@ -86,15 +86,14 @@ impl RampMetricsReporter {
     }
 
     fn flush(&mut self, timestamp: u64) {
-        //dbg!("flush");
-        for (port, count) in &self.metrics {
-            // TODO avoid clone here
-            self.send_metric(timestamp, (*port).clone(), *count);
-        }
+        dbg!("flush");
+        self.send_metric(timestamp, "in", self.metrics.r#in);
+        self.send_metric(timestamp, "out", self.metrics.out);
+        self.send_metric(timestamp, "error", self.metrics.error);
         self.last_flush_ns = timestamp;
     }
 
-    fn send_metric(&self, timestamp: u64, port: Cow<'static, str>, count: u64) {
+    fn send_metric(&self, timestamp: u64, port: &'static str, count: u64) {
         if let Some((metrics_input, metrics_addr)) = &self.metrics_pipeline {
             if let Some(input) = metrics_input.instance_port() {
                 // metrics tags
@@ -129,7 +128,7 @@ impl RampMetricsReporter {
                     input: input.into(),
                     event: metrics_event,
                 }) {
-                    error!("[Onramp] failed to send to metrics pipeline: {}", e);
+                    error!("Failed to send to system metrics pipeline: {}", e);
                 }
             }
         }
