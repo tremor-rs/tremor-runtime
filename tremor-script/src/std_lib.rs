@@ -29,6 +29,7 @@ mod string;
 mod system;
 mod r#type;
 mod win;
+mod range;
 
 use crate::registry::{Aggr as AggrRegistry, Registry};
 
@@ -48,6 +49,7 @@ pub fn load(registry: &mut Registry) {
     string::load(registry);
     system::load(registry);
     r#type::load(registry);
+    range::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
