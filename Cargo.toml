@@ -124,6 +124,8 @@ ws-echo = []
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
 
-#[patch.crates-io]
+[patch.crates-io]
 #simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = 'from-object' }
+rdkafka = { git = 'https://github.com/fede1024/rust-rdkafka', rev = '802cb82d5526afa5bb3e95c03955e3da5353d2ef' }
+rdkafka-sys = { git = 'https://github.com/fede1024/rust-rdkafka', rev = '802cb82d5526afa5bb3e95c03955e3da5353d2ef' }
 
