@@ -261,7 +261,7 @@ impl Onramp for Ws {
         // we need to change this here since ws is special
         let preprocessors = preprocessors.to_vec();
         thread::Builder::new()
-            .name(format!("onramp-udp-{}", "???"))
+            .name(format!("onramp-ws-{}", "???"))
             .spawn(move || {
                 if let Err(e) = onramp_loop(&rx, config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
