@@ -14,7 +14,7 @@ binding:
   - id: ws
     links:
       '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/ws/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/ws/{instance}/in', '/offramp/system::stdout/system/out' ]
 
 mapping:
   /binding/ws/01:

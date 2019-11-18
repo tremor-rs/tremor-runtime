@@ -124,10 +124,6 @@ impl offramp::Impl for Ws {
 
 impl Offramp for Ws {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
-        // If we are not connected yet we wait for a message to connect
-        if self.addr.is_none() {
-            self.addr = self.rx.recv()?;
-        }
         // We eat up the entire buffer
         while let Ok(addr) = self.rx.try_recv() {
             self.addr = addr;
@@ -137,6 +133,7 @@ impl Offramp for Ws {
         }
         // If after that we're not connected yet we try to reconnect
         if self.addr.is_none() && event.ingest_ns - self.downed_at > 1_000_000_000 {
+            warn!("[WS Offramp] reconnecting.");
             self.downed_at = event.ingest_ns;
             let url = self.config.url.clone();
             let tx = self.tx.clone();
@@ -191,7 +188,6 @@ impl Offramp for Ws {
                 }
             }
         } else {
-            error!("[WS Offramp] not connected");
             return Err(Error::from("not connected"));
         };
         Ok(())
