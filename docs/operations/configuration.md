@@ -68,6 +68,16 @@ All live or running artefacts have a corresponding state machine that manages it
 lifecycle. The FSM is a simplified version of the POA servant activator lifecycle from CORBA
 and other Application Server Platforms.
 
+## Using the docker image
+
+When using the tremor docker image configuration is loaded from the folder `/etc/tremor` this folder should be mounted into the docker container to propagate the data.
+
+The following files are looked for:
+
+* `/etc/tremor/logger.yaml` a [log4rs](https://docs.rs/log4rs/0.8.3/log4rs/) configuration file to control logging in tremor.
+* `/etc/tremor/config/*.trickle` all files will be loaded as trickle pipelines - trickle pipelines are always loaded before yaml configuration!
+* `/etc/tremor/config/*.yaml` all files will be laoded as configuration files and evaluated in order (so mappings can not refer to artifacts in later files!) - NOTE: defining pipelines in yaml is depricated and trickle pipelines should be used.
+
 ## Static or Bootstrap deployments
 
 Static or Bootstrap deployment allows tremor to be configured at startup with its registry and repository pre-populated with out of the box user defined configuration.

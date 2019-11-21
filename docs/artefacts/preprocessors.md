@@ -63,3 +63,7 @@ Reassembles messages that were split apart using the [GELF chunking protocol](ht
 ### remove-empty
 
 Removes empty messages (aka zero len).
+
+### length-prefixerd
+
+Seperates a continous stream of data based on length prefixing. The lenght for each package in a stream is based on the first 64 bit decoded as a unsigned big endian value.

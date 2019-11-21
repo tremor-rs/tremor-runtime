@@ -14,6 +14,10 @@ Delimits the output ( events ) into lines ( by '\n' )
 
 Encodes raw data into base64 encoded bytes.
 
+### length-prefixerd
+
+Prefixes the data with a network byte order (big endian) lenght of the data in bytes
+
 ### compression
 
 Compresses event data.
@@ -28,3 +32,4 @@ Supported formats:
 * xz        - Xz2 level 9 compression
 * snappy    - Snappy compression
 * lz4       - Lz level 4 compression
+

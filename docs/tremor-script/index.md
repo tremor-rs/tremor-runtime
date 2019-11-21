@@ -1,12 +1,8 @@
 # Tremor-Script
 
-The `tremor-script` scripting language is an interpreted expression-oriented language
-designed for the filtering, extraction, transformation and streaming of structured
-data in a stream or event-based processing system.
+The `tremor-script` scripting language is an interpreted expression-oriented language designed for the filtering, extraction, transformation and streaming of structured data in a stream or event-based processing system.
 
-At its core, `tremor-script` supports a structured type system equivalent to JSON. It
-supports integer, floating point, boolean and UTF-8 encoded string literals, literal
-arrays and associative dictionaries or record types in addition to a `null` marker.
+At its core, `tremor-script` supports a structured type system equivalent to JSON. It supports integer, floating point, boolean and UTF-8 encoded string literals, literal arrays and associative dictionaries or record types in addition to a `null` marker.
 
 A well-formed JSON document is a legal tremor-script expression.
 
@@ -21,51 +17,35 @@ The language is explicitly not Turing-complete:
 
 ### Developer friendly
 
-The language adopts a fortran-like syntax for key expression forms and has
-a path-like syntax for indexing into records and arrays
+The language adopts a fortran-like syntax for key expression forms and has a path-like syntax for indexing into records and arrays
 
 ### Stream-oriented / event-based
 
-Tremor-script is designed to process unstructured ( but well-formed ) data events.
-Event data can be JSON, MsgPack or any other form supported by the tremor event
-processing system.
+Tremor-script is designed to process unstructured ( but well-formed ) data events. Event data can be JSON, MsgPack or any other form supported by the tremor event processing system.
 
 ### Self-documenting
 
-The fortran-like syntax allows rich operations to be computed against arbitrary JSON-like
-data. For example JSON documents can be `patch`ed and `merge`ed with operation and document
-based templates. Records and Arrays can be iterated over to transform them, merge them with
-other documents or to extract subsets for further processing
+The fortran-like syntax allows rich operations to be computed against arbitrary JSON-like data. For example JSON documents can be `patch`ed and `merge`ed with operation and document based templates. Records and Arrays can be iterated over to transform them, merge them with other documents or to extract subsets for further processing
 
 ### Extensibility
 
-The expression-based nature of `tremor-script` means that computational forms and any processing
-is transient. The language describes a set of rules ( expressions ) that process an inbound event document
-into an outbound documented emitted after evaluation of the script.
+The expression-based nature of `tremor-script` means that computational forms and any processing is transient. The language describes a set of rules ( expressions ) that process an inbound event document into an outbound documented emitted after evaluation of the script.
 
-The core expression language is designed for reuse in other script-based DSLs and can currently be extended
-through its modular function subsystem.
+The core expression language is designed for reuse in other script-based DSLs and can currently be extended through its modular function subsystem.
 
-The language also supports a pluggable data extraction model allowing base64 encoded, regular expressions and
-other micro-formats encoded within record fields to be referenced based on their internal structure and for
-subsets to be mapped accordingly.
+The language also supports a pluggable data extraction model allowing base64 encoded, regular expressions and other micro-formats encoded within record fields to be referenced based on their internal structure and for subsets to be mapped accordingly.
 
 In the future, `tremor-script` may be retargeted as a JIT-compiled language.
 
 ### Performant
 
-Data ingested into tremor-script is vectorized via SIMD-parallel instructions on x86-64 or other Intel processor
-architectures supporting ssev3/avx extensions. Processing streams of such event-data incurs some allocation overhead
-at this time, but these event-bound allocations are being written out of the interpreter.
+Data ingested into tremor-script is vectorized via SIMD-parallel instructions on x86-64 or other Intel processor architectures supporting ssev3/avx extensions. Processing streams of such event-data incurs some allocation overhead at this time, but these event-bound allocations are being written out of the interpreter.
 
-The current meaning of `performant` as documented here means that `tremor-script` is more efficient at processing
-log-like data than the system it replaces ( logstash - which mixes extraction plugins such as `grok` and `dissect`
-with JRuby scripts and a terse configuration format )
+The current meaning of `performant` as documented here means that `tremor-script` is more efficient at processing log-like data than the system it replaces ( logstash - which mixes extraction plugins such as `grok` and `dissect` with JRuby scripts and a terse configuration format )
 
 ### Productive
 
-The `tremor-script` parsing tool-chain has been designed with ease-of-debugging and ease-of-development in mind. It
-has buitin support for syntax-highlighting on the console with errors annotating highlighted sections of badly written
+The `tremor-script` parsing tool-chain has been designed with ease-of-debugging and ease-of-development in mind. It has buitin support for syntax-highlighting on the console with errors annotating highlighted sections of badly written
 scripts to simplify fixing such scripts.
 
 ## Language
@@ -200,8 +180,7 @@ PathSegment grammar:
 ArraySegment grammar:
 > ![](grammar/diagram/ArraySegment.png)
 
-Path-like structures in `tremor-script` allow a subset of an ingested event, meta-data passed to the tremor-script function
-and script-local data to be indexed. For example the following document
+Path-like structures in `tremor-script` allow a subset of an ingested event, meta-data passed to the tremor-script function and script-local data to be indexed. 
 
 Example event for illustration purposes:
 
@@ -272,9 +251,7 @@ Grab the range of books from 0 ( the first ) to 2 ( the last ), exclusive of the
 let capture = event.store.book[0:2];
 ```
 
-The type of a path is equivalent to the type of the data returned by a path expression. So in
-the above examples, a reference to a book title would return the value at that path, which in
-the reference event document is a `string`.
+The type of a path is equivalent to the type of the data returned by a path expression. So in the above examples, a reference to a book title would return the value at that path, which in the reference event document is a `string`.
 
 Path's in `tremor-script` are themselves expressions in their own right.
 
@@ -291,8 +268,7 @@ Const can be used to define immutable, constant values that get evaluated at com
 Let grammar:
 > ![](grammar/diagram/Let.png)
 
-The let expression allows data pointed to by a path to be destructively mutated, and the pointed-to
-value reassigned. If the path does not yet exist, it will be created in-situ:
+The let expression allows data pointed to by a path to be destructively mutated, and the pointed-to value reassigned. If the path does not yet exist, it will be created in-situ:
 
 Set a local variable `a` to the literal integer value 10:
 
@@ -317,17 +293,13 @@ let $a = a;
 Drop grammar:
 > ![](grammar/diagram/Drop.png)
 
-Drop expressions enable short-circuiting the execution of a `tremor-script` when badly formed
-data is discovered. If no argument is supplied, `drop` will return the event record. If an
-argument is supplied, the result of evaluating the expression will be returned. Tremor or
-other processing tools can process dropped events or data using purpose-built error-handling.
+Drop expressions enable short-circuiting the execution of a `tremor-script` when badly formed data is discovered. If no argument is supplied, `drop` will return the event record. If an argument is supplied, the result of evaluating the expression will be returned. Tremor or other processing tools can process dropped events or data using purpose-built error-handling.
 
-As the content of the dropped event is user-defined, operators can standardise the format of
-the error emitted on drop from `tremor-script`
+As the content of the dropped event is user-defined, operators can standardise the format of the error emitted on drop from `tremor-script`
 
 ```tremor
-drop "oh noes!";
-drop "never happens"; # As the first emit always wins, this expression never executes
+drop;
+drop; # As the first emit always wins, this expression never executes
 ```
 
 ### Emit
@@ -335,18 +307,11 @@ drop "never happens"; # As the first emit always wins, this expression never exe
 Emit grammar:
 > ![](grammar/diagram/Emit.png)
 
-Emit expressions enable short-circuiting the execution of a `tremor-script` when processing
-is known to be complete and further processing can be avoided. If no argument is supplied,
-`emit` will return the event record. If an argument is supplied, the result of evaluating the expression
-will be returned. Tremor or other processing tools can process emitted events or data using their
-default flow-based or stream-based data processing pipelines.
+Emit expressions enable short-circuiting the execution of a `tremor-script` when processing is known to be complete and further processing can be avoided. If no argument is supplied, emit` will return the event record. If an argument is supplied, the result of evaluating the expression will be returned. Tremor or other processing tools can process emitted events or data using their default flow-based or stream-based data processing pipelines.
 
-As the content of the emitted event is user-defined, oeprators can standardise the format
-of the event emitted on emit from `tremor-script`
+As the content of the emitted event is user-defined, oeprators can standardise the format of the event emitted on emit from `tremor-script`
 
-*NOTE* By default, if no `emit` or `drop` expressions are defined, all expressions in a correctly
-written tremor-script will be executed until completion and the value of the last expression evaluated
-will be returned as an `emit` message.
+*NOTE* By default, if no `emit` or `drop` expressions are defined, all expressions in a correctly written tremor-script will be executed until completion and the value of the last expression evaluated will be returned as an `emit` message.
 
 Implicit emission:
 
@@ -366,10 +331,7 @@ emit "oh noes!"
 emit "never happens"; # As the first emit always wins, this expression never executes
 ```
 
-There are times when it is necessary to emit synthetic events from `tremor-script` within a
-`tremor` `pipeline` to an alternate `operator` port than the default success route. For example,
-when data is well-formed but not valid and the data needs to be __diverted__ into an alternate
-flow. The emit clause can be deployed for this purpose by specifying an optional named port.
+There are times when it is necessary to emit synthetic events from `tremor-script` within a tremor` `pipeline` to an alternate `operator` port than the default success route. For example, when data is well-formed but not valid and the data needs to be __diverted__ into an alternate flow. The emit clause can be deployed for this purpose by specifying an optional named port.
 
 ```tremor
 emit {
@@ -388,8 +350,7 @@ Match grammar:
 Match case grammar:
 > ![](grammar/diagram/MatchCaseClause.png)
 
-Match expressions enable data to be filtered or queried using case-based reasoning. Match expressions
-take the form:
+Match expressions enable data to be filtered or queried using case-based reasoning. Match expressions take the form:
 
 ```tremor
 match <target> of
@@ -431,10 +392,7 @@ emit found;
 
 > ![](grammar/diagram/ExprCase.png)
 
-The simplest form of case expression in match expressions is matching a literal
-value. Values can be any legal tremor-script type and they can be provided as
-literals, computed values or path references to local variables, metadata or values
-arriving via events.
+The simplest form of case expression in match expressions is matching a literal value. Values can be any legal tremor-script type and they can be provided as literals, computed values or path references to local variables, metadata or values arriving via events.
 
 ```tremor
 let example = match 12 of
@@ -471,25 +429,15 @@ match "this is not base64 encoded" of
 end;
 ```
 
-These are often referred to informally as `tilde expressions` and tremor supports a
-variety of micro-formats that can be used for predicate or test-based matching such
-as logstash dissect, json, influx, perl-compatible regular expressions.
+These are often referred to informally as `tilde expressions` and tremor supports a variety of micro-formats that can be used for predicate or test-based matching such as logstash dissect, json, influx, perl-compatible regular expressions.
 
-Tilde expressions can under certain conditions elementize ( extract ) micro-format
-data. The elementization or extraction is covered in the [Extractors](#extractors)
-section of this document and in the Extractor reference.
+Tilde expressions can under certain conditions elementize ( extract ) micro-format data. The elementization or extraction is covered in the [Extractors](#extractors) section of this document and in the Extractor reference.
 
 #### Match and extract expressions
 
-It is also possible to elementize or ingest supported micro-formats into
-tremor-script for further processing. For example, we can use the `~=` and `~` operator
-to perform a predicate test, such as the base64 test in the previous example,
-which upon success, extracts ( in the base64 case, decoding ) a value for further
-processing.
+It is also possible to elementize or ingest supported micro-formats into tremor-script for further processing. For example, we can use the `~=` and `~` operator to perform a predicate test, such as the base64 test in the previous example, which upon success, extracts ( in the base64 case, decoding ) a value for further processing.
 
-For example if we had an embedded JSON document in a string, we could test for
-the value being well-formed json, and extract the contents to a local variable
-as follows:
+For example if we had an embedded JSON document in a string, we could test for the value being well-formed json, and extract the contents to a local variable as follows:
 
 ```tremor
 let sneaky_json = "
@@ -514,9 +462,7 @@ Array Pattern filter grammar:
 
 > ![](grammar/diagram/ArrayPatternFilter.png)
 
-In addition to literal array matching, where the case expression array literal must exactly
-match the target of the match expression, array patterns enable testing for matching elements
-within an array and filtering on the basis of matched elements.
+In addition to literal array matching, where the case expression array literal must exactly match the target of the match expression, array patterns enable testing for matching elements within an array and filtering on the basis of matched elements.
 
 ```tremor
 let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
@@ -548,9 +494,7 @@ Record Pattern Fields grammar
 
 > ![](grammar/diagram/RecordPatternFields.png)
 
-Similarly to record literal matching where the case expression record must exactly match the
-target of the match expression, record patterns enable testing for matching fields or sub-structures
-within a record and extracting and elementizing data on the basis of matched predicate tests ( via `~=` ).
+Similarly to record literal matching where the case expression record must exactly match the target of the match expression, record patterns enable testing for matching fields or sub-structures within a record and extracting and elementizing data on the basis of matched predicate tests ( via `~=` ).
 
 We can check for the presence of fields:
 
@@ -603,9 +547,7 @@ end;
 
 > ![](grammar/diagram/Guard.png)
 
-Guard expressions in Match case clauses enable matching data structures to be further
-filtered based on predicate expressions. For example they can be used to restrict the
-match to a subset of matching cases where appropriate.
+Guard expressions in Match case clauses enable matching data structures to be further filtered based on predicate expressions. For example they can be used to restrict the match to a subset of matching cases where appropriate.
 
 ```tremor
 match event of
@@ -618,8 +560,7 @@ end
 
 > ![](grammar/diagram/Merge.png)
 
-Merge expressions defines a difference against a targetted record and applies that difference to produce
-a result record. Merge operations in `tremor-script` follow merge-semantics defined in [RFC 7386](https://tools.ietf.org/html/rfc7386).
+Merge expressions defines a difference against a targetted record and applies that difference to produce a result record. Merge operations in `tremor-script` follow merge-semantics defined in [RFC 7386](https://tools.ietf.org/html/rfc7386).
 
 ```tremor
 let event = merge event of {"some": "record"} end
@@ -644,15 +585,9 @@ Patch operation grammar
 
 > ![](grammar/diagram/PatchOperation.png)
 
-Patch expressions define a set of record level field operations to be applied to a target record in order
-to transform a targetted record. Patch allows fields to be: inserted where there was no field before; removed
-where there was a field before; updated where there was a field before; or inserted or updated regardless of
-whether or not there was a field before. Patch also allows field level merge operations on records or for the
-targetted document itself to be merged. Merge operations in patch are syntax sugar in that they are both based
-on the merge operation.
+Patch expressions define a set of record level field operations to be applied to a target record in order to transform a targetted record. Patch allows fields to be: inserted where there was no field before; removed where there was a field before; updated where there was a field before; or inserted or updated regardless of whether or not there was a field before. Patch also allows field level merge operations on records or for the targetted document itself to be merged. Merge operations in patch are syntax sugar in that they are both based on the merge operation.
 
-Patch follows the semantics of [RFC 6902](https://tools.ietf.org/html/rfc6902) with the explicit exclusion of
-the `copy` and `move` operations and with the addition of an `upsert` operation the variant supported by `tremor-script`
+Patch follows the semantics of [RFC 6902](https://tools.ietf.org/html/rfc6902) with the explicit exclusion of the `copy` and `move` operations and with the addition of an `upsert` operation the variant supported by `tremor-script`
 
 |Example|Expression|Result|Explanation|
 |---|---|---|---|
@@ -668,8 +603,7 @@ For Case Clause grammar
 
 > ![](grammar/diagram/ForCaseClause.png)
 
-For expressions are case-based record or array comprehensions that can iterate over index/element or key/value
-pairs in record or array literals respectively.
+For expressions are case-based record or array comprehensions that can iterate over index/element or key/value pairs in record or array literals respectively.
 
 Given our book store example from above:
 
@@ -691,9 +625,7 @@ end
 
 > ![](grammar/diagram/TEST_ESCAPE.png)
 
-The language has pluggable support for a number of microformats with two basic modes of operation that
-enable predicate tests ( does a particular value match the expected micro-format ) and elementization
-( if a value does match a specific micro-format, then extract and elementize accordingly.
+The language has pluggable support for a number of microformats with two basic modes of operation that enable predicate tests ( does a particular value match the expected micro-format ) and elementization ( if a value does match a specific micro-format, then extract and elementize accordingly.
 
 The general form of a supported micro-format is as follows:
 
@@ -721,5 +653,4 @@ The set of supported micro-formats at the time of writing are as follows:
 |__influx__|Not required|Tests if the underlying value conforms to Influx line protocol specification|__record__|Returns an influx line protocol record matching extractions based on supplied specification|
 |__json__|Not required|Tests if the underlying value is json encoded|__depends on value__|Returns a hydrated `tremor-script` value upon extraction|
 
-There is no concept of _injector_ in the `tremor-script` language that is analogous to extractors. Where relevant the langauge supports functions that
-support the underlying operation ( such as base64 encoding ) and let expressions can be used for assignments.
+There is no concept of _injector_ in the `tremor-script` language that is analogous to extractors. Where relevant the langauge supports functions thatcsupport the underlying operation ( such as base64 encoding ) and let expressions can be used for assignments.
