@@ -80,6 +80,7 @@ pub struct TrickleSelect {
 
 pub trait WindowTrait: std::fmt::Debug {
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
+    fn eviction_ns(&self) -> Option<u64>;
 }
 
 #[derive(Debug)]
@@ -87,17 +88,11 @@ pub struct Window {
     window_impl: WindowImpl,
     name: String,
     dims: SelectDims,
+    last_dims: SelectDims,
+    next_swap: u64,
 }
 
 impl Window {}
-
-/*
-impl WindowTrait for Window {
-    fn on_event(&mut self, group: &str, event: &Event) -> Result<WindowEvent> {
-        self.dims.on_event(event)
-    }
-}
-*/
 
 // We allow this since No is barely ever used.
 #[allow(clippy::large_enum_variant)]
@@ -114,6 +109,7 @@ impl std::default::Default for WindowImpl {
             size: 15_000_000_000,
             next_window: None,
             script: None,
+            ttl: None,
         }
         .into()
     }
@@ -125,6 +121,13 @@ impl WindowTrait for WindowImpl {
             Self::TumblingTimeBased(w) => w.on_event(event),
             Self::TumblingCountBased(w) => w.on_event(event),
             Self::No(w) => w.on_event(event),
+        }
+    }
+    fn eviction_ns(&self) -> Option<u64> {
+        match self {
+            Self::TumblingTimeBased(w) => w.eviction_ns(),
+            Self::TumblingCountBased(w) => w.eviction_ns(),
+            Self::No(w) => w.eviction_ns(),
         }
     }
 }
@@ -156,9 +159,9 @@ pub enum Accumulate {
 #[derive(Debug, PartialEq)]
 pub struct WindowEvent {
     /// New window is opened,
-    pub open: bool,
+    open: bool,
     /// Close the window before this event and opeen the next one
-    pub emit: bool,
+    emit: bool,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -167,6 +170,9 @@ pub struct NoWindow {
 }
 
 impl WindowTrait for NoWindow {
+    fn eviction_ns(&self) -> Option<u64> {
+        None
+    }
     fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
         if self.open {
             Ok(WindowEvent {
@@ -185,24 +191,34 @@ impl WindowTrait for NoWindow {
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnTime {
-    pub next_window: Option<u64>,
-    pub size: u64,
+    next_window: Option<u64>,
+    size: u64,
+    ttl: Option<u64>,
     script: Option<rentals::Window>,
 }
 impl TumblingWindowOnTime {
-    pub fn from_stmt(size: u64, script: Option<&WindowDecl>, stmt: &StmtRentalWrapper) -> Self {
+    pub fn from_stmt(
+        size: u64,
+        ttl: Option<u64>,
+        script: Option<&WindowDecl>,
+        stmt: &StmtRentalWrapper,
+    ) -> Self {
         let script = script.map(|s| {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
         });
         Self {
             next_window: None,
             size,
+            ttl,
             script,
         }
     }
 }
 
 impl WindowTrait for TumblingWindowOnTime {
+    fn eviction_ns(&self) -> Option<u64> {
+        self.ttl
+    }
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         let time = self
             .script
@@ -251,13 +267,19 @@ impl WindowTrait for TumblingWindowOnTime {
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnNumber {
-    pub next_window: Option<u64>,
-    pub size: u64,
+    next_window: Option<u64>,
+    size: u64,
+    ttl: Option<u64>,
     script: Option<rentals::Window>,
 }
 
 impl TumblingWindowOnNumber {
-    pub fn from_stmt(size: u64, script: Option<&WindowDecl>, stmt: &StmtRentalWrapper) -> Self {
+    pub fn from_stmt(
+        size: u64,
+        ttl: Option<u64>,
+        script: Option<&WindowDecl>,
+        stmt: &StmtRentalWrapper,
+    ) -> Self {
         let script = script.map(|s| {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
         });
@@ -265,10 +287,14 @@ impl TumblingWindowOnNumber {
             next_window: None,
             size,
             script,
+            ttl,
         }
     }
 }
 impl WindowTrait for TumblingWindowOnNumber {
+    fn eviction_ns(&self) -> Option<u64> {
+        self.ttl
+    }
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         let count = self
             .script
@@ -346,8 +372,10 @@ impl TrickleSelect {
             .into_iter()
             .map(|(name, window_impl)| Window {
                 dims: dims.clone(),
+                last_dims: dims.clone(),
                 name,
                 window_impl,
+                next_swap: 0,
             })
             .collect();
         Ok(Self {
@@ -424,6 +452,22 @@ impl Operator for TrickleSelect {
             group_values.push(vec![Value::Null])
         };
 
+        // Handle eviction
+
+        for window in &mut self.windows {
+            if let Some(eviction_ns) = window.window_impl.eviction_ns() {
+                if window.next_swap < event.ingest_ns {
+                    window.next_swap = event.ingest_ns + eviction_ns;
+                    let this_groups: &mut Groups =
+                        unsafe { std::mem::transmute(window.dims.suffix()) };
+                    let last_groups: &mut Groups =
+                        unsafe { std::mem::transmute(window.last_dims.suffix()) };
+                    last_groups.clear();
+                    std::mem::swap(this_groups, last_groups);
+                }
+            }
+        }
+
         let group_values: Vec<Value> = group_values.into_iter().map(Value::Array).collect();
         for group_value in group_values {
             let group_str = sorsorted_serialize(&group_value)?;
@@ -434,13 +478,15 @@ impl Operator for TrickleSelect {
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
+                        let last_groups: &mut Groups =
+                            unsafe { std::mem::transmute(this.last_dims.suffix()) };
                         (
                             group_str.clone(),
-                            GroupData {
+                            last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
                                 window: this.window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                            },
+                            }),
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
@@ -455,13 +501,15 @@ impl Operator for TrickleSelect {
                             .raw_entry_mut()
                             .from_key(&group_str)
                             .or_insert_with(|| {
+                                let last_groups: &mut Groups =
+                                    unsafe { std::mem::transmute(this.last_dims.suffix()) };
                                 (
                                     group_str.clone(),
-                                    GroupData {
+                                    last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
                                         window: this.window_impl.clone(),
                                         aggrs: aggregates.clone(),
                                         group: group_value.clone_static(),
-                                    },
+                                    }),
                                 )
                             });
                         for (i, aggr) in this_group.aggrs.iter().enumerate() {
