@@ -8,11 +8,8 @@ script
 end;
 
 create operator bucket;
-
 create script categorize;
 
 select event from in into categorize;
-
 select event from categorize into bucket;
-
 select event from bucket into out;

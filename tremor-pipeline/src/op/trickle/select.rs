@@ -30,7 +30,14 @@ use tremor_script::{
 };
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
-type Groups<'groups> = HashMap<String, (Value<'static>, Aggrs<'groups>)>;
+
+#[derive(Debug, Clone)]
+pub struct GroupData<'groups> {
+    group: Value<'static>,
+    window: WindowImpl,
+    aggrs: Aggrs<'groups>,
+}
+type Groups<'groups> = HashMap<String, GroupData<'groups>>;
 rental! {
     pub mod rentals {
         use std::sync::Arc;
@@ -84,11 +91,13 @@ pub struct Window {
 
 impl Window {}
 
+/*
 impl WindowTrait for Window {
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
-        self.window_impl.on_event(event)
+    fn on_event(&mut self, group: &str, event: &Event) -> Result<WindowEvent> {
+        self.dims.on_event(event)
     }
 }
+*/
 
 // We allow this since No is barely ever used.
 #[allow(clippy::large_enum_variant)]
@@ -414,24 +423,51 @@ impl Operator for TrickleSelect {
         if group_values.is_empty() {
             group_values.push(vec![Value::Null])
         };
-        let mut itr = self.windows.iter_mut().peekable();
-        while let Some(this) = itr.next() {
-            let window_event = this.on_event(&event)?;
-            let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
-            if window_event.emit {
-                // If we would emit first merge the data to the next window (if there is any)
-                if let Some(next) = itr.peek() {
-                    for (group, (group_val, aggrs)) in groups.iter() {
+
+        let group_values: Vec<Value> = group_values.into_iter().map(Value::Array).collect();
+        for group_value in group_values {
+            let group_str = sorsorted_serialize(&group_value)?;
+            let mut windows = self.windows.iter_mut().peekable();
+            while let Some(this) = windows.next() {
+                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                let (_, this_group) = this_groups
+                    .raw_entry_mut()
+                    .from_key(&group_str)
+                    .or_insert_with(|| {
+                        (
+                            group_str.clone(),
+                            GroupData {
+                                window: this.window_impl.clone(),
+                                aggrs: aggregates.clone(),
+                                group: group_value.clone_static(),
+                            },
+                        )
+                    });
+                let window_event = this_group.window.on_event(&event)?;
+                // If this window should emit
+                if window_event.emit {
+                    // See if we need to merge into the next tiltframe
+                    // If so merge the aggregates
+                    if let Some(next) = windows.peek() {
                         let next_groups: &mut Groups =
                             unsafe { std::mem::transmute(next.dims.suffix()) };
-                        let (_, next_aggrs) = next_groups
-                            .entry(group.clone())
-                            .or_insert_with(|| (group_val.clone(), aggregates.clone()));
-                        for (i, aggr) in aggrs.iter().enumerate() {
-                            // I HATE YOU RUST WHY DO I HAVE TO TRANSMUTE HERE!?!?
+                        let (_, next_group) = next_groups
+                            .raw_entry_mut()
+                            .from_key(&group_str)
+                            .or_insert_with(|| {
+                                (
+                                    group_str.clone(),
+                                    GroupData {
+                                        window: this.window_impl.clone(),
+                                        aggrs: aggregates.clone(),
+                                        group: group_value.clone_static(),
+                                    },
+                                )
+                            });
+                        for (i, aggr) in this_group.aggrs.iter().enumerate() {
                             let aggr_static: &InvokeAggrFn<'static> =
                                 unsafe { std::mem::transmute(aggr) };
-                            next_aggrs[i]
+                            next_group.aggrs[i]
                                 .invocable
                                 .merge(&aggr_static.invocable)
                                 .map_err(|e| {
@@ -441,21 +477,19 @@ impl Operator for TrickleSelect {
                                 })?;
                         }
                     }
-                }
-                consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
-
-                for (_group, (group, aggrs)) in groups.iter() {
+                    // Then emit the window itself
+                    consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
                     let data = event.data.suffix();
                     #[allow(clippy::transmute_ptr_to_ptr)]
                     let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
                     #[allow(clippy::transmute_ptr_to_ptr)]
                     let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
-                    consts[GROUP_CONST_ID] = group.clone_static();
+                    consts[GROUP_CONST_ID] = group_value.clone_static();
 
                     let env = Env {
                         context: &ctx,
                         consts: &consts,
-                        aggrs: &aggrs,
+                        aggrs: &this_group.aggrs,
                     };
                     let value =
                         stmt.target
@@ -492,27 +526,25 @@ impl Operator for TrickleSelect {
                     ));
                 }
             }
-            if window_event.open {
-                // When we close the window we clear all the aggregates
-                groups.clear()
-            }
-            if !window_event.emit {
-                break;
-            }
-        }
+            if let Some(this) = self.windows.first() {
+                let (unwind_event, event_meta) = event.data.parts();
+                consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
 
-        if let Some(this) = self.windows.first() {
-            let groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
-            let (unwind_event, event_meta) = event.data.parts();
-            consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
-
-            for group in group_values {
-                let group = Value::Array(group);
-                let group_str = sorsorted_serialize(&group)?;
-                let (_, aggrs) = groups
-                    .entry(group_str.clone())
-                    .or_insert_with(|| (group.clone_static(), aggregates.clone()));
-                let mut group_clone_static = group.clone_static();
+                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                let (_, this_group) = this_groups
+                    .raw_entry_mut()
+                    .from_key(&group_str)
+                    .or_insert_with(|| {
+                        (
+                            group_str.clone(),
+                            GroupData {
+                                window: this.window_impl.clone(),
+                                aggrs: aggregates.clone(),
+                                group: group_value.clone_static(),
+                            },
+                        )
+                    });
+                let mut group_clone_static = group_value.clone_static();
                 if let Some(g) = group_clone_static.as_array_mut() {
                     g.push(Value::from(group_str));
                 }
@@ -522,8 +554,7 @@ impl Operator for TrickleSelect {
                     consts: &consts,
                     aggrs: &NO_AGGRS,
                 };
-
-                for aggr in aggrs.iter_mut() {
+                for aggr in this_group.aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
@@ -543,44 +574,30 @@ impl Operator for TrickleSelect {
                         e.into_err(aggr, aggr, r)
                     })?;
                 }
-            }
-        } else {
-            // After having has been applied to any emissions causal on this
-            // event, we prepare the target expression synthetic event and
-            // return it for downstream processing
-            //
-            // FIXME: This can be nicer, got to look at run for tremor script
-
-            for group in group_values {
-                // PERF: we could skip that if we're having only one group
-                let event = event.clone();
-                let group = Value::Array(group);
-                let group_str = sorsorted_serialize(&group)?;
-                let mut group1 = group.clone_static();
-                if let Some(g) = group1.as_array_mut() {
-                    g.push(Value::from(group_str));
-                }
-                consts[GROUP_CONST_ID] = group1;
+            } else {
+                let data = event.data.suffix();
+                #[allow(clippy::transmute_ptr_to_ptr)]
+                let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
+                #[allow(clippy::transmute_ptr_to_ptr)]
+                let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                consts[GROUP_CONST_ID] = group_value.clone_static();
 
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
                     aggrs: &NO_AGGRS,
                 };
-
-                let (unwind_event, event_meta) = event.data.parts();
-
                 let value = stmt
                     .target
-                    .run(opts, &env, unwind_event, &event_meta, &local_stack)?;
+                    .run(opts, &env, unwind_event, event_meta, &local_stack)?;
 
-                *unwind_event = value.into_owned();
+                let result = value.into_owned();
                 if let Some(guard) = &stmt.maybe_having {
-                    let test = guard.run(opts, &env, unwind_event, &Value::Null, &local_stack)?;
-                    match test.into_owned() {
+                    let test = guard.run(opts, &env, &result, &Value::Null, &local_stack)?;
+                    match test.borrow() {
                         Value::Bool(true) => (),
                         Value::Bool(false) => {
-                            return Ok(vec![]);
+                            continue;
                         }
                         other => {
                             return tremor_script::errors::query_guard_not_bool(
@@ -591,7 +608,18 @@ impl Operator for TrickleSelect {
                         }
                     };
                 }
-                events.push(("out".into(), event));
+                events.push((
+                    "out".into(),
+                    Event {
+                        id: event.id,
+                        ingest_ns: event.ingest_ns,
+                        // TODO avoid origin_uri clone here
+                        origin_uri: event.origin_uri.clone(),
+                        is_batch: event.is_batch,
+                        kind: event.kind,
+                        data: (result, event_meta.clone()).into(),
+                    },
+                ));
             }
         }
         Ok(events)
@@ -773,6 +801,7 @@ mod test {
 
     #[test]
     fn count_tilt() -> Result<()> {
+        // Windows are 15s and 30s
         let mut op = parse_query("select stats::count() from in into out;")?;
         // Insert two events prior to 15
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
@@ -785,17 +814,25 @@ mod test {
         assert_eq!(event.data.suffix().value, 2);
         // Add another event prior to 30
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
-        // add one at thirty, this is the second event the second frame sees but it's
-        // timer is at 15 only so it doens't emit yet. However the first window emits
-        let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
-        assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
+        // This emits the rollup to 30s as well
+        let [(out1, event1), (out2, event2)] =
+            try_enqueue_two(&mut op, test_event(30))?.expect("no event 2");
+        assert_eq!("out", out1);
+        assert_eq!(event1.data.suffix().value, 2);
+        assert_eq!("out", out2);
+        assert_eq!(event2.data.suffix().value, 4);
         // Add another event prior to 45 to the first window
         assert!(try_enqueue(&mut op, test_event(31))?.is_none());
-        // Emit at 45, this is 30 seconds into the second frame so we see
-        // two emits here.
+
+        // At 45 the 15s window wmits
+        let (out, event) = try_enqueue(&mut op, test_event(45))?.expect("no event 1");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
+        assert!(try_enqueue(&mut op, test_event(46))?.is_none());
+
+        // Add 60 the 15 and 30s window emits
         let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(45))?.expect("no event 2");
+            try_enqueue_two(&mut op, test_event(60))?.expect("no event 3");
         assert_eq!("out", out1);
         assert_eq!("out", out2);
         assert_eq!(event1.data.suffix().value, 2);

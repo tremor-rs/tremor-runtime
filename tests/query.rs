@@ -88,6 +88,7 @@ test_cases!(
     // the current issue is that windows contain all groups so a sized
     // window of 10 that has 2 groups will emit both groups if the SUM of events reaches
     // 10, not emit a group when this group reaches 10 events
+    grou_by_size,
     default_rule,
     dimensions,
     example_rule,
