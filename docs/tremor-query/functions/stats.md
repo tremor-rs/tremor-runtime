@@ -73,3 +73,14 @@ internally to limit accuracy to 2 significant decimal places.
 ```trickle
 stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
 ```
+
+#### stats::dds(int|float) -> record
+
+Uses a Distributed data-stream Sketch ( [DDS (paper)](http://www.vldb.org/pvldb/vol12/p2195-masson.pdf) Histogram to calculate
+count, min, max, mean and quartiles with quartile relative-error accurate over the range of points in the histogram. The DDS
+histogram trades off accuracy ( to a very low error and guaranteed low relative error ) and unlike HDR histograms does not
+need bounds specified.
+
+```trickle
+stats::dds(event.value, ["0.5","0.75","0.9","0.99","0.999"])
+```

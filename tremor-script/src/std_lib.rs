@@ -22,6 +22,7 @@ mod json;
 mod math;
 mod origin;
 mod random;
+mod range;
 mod re;
 mod record;
 mod stats;
@@ -29,7 +30,6 @@ mod string;
 mod system;
 mod r#type;
 mod win;
-mod range;
 
 use crate::registry::{Aggr as AggrRegistry, Registry};
 

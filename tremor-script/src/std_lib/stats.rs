@@ -20,6 +20,7 @@ use halfbrown::hashmap;
 use hdrhistogram::Histogram;
 use simd_json::value::borrowed::Value;
 use simd_json::value::ValueTrait;
+use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
 use std::f64;
 use std::marker::Send;
@@ -343,6 +344,305 @@ impl TremorAggrFn for Stdev {
     }
 }
 
+struct Dds {
+    histo: Option<DDSketch>,
+    cache: Vec<f64>,
+    percentiles: Vec<(String, f64)>,
+    percentiles_set: bool,
+    //    digits_significant_precision: usize,
+}
+
+impl std::clone::Clone for Dds {
+    // DDSKetch does not implement clone
+    fn clone(&self) -> Dds {
+        Self {
+            histo: match &self.histo {
+                Some(dds) => {
+                    let config = DDSketchConfig::defaults();
+                    let mut histo = DDSketch::new(config);
+                    histo.merge(&dds).ok();
+                    Some(histo)
+                }
+                None => None,
+            },
+            cache: self.cache.clone(),
+            percentiles: self.percentiles.clone(),
+            percentiles_set: self.percentiles_set,
+            //            digits_significant_precision: 2,
+        }
+    }
+}
+
+impl std::default::Default for Dds {
+    fn default() -> Self {
+        Self {
+            histo: None,
+            cache: Vec::with_capacity(HIST_INITIAL_CACHE_SIZE),
+            percentiles: vec![
+                ("0.5".to_string(), 0.5),
+                ("0.9".to_string(), 0.9),
+                ("0.95".to_string(), 0.95),
+                ("0.99".to_string(), 0.99),
+                ("0.999".to_string(), 0.999),
+                ("0.9999".to_string(), 0.9999),
+                ("0.99999".to_string(), 0.99999),
+            ],
+            percentiles_set: false,
+            //            digits_significant_precision: 2,
+        }
+    }
+}
+
+unsafe impl Send for Dds {}
+unsafe impl Sync for Dds {}
+
+impl TremorAggrFn for Dds {
+    #[allow(clippy::result_unwrap_used)]
+    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+        if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
+            if !self.percentiles_set {
+                let percentiles: FResult<Vec<(String, f64)>> = vals
+                    .iter()
+                    .flat_map(|v| v.as_str().map(String::from))
+                    .map(|s| {
+                        let p = s.parse().map_err(|_| FunctionError::RuntimeError {
+                            mfa: mfa("stats", "dds", 2),
+                            error: format!("Provided percentile '{}' isn't a float", s),
+                        })?;
+                        Ok((s, p))
+                    })
+                    .collect();
+                self.percentiles = percentiles?;
+                self.percentiles_set = true
+            }
+        }
+        if let Some(v) = args[0].cast_f64() {
+            if v < 0.0 {
+                return Ok(());
+            } else if let Some(ref mut histo) = self.histo {
+                histo.add(v);
+            } else {
+                self.cache.push(v);
+                if self.cache.len() == HIST_MAX_CACHE_SIZE {
+                    let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
+                    for v in self.cache.drain(..) {
+                        histo.add(v);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn emit<'event>(&mut self) -> FResult<Value<'event>> {
+        let mut p = hashmap! {};
+        if let Some(histo) = &self.histo {
+            let count = histo.count();
+            if count == 0 {
+                for (pcn, _percentile) in &self.percentiles {
+                    p.insert(pcn.clone().into(), Value::from(0.0));
+                }
+            } else {
+                for (pcn, percentile) in &self.percentiles {
+                    match histo.quantile(*percentile) {
+                        Ok(Some(quantile)) => {
+                            let quantile_dsp = math::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            p.insert(pcn.clone().into(), Value::from(quantile_dsp));
+                        }
+                        _ => {
+                            return Err(FunctionError::RuntimeError {
+                                mfa: mfa("stats", "dds", 2),
+                                error: format!("Unable to calculate percentile '{}'", *percentile),
+                            })
+                        }
+                    }
+                }
+            }
+            let min = match histo.min() {
+                Some(min) => min,
+                _ => {
+                    return Err(FunctionError::RuntimeError {
+                        mfa: mfa("stats", "dds", 2),
+                        error: format!("Unable to calculate min"),
+                    })
+                }
+            };
+            let max = match histo.max() {
+                Some(max) => max,
+                _ => {
+                    return Err(FunctionError::RuntimeError {
+                        mfa: mfa("stats", "dds", 2),
+                        error: format!("Unable to calculate max"),
+                    })
+                }
+            };
+            let sum = match histo.sum() {
+                Some(sum) => sum,
+                _ => {
+                    return Err(FunctionError::RuntimeError {
+                        mfa: mfa("stats", "dds", 2),
+                        error: format!("Unable to calculate sum"),
+                    })
+                }
+            };
+            Ok(Value::from(hashmap! {
+                            "count".into() => Value::from(count),
+                            "min".into() => Value::from(min),
+                            "max".into() => Value::from(max),
+                            "mean".into() => Value::F64(sum / count as f64),
+            //                "stdev".into() => Value::F64(histo.stdev()),
+            //                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                            "percentiles".into() => Value::from(p),
+                        }))
+        } else {
+            let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
+            for v in self.cache.drain(..) {
+                histo.add(v);
+            }
+            let count = histo.count();
+
+            if count == 0 {
+                for (pcn, _percentile) in &self.percentiles {
+                    p.insert(pcn.clone().into(), Value::from(0.0));
+                }
+            } else {
+                for (pcn, percentile) in &self.percentiles {
+                    match histo.quantile(*percentile) {
+                        Ok(Some(quantile)) => {
+                            let quantile_dsp = math::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            p.insert(pcn.clone().into(), Value::from(quantile_dsp));
+                        }
+                        _ => {
+                            return Err(FunctionError::RuntimeError {
+                                mfa: mfa("stats", "dds", 2),
+                                error: format!("Unable to calculate percentile '{}'", *percentile),
+                            })
+                        }
+                    }
+                }
+            }
+            let min = if count == 0 {
+                0f64
+            } else {
+                match histo.min() {
+                    Some(min) => min,
+                    _ => {
+                        return Err(FunctionError::RuntimeError {
+                            mfa: mfa("stats", "dds", 2),
+                            error: format!("Unable to calculate min"),
+                        })
+                    }
+                }
+            };
+            let max = if count == 0 {
+                f64::MAX
+            } else {
+                match histo.max() {
+                    Some(max) => max,
+                    _ => {
+                        return Err(FunctionError::RuntimeError {
+                            mfa: mfa("stats", "dds", 2),
+                            error: format!("Unable to calculate max"),
+                        })
+                    }
+                }
+            };
+            let sum = if count == 0 {
+                0f64
+            } else {
+                match histo.sum() {
+                    Some(sum) => sum,
+                    _ => {
+                        return Err(FunctionError::RuntimeError {
+                            mfa: mfa("stats", "dds", 2),
+                            error: format!("Unable to calculate sum"),
+                        })
+                    }
+                }
+            };
+            Ok(Value::from(hashmap! {
+                            "count".into() => Value::from(count),
+                            "min".into() => Value::from(min),
+                            "max".into() => Value::from(max),
+                            "mean".into() => Value::F64(sum / count as f64),
+            //                "stdev".into() => Value::F64(histo.stdev()),
+            //                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                            "percentiles".into() => Value::from(p),
+            }))
+        }
+    }
+
+    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+        // FIXME there's no facility for this with dds histogram, punt for now
+        Ok(())
+    }
+
+    fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
+        let other: Option<&Dds> = src.downcast_ref::<Self>();
+        if let Some(other) = other {
+            if !self.percentiles_set {
+                self.percentiles = other.percentiles.clone();
+                self.percentiles_set = true;
+            };
+
+            if let Some(ref mut histo) = self.histo {
+                //  If this is a histogram and we merge
+                if let Some(ref other) = other.histo {
+                    // If the other was also a histogram merge them
+                    histo.merge(other).ok();
+                } else {
+                    // if the other was still a cache add it's values
+                    for v in &other.cache {
+                        histo.add(*v);
+                    }
+                }
+            } else {
+                // If we were a cache
+                match other.histo {
+                    Some(ref other) => {
+                        // If the other was a histogram clone it and empty our values
+                        let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
+                        histo.merge(other).ok();
+                        for v in self.cache.drain(..) {
+                            histo.add(v);
+                        }
+                        self.histo = Some(histo)
+                    }
+                    _ => {
+                        // If both are caches
+                        if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
+                            // If the cache size exceeds our maximal cache size drain them into a histogram
+                            let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
+                            for v in self.cache.drain(..) {
+                                histo.add(v);
+                            }
+                            for v in &other.cache {
+                                histo.add(*v);
+                            }
+                            self.histo = Some(histo);
+                        } else {
+                            // If not append it's cache
+                            self.cache.extend(&other.cache);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn init(&mut self) {
+        self.histo = None;
+        self.cache.clear();
+    }
+    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> RangeInclusive<usize> {
+        1..=2
+    }
+}
+
 #[derive(Clone)]
 struct Hdr {
     histo: Option<Histogram<u64>>,
@@ -624,6 +924,11 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
             module: "stats".to_string(),
             name: "hdr".to_string(),
             fun: Box::new(Hdr::default()),
+        })
+        .insert(TremorAggrFnWrapper {
+            module: "stats".to_string(),
+            name: "dds".to_string(),
+            fun: Box::new(Dds::default()),
         });
 }
 
@@ -802,6 +1107,53 @@ mod test {
                 "0.9999": 100
             }
         })
+        .into();
+        assert_eq!(v, e);
+        Ok(())
+    }
+
+    #[test]
+    fn dds() -> Result<()> {
+        use simd_json::BorrowedValue;
+
+        let mut a = Dds::default();
+        a.init();
+        let mut i = 1;
+
+        loop {
+            if i > 100 {
+                break;
+            }
+            a.accumulate(&[
+                &Value::from(i),
+                &Value::Array(vec![
+                    Value::String(std::borrow::Cow::Borrowed("0.5")),
+                    Value::String(std::borrow::Cow::Borrowed("0.9")),
+                    Value::String(std::borrow::Cow::Borrowed("0.95")),
+                    Value::String(std::borrow::Cow::Borrowed("0.99")),
+                    Value::String(std::borrow::Cow::Borrowed("0.999")),
+                    Value::String(std::borrow::Cow::Borrowed("0.9999")),
+                ]),
+            ])?;
+            i += 1;
+        }
+        let v = a.emit()?;
+        let e: BorrowedValue = json!({
+                    "min": 1.0,
+                    "max": 100.0,
+                    "count": 100,
+                    "mean": 50.5,
+        //            "stdev": 28.866_070_047_722_12,
+        //            "var": 833.25,
+                    "percentiles": {
+                        "0.5": 50.0,
+                        "0.9": 89.2,
+                        "0.95": 94.7,
+                        "0.99": 98.6,
+                        "0.999": 98.6,
+                        "0.9999": 98.6,
+                    }
+                })
         .into();
         assert_eq!(v, e);
         Ok(())

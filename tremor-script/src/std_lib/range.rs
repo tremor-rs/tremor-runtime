@@ -19,21 +19,16 @@ use crate::tremor_const_fn;
 // ALLOW: Until we have u64 support in clippy
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
-    registry
-        .insert(tremor_const_fn! (range::range(_context, a, b) {
-            match (a, b) {
-                (Value::I64(a), Value::I64(b)) => {
-                       let range: Vec<i64> = (*a..*b).collect();
-                       let range: Vec<Value> = range.iter().map(|x| Value::I64(*x)).collect();
-                       //let range = .unwrap_or_else(FunctionError::RuntimeError {
-                   //mfa: mfa("range", "range", 2),
-                   //error: format!("Unable to calculuate range {},{}", *a, *b)
-                  //});
-                  Ok(Value::Array(range))
-                },
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
-        }));
+    registry.insert(tremor_const_fn! (range::range(_context, a, b) {
+        match (a, b) {
+            (Value::I64(a), Value::I64(b)) => {
+                   let range: Vec<i64> = (*a..*b).collect();
+                   let range: Vec<Value> = range.iter().map(|x| Value::I64(*x)).collect();
+              Ok(Value::Array(range))
+            },
+            _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+        }
+    }));
 }
 
 #[cfg(test)]
@@ -53,6 +48,6 @@ mod test {
         let s = Value::from(0);
         let e = Value::from(42);
         let a: Vec<i32> = (0i32..42i32).collect();
-        assert_val!(f(&[&s,&e]), a);
+        assert_val!(f(&[&s, &e]), a);
     }
 }
