@@ -19,7 +19,7 @@ use crate::ast::Warning;
 #[cfg(feature = "fns")]
 pub use custom_fn::*;
 
-use crate::ast::{BaseExpr, NodeMeta};
+use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::*;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
@@ -154,7 +154,7 @@ impl FunctionError {
         outer: &O,
         inner: &I,
         registry: Option<&Registry>,
-        meta: &[NodeMeta],
+        meta: &NodeMetas,
     ) -> crate::errors::Error {
         use FunctionError::*;
         let outer = outer.extent(meta);

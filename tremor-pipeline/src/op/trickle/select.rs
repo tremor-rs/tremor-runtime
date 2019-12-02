@@ -696,7 +696,6 @@ mod test {
     use simd_json::borrowed::Value;
     use simd_json::json;
     use tremor_script::ast;
-    use tremor_script::pos::Location;
 
     fn test_target<'test>() -> ast::ImutExpr<'test> {
         let target: ast::ImutExpr<'test> = ast::ImutExpr::Literal(ast::Literal {
@@ -708,8 +707,7 @@ mod test {
 
     fn test_stmt(target: ast::ImutExpr) -> ast::Select {
         tremor_script::ast::Select {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             from: (
                 ast::Ident {
                     mid: 0,
@@ -744,7 +742,7 @@ mod test {
     fn test_query(stmt: ast::Stmt) -> ast::Query {
         ast::Query {
             stmts: vec![stmt.clone()],
-            node_meta: Vec::new(),
+            node_meta: ast::NodeMetas::default(),
         }
     }
 
@@ -1153,7 +1151,7 @@ mod test {
             aggregates: vec![],
             consts: vec![Value::Null, Value::Null, Value::Null],
             locals: 0,
-            node_meta: Vec::new(),
+            node_meta: ast::NodeMetas::default(),
         })
     }
     #[test]

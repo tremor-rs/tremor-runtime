@@ -68,10 +68,9 @@ impl<'script> ScriptRaw<'script> {
                     let expr = expr.up(&mut helper)?;
                     if i == len - 1 {
                         exprs.push(Expr::Imut(ImutExpr::Local {
-                            id: name.clone(),
                             is_const: true,
                             idx: consts.len(),
-                            mid: helper.add_meta(start, end),
+                            mid: helper.add_meta_w_name(start, end, name),
                         }))
                     }
 
@@ -598,17 +597,11 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
             },
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
-                    ref id,
                     is_const,
                     mid,
                     idx,
                     ref segments,
-                }) if segments.is_empty() => ImutExpr::Local {
-                    id: id.clone(),
-                    mid,
-                    idx,
-                    is_const,
-                },
+                }) if segments.is_empty() => ImutExpr::Local { mid, idx, is_const },
                 p => ImutExpr::Path(p),
             },
             ImutExprRaw::Literal(l) => ImutExpr::Literal(l.up(helper)?),
@@ -1272,19 +1265,23 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
             Element { expr, start, end } => {
                 let expr = expr.up(helper)?;
                 let r = expr.extent(&helper.meta);
-                let mid = helper.add_meta(start, end);
                 match expr {
                     ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l), &helper)? {
-                        Value::String(id) => Segment::Id {
-                            key: KnownKey::from(id.clone()),
-                            id: id.clone(),
-                            mid,
-                        },
+                        Value::String(id) => {
+                            let mid = helper.add_meta_w_name(start, end, id.clone());
+                            Segment::Id {
+                                key: KnownKey::from(id.clone()),
+                                mid,
+                            }
+                        }
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        Value::I64(idx) if idx >= 0 => Segment::Idx {
-                            idx: idx as usize,
-                            mid,
-                        },
+                        Value::I64(idx) if idx >= 0 => {
+                            let mid = helper.add_meta(start, end);
+                            Segment::Idx {
+                                idx: idx as usize,
+                                mid,
+                            }
+                        }
                         other => {
                             return Err(ErrorKind::TypeConflict(
                                 r.expand_lines(2),
@@ -1295,7 +1292,10 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
                             .into());
                         }
                     },
-                    expr => Segment::Element { mid, expr },
+                    expr => {
+                        let mid = helper.add_meta(start, end);
+                        Segment::Element { mid, expr }
+                    }
                 }
             }
             Range {
@@ -1365,12 +1365,12 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
-        if let Some(Segment::Id { id, .. }) = segments.next() {
+        if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
-            let mid = helper.add_meta(self.start, self.end);
+            let id = helper.meta.name_dflt(mid).clone();
+            let mid = helper.add_meta_w_name(self.start, self.end, id.clone());
             if let Some(idx) = helper.is_const(&id) {
                 Ok(LocalPath {
-                    id,
                     is_const: true,
                     idx: *idx,
                     mid,
@@ -1379,7 +1379,6 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             } else {
                 let idx = helper.var_id(&id);
                 Ok(LocalPath {
-                    id,
                     is_const: false,
                     idx,
                     mid,

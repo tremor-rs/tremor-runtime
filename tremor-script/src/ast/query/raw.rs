@@ -399,10 +399,10 @@ pub struct OperatorKindRaw {
     pub operation: String,
 }
 impl BaseExpr for OperatorKindRaw {
-    fn s(&self, _meta: &[NodeMeta]) -> Location {
+    fn s(&self, _meta: &NodeMetas) -> Location {
         self.start
     }
-    fn e(&self, _meta: &[NodeMeta]) -> Location {
+    fn e(&self, _meta: &NodeMetas) -> Location {
         self.end
     }
     fn mid(&self) -> usize {

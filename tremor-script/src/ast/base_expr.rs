@@ -23,11 +23,11 @@ use crate::pos::{Location, Range};
 macro_rules! impl_expr {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
-            fn s(&self, _meta: &[NodeMeta]) -> Location {
+            fn s(&self, _meta: &NodeMetas) -> Location {
                 self.start
             }
 
-            fn e(&self, _meta: &[NodeMeta]) -> Location {
+            fn e(&self, _meta: &NodeMetas) -> Location {
                 self.end
             }
             fn mid(&self) -> usize {
@@ -38,10 +38,10 @@ macro_rules! impl_expr {
 }
 
 impl BaseExpr for Range {
-    fn s(&self, _meta: &[NodeMeta]) -> Location {
+    fn s(&self, _meta: &NodeMetas) -> Location {
         self.0
     }
-    fn e(&self, _meta: &[NodeMeta]) -> Location {
+    fn e(&self, _meta: &NodeMetas) -> Location {
         self.1
     }
     fn mid(&self) -> usize {
@@ -62,23 +62,23 @@ macro_rules! impl_expr2 {
 
 pub trait BaseExpr: Clone {
     fn mid(&self) -> usize;
-    fn s(&self, meta: &[NodeMeta]) -> Location {
-        meta.get(self.mid()).map(|v| v.start).unwrap_or_default()
+    fn s(&self, meta: &NodeMetas) -> Location {
+        meta.start(self.mid()).unwrap_or_default()
     }
-    fn e(&self, meta: &[NodeMeta]) -> Location {
-        meta.get(self.mid()).map(|v| v.end).unwrap_or_default()
+    fn e(&self, meta: &NodeMetas) -> Location {
+        meta.end(self.mid()).unwrap_or_default()
     }
 
-    fn extent(&self, meta: &[NodeMeta]) -> Range {
+    fn extent(&self, meta: &NodeMetas) -> Range {
         Range(self.s(meta), self.e(meta))
     }
 }
 
 impl BaseExpr for (Location, Location) {
-    fn s(&self, _meta: &[NodeMeta]) -> Location {
+    fn s(&self, _meta: &NodeMetas) -> Location {
         self.0
     }
-    fn e(&self, _meta: &[NodeMeta]) -> Location {
+    fn e(&self, _meta: &NodeMetas) -> Location {
         self.1
     }
     fn mid(&self) -> usize {
@@ -87,7 +87,7 @@ impl BaseExpr for (Location, Location) {
 }
 
 impl<'script> BaseExpr for ImutExpr<'script> {
-    fn s(&self, meta: &[NodeMeta]) -> Location {
+    fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             ImutExpr::Binary(e) => e.s(meta),
             ImutExpr::Comprehension(e) => e.s(meta),
@@ -99,7 +99,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::List(e) => e.s(meta),
             ImutExpr::Literal(e) => e.s(meta),
             ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => {
-                meta.get(*mid).map(|v| v.start).unwrap_or_default()
+                meta.start(*mid).unwrap_or_default()
             }
             ImutExpr::Match(e) => e.s(meta),
             ImutExpr::Merge(e) => e.s(meta),
@@ -109,7 +109,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::Unary(e) => e.s(meta),
         }
     }
-    fn e(&self, meta: &[NodeMeta]) -> Location {
+    fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             ImutExpr::Binary(e) => e.e(meta),
             ImutExpr::Comprehension(e) => e.e(meta),
@@ -125,7 +125,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::Patch(e) => e.e(meta),
             ImutExpr::Path(e) => e.e(meta),
             ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => {
-                meta.get(*mid).map(|v| v.end).unwrap_or_default()
+                meta.end(*mid).unwrap_or_default()
             }
             ImutExpr::Record(e) => e.e(meta),
             ImutExpr::Unary(e) => e.e(meta),
@@ -170,14 +170,14 @@ impl<'script> BaseExpr for Expr<'script> {
 }
 
 impl<'script> BaseExpr for PathRaw<'script> {
-    fn s(&self, meta: &[NodeMeta]) -> Location {
+    fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             PathRaw::Local(e) => e.s(meta),
             PathRaw::Meta(e) => e.start,
             PathRaw::Event(e) => e.start,
         }
     }
-    fn e(&self, meta: &[NodeMeta]) -> Location {
+    fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             PathRaw::Local(e) => e.e(meta),
             PathRaw::Meta(e) => e.end,
@@ -214,7 +214,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
     fn mid(&self) -> usize {
         0
     }
-    fn s(&self, meta: &[NodeMeta]) -> Location {
+    fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             ImutExprRaw::String(e) => e.start,
             ImutExprRaw::Binary(e) => e.start,
@@ -232,7 +232,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Unary(e) => e.start,
         }
     }
-    fn e(&self, meta: &[NodeMeta]) -> Location {
+    fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             ImutExprRaw::String(e) => e.end,
             ImutExprRaw::Binary(e) => e.end,
@@ -259,11 +259,11 @@ impl BaseExpr for TestExpr {
 }
 
 impl BaseExpr for TestExprRaw {
-    fn s(&self, _meta: &[NodeMeta]) -> Location {
+    fn s(&self, _meta: &NodeMetas) -> Location {
         self.start
     }
 
-    fn e(&self, _meta: &[NodeMeta]) -> Location {
+    fn e(&self, _meta: &NodeMetas) -> Location {
         self.end
     }
     fn mid(&self) -> usize {

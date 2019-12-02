@@ -34,7 +34,7 @@ impl<'script> PartialEq for Segment<'script> {
     fn eq(&self, other: &Self) -> bool {
         use Segment::*;
         match (self, other) {
-            (Id { id: id1, .. }, Id { id: id2, .. }) => id1 == id2,
+            (Id { mid: id1, .. }, Id { mid: id2, .. }) => id1 == id2,
             (Idx { idx: idx1, .. }, Idx { idx: idx2, .. }) => idx1 == idx2,
             (Element { expr: expr1, .. }, Element { expr: expr2, .. }) => expr1 == expr2,
             (

@@ -34,16 +34,66 @@ use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;
 
-#[derive(Default, Copy, Clone, Serialize, Debug, PartialEq)]
-pub struct NodeMeta {
+#[derive(Default, Clone, Serialize, Debug, PartialEq)]
+pub struct NodeMeta<'script> {
     start: Location,
     end: Location,
-    
+    name: Option<Cow<'script, str>>,
 }
 
-impl From<(Location, Location)> for NodeMeta {
+impl From<(Location, Location)> for NodeMeta<'static> {
     fn from((start, end): (Location, Location)) -> Self {
-        Self { start, end }
+        Self {
+            start,
+            end,
+            name: None,
+        }
+    }
+}
+
+#[derive(Default, Clone, Serialize, Debug, PartialEq)]
+pub struct NodeMetas<'script>(Vec<NodeMeta<'script>>);
+
+impl<'script> NodeMetas<'script> {
+    pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
+        let mid = self.0.len();
+        self.0.push((start, end).into());
+        mid
+    }
+    pub fn add_meta_w_name(
+        &mut self,
+        start: Location,
+        end: Location,
+        name: Cow<'script, str>,
+    ) -> usize {
+        let mid = self.0.len();
+        self.0.push(NodeMeta {
+            start,
+            end,
+            name: Some(name),
+        });
+        mid
+    }
+    pub fn start(&self, idx: usize) -> Option<Location> {
+        self.0.get(idx).map(|v| v.start)
+    }
+    pub fn end(&self, idx: usize) -> Option<Location> {
+        self.0.get(idx).map(|v| v.end)
+    }
+    pub fn name(&self, idx: usize) -> Option<&Cow<'script, str>> {
+        self.0.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
+    }
+
+    pub fn start_dflt(&self, idx: usize) -> Location {
+        self.start(idx).unwrap_or_default()
+    }
+    pub fn end_dflt(&self, idx: usize) -> Location {
+        self.end(idx).unwrap_or_default()
+    }
+    pub fn name_dflt(&self, idx: usize) -> Cow<'script, str> {
+        self.name(idx)
+            .cloned()
+            .unwrap_or_else(|| String::from("<UNKNOWN>").into())
     }
 }
 
@@ -69,7 +119,7 @@ where
     shadowed_vars: Vec<String>,
     pub locals: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
-    pub meta: Vec<NodeMeta>,
+    pub meta: NodeMetas<'script>,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -77,9 +127,15 @@ where
     'script: 'registry,
 {
     pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        let mid = self.meta.len();
-        self.meta.push((start, end).into());
-        mid
+        self.meta.add_meta(start, end)
+    }
+    pub fn add_meta_w_name(
+        &mut self,
+        start: Location,
+        end: Location,
+        name: Cow<'script, str>,
+    ) -> usize {
+        self.meta.add_meta_w_name(start, end, name)
     }
     pub fn has_locals(&self) -> bool {
         self.locals
@@ -110,7 +166,7 @@ where
             locals: HashMap::new(),
             consts: HashMap::new(),
             shadowed_vars: Vec::new(),
-            meta: Vec::new(),
+            meta: NodeMetas::default(),
         }
     }
 
@@ -175,7 +231,7 @@ pub struct Script<'script> {
     pub consts: Vec<Value<'script>>,
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     pub locals: usize,
-    pub node_meta: Vec<NodeMeta>,
+    pub node_meta: NodeMetas<'script>,
 }
 
 impl<'run, 'script, 'event> Script<'script>
@@ -291,12 +347,12 @@ fn path_eq<'script>(path: &Path<'script>, expr: &ImutExpr<'script>) -> bool {
 
     let target_expr = match expr.clone() {
         ImutExpr::Local {
-            id,
+            //id,
             idx,
             mid,
             is_const,
         } => ImutExpr::Path(Path::Local(LocalPath {
-            id,
+            //id,
             segments: vec![],
             idx,
             mid,
@@ -348,7 +404,7 @@ pub enum ImutExpr<'script> {
     Merge(Box<Merge<'script>>),
     Path(Path<'script>),
     Local {
-        id: Cow<'script, str>,
+        //id: Cow<'script, str>,
         idx: usize,
         mid: usize,
         is_const: bool,
@@ -685,7 +741,6 @@ impl<'script> Path<'script> {
 #[derive(Clone, Debug, Serialize)]
 pub enum Segment<'script> {
     Id {
-        id: Cow<'script, str>,
         #[serde(skip)]
         key: KnownKey<'script>,
         mid: usize,
@@ -709,7 +764,7 @@ pub enum Segment<'script> {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct LocalPath<'script> {
-    pub id: Cow<'script, str>,
+    //pub id: Cow<'script, str>,
     pub idx: usize,
     pub is_const: bool,
     pub mid: usize,

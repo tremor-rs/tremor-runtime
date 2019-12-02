@@ -298,7 +298,13 @@ where
         }
         let mut current: &Value = unsafe {
             match path {
-                Path::Const(p) => return error_assign_to_const(self, p.id.to_string(), &env.meta),
+                Path::Const(p) => {
+                    return error_assign_to_const(
+                        self,
+                        env.meta.name_dflt(p.mid).to_string(),
+                        &env.meta,
+                    )
+                }
                 Path::Local(lpath) => match local.values.get(lpath.idx) {
                     Some(Some(l)) => {
                         let l: &mut Value = mem::transmute(l);
@@ -322,7 +328,7 @@ where
                             self,
                             lpath,
                             &path,
-                            lpath.id.to_string(),
+                            env.meta.name_dflt(lpath.mid).to_string(),
                             vec![],
                             &env.meta,
                         );

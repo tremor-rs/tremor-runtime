@@ -67,7 +67,7 @@ where
     pub context: &'run EventContext,
     pub consts: &'run [Value<'event>],
     pub aggrs: &'run [InvokeAggrFn<'script>],
-    pub meta: &'run [NodeMeta],
+    pub meta: &'run NodeMetas<'script>,
 }
 
 #[derive(Default, Debug)]
@@ -144,7 +144,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
 pub fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
     outer: &'run OuterExpr,
     inner: &'run InnerExpr,
-    node_meta: &'run [NodeMeta],
+    node_meta: &'run NodeMetas,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
@@ -287,7 +287,14 @@ where
         Path::Local(lpath) => match local.values.get(lpath.idx) {
             Some(Some(l)) => l,
             Some(None) => {
-                return error_bad_key(outer, lpath, &path, lpath.id.to_string(), vec![], &env.meta);
+                return error_bad_key(
+                    outer,
+                    lpath,
+                    &path,
+                    env.meta.name_dflt(lpath.mid).to_string(),
+                    vec![],
+                    &env.meta,
+                );
             }
 
             _ => return error_oops(outer, "Use of unknown local value", &env.meta),
@@ -302,7 +309,7 @@ where
 
     for segment in path.segments() {
         match segment {
-            Segment::Id { id, key, .. } => {
+            Segment::Id { mid, key, .. } => {
                 if let Some(c) = key.lookup(current) {
                     current = c;
                     subrange = None;
@@ -312,7 +319,7 @@ where
                         outer,
                         segment, //&Expr::dummy(*start, *end),
                         &path,
-                        id.to_string(),
+                        env.meta.name_dflt(*mid).to_string(),
                         o.keys().map(ToString::to_string).collect(),
                         &env.meta,
                     );
@@ -1007,7 +1014,7 @@ where
 pub fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     local: &'run LocalStack<'event>,
-    node_meta: &'run [NodeMeta],
+    node_meta: &'run NodeMetas,
     idx: usize,
     v: Value<'event>,
 ) -> Result<()>
@@ -1034,7 +1041,7 @@ impl<'script> GroupBy<'script> {
         &'script self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
-        node_meta: &'run [NodeMeta],
+        node_meta: &'run NodeMetas<'script>,
         meta: &'run Value<'event>,
         groups: &'run mut Vec<Vec<Value<'event>>>,
     ) -> Result<()>
@@ -1054,7 +1061,7 @@ impl<'script> GroupBy<'script> {
             consts: &consts,
             context: ctx,
             aggrs: &NO_AGGRS,
-            meta: &node_meta,
+            meta: node_meta,
         };
         match self {
             GroupBy::Expr { expr, .. } => {

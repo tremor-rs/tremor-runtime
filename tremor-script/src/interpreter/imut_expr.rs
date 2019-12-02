@@ -89,19 +89,24 @@ where
                 idx,
                 mid,
                 is_const: false,
-                id,
             } => match local.values.get(*idx) {
                 Some(Some(l)) => Ok(Cow::Borrowed(l)),
                 Some(None) => {
                     let path: Path = Path::Local(LocalPath {
-                        id: id.clone(),
                         is_const: false,
                         idx: *idx,
                         mid: *mid,
                         segments: vec![],
                     });
                     //TODO: get root key
-                    error_bad_key(self, self, &path, id.to_string(), vec![], &env.meta)
+                    error_bad_key(
+                        self,
+                        self,
+                        &path,
+                        env.meta.name_dflt(*mid).to_string(),
+                        vec![],
+                        &env.meta,
+                    )
                 }
 
                 _ => error_oops(self, "Unknown local variable", &env.meta),
@@ -317,15 +322,11 @@ where
 
         for segment in path.segments() {
             match segment {
-                Segment::Id { id, .. } => {
-                    if let Some(o) = current.as_object() {
-                        if let Some(c) = o.get(id) {
-                            current = c;
-                            subrange = None;
-                            continue;
-                        } else {
-                            return Ok(Cow::Borrowed(&FALSE));
-                        }
+                Segment::Id { key, .. } => {
+                    if let Some(c) = key.lookup(current) {
+                        current = c;
+                        subrange = None;
+                        continue;
                     } else {
                         return Ok(Cow::Borrowed(&FALSE));
                     }

@@ -25,7 +25,7 @@ pub const ARGS_CONST_ID: usize = 2;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Query<'script> {
     pub stmts: Stmts<'script>,
-    pub node_meta: Vec<NodeMeta>,
+    pub node_meta: NodeMetas<'script>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -45,7 +45,7 @@ pub struct SelectStmt<'script> {
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     pub consts: Vec<Value<'script>>,
     pub locals: usize,
-    pub node_meta: Vec<NodeMeta>,
+    pub node_meta: NodeMetas<'script>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
