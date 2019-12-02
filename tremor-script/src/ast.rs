@@ -35,12 +35,13 @@ use std::mem;
 use upable::Upable;
 
 #[derive(Default, Copy, Clone, Serialize, Debug, PartialEq)]
-pub struct NodeMeta<'script> {
+pub struct NodeMeta {
     start: Location,
     end: Location,
+    
 }
 
-impl From<(Location, Location)> for NodeMeta<'static> {
+impl From<(Location, Location)> for NodeMeta {
     fn from((start, end): (Location, Location)) -> Self {
         Self { start, end }
     }
