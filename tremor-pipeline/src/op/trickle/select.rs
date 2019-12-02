@@ -406,6 +406,7 @@ impl Operator for TrickleSelect {
             aggregates,
             consts,
             locals,
+            node_meta,
         }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
         consts[WINDOW_CONST_ID] = Value::Null;
@@ -424,6 +425,7 @@ impl Operator for TrickleSelect {
                 context: &ctx,
                 consts: &consts,
                 aggrs: &NO_AGGRS,
+                meta: &node_meta,
             };
             let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
             match test.borrow() {
@@ -432,7 +434,9 @@ impl Operator for TrickleSelect {
                     return Ok(vec![]);
                 }
                 other => {
-                    return tremor_script::errors::query_guard_not_bool(&stmt, guard, &other)?;
+                    return tremor_script::errors::query_guard_not_bool(
+                        &stmt, guard, &other, &node_meta,
+                    )?;
                 }
             };
         }
@@ -445,7 +449,13 @@ impl Operator for TrickleSelect {
             let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(&ctx, &unwind_event, &event_meta, &mut group_values)?
+                group_by.generate_groups(
+                    &ctx,
+                    &unwind_event,
+                    &node_meta,
+                    &event_meta,
+                    &mut group_values,
+                )?
             };
         }
         if group_values.is_empty() {
@@ -521,7 +531,7 @@ impl Operator for TrickleSelect {
                                 .map_err(|e| {
                                     // FIXME nice error
                                     let r: Option<&Registry> = None;
-                                    e.into_err(aggr, aggr, r)
+                                    e.into_err(aggr, aggr, r, &node_meta)
                                 })?;
                         }
                     }
@@ -538,6 +548,7 @@ impl Operator for TrickleSelect {
                         context: &ctx,
                         consts: &consts,
                         aggrs: &this_group.aggrs,
+                        meta: &node_meta,
                     };
                     let value =
                         stmt.target
@@ -556,6 +567,7 @@ impl Operator for TrickleSelect {
                                     stmt.borrow(),
                                     guard,
                                     &other,
+                                    &node_meta,
                                 )?;
                             }
                         };
@@ -601,6 +613,7 @@ impl Operator for TrickleSelect {
                     context: &ctx,
                     consts: &consts,
                     aggrs: &NO_AGGRS,
+                    meta: &node_meta,
                 };
                 for aggr in this_group.aggrs.iter_mut() {
                     let invocable = &mut aggr.invocable;
@@ -619,7 +632,7 @@ impl Operator for TrickleSelect {
                     invocable.accumulate(argv1.as_slice()).map_err(|e| {
                         // FIXME nice error
                         let r: Option<&Registry> = None;
-                        e.into_err(aggr, aggr, r)
+                        e.into_err(aggr, aggr, r, &node_meta)
                     })?;
                 }
             } else {
@@ -634,6 +647,7 @@ impl Operator for TrickleSelect {
                     context: &ctx,
                     consts: &consts,
                     aggrs: &NO_AGGRS,
+                    meta: &node_meta,
                 };
                 let value = stmt
                     .target
@@ -652,6 +666,7 @@ impl Operator for TrickleSelect {
                                 stmt.borrow(),
                                 guard,
                                 &other,
+                                &node_meta,
                             )?;
                         }
                     };
@@ -685,45 +700,39 @@ mod test {
 
     fn test_target<'test>() -> ast::ImutExpr<'test> {
         let target: ast::ImutExpr<'test> = ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::I64(42),
         });
         target
     }
 
-    fn test_stmt(target: ast::ImutExpr) -> ast::MutSelect {
-        tremor_script::ast::MutSelect {
+    fn test_stmt(target: ast::ImutExpr) -> ast::Select {
+        tremor_script::ast::Select {
             start: Location::default(),
             end: Location::default(),
             from: (
                 ast::Ident {
-                    start: Location::default(),
-                    end: Location::default(),
+                    mid: 0,
                     id: "in".into(),
                 },
                 ast::Ident {
-                    start: Location::default(),
-                    end: Location::default(),
+                    mid: 0,
                     id: "out".into(),
                 },
             ),
             into: (
                 ast::Ident {
-                    start: Location::default(),
-                    end: Location::default(),
+                    mid: 0,
                     id: "out".into(),
                 },
                 ast::Ident {
-                    start: Location::default(),
-                    end: Location::default(),
+                    mid: 0,
                     id: "in".into(),
                 },
             ),
             target,
             maybe_where: Some(ast::ImutExpr::Literal(ast::Literal {
-                start: Location::default(),
-                end: Location::default(),
+                mid: 0,
                 value: Value::Bool(true),
             })),
             windows: vec![],
@@ -735,6 +744,7 @@ mod test {
     fn test_query(stmt: ast::Stmt) -> ast::Query {
         ast::Query {
             stmts: vec![stmt.clone()],
+            node_meta: Vec::new(),
         }
     }
 
@@ -760,6 +770,7 @@ mod test {
             (
                 "15s".into(),
                 TumblingWindowOnTime {
+                    ttl: None,
                     size: 15_000_000_000,
                     next_window: None,
                     script: None,
@@ -769,6 +780,7 @@ mod test {
             (
                 "30s".into(),
                 TumblingWindowOnTime {
+                    ttl: None,
                     size: 30_000_000_000,
                     next_window: None,
                     script: None,
@@ -931,8 +943,7 @@ mod test {
         let mut stmt_ast = test_stmt(target);
 
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(true),
         }));
 
@@ -977,8 +988,7 @@ mod test {
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(false),
         }));
         let stmt_ast = test_select_stmt(stmt_ast);
@@ -1013,8 +1023,7 @@ mod test {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::String("snot".into()),
         }));
 
@@ -1052,13 +1061,11 @@ mod test {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(true),
         }));
 
@@ -1101,13 +1108,11 @@ mod test {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(false),
         }));
 
@@ -1142,12 +1147,13 @@ mod test {
         Ok(())
     }
 
-    fn test_select_stmt(stmt: tremor_script::ast::MutSelect) -> tremor_script::ast::Stmt {
+    fn test_select_stmt(stmt: tremor_script::ast::Select) -> tremor_script::ast::Stmt {
         ast::Stmt::Select(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
             consts: vec![Value::Null, Value::Null, Value::Null],
             locals: 0,
+            node_meta: Vec::new(),
         })
     }
     #[test]
@@ -1156,13 +1162,11 @@ mod test {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Bool(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
-            start: Location::default(),
-            end: Location::default(),
+            mid: 0,
             value: Value::Object(hashmap! {
                 "snot".into() => "badger".into(),
             }),

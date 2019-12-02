@@ -64,7 +64,7 @@ where
         effectors: &'script [Expr<'script>],
     ) -> Result<Cont<'run, 'event>> {
         if effectors.is_empty() {
-            return error_missing_effector(self, inner);
+            return error_missing_effector(self, inner, &env.meta);
         }
         // We know we have at least one element so [] access is safe!
         for effector in &effectors[..effectors.len() - 1] {
@@ -111,7 +111,7 @@ where
                 );
             }
         }
-        error_no_clause_hit(self)
+        error_no_clause_hit(self, &env.meta)
     }
 
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
@@ -126,7 +126,7 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
         // NOTE: Is this good? I don't like it.
-        let value = stry!(expr.target.run(opts, env, event, meta, local,));
+        let value = stry!(expr.target.run(opts, env, event, meta, local));
         let v: &Value = value.borrow();
         let v: &mut Value = unsafe { mem::transmute(v) };
         stry!(patch_value(self, opts, env, event, meta, local, v, expr));
@@ -156,10 +156,10 @@ where
                 stry!(merge_values(self, &expr.expr, value, &replacement));
                 Ok(Cow::Borrowed(value))
             } else {
-                error_need_obj(self, &expr.expr, replacement.value_type())
+                error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
             }
         } else {
-            error_need_obj(self, &expr.target, value.value_type())
+            error_need_obj(self, &expr.target, value.value_type(), &env.meta)
         }
     }
 
@@ -191,8 +191,14 @@ where
             // mutation in the future we could get rid of this.
 
             'comprehension_outer: for (k, v) in target_map.clone() {
-                stry!(set_local_shadow(self, local, expr.key_id, Value::String(k)));
-                stry!(set_local_shadow(self, local, expr.val_id, v));
+                stry!(set_local_shadow(
+                    self,
+                    local,
+                    &env.meta,
+                    expr.key_id,
+                    Value::String(k)
+                ));
+                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
                 for e in cases {
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
                         let v = demit!(
@@ -222,8 +228,14 @@ where
 
             let mut count = 0;
             'comp_array_outer: for x in target_array.clone() {
-                stry!(set_local_shadow(self, local, expr.key_id, count.into()));
-                stry!(set_local_shadow(self, local, expr.val_id, x));
+                stry!(set_local_shadow(
+                    self,
+                    local,
+                    &env.meta,
+                    expr.key_id,
+                    count.into()
+                ));
+                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, x));
 
                 for e in cases {
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
@@ -286,7 +298,7 @@ where
         }
         let mut current: &Value = unsafe {
             match path {
-                Path::Const(p) => return error_assign_to_const(self, p.id.to_string()),
+                Path::Const(p) => return error_assign_to_const(self, p.id.to_string(), &env.meta),
                 Path::Local(lpath) => match local.values.get(lpath.idx) {
                     Some(Some(l)) => {
                         let l: &mut Value = mem::transmute(l);
@@ -303,17 +315,24 @@ where
                             if let Some(l) = d {
                                 return Ok(Cow::Borrowed(l));
                             } else {
-                                return error_oops(self, "Unreacable code");
+                                return error_oops(self, "Unreacable code", &env.meta);
                             }
                         }
-                        return error_bad_key(self, lpath, &path, lpath.id.to_string(), vec![]);
+                        return error_bad_key(
+                            self,
+                            lpath,
+                            &path,
+                            lpath.id.to_string(),
+                            vec![],
+                            &env.meta,
+                        );
                     }
 
-                    _ => return error_oops(self, "Unknown local varialbe"),
+                    _ => return error_oops(self, "Unknown local varialbe", &env.meta),
                 },
                 Path::Meta(_path) => {
                     if segments.is_empty() {
-                        return error_invalid_assign_target(self);
+                        return error_invalid_assign_target(self, &env.meta);
                     }
                     meta
                 }
@@ -337,7 +356,7 @@ where
                         ) {
                             next
                         } else {
-                            return error_need_obj(self, segment, current.value_type());
+                            return error_need_obj(self, segment, current.value_type(), &env.meta);
                         };
                     }
                     Segment::Element { expr, .. } => {
@@ -352,11 +371,11 @@ where
                                 map.get_mut(&id).unwrap_or_else(|| unreachable!())
                             }
                         } else {
-                            return error_need_obj(self, segment, current.value_type());
+                            return error_need_obj(self, segment, current.value_type(), &env.meta);
                         }
                     }
                     Segment::Idx { .. } | Segment::Range { .. } => {
-                        return error_assign_array(self, segment)
+                        return error_assign_array(self, segment, &env.meta)
                     }
                 }
             }
@@ -419,10 +438,10 @@ where
                     if let Some(v) = opt {
                         v
                     } else {
-                        return error_oops(self, "Unknown local variable");
+                        return error_oops(self, "Unknown local variable", &env.meta);
                     }
                 } else {
-                    return error_oops(self, "Unknown local variable");
+                    return error_oops(self, "Unknown local variable", &env.meta);
                 };
                 self.assign(opts, env, event, meta, local, &path, value)
                     .map(Cont::Cont)

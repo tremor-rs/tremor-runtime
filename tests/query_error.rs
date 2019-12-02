@@ -72,6 +72,7 @@ macro_rules! test_cases {
 
                     match to_pipe(&contents) {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) =>{
+                            dbg!(&e);
                             let e = tremor_script::errors::Error(e, o);
                             let mut h = Dumb::new();
                             tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;

@@ -67,6 +67,7 @@ where
     pub context: &'run EventContext,
     pub consts: &'run [Value<'event>],
     pub aggrs: &'run [InvokeAggrFn<'script>],
+    pub meta: &'run [NodeMeta],
 }
 
 #[derive(Default, Debug)]
@@ -143,6 +144,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
 pub fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
     outer: &'run OuterExpr,
     inner: &'run InnerExpr,
+    node_meta: &'run [NodeMeta],
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
@@ -183,7 +185,7 @@ where
             BitAnd => Ok(static_bool!(*l & *r)),
             BitOr => Ok(static_bool!(*l | *r)),
             BitXor => Ok(static_bool!(*l ^ *r)),
-            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
         },
         (op, String(l), String(r)) => match op {
             Gt => Ok(static_bool!(l > r)),
@@ -191,7 +193,7 @@ where
             Lt => Ok(static_bool!(l < r)),
             Lte => Ok(static_bool!(l <= r)),
             Add => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
-            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
         },
         (op, I64(l), I64(r)) => match op {
             BitAnd => Ok(Cow::Owned(I64(*l & *r))),
@@ -209,20 +211,20 @@ where
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             RBitShiftSigned => match (*l).checked_shr(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),
-                None => error_invalid_bitshift(outer, inner),
+                None => error_invalid_bitshift(outer, inner, &node_meta),
             },
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             RBitShiftUnsigned => match (*l as u64).checked_shr(*r as u32) {
                 #[allow(clippy::cast_possible_wrap)]
                 Some(n) => Ok(Cow::Owned(I64(n as i64))),
-                None => error_invalid_bitshift(outer, inner),
+                None => error_invalid_bitshift(outer, inner, &node_meta),
             },
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             LBitShift => match (*l).checked_shl(*r as u32) {
                 Some(n) => Ok(Cow::Owned(I64(n))),
-                None => error_invalid_bitshift(outer, inner),
+                None => error_invalid_bitshift(outer, inner, &node_meta),
             },
-            _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+            _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
         },
         (op, l, r) => {
             if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
@@ -235,10 +237,10 @@ where
                     Sub => Ok(Cow::Owned(F64(l - r))),
                     Mul => Ok(Cow::Owned(F64(l * r))),
                     Div => Ok(Cow::Owned(F64(l / r))),
-                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs),
+                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
                 }
             } else {
-                error_invalid_binary(outer, inner, *op, lhs, rhs)
+                error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta)
             }
         }
     }
@@ -285,14 +287,14 @@ where
         Path::Local(lpath) => match local.values.get(lpath.idx) {
             Some(Some(l)) => l,
             Some(None) => {
-                return error_bad_key(outer, lpath, &path, lpath.id.to_string(), vec![]);
+                return error_bad_key(outer, lpath, &path, lpath.id.to_string(), vec![], &env.meta);
             }
 
-            _ => return error_oops(outer, "Use of unknown local value"),
+            _ => return error_oops(outer, "Use of unknown local value", &env.meta),
         },
         Path::Const(lpath) => match env.consts.get(lpath.idx) {
             Some(v) => v,
-            _ => return error_oops(outer, "Use of uninitalized constant"),
+            _ => return error_oops(outer, "Use of uninitalized constant", &env.meta),
         },
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
@@ -312,9 +314,10 @@ where
                         &path,
                         id.to_string(),
                         o.keys().map(ToString::to_string).collect(),
+                        &env.meta,
                     );
                 } else {
-                    return error_need_obj(outer, segment, current.value_type());
+                    return error_need_obj(outer, segment, current.value_type(), &env.meta);
                 }
             }
             Segment::Idx { idx, .. } => {
@@ -329,7 +332,13 @@ where
                     if idx >= end {
                         // We exceed the sub range
                         let bad_idx = idx - start;
-                        return error_array_out_of_bound(outer, segment, &path, bad_idx..bad_idx);
+                        return error_array_out_of_bound(
+                            outer,
+                            segment,
+                            &path,
+                            bad_idx..bad_idx,
+                            &env.meta,
+                        );
                     }
 
                     if let Some(c) = a.get(idx) {
@@ -337,10 +346,16 @@ where
                         subrange = None;
                         continue;
                     } else {
-                        return error_array_out_of_bound(outer, segment, &path, idx..idx);
+                        return error_array_out_of_bound(
+                            outer,
+                            segment,
+                            &path,
+                            idx..idx,
+                            &env.meta,
+                        );
                     }
                 } else {
-                    return error_need_arr(outer, segment, current.value_type());
+                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
                 }
             }
             Segment::Element { expr, .. } => {
@@ -359,11 +374,12 @@ where
                                 &path,
                                 id.to_string(),
                                 o.keys().map(ToString::to_string).collect(),
+                                &env.meta,
                             );
                         }
                     }
                     (Value::Object(_), other) => {
-                        return error_need_str(outer, segment, other.value_type())
+                        return error_need_str(outer, segment, other.value_type(), &env.meta)
                     }
                     (Value::Array(a), idx) => {
                         if let Some(idx) = idx.as_usize() {
@@ -382,6 +398,7 @@ where
                                     segment,
                                     &path,
                                     bad_idx..bad_idx,
+                                    &env.meta,
                                 );
                             }
 
@@ -390,19 +407,25 @@ where
                                 subrange = None;
                                 continue;
                             } else {
-                                return error_array_out_of_bound(outer, segment, &path, idx..idx);
+                                return error_array_out_of_bound(
+                                    outer,
+                                    segment,
+                                    &path,
+                                    idx..idx,
+                                    &env.meta,
+                                );
                             }
                         } else {
-                            return error_need_int(outer, segment, idx.value_type());
+                            return error_need_int(outer, segment, idx.value_type(), &env.meta);
                         }
                     }
                     (other, Value::String(_)) => {
-                        return error_need_obj(outer, segment, other.value_type())
+                        return error_need_obj(outer, segment, other.value_type(), &env.meta)
                     }
                     (other, Value::I64(_)) => {
-                        return error_need_arr(outer, segment, other.value_type())
+                        return error_need_arr(outer, segment, other.value_type(), &env.meta)
                     }
-                    _ => return error_oops(outer, "Bad path segments"),
+                    _ => return error_oops(outer, "Bad path segments", &env.meta),
                 }
             }
 
@@ -431,6 +454,7 @@ where
                                     &path,
                                     // Compensate for range inclusiveness
                                     range_start..(range_end - 1),
+                                    &env.meta,
                                 );
                             } else {
                                 subrange = Some((range_start, range_end));
@@ -438,14 +462,14 @@ where
                             }
                         } else {
                             let re: &ImutExpr = range_end.borrow();
-                            return error_need_int(outer, re, e.value_type());
+                            return error_need_int(outer, re, e.value_type(), &env.meta);
                         }
                     } else {
                         let rs: &ImutExpr = range_start.borrow();
-                        return error_need_int(outer, rs.borrow(), s.value_type());
+                        return error_need_int(outer, rs.borrow(), s.value_type(), &env.meta);
                     }
                 } else {
-                    return error_need_arr(outer, segment, current.value_type());
+                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
                 }
             }
         }
@@ -456,7 +480,7 @@ where
             let sub = unsafe { a.get_unchecked(start..end).to_vec() };
             Ok(Cow::Owned(Value::Array(sub)))
         } else {
-            error_need_arr(outer, outer, current.value_type())
+            error_need_arr(outer, outer, current.value_type(), &env.meta)
         }
     } else {
         Ok(Cow::Borrowed(current))
@@ -522,7 +546,12 @@ where
                     let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
                     let new_value = stry!(expr.run(opts, env, event, meta, local));
                     if obj.contains_key(&new_key) {
-                        return error_patch_key_exists(patch_expr, ident, new_key.to_string());
+                        return error_patch_key_exists(
+                            patch_expr,
+                            ident,
+                            new_key.to_string(),
+                            &env.meta,
+                        );
                     } else {
                         obj.insert(new_key, new_value.into_owned());
                     }
@@ -537,6 +566,7 @@ where
                             patch_expr,
                             expr,
                             new_key.to_string(),
+                            &env.meta,
                         );
                     }
                 }
@@ -554,7 +584,7 @@ where
                     let to = stry!(to.eval_to_string(opts, env, event, meta, local));
 
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string());
+                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
                     }
                     if let Some(old) = obj.remove(&from) {
                         obj.insert(to, old);
@@ -565,7 +595,7 @@ where
                     let to = stry!(to.eval_to_string(opts, env, event, meta, local));
 
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string());
+                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
                     }
                     if let Some(old) = obj.get(&from) {
                         let old = old.clone();
@@ -586,6 +616,7 @@ where
                                 ident,
                                 new_key.to_string(),
                                 &other,
+                                &env.meta,
                             );
                         }
                         None => {
@@ -602,7 +633,7 @@ where
                 }
             }
         } else {
-            return error_need_obj(patch_expr, &expr.target, value.value_type());
+            return error_need_obj(patch_expr, &expr.target, value.value_type(), &env.meta);
         }
     }
     Ok(())
@@ -628,7 +659,7 @@ where
         let test = stry!(guard.run(opts, env, event, meta, local));
         match test.borrow() {
             Value::Bool(b) => Ok(*b),
-            other => error_guard_not_bool(outer, guard, other),
+            other => error_guard_not_bool(outer, guard, other, &env.meta),
         }
     } else {
         Ok(true)
@@ -714,7 +745,7 @@ where
                     )) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, a.idx, v));
+                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
                         test_guard(outer, opts, env, event, meta, local, guard)
                     } else {
                         Ok(false)
@@ -733,7 +764,7 @@ where
                     )) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, a.idx, v));
+                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, meta, local, guard)
                     } else {
@@ -746,14 +777,20 @@ where
                     if val_eq(target, vb) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, a.idx, v.into_owned()));
+                        stry!(set_local_shadow(
+                            outer,
+                            local,
+                            &env.meta,
+                            a.idx,
+                            v.into_owned(),
+                        ));
 
                         test_guard(outer, opts, env, event, meta, local, guard)
                     } else {
                         Ok(false)
                     }
                 }
-                _ => error_oops(outer, "Unimplemented pattern"),
+                _ => error_oops(outer, "Unimplemented pattern", &env.meta),
             }
         }
         Pattern::Default => Ok(true),
@@ -970,6 +1007,7 @@ where
 pub fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     local: &'run LocalStack<'event>,
+    node_meta: &'run [NodeMeta],
     idx: usize,
     v: Value<'event>,
 ) -> Result<()>
@@ -986,7 +1024,7 @@ where
         *d = Some(v);
         Ok(())
     } else {
-        error_oops(outer, "Unknown local variable")
+        error_oops(outer, "Unknown local variable", &node_meta)
     }
 }
 
@@ -996,6 +1034,7 @@ impl<'script> GroupBy<'script> {
         &'script self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
+        node_meta: &'run [NodeMeta],
         meta: &'run Value<'event>,
         groups: &'run mut Vec<Vec<Value<'event>>>,
     ) -> Result<()>
@@ -1015,6 +1054,7 @@ impl<'script> GroupBy<'script> {
             consts: &consts,
             context: ctx,
             aggrs: &NO_AGGRS,
+            meta: &node_meta,
         };
         match self {
             GroupBy::Expr { expr, .. } => {
@@ -1031,7 +1071,7 @@ impl<'script> GroupBy<'script> {
 
             GroupBy::Set { items, .. } => {
                 for item in items {
-                    item.generate_groups(ctx, event, meta, groups)?
+                    item.generate_groups(ctx, event, node_meta, meta, groups)?
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1070,7 +1110,7 @@ impl<'script> GroupBy<'script> {
                     }
                     Ok(())
                 } else {
-                    error_need_arr(self, self, v.value_type())
+                    error_need_arr(self, self, v.value_type(), &env.meta)
                 }
             }
         }

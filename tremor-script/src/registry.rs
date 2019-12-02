@@ -19,7 +19,7 @@ use crate::ast::Warning;
 #[cfg(feature = "fns")]
 pub use custom_fn::*;
 
-use crate::ast::BaseExpr;
+use crate::ast::{BaseExpr, NodeMeta};
 use crate::errors::*;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
@@ -154,10 +154,11 @@ impl FunctionError {
         outer: &O,
         inner: &I,
         registry: Option<&Registry>,
+        meta: &[NodeMeta],
     ) -> crate::errors::Error {
         use FunctionError::*;
-        let outer = outer.extent();
-        let inner = inner.extent();
+        let outer = outer.extent(meta);
+        let inner = inner.extent(meta);
         match self {
             BadArity { mfa, calling_a } => {
                 ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..=mfa.a, calling_a).into()

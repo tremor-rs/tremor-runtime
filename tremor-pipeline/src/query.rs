@@ -172,7 +172,8 @@ impl Query {
                     if !nodes.contains_key(&s.from.0.id) {
                         let from = s.from.0.id.clone().to_string();
                         let mut h = DumbHighlighter::default();
-                        let butt = query_stream_not_defined(&s, &s.from.0, from)?;
+                        let butt =
+                            query_stream_not_defined(&s, &s.from.0, from, &script.node_meta)?;
                         tremor_script::query::Query::format_error_from_script(
                             &self.0.source,
                             &mut h,

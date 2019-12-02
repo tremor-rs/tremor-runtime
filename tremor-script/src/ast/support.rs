@@ -111,10 +111,7 @@ impl fmt::Display for UnaryOpKind {
 
 impl<'script> PartialEq for Invoke<'script> {
     fn eq(&self, other: &Self) -> bool {
-        self.start == other.start
-            && self.end == other.end
-            && self.module == other.module
-            && self.fun == other.fun
+        self.mid == other.mid && self.module == other.module && self.fun == other.fun
         //&& self.args == other.args FIXME why??!?
     }
 }
@@ -127,8 +124,7 @@ impl<'script> fmt::Debug for Invoke<'script> {
 
 impl PartialEq for InvokeAggr {
     fn eq(&self, other: &Self) -> bool {
-        self.start == other.start
-            && self.end == other.end
+        self.mid == other.mid
             && self.module == other.module
             && self.fun == other.fun
             && self.aggr_id == other.aggr_id

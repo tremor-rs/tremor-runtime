@@ -15,7 +15,7 @@
 // Copyright of original code is with original authors. Source cited below:
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
-use crate::ast::{BaseExpr, Expr};
+//use crate::ast::{BaseExpr, Expr};
 pub use codespan::{
     ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
     LineOffset,
@@ -70,11 +70,13 @@ impl Range {
     }
 }
 
+/*
 impl<'script> From<Expr<'script>> for Range {
     fn from(expr: Expr<'script>) -> Self {
-        expr.extent()
+        expr.extent(&FIXME)
     }
 }
+*/
 
 impl From<(Location, Location)> for Range {
     fn from(locs: (Location, Location)) -> Self {

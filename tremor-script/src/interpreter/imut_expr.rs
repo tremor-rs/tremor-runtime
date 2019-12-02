@@ -43,7 +43,7 @@ where
     ) -> Result<Cow<'event, str>> {
         match stry!(self.run(opts, env, event, meta, local)).borrow() {
             Value::String(s) => Ok(s.clone()),
-            other => error_need_obj(self, self, other.value_type()),
+            other => error_need_obj(self, self, other.value_type(), &env.meta),
         }
     }
 
@@ -87,8 +87,7 @@ where
             ImutExpr::Merge(ref expr) => self.merge(opts, env, event, meta, local, expr),
             ImutExpr::Local {
                 idx,
-                start,
-                end,
+                mid,
                 is_const: false,
                 id,
             } => match local.values.get(*idx) {
@@ -98,15 +97,14 @@ where
                         id: id.clone(),
                         is_const: false,
                         idx: *idx,
-                        start: *start,
-                        end: *end,
+                        mid: *mid,
                         segments: vec![],
                     });
                     //TODO: get root key
-                    error_bad_key(self, self, &path, id.to_string(), vec![])
+                    error_bad_key(self, self, &path, id.to_string(), vec![], &env.meta)
                 }
 
-                _ => error_oops(self, "Unknown local variable"),
+                _ => error_oops(self, "Unknown local variable", &env.meta),
             },
             ImutExpr::Local {
                 idx,
@@ -114,7 +112,7 @@ where
                 ..
             } => match env.consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
-                _ => error_oops(self, "Unknown const variable"),
+                _ => error_oops(self, "Unknown const variable", &env.meta),
             },
             ImutExpr::Unary(ref expr) => self.unary(opts, env, event, meta, local, expr),
             ImutExpr::Binary(ref expr) => self.binary(opts, env, event, meta, local, expr),
@@ -149,8 +147,14 @@ where
             // mutation in the future we could get rid of this.
 
             'comprehension_outer: for (k, v) in target_map.clone() {
-                stry!(set_local_shadow(self, local, expr.key_id, Value::String(k)));
-                stry!(set_local_shadow(self, local, expr.val_id, v));
+                stry!(set_local_shadow(
+                    self,
+                    local,
+                    &env.meta,
+                    expr.key_id,
+                    Value::String(k)
+                ));
+                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
                 for e in cases {
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
                         let v = stry!(
@@ -174,8 +178,14 @@ where
 
             let mut count = 0;
             'comp_array_outer: for x in target_array.clone() {
-                stry!(set_local_shadow(self, local, expr.key_id, count.into()));
-                stry!(set_local_shadow(self, local, expr.val_id, x));
+                stry!(set_local_shadow(
+                    self,
+                    local,
+                    &env.meta,
+                    expr.key_id,
+                    count.into()
+                ));
+                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, x));
 
                 for e in cases {
                     if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
@@ -206,7 +216,7 @@ where
         effectors: &'script [ImutExpr<'script>],
     ) -> Result<Cow<'run, Value<'event>>> {
         if effectors.is_empty() {
-            return error_missing_effector(self, inner);
+            return error_missing_effector(self, inner, &env.meta);
         }
         // Since we don't have side effects we don't need to run anything but the last effector!
         let effector = &effectors[effectors.len() - 1];
@@ -247,7 +257,7 @@ where
                 );
             }
         }
-        error_no_clause_hit(self)
+        error_no_clause_hit(self, &env.meta)
     }
 
     fn binary(
@@ -261,7 +271,7 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         let lhs = stry!(expr.lhs.run(opts, env, event, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, meta, local));
-        exec_binary(self, expr, expr.kind, &lhs, &rhs)
+        exec_binary(self, expr, &env.meta, expr.kind, &lhs, &rhs)
     }
 
     fn unary(
@@ -277,7 +287,7 @@ where
         // TODO align this implemenation to be similar to exec_binary?
         match exec_unary(expr.kind, &rhs) {
             Some(v) => Ok(v),
-            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs),
+            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs, &env.meta),
         }
     }
 
@@ -295,11 +305,11 @@ where
             Path::Local(path) => match local.values.get(path.idx) {
                 Some(Some(l)) => l,
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
-                _ => return error_oops(self, "Unknown local variable"),
+                _ => return error_oops(self, "Unknown local variable", &env.meta),
             },
             Path::Const(path) => match env.consts.get(path.idx) {
                 Some(v) => v,
-                _ => return error_oops(self, "Unknown constant variable"),
+                _ => return error_oops(self, "Unknown constant variable", &env.meta),
             },
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
@@ -440,7 +450,7 @@ where
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
-                    e.into_err(self, self, r)
+                    e.into_err(self, self, r, &env.meta)
                 })
         }
     }
@@ -468,7 +478,7 @@ where
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
-                    e.into_err(self, self, r)
+                    e.into_err(self, self, r, &env.meta)
                 })
         }
     }
@@ -500,7 +510,7 @@ where
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
-                    e.into_err(self, self, r)
+                    e.into_err(self, self, r, &env.meta)
                 })
         }
     }
@@ -530,7 +540,7 @@ where
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r)
+                e.into_err(self, self, r, &env.meta)
             })
     }
 
@@ -542,7 +552,11 @@ where
         expr: &'script InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
-            return error_oops(self, "Trying to emit aggreagate outside of emit context");
+            return error_oops(
+                self,
+                "Trying to emit aggreagate outside of emit context",
+                &env.meta,
+            );
         }
 
         unsafe {
@@ -551,7 +565,7 @@ where
                 mem::transmute(&env.aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r)
+                e.into_err(self, self, r, &env.meta)
             })?;
             invocable.init();
             Ok(r)
@@ -598,10 +612,10 @@ where
                 stry!(merge_values(self, &expr.expr, &mut value, &replacement));
                 Ok(Cow::Owned(value))
             } else {
-                error_need_obj(self, &expr.expr, replacement.value_type())
+                error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
             }
         } else {
-            error_need_obj(self, &expr.target, value.value_type())
+            error_need_obj(self, &expr.target, value.value_type(), &env.meta)
         }
     }
 }

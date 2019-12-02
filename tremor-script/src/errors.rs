@@ -17,7 +17,7 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 
-use crate::ast::{self, BaseExpr, Expr, Ident};
+use crate::ast::{self, BaseExpr, Expr, Ident, NodeMeta};
 use crate::errors;
 use crate::lexer;
 use crate::pos;
@@ -590,8 +590,9 @@ pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
     stmt: &Box<S>,
     inner: &I,
     name: String,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name).into())
+    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into())
 }
 
 // We need this since boxes are terrible
@@ -600,11 +601,12 @@ pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     stmt: &Box<O>,
     inner: &I,
     _got: &Value,
+    meta: &[NodeMeta],
 ) -> Result<T> {
     // FIXME Should actually say expected/actualf or type ( error_type_conflict )
     Err(ErrorKind::QueryStreamNotDefined(
-        stmt.extent(),
-        inner.extent(),
+        stmt.extent(meta),
+        inner.extent(meta),
         "snot at error type conflict".to_string(),
     )
     .into())
@@ -615,63 +617,78 @@ pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     got: ValueType,
     expected: Vec<ValueType>,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::TypeConflict(outer.extent(), inner.extent(), got, expected).into())
+    Err(ErrorKind::TypeConflict(outer.extent(meta), inner.extent(meta), got, expected).into())
 }
 
-pub fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::NoLocalsAllowed(outer.extent(), inner.extent()).into())
+pub fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::NoLocalsAllowed(outer.extent(meta), inner.extent(meta)).into())
 }
 
-pub fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::NoConstsAllowed(outer.extent(), inner.extent()).into())
+pub fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
 }
 
 pub fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::Object])
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Object], meta)
 }
 pub fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array])
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array], meta)
 }
 
 pub fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::String])
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::String], meta)
 }
 
 pub fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64])
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
 }
 pub fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
     expected: ValueType,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![expected])
+    error_type_conflict_mult(outer, inner, got, vec![expected], meta)
 }
 
 pub fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: &Value,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
+    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool, meta)
 }
 
 pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
@@ -679,8 +696,12 @@ pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     op: ast::UnaryOpKind,
     val: &Value,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.value_type()).into())
+    Err(
+        ErrorKind::InvalidUnary(outer.extent(meta), inner.extent(meta), op, val.value_type())
+            .into(),
+    )
 }
 
 pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
@@ -689,10 +710,11 @@ pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     op: ast::BinOpKind,
     left: &Value,
     right: &Value,
+    meta: &[NodeMeta],
 ) -> Result<T> {
     Err(ErrorKind::InvalidBinary(
-        outer.extent(),
-        inner.extent(),
+        outer.extent(meta),
+        inner.extent(meta),
         op,
         left.value_type(),
         right.value_type(),
@@ -700,35 +722,49 @@ pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     .into())
 }
 
-pub fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::InvalidBitshift(outer.extent(), inner.extent()).into())
+pub fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::InvalidBitshift(outer.extent(meta), inner.extent(meta)).into())
 }
 
-pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    Err(ErrorKind::NoClauseHit(outer.extent()).into())
+pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O, meta: &[NodeMeta]) -> Result<T> {
+    Err(ErrorKind::NoClauseHit(outer.extent(meta)).into())
 }
 
-pub fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(outer: &O, msg: &S) -> Result<T> {
-    Err(ErrorKind::Oops(outer.extent(), msg.to_string()).into())
+pub fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
+    outer: &O,
+    msg: &S,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::Oops(outer.extent(meta), msg.to_string()).into())
 }
 
 pub fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     key: String,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::PatchKeyExists(outer.extent(), inner.extent(), key).into())
+    Err(ErrorKind::PatchKeyExists(outer.extent(meta), inner.extent(meta), key).into())
 }
 
 pub fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     key: String,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::UpdateKeyMissing(outer.extent(), inner.extent(), key).into())
+    Err(ErrorKind::UpdateKeyMissing(outer.extent(meta), inner.extent(meta), key).into())
 }
-pub fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::MissingEffectors(outer.extent(), inner.extent()).into())
+pub fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::MissingEffectors(outer.extent(meta), inner.extent(meta)).into())
 }
 
 pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
@@ -736,20 +772,35 @@ pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     key: String,
     val: &Value,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.value_type()).into())
+    Err(ErrorKind::MergeTypeConflict(
+        outer.extent(meta),
+        inner.extent(meta),
+        key,
+        val.value_type(),
+    )
+    .into())
 }
 
-pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::AssignIntoArray(outer.extent(), inner.extent()).into())
+pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    Err(ErrorKind::AssignIntoArray(outer.extent(meta), inner.extent(meta)).into())
 }
-pub fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    let inner: Range = outer.extent();
+pub fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O, meta: &[NodeMeta]) -> Result<T> {
+    let inner: Range = outer.extent(meta);
 
     Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
 }
-pub fn error_assign_to_const<T, O: BaseExpr>(outer: &O, name: String) -> Result<T> {
-    let inner: Range = outer.extent();
+pub fn error_assign_to_const<T, O: BaseExpr>(
+    outer: &O,
+    name: String,
+    meta: &[NodeMeta],
+) -> Result<T> {
+    let inner: Range = outer.extent(meta);
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
 }
@@ -758,14 +809,15 @@ pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     path: &ast::Path<'script>,
     r: IRange<usize>,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    let expr: Range = outer.extent();
+    let expr: Range = outer.extent(meta);
     Err(match path {
         ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into()
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into()
         }
-        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
-        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
+        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
+        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
     })
 }
 
@@ -775,17 +827,18 @@ pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
     path: &ast::Path<'script>,
     key: String,
     options: Vec<String>,
+    meta: &[NodeMeta],
 ) -> Result<T> {
-    let expr: Range = outer.extent();
+    let expr: Range = outer.extent(meta);
     Err(match path {
         ast::Path::Local(_p) | ast::Path::Const(_p) => {
-            ErrorKind::BadAccessInLocal(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Meta(_p) => {
-            ErrorKind::BadAccessInGlobal(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInGlobal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Event(_p) => {
-            ErrorKind::BadAccessInEvent(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInEvent(expr, inner.extent(meta), key, options).into()
         }
     })
 }
