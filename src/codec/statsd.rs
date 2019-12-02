@@ -15,7 +15,7 @@
 use super::Codec;
 use crate::errors::*;
 use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::ValueTrait;
+use simd_json::value::Value as ValueTrait;
 use std::str;
 use tremor_script::prelude::*;
 
@@ -147,10 +147,12 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 }
                 Sign::Minus => {
                     // If it was a `-` we got to negate the number
-                    value = match value {
-                        Value::I64(v) => Value::I64(-v),
-                        Value::F64(v) => Value::F64(-v),
-                        _ => return Err(ErrorKind::InvalidStatsD.into()),
+                    value = if let Some(v) = value.as_i64() {
+                        Value::from(-v)
+                    } else if let Some(v) = value.as_f64() {
+                        Value::from(-v)
+                    } else {
+                        return Err(ErrorKind::InvalidStatsD.into());
                     };
                     m.insert("action".into(), "sub".into());
                 }

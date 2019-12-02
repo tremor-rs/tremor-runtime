@@ -409,9 +409,9 @@ impl Operator for TrickleSelect {
             node_meta,
         }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
-        consts[WINDOW_CONST_ID] = Value::Null;
-        consts[GROUP_CONST_ID] = Value::Null;
-        consts[ARGS_CONST_ID] = Value::Null;
+        consts[WINDOW_CONST_ID] = Value::null();
+        consts[GROUP_CONST_ID] = Value::null();
+        consts[ARGS_CONST_ID] = Value::null();
         // TODO avoid origin_uri clone here
         let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
@@ -428,16 +428,14 @@ impl Operator for TrickleSelect {
                 meta: &node_meta,
             };
             let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
-            match test.borrow() {
-                Value::Bool(true) => (),
-                Value::Bool(false) => {
+            if let Some(test) = test.as_bool() {
+                if !test {
                     return Ok(vec![]);
-                }
-                other => {
-                    return tremor_script::errors::query_guard_not_bool(
-                        &stmt, guard, &other, &node_meta,
-                    )?;
-                }
+                };
+            } else {
+                return tremor_script::errors::query_guard_not_bool(
+                    &stmt, guard, &test, &node_meta,
+                )?;
             };
         }
 
@@ -459,7 +457,7 @@ impl Operator for TrickleSelect {
             };
         }
         if group_values.is_empty() {
-            group_values.push(vec![Value::Null])
+            group_values.push(vec![Value::null()])
         };
 
         // Handle eviction
@@ -556,21 +554,19 @@ impl Operator for TrickleSelect {
 
                     let result = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
-                        let test = guard.run(opts, &env, &result, &Value::Null, &local_stack)?;
-                        match test.borrow() {
-                            Value::Bool(true) => (),
-                            Value::Bool(false) => {
+                        let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                        if let Some(test) = test.as_bool() {
+                            if !test {
                                 continue;
                             }
-                            other => {
-                                return tremor_script::errors::query_guard_not_bool(
-                                    stmt.borrow(),
-                                    guard,
-                                    &other,
-                                    &node_meta,
-                                )?;
-                            }
-                        };
+                        } else {
+                            return tremor_script::errors::query_guard_not_bool(
+                                stmt.borrow(),
+                                guard,
+                                &test,
+                                &node_meta,
+                            )?;
+                        }
                     }
                     events.push((
                         "out".into(),
@@ -655,21 +651,19 @@ impl Operator for TrickleSelect {
 
                 let result = value.into_owned();
                 if let Some(guard) = &stmt.maybe_having {
-                    let test = guard.run(opts, &env, &result, &Value::Null, &local_stack)?;
-                    match test.borrow() {
-                        Value::Bool(true) => (),
-                        Value::Bool(false) => {
+                    let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                    if let Some(test) = test.as_bool() {
+                        if !test {
                             continue;
                         }
-                        other => {
-                            return tremor_script::errors::query_guard_not_bool(
-                                stmt.borrow(),
-                                guard,
-                                &other,
-                                &node_meta,
-                            )?;
-                        }
-                    };
+                    } else {
+                        return tremor_script::errors::query_guard_not_bool(
+                            stmt.borrow(),
+                            guard,
+                            &test,
+                            &node_meta,
+                        )?;
+                    }
                 }
                 events.push((
                     "out".into(),
@@ -700,7 +694,7 @@ mod test {
     fn test_target<'test>() -> ast::ImutExpr<'test> {
         let target: ast::ImutExpr<'test> = ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::I64(42),
+            value: Value::from(42),
         });
         target
     }
@@ -731,7 +725,7 @@ mod test {
             target,
             maybe_where: Some(ast::ImutExpr::Literal(ast::Literal {
                 mid: 0,
-                value: Value::Bool(true),
+                value: Value::from(true),
             })),
             windows: vec![],
             maybe_group_by: None,
@@ -942,7 +936,7 @@ mod test {
 
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(true),
+            value: Value::from(true),
         }));
 
         let stmt_ast = test_select_stmt(stmt_ast);
@@ -987,7 +981,7 @@ mod test {
         let script_box = Box::new(script.clone());
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(false),
+            value: Value::from(false),
         }));
         let stmt_ast = test_select_stmt(stmt_ast);
 
@@ -1060,11 +1054,11 @@ mod test {
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(true),
+            value: Value::from(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(true),
+            value: Value::from(true),
         }));
 
         let stmt_ast = test_select_stmt(stmt_ast);
@@ -1107,11 +1101,11 @@ mod test {
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(true),
+            value: Value::from(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(false),
+            value: Value::from(false),
         }));
 
         let stmt_ast = test_select_stmt(stmt_ast);
@@ -1149,7 +1143,7 @@ mod test {
         ast::Stmt::Select(SelectStmt {
             stmt: Box::new(stmt),
             aggregates: vec![],
-            consts: vec![Value::Null, Value::Null, Value::Null],
+            consts: vec![Value::null(), Value::null(), Value::null()],
             locals: 0,
             node_meta: ast::NodeMetas::default(),
         })
@@ -1161,11 +1155,11 @@ mod test {
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Bool(true),
+            value: Value::from(true),
         }));
         stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
             mid: 0,
-            value: Value::Object(hashmap! {
+            value: Value::from(hashmap! {
                 "snot".into() => "badger".into(),
             }),
         }));

@@ -42,9 +42,7 @@ use petgraph::graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde::Serialize;
-use simd_json::json;
-use simd_json::value::ValueTrait;
-use simd_json::BorrowedValue;
+use simd_json::{json, BorrowedValue, Value as ValueTrait, ValueBuilder};
 use std::borrow::Cow;
 use std::iter;
 use std::iter::Iterator;
@@ -128,7 +126,7 @@ impl Default for Event {
     fn default() -> Self {
         Self {
             id: 0,
-            data: Value::Null.into(),
+            data: Value::null().into(),
             ingest_ns: 0,
             origin_uri: None,
             kind: None,
@@ -469,7 +467,7 @@ impl NodeMetrics {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for (k, v) in &self.inputs {
             tags.insert("direction".into(), "input".into());
-            tags.insert("port".into(), Value::String(k.clone()));
+            tags.insert("port".into(), Value::from(k.clone()));
             //TODO: This is ugly
             res.push(
                 json!({
@@ -485,7 +483,7 @@ impl NodeMetrics {
         }
         for (k, v) in &self.outputs {
             tags.insert("direction".into(), "output".into());
-            tags.insert("port".into(), Value::String(k.clone()));
+            tags.insert("port".into(), Value::from(k.clone()));
             //TODO: This is ugly
             res.push(
                 json!({
@@ -850,7 +848,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             origin_uri: None,
-            data: Value::Null.into(),
+            data: Value::null().into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -874,7 +872,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             origin_uri: None,
-            data: Value::Null.into(),
+            data: Value::null().into(),
             kind: None,
         };
         let event2 = Event {
@@ -882,7 +880,7 @@ mod test {
             id: 2,
             ingest_ns: 2,
             origin_uri: None,
-            data: Value::Null.into(),
+            data: Value::null().into(),
             kind: None,
         };
         let mut results = Vec::new();

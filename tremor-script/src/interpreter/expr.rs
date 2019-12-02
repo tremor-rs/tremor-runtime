@@ -21,7 +21,7 @@ use crate::errors::*;
 use crate::stry;
 use simd_json::value::{
     borrowed::{Object, Value},
-    ValueTrait,
+    MutableValue, Value as ValueTrait,
 };
 use std::borrow::{Borrow, Cow};
 

@@ -662,7 +662,7 @@ pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simd_json::BorrowedValue as Value;
+    use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 
     // Test utility to grab a function from the registry
     pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
@@ -690,7 +690,7 @@ mod tests {
 
     #[test]
     pub fn bad_arity() {
-        let f = tremor_fn! (module::name(_context, _a: I64){
+        let f = tremor_fn! (module::name(_context, _a){
             Ok(format!("{}", _a).into())
         });
         let one = Value::from(1);
@@ -709,11 +709,11 @@ mod tests {
 
     #[test]
     pub fn bad_type() {
-        let f = tremor_fn!(module::name(_context, _a: I64){
+        let f = tremor_fn!(module::name(_context, _a: String){
             Ok(format!("{}", _a).into())
         });
 
-        let one = Value::from("1");
+        let one = Value::from(1);
         assert!(f
             .invoke(
                 &EventContext {
@@ -728,10 +728,14 @@ mod tests {
     #[test]
     pub fn add() {
         let f = tremor_fn!(math::add(_context, _a, _b){
-            match (_a, _b) {
-                (Value::F64(a), Value::F64(b)) => Ok(Value::from(a + b)),
-                (Value::I64(a), Value::I64(b)) => Ok(Value::from(a + b)),
-                _ =>Err(to_runtime_error("could not add numbers"))
+            if let (Some(a), Some(b)) = (_a.as_i64(), _b.as_i64()) {
+                Ok(Value::from(a + b))
+            } else if let (Some(a), Some(b)) = (_a.as_f64(), _b.as_f64()) {
+                    Ok(Value::from(a + b))
+                } else {
+                Err(FunctionError::BadType{
+                    mfa: this_mfa(),
+                })
             }
         });
 
@@ -751,8 +755,14 @@ mod tests {
 
     #[test]
     pub fn t3() {
-        let f = tremor_fn!(math::add(_context, _a: I64, _b: I64, _c: I64){
-            Ok(Value::from(_a + _b + _c))
+        let f = tremor_fn!(math::add(_context, _a, _b, _c){
+            if let (Some(a), Some(b), Some(c)) = (_a.as_i64(), _b.as_i64(), _c.as_i64()) {
+                Ok(Value::from(a + b + c))
+            } else {
+                Err(FunctionError::BadType{
+                    mfa: this_mfa(),
+                })
+            }
         });
         let one = Value::from(1);
         let two = Value::from(2);

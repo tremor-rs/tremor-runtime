@@ -29,11 +29,10 @@ pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::{BorrowedValue as Value, KnownKey};
+use simd_json::{BorrowedValue as Value, KnownKey, ValueBuilder};
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;
-
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 pub struct NodeMeta<'script> {
     start: Location,
@@ -290,7 +289,7 @@ where
         // We know that we never get here, sadly rust doesn't
         #[cfg_attr(tarpaulin, skip)]
         Ok(Return::Emit {
-            value: Value::Null,
+            value: Value::null(),
             port: None,
         })
     }

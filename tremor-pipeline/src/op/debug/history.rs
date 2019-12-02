@@ -124,9 +124,9 @@ mod test {
 
         let (out, mut event) = op
             .on_event("in", event)
-            .expect("failed to run pipeline")
+            .expect("Failed to run pipeline")
             .pop()
-            .expect("empty results");
+            .expect("Empty results");
         assert_eq!("out", out);
         let _ = op.on_signal(&mut event);
 

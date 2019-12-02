@@ -14,7 +14,7 @@
 
 use crate::registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, ValueBuilder};
 use std::ops::RangeInclusive;
 
 #[derive(Clone, Debug, Default)]
@@ -34,7 +34,7 @@ impl TremorAggrFn for First {
         if let Some(v) = &self.0 {
             Ok(v.clone())
         } else {
-            Ok(Value::Null)
+            Ok(Value::null())
         }
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
@@ -43,7 +43,7 @@ impl TremorAggrFn for First {
         if let Some(r) = r {
             Ok(r)
         } else {
-            Ok(Value::Null)
+            Ok(Value::null())
         }
     }
     fn init(&mut self) {
@@ -82,7 +82,7 @@ impl TremorAggrFn for Last {
         if let Some(v) = &self.0 {
             Ok(v.clone())
         } else {
-            Ok(Value::Null)
+            Ok(Value::null())
         }
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
@@ -91,7 +91,7 @@ impl TremorAggrFn for Last {
         if let Some(r) = r {
             Ok(r)
         } else {
-            Ok(Value::Null)
+            Ok(Value::null())
         }
     }
     fn init(&mut self) {
@@ -231,7 +231,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 mod test {
     use super::*;
     use crate::registry::FResult as Result;
-    use simd_json::value::ValueTrait;
+    use simd_json::value::Value as ValueTrait;
     #[test]
     fn first() -> Result<()> {
         let mut a = First::default();

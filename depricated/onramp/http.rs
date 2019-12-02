@@ -93,11 +93,11 @@ use crate::utils;
 use base64;
 use futures::sync::mpsc::channel;
 use futures::{Future, Stream};
+use hashbrown::HashMap;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use serde::{Deserialize, Deserializer};
 use serde_yaml;
 use std::cell::Cell;
-use hashbrown::HashMap;
 use std::io::Write;
 use std::result;
 use std::thread;
@@ -232,7 +232,7 @@ fn data_v1(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Er
                 .then(|res| match res.unwrap().pop().unwrap().v {
                     Ok(Some(v)) => Ok(HttpResponse::Ok().json(json!({ "ok": format!("{}", v) }))),
                     Ok(None) => {
-                        Ok(HttpResponse::Ok().json(json!({ "ok": serde_json::Value::Null })))
+                        Ok(HttpResponse::Ok().json(json!({ "ok": serde_json::Value::null() })))
                     }
                     Err(_e) => Ok(HttpResponse::new(http::StatusCode::INTERNAL_SERVER_ERROR)),
                 })
@@ -262,7 +262,7 @@ fn raw(req: &HttpRequest<OnrampState>) -> Box<Future<Item = HttpResponse, Error 
                 .then(|res| match res.unwrap().pop().unwrap().v {
                     Ok(Some(v)) => Ok(HttpResponse::Ok().json(json!({ "ok": format!("{}", v) }))),
                     Ok(None) => {
-                        Ok(HttpResponse::Ok().json(json!({ "ok": serde_json::Value::Null })))
+                        Ok(HttpResponse::Ok().json(json!({ "ok": serde_json::Value::null() })))
                     }
                     Err(_e) => Ok(HttpResponse::new(http::StatusCode::INTERNAL_SERVER_ERROR)),
                 })
@@ -319,5 +319,4 @@ mod tests {
         let data = r#"{"header":{"contentType":"JSON","uuid":"dpsQpvkwEeiiHAJCTXQTiQ=="},"body":"eyJoYW5kbGluZ191bml0X2lkIjoiU1BYRDVCRTMxRjk3MTJCNjEiLCJpc19mb3JjZV9sb2FkIjpmYWxzZSwib3JkZXJfbnVtYmVyIjoiMTM1OTMzOTgxIiwic2xtX2lkIjozMDk5MDI3Mywid2FyZWhvdXNlX2lkIjoiMjIifQ=="}"#;
         let _r: EventWrapper = serde_json::from_str(data).unwrap();
     }
-
 }

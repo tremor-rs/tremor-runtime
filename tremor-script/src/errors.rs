@@ -33,7 +33,7 @@ use regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 pub use simd_json::ValueType;
-use simd_json::{BorrowedValue as Value, ValueTrait};
+use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 use std::num;
 use std::ops::{Range as IRange, RangeInclusive};
 use url;
@@ -114,6 +114,7 @@ fn t2s(t: ValueType) -> &'static str {
         ValueType::Bool => "boolean",
         ValueType::String => "string",
         ValueType::I64 => "integer",
+        ValueType::U64 => "integer",
         ValueType::F64 => "float",
         ValueType::Array => "array",
         ValueType::Object => "record",

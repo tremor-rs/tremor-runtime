@@ -46,12 +46,8 @@ mod std_lib;
 mod tilde;
 pub mod utils;
 pub use ctx::{EventContext, EventOriginUri};
-pub use interpreter::AggrType;
+pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 pub mod prelude;
-
-#[cfg(test)]
-#[macro_use]
-extern crate matches;
 
 extern crate serde;
 #[macro_use]
@@ -63,7 +59,7 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{self, Serialize};
 pub use simd_json::value::borrowed::Object;
 pub use simd_json::value::borrowed::Value;
-use simd_json::value::ValueTrait;
+use simd_json::value::Value as ValueTrait;
 
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, Registry, TremorAggrFn,
@@ -283,41 +279,12 @@ pub use rentals::Value as LineValue;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Expr, ImutExpr, Literal};
     use crate::errors::*;
     use crate::interpreter::AggrType;
     use crate::lexer::{TokenFuns, TokenSpan};
     use halfbrown::hashmap;
     use simd_json::borrowed::{Object, Value};
-
-    macro_rules! parse_lit {
-        ($src:expr, $expected:pat) => {{
-            let r: Registry = registry();
-            let ar: AggrRegistry = aggr_registry();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
-
-            let actual = parser::grammar::ScriptParser::new()
-                .parse(filtered_tokens)
-                .expect("execution failed")
-                .up_script(&r, &ar)
-                .expect("execution failed");
-            assert_matches!(
-                actual.0.exprs[0],
-                Expr::Imut(ImutExpr::Literal(Literal {
-                    value: $expected, ..
-                }))
-            );
-        }};
-    }
+    use simd_json::ValueBuilder;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
@@ -335,7 +302,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::from(Object::new());
+            let mut event = Value::from(Object::new());
             let mut global_map = Value::from(Object::new());
             let value = runnable.run(
                 &EventContext {
@@ -372,8 +339,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Object::new());
-            let mut global_map = Value::Object(hashmap! {});
+            let mut event = Value::object();
+            let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
                 &EventContext {
                     at: 0,
@@ -403,8 +370,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = simd_json::borrowed::Value::Object(Object::new());
-            let mut global_map = Value::Object(hashmap! {});
+            let mut event = Value::object();
+            let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
                 &EventContext {
                     at: 0,
@@ -420,179 +387,165 @@ mod tests {
 
     #[test]
     fn test_literal_expr() {
-        use simd_json::BorrowedValue;
-        use Value::I64;
-        parse_lit!("null;", BorrowedValue::Null);
-        parse_lit!("true;", BorrowedValue::Bool(true));
-        parse_lit!("false;", BorrowedValue::Bool(false));
-        parse_lit!("0;", BorrowedValue::I64(0));
-        parse_lit!("123;", BorrowedValue::I64(123));
-        parse_lit!("123.456;", BorrowedValue::F64(_)); // 123.456 we can't match aginst float ...
-        parse_lit!(
+        eval!("null;", Value::null());
+        eval!("true;", Value::from(true));
+        eval!("false;", Value::from(false));
+        eval!("0;", Value::from(0));
+        eval!("123;", Value::from(123));
+        eval!("123.456;", Value::from(123.456)); // 123.456 we can't match aginst float ...
+        eval!(
             "123.456e10;",
-            BorrowedValue::F64(_) // 123.456e10 we can't match against float
+            Value::from(123.456e10) // 123.456e10 we can't match against float
         );
-        parse_lit!("\"hello\";", BorrowedValue::String(_)); // we can't match against a COW
-        eval!("null;", Value::Null);
-        eval!("true;", Value::Bool(true));
-        eval!("false;", Value::Bool(false));
-        eval!("0;", Value::I64(0));
-        eval!("123;", Value::I64(123));
-        eval!("123.456;", Value::F64(123.456));
-        eval!("123.456e10;", Value::F64(123.456e10));
-        eval!("\"hello\";", Value::String("hello".into()));
-        eval!("\"hello\";\"world\";", Value::String("world".into()));
+        eval!("\"hello\";", Value::from("hello")); // we can't match against a COW
+        eval!("null;", Value::null());
+        eval!("true;", Value::from(true));
+        eval!("false;", Value::from(false));
+        eval!("0;", Value::from(0));
+        eval!("123;", Value::from(123));
+        eval!("123.456;", Value::from(123.456));
+        eval!("123.456e10;", Value::from(123.456e10));
+        eval!("\"hello\";", Value::from("hello"));
+        eval!("\"hello\";\"world\";", Value::from("world"));
         eval!(
             "true;\"hello\";[1,2,3,4,5];",
-            Value::Array(vec![I64(1), I64(2), I64(3), I64(4), I64(5)])
+            Value::from(vec![1u64, 2, 3, 4, 5])
         );
         eval!(
             "true;\"hello\";[1,2,3,4,5,];",
-            Value::Array(vec![I64(1), I64(2), I64(3), I64(4), I64(5)])
+            Value::from(vec![1u64, 2, 3, 4, 5])
         );
     }
 
     #[test]
     fn test_let_expr() {
-        use Value::I64;
-        eval!("let test = null;", Value::Null);
-        eval!("let test = 10;", Value::I64(10));
-        eval!("let test = 10.2345;", Value::F64(10.2345));
-        eval!(
-            "\"hello\"; let test = \"world\";",
-            Value::String(std::borrow::Cow::Borrowed("world"))
-        );
+        eval!("let test = null;", Value::null());
+        eval!("let test = 10;", Value::from(10));
+        eval!("let test = 10.2345;", Value::from(10.2345));
+        eval!("\"hello\"; let test = \"world\";", Value::from("world"));
         eval!(
             "\"hello\"; let test = [2,4,6,8];",
-            Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])
+            Value::from(vec![2u64, 4, 6, 8])
         );
-        eval!(
-            "\"hello\"; let $test = \"world\";",
-            Value::String(std::borrow::Cow::Borrowed("world"))
-        );
+        eval!("\"hello\"; let $test = \"world\";", Value::from("world"));
         eval!(
             "\"hello\"; let $test = [2,4,6,8];",
-            Value::Array(vec![I64(2), I64(4), I64(6), I64(8)])
+            Value::from(vec![2u64, 4, 6, 8])
         );
     }
 
     #[test]
     fn test_present() {
-        eval!(r#"let t = {}; present t"#, Value::Bool(true));
+        eval!(r#"let t = {}; present t"#, Value::from(true));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"],}}}; present t.a"#,
-            Value::Bool(true)
+            Value::from(true)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b"#,
-            Value::Bool(true)
+            Value::from(true)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]},}}; present t.a.b.c"#,
-            Value::Bool(true)
+            Value::from(true)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[0]"#,
-            Value::Bool(true)
+            Value::from(true)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[1]"#,
-            Value::Bool(true)
+            Value::from(true)
         );
 
-        eval!(r#"let t = {}; present r"#, Value::Bool(false));
+        eval!(r#"let t = {}; present r"#, Value::from(false));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.x"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x.c"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b.c"#,
-            Value::Bool(false)
+            Value::from(false)
         );
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[2]"#,
-            Value::Bool(false)
+            Value::from(false)
         );
     }
 
     #[test]
     fn test_assign_local() {
-        use Value::I64;
         dbg!();
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("out") => Value::Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+                "out".into() => Value::from(vec![2u64, 4, 6, 8]),
             })
         );
         dbg!();
         eval_global!(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("out") => Value::Array(vec![Value::Array(vec![I64(4), I64(6), I64(8), I64(10)])]),
+                "out".into() => Value::from(vec![vec![4u64, 6, 8, 10]]),
             })
         );
     }
 
     #[test]
     fn test_assign_meta() {
-        use simd_json::borrowed::Value::Array;
-        use simd_json::borrowed::Value::I64;
         eval_global!(
             "\"hello\"; let $test = [2,4,6,8];",
-            Value::Object(hashmap! {
-                "test".into() => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+            Value::from(hashmap! {
+                "test".into() => Value::from(vec![2u64, 4, 6, 8]),
             })
         );
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $test = [test];",
-            Value::Object(hashmap! {
-                "test".into() => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+            Value::from(hashmap! {
+                "test".into() => Value::from(vec![vec![2u64, 4, 6, 8]]),
             })
         );
     }
 
     #[test]
     fn test_assign_event() {
-        use simd_json::borrowed::Value::Array;
-        use simd_json::borrowed::Value::I64;
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("test") => Array(vec![I64(2), I64(4), I64(6), I64(8)]),
+                std::borrow::Cow::Borrowed("test") => Value::from(vec![2u64, 4, 6, 8]),
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("test") => Array(vec![Array(vec![I64(2), I64(4), I64(6), I64(8)])]),
+                std::borrow::Cow::Borrowed("test") => Value::from(vec![vec![2u64, 4, 6, 8]]),
             })
         );
     }
 
     #[test]
     fn test_single_json_expr_is_valid() {
-        eval!("true ", Value::Bool(true));
-        eval!("true;", Value::Bool(true));
+        eval!("true ", Value::from(true));
+        eval!("true;", Value::from(true));
         eval!(
             "{ \"snot\": \"badger\" }",
-            Value::Object(hashmap! { "snot".into() => "badger".into() })
+            Value::from(hashmap! { "snot".into() => "badger".into() })
         );
     }
 }

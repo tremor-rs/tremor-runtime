@@ -14,8 +14,8 @@
 use crate::op::prelude::*;
 use crate::FN_REGISTRY;
 use simd_json::borrowed::Value;
-use simd_json::value::ValueTrait;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
+use tremor_script::prelude::*;
 use tremor_script::{self, interpreter::AggrType, EventContext, Return, Script};
 
 op!(TremorFactory(node) {
@@ -88,7 +88,7 @@ impl Operator for Tremor {
             }
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
-                let mut o = Value::Object(hashmap! {
+                let mut o = Value::from(hashmap! {
                     "error".into() => Value::String(self.runtime.format_error(&e).into()),
                 });
                 std::mem::swap(&mut o, unwind_event);

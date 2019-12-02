@@ -20,6 +20,6 @@ use simd_json::BorrowedValue;
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (system::ingest_ns(ctx) {
-        Ok(BorrowedValue::I64(ctx.at as i64))
+        Ok(BorrowedValue::from(ctx.at))
     }));
 }

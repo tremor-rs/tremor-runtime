@@ -41,6 +41,7 @@ mod registry;
 mod script;
 mod std_lib;
 mod tilde;
+pub mod utils;
 #[macro_use]
 extern crate rental;
 

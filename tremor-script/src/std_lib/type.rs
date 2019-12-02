@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::{ValueTrait, ValueType};
+use simd_json::{Value as ValueTrait, ValueType};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
@@ -43,6 +43,7 @@ pub fn load(registry: &mut Registry) {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
                 ValueType::I64 => Value::from("integer"),
+                ValueType::U64 => Value::from("integer"),
                 ValueType::F64 => Value::from("float"),
                 ValueType::String => Value::from("string"),
                 ValueType::Array => Value::from("array"),
@@ -61,7 +62,7 @@ pub fn load(registry: &mut Registry) {
 mod test {
     use crate::registry::fun;
     use simd_json::value::borrowed::Object;
-    use simd_json::BorrowedValue as Value;
+    use simd_json::{BorrowedValue as Value, ValueBuilder};
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
@@ -74,7 +75,7 @@ mod test {
         let f = fun("type", "is_null");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        assert_val!(f(&[&Value::Null]), true)
+        assert_val!(f(&[&Value::null()]), true)
     }
 
     #[test]
@@ -82,7 +83,7 @@ mod test {
         let f = fun("type", "is_bool");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        let v = Value::Bool(true);
+        let v = Value::from(true);
         assert_val!(f(&[&v]), true)
     }
 
@@ -145,9 +146,9 @@ mod test {
     #[test]
     fn as_string() {
         let f = fun("type", "as_string");
-        let v = Value::Null;
+        let v = Value::null();
         assert_val!(f(&[&v]), "null");
-        let v = Value::Bool(true);
+        let v = Value::from(true);
         assert_val!(f(&[&v]), "bool");
         let v = Value::from(42);
         assert_val!(f(&[&v]), "integer");

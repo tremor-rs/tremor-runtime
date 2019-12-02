@@ -148,7 +148,7 @@ impl Elastic {
             let insight = Event {
                 is_batch: false,
                 id: 0,
-                data: (Value::Null, m).into(),
+                data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
                 origin_uri: None,
                 kind: None,
@@ -176,7 +176,7 @@ impl Elastic {
                 let insight = Event {
                     is_batch: false,
                     id: 0,
-                    data: (Value::Null, m).into(),
+                    data: (Value::null(), m).into(),
                     ingest_ns: nanotime(),
                     origin_uri: None,
                     kind: None,

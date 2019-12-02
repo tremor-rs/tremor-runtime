@@ -21,8 +21,24 @@
 
 use crate::datetime::*;
 use crate::registry::Registry;
-use crate::tremor_const_fn;
+use crate::{tremor_const_fn, tremor_fn};
 use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
+use simd_json::Value as ValueTrait;
+
+macro_rules! time_fn {
+    ($name:ident, $fn:ident) => {
+        tremor_const_fn! (datetime::$name(_context, _value) {
+            _value.as_u64().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
+        })
+    };
+}
+macro_rules! time_fn_32 {
+    ($name:ident, $fn:ident) => {
+        tremor_const_fn! (math::$name(_context, _value) {
+            _value.as_u32().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
+        })
+    };
+}
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -35,93 +51,46 @@ pub fn load(registry: &mut Registry) {
 })
 }}))
 
-        .insert(
-            tremor_const_fn!(datetime::iso8601(_context, _datetime: I64) {
-              let res = _iso8601(* _datetime as u64);
-                 Ok(Value::from(res))
-            }))
-        .insert(tremor_const_fn!(datetime::format(_context, _datetime: I64, _fmt: String) {
-            let res = _format(* _datetime as u64, _fmt);
-            Ok(Value::from(res))
+        .insert(time_fn!(iso8601, _iso8601))
+        .insert(tremor_const_fn!(datetime::format(_context, _datetime, _fmt) {
+            if let (Some(datetime), Some(fmt)) = (_datetime.as_u64(), _fmt.as_str()) {
+                Ok(Value::from(_format(datetime, fmt)))
+            } else {
+                Err(FunctionError::BadType{ mfa: this_mfa() })
+            }
         }))
-        .insert(tremor_const_fn!(datetime::second(_context, _value: I64) {
-            Ok(Value::from(_second(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::minute(_context, _value: I64) {
-            Ok(Value::from(_minute(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::hour(_context, _value: I64) {
-            Ok(Value::from(_hour(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::millisecond(_context, _value: I64) {
-            Ok(Value::from(_millisecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::microsecond(_context, _value: I64) {
-            Ok(Value::from(_microsecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::nanosecond(_context, _value: I64) {
-            Ok(Value::from(_nanosecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::day(_context, _value: I64) {
-            Ok(Value::from(_day(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::month(_context, _value: I64) {
-            Ok(Value::from(_month(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::year(_context, _value: I64) {
-            Ok(Value::from(_year(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::today(_context) {
+        .insert(time_fn!(year, _year))
+        .insert(time_fn!(month, _month))
+        .insert(time_fn!(day, _day))
+        .insert(time_fn!(hour, _hour))
+        .insert(time_fn!(minute, _minute))
+        .insert(time_fn!(second, _second))
+        .insert(time_fn!(millisecond, _millisecond))
+        .insert(time_fn!(microsecond, _microsecond))
+        .insert(time_fn!(nanosecond, _nanosecond))
+        .insert(tremor_fn!(datetime::today(_context) {
             Ok(Value::from(_today()))
         }))
-        .insert(tremor_const_fn!(datetime::subsecond(_context, _value: I64) {
-            Ok(Value::from(_subsecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::to_nearest_millisecond(_context, _value: I64) {
-            Ok(Value::from(_to_nearest_millisecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::to_nearest_microsecond(_context, _value: I64) {
-            Ok(Value::from(_to_nearest_microsecond(*_value as u64)))
-        }))
-        .insert(tremor_const_fn!(datetime::to_nearest_second(_context, _value: I64) {
-              Ok(Value::from(_to_nearest_second(*_value as u64)))
-        }))
+        .insert(time_fn!(subsecond, _subsecond))
+        .insert(time_fn!(to_nearest_millisecond, _to_nearest_millisecond))
+        .insert(time_fn!(to_nearest_microsecond, _to_nearest_microsecond))
+        .insert(time_fn!(to_nearest_second, _to_nearest_second))
         .insert(tremor_const_fn!(datetime::from_human_format(_context, _value: String) {
             match _from_human_format(_value) {
                 Some(x) => Ok(Value::from(x)),
                 None => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("The human format {} is invalid", _value)})
-        }
+            }
         }))
-        .insert(tremor_const_fn!(datetime::with_nanoseconds(_context, _n: I64) {
-            Ok(Value::from(_with_nanoseconds(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_microseconds(_context, _n: I64) {
-            Ok(Value::from(_with_microseconds(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_milliseconds(_context, _n: I64) {
-            Ok(Value::from(_with_milliseconds(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_seconds(_context, _n: I64) {
-            Ok(Value::from(_with_seconds(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_minutes(_context, _n: I64) {
-            Ok(Value::from(_with_minutes(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_hours(_context, _n: I64) {
-            Ok(Value::from(_with_hours(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_days(_context, _n: I64) {
-            Ok(Value::from(_with_days(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_weeks(_context, _n: I64) {
-            Ok(Value::from(_with_weeks(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::with_years(_context, _n: I64) {
-            Ok(Value::from(_with_years(*_n as u32)))
-        }))
-        .insert(tremor_const_fn!(datetime::without_subseconds(_context, _n: I64) {
-            Ok(Value::from(_without_subseconds(*_n as u64)))
-        }));
+        .insert(time_fn_32!(with_nanoseconds, _with_nanoseconds))
+        .insert(time_fn_32!(with_microseconds, _with_microseconds))
+        .insert(time_fn_32!(with_milliseconds, _with_milliseconds))
+        .insert(time_fn_32!(with_seconds, _with_seconds))
+        .insert(time_fn_32!(with_minutes, _with_minutes))
+        .insert(time_fn_32!(with_hours, _with_hours))
+        .insert(time_fn_32!(with_days, _with_days))
+        .insert(time_fn_32!(with_weeks, _with_weeks))
+        .insert(time_fn_32!(with_years, _with_years))
+        .insert(time_fn!(without_subseconds, _without_subseconds));
 }
 
 pub fn _iso8601(datetime: u64) -> String {

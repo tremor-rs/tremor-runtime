@@ -101,37 +101,37 @@ mod test {
     #[test]
     fn len() {
         let f = fun("record", "len");
-        let v = Value::Object(hashmap! {
+        let v = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
         assert_val!(f(&[&v]), 2);
-        let v = Value::Object(hashmap! {});
+        let v = Value::from(hashmap! {});
         assert_val!(f(&[&v]), 0);
     }
 
     #[test]
     fn is_empty() {
         let f = fun("record", "is_empty");
-        let v = Value::Object(hashmap! {
+        let v = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
         assert_val!(f(&[&v]), false);
-        let v = Value::Object(hashmap! {});
+        let v = Value::from(hashmap! {});
         assert_val!(f(&[&v]), true);
     }
 
     #[test]
     fn contains() {
         let f = fun("record", "contains");
-        let v1 = Value::Object(hashmap! {
+        let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
         let v2 = Value::from("this");
         assert_val!(f(&[&v1, &v2]), true);
-        let v1 = Value::Object(hashmap! {
+        let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
@@ -142,7 +142,7 @@ mod test {
     #[test]
     fn keys() {
         let f = fun("record", "keys");
-        let v = Value::Object(hashmap! {
+        let v = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
@@ -154,7 +154,7 @@ mod test {
     #[test]
     fn values() {
         let f = fun("record", "values");
-        let v = Value::Object(hashmap! {
+        let v = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
@@ -167,7 +167,7 @@ mod test {
     #[test]
     fn to_array() {
         let f = fun("record", "to_array");
-        let v = Value::Object(hashmap! {
+        let v = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
@@ -189,7 +189,7 @@ mod test {
         ]);
         assert_val!(
             f(&[&v]),
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 "this".into() => Value::from("is"),
                 "a".into() => Value::from("test")
             })
@@ -199,14 +199,14 @@ mod test {
     #[test]
     fn select() {
         let f = fun("record", "select");
-        let v1 = Value::Object(hashmap! {
+        let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
         let v2 = Value::Array(vec![Value::from("this"), Value::from("is")]);
         assert_val!(
             f(&[&v1, &v2]),
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 "this".into() => Value::from("is"),
             })
         );
@@ -214,17 +214,17 @@ mod test {
     #[test]
     fn merge() {
         let f = fun("record", "merge");
-        let v1 = Value::Object(hashmap! {
+        let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
         });
-        let v2 = Value::Object(hashmap! {
+        let v2 = Value::from(hashmap! {
             "with".into() => Value::from("cake"),
             "a".into() => Value::from("cake")
         });
         assert_val!(
             f(&[&v1, &v2]),
-            Value::Object(hashmap! {
+            Value::from(hashmap! {
                 "this".into() => Value::from("is"),
                 "a".into() => Value::from("cake"),
                 "with".into() => Value::from("cake"),

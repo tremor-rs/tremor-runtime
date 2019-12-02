@@ -27,7 +27,7 @@ pub fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
 
 fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     match j {
-        Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
+        Value::Static(_) | Value::String(_) => {
             write!(w, "{}", j.encode())?;
         }
         Value::Array(a) => {

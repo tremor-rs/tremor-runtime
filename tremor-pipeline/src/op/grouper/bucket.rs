@@ -149,7 +149,7 @@ impl Operator for Grouper {
                     (class.to_string(), Bucket::new(cardinality))
                 });
 
-            let d = meta.get("dimensions").unwrap_or(&Value::Null);
+            let d = meta.get("dimensions").unwrap_or(&NULL);
             let dimensions = d.encode();
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {

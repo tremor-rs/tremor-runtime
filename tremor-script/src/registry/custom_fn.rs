@@ -55,8 +55,8 @@ impl TremorFn for CustomFn {
             consts: &NO_CONSTS,
             aggrs: &NO_AGGRS,
         };
-        let mut no_event = Value::Null;
-        let mut no_meta = Value::Null;
+        let mut no_event = Value::null();
+        let mut no_meta = Value::null();
         unsafe {
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {
@@ -83,7 +83,7 @@ impl TremorFn for CustomFn {
             }
         }
 
-        Ok(Value::Null)
+        Ok(Value::null())
     }
     fn snot_clone(&self) -> Box<dyn TremorFn> {
         Box::new(self.clone())

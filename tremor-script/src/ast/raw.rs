@@ -25,7 +25,7 @@ pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::value::{borrowed, ValueTrait};
+use simd_json::value::{borrowed, Value as ValueTrait};
 use simd_json::{BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 
@@ -41,7 +41,7 @@ impl<'script> ScriptRaw<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
-        let mut consts: Vec<Value> = vec![Value::Null, Value::Null, Value::Null];
+        let mut consts: Vec<Value> = vec![Value::null(), Value::null(), Value::null()];
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
         helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
@@ -1274,22 +1274,19 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
                                 mid,
                             }
                         }
-                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        Value::I64(idx) if idx >= 0 => {
-                            let mid = helper.add_meta(start, end);
-                            Segment::Idx {
-                                idx: idx as usize,
-                                mid,
-                            }
-                        }
                         other => {
-                            return Err(ErrorKind::TypeConflict(
-                                r.expand_lines(2),
-                                r,
-                                other.value_type(),
-                                vec![ValueType::I64, ValueType::String],
-                            )
-                            .into());
+                            if let Some(idx) = other.as_usize() {
+                                let mid = helper.add_meta(start, end);
+                                Segment::Idx { idx, mid }
+                            } else {
+                                return Err(ErrorKind::TypeConflict(
+                                    r.expand_lines(2),
+                                    r,
+                                    other.value_type(),
+                                    vec![ValueType::I64, ValueType::String],
+                                )
+                                .into());
+                            }
                         }
                     },
                     expr => {

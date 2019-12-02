@@ -15,18 +15,20 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
+use simd_json::Value as ValueTrait;
 
 // ALLOW: Until we have u64 support in clippy
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_const_fn! (range::range(_context, a, b) {
-        match (a, b) {
-            (Value::I64(a), Value::I64(b)) => {
-                   let range: Vec<i64> = (*a..*b).collect();
-                   let range: Vec<Value> = range.iter().map(|x| Value::I64(*x)).collect();
-              Ok(Value::Array(range))
-            },
-            _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+        if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
+            let range: Vec<Value> = (a..b).map(|x| Value::from(x)).collect();
+            Ok(Value::from(range))
+        } else if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
+            let range: Vec<Value> = (a..b).map(|x| Value::from(x)).collect();
+            Ok(Value::from(range))
+        } else {
+            Err(FunctionError::BadType{mfa: this_mfa()})
         }
     }));
 }

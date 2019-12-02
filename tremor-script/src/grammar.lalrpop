@@ -17,7 +17,7 @@ use crate::ast::query::raw::*;
 use crate::ast::{BinOpKind, UnaryOpKind};
 use crate::lexer::Token;
 use crate::pos::Location;
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, ValueBuilder};
 use std::borrow::Cow;
 
 grammar<'input>;
@@ -370,7 +370,7 @@ Literal: LiteralRaw<'input> = {
 
 /// null
 Nil: Value<'input> = {
-    <literal:"nil">  => Value::Null,
+    <literal:"nil">  => Value::null(),
 }
 
 /// booleans

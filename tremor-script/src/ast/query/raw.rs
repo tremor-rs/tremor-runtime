@@ -61,7 +61,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 let stmt: Select<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut consts, &mut locals);
                 // We know that select statements have exactly three consts
-                let consts = vec![Value::Null, Value::Null, Value::Null];
+                let consts = vec![Value::null(), Value::null(), Value::null()];
 
                 Ok(Stmt::Select(SelectStmt {
                     stmt: Box::new(stmt),

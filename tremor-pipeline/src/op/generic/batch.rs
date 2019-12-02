@@ -95,7 +95,7 @@ impl Operator for Batch {
                     e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
                     //  "kind":null,
                     // kind is always null on events
-                    e.insert_nocheck("kind".into(), Value::Null);
+                    e.insert_nocheck("kind".into(), Value::null());
                     //  "is_batch":false
                     e.insert_nocheck("is_batch".into(), is_batch.into());
                     // }
@@ -346,7 +346,7 @@ mod test {
             id: 1,
             ingest_ns: 2_000_000,
             origin_uri: None,
-            data: Value::Null.into(),
+            data: Value::null().into(),
             kind: None,
         };
 

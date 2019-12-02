@@ -19,7 +19,7 @@ use crate::registry::{
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
 use simd_json::value::borrowed::Value;
-use simd_json::value::ValueTrait;
+use simd_json::value::{Value as ValueTrait, ValueBuilder};
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
 use std::f64;
@@ -39,7 +39,7 @@ impl TremorAggrFn for Count {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::I64(self.0))
+        Ok(Value::from(self.0))
     }
     fn init(&mut self) {
         self.0 = 0;
@@ -80,7 +80,7 @@ impl TremorAggrFn for Sum {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::F64(self.0))
+        Ok(Value::from(self.0))
     }
     fn init(&mut self) {
         self.0 = 0.0;
@@ -124,9 +124,9 @@ impl TremorAggrFn for Mean {
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
-            Ok(Value::Null)
+            Ok(Value::null())
         } else {
-            Ok(Value::F64(self.1 / (self.0 as f64)))
+            Ok(Value::from(self.1 / (self.0 as f64)))
         }
     }
     fn init(&mut self) {
@@ -182,7 +182,7 @@ impl TremorAggrFn for Min {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::F64(self.0.unwrap_or_default()))
+        Ok(Value::from(self.0.unwrap_or_default()))
     }
     fn init(&mut self) {
         self.0 = None;
@@ -223,7 +223,7 @@ impl TremorAggrFn for Max {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::F64(self.0.unwrap_or_default()))
+        Ok(Value::from(self.0.unwrap_or_default()))
     }
     fn init(&mut self) {
         self.0 = None;
@@ -280,10 +280,12 @@ impl TremorAggrFn for Var {
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {
-            Ok(Value::F64(0.0))
+            Ok(Value::from(0.0))
         } else {
             let n = self.n as f64;
-            Ok(Value::F64((self.ex2 - (self.ex * self.ex) / n) / (n - 1.0)))
+            Ok(Value::from(
+                (self.ex2 - (self.ex * self.ex) / n) / (n - 1.0),
+            ))
         }
     }
     fn init(&mut self) {
@@ -320,9 +322,12 @@ impl TremorAggrFn for Stdev {
         self.0.compensate(args)
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        self.0.emit().map(|v| match v {
-            Value::F64(v) => Value::F64(v.sqrt()),
-            v => v,
+        self.0.emit().map(|v| {
+            if let Some(v) = v.as_f64() {
+                Value::from(v.sqrt())
+            } else {
+                v
+            }
         })
     }
     fn init(&mut self) {
@@ -489,9 +494,9 @@ impl TremorAggrFn for Dds {
                             "count".into() => Value::from(count),
                             "min".into() => Value::from(min),
                             "max".into() => Value::from(max),
-                            "mean".into() => Value::F64(sum / count as f64),
-            //                "stdev".into() => Value::F64(histo.stdev()),
-            //                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                            "mean".into() => Value::from(sum / count as f64),
+            //                "stdev".into() => Value::from(histo.stdev()),
+            //                "var".into() => Value::from(histo.stdev().powf(2.0)),
                             "percentiles".into() => Value::from(p),
                         }))
         } else {
@@ -564,9 +569,9 @@ impl TremorAggrFn for Dds {
                             "count".into() => Value::from(count),
                             "min".into() => Value::from(min),
                             "max".into() => Value::from(max),
-                            "mean".into() => Value::F64(sum / count as f64),
-            //                "stdev".into() => Value::F64(histo.stdev()),
-            //                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                            "mean".into() => Value::from(sum / count as f64),
+            //                "stdev".into() => Value::from(histo.stdev()),
+            //                "var".into() => Value::from(histo.stdev().powf(2.0)),
                             "percentiles".into() => Value::from(p),
             }))
         }
@@ -833,9 +838,9 @@ impl TremorAggrFn for Hdr {
                 "count".into() => Value::from(histo.len()),
                 "min".into() => Value::from(histo.min()),
                 "max".into() => Value::from(histo.max()),
-                "mean".into() => Value::F64(histo.mean()),
-                "stdev".into() => Value::F64(histo.stdev()),
-                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                "mean".into() => Value::from(histo.mean()),
+                "stdev".into() => Value::from(histo.stdev()),
+                "var".into() => Value::from(histo.stdev().powf(2.0)),
                 "percentiles".into() => Value::from(p),
             }))
         } else {
@@ -863,9 +868,9 @@ impl TremorAggrFn for Hdr {
                 "count".into() => Value::from(histo.len()),
                 "min".into() => Value::from(histo.min()),
                 "max".into() => Value::from(histo.max()),
-                "mean".into() => Value::F64(histo.mean()),
-                "stdev".into() => Value::F64(histo.stdev()),
-                "var".into() => Value::F64(histo.stdev().powf(2.0)),
+                "mean".into() => Value::from(histo.mean()),
+                "stdev".into() => Value::from(histo.stdev()),
+                "var".into() => Value::from(histo.stdev().powf(2.0)),
                 "percentiles".into() => Value::from(p),
             }))
         }

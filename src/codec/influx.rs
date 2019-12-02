@@ -188,14 +188,14 @@ impl BInflux {
         if vsn != 0 {
             return Err(ErrorKind::InvalidInfluxData("invalid version".into()).into());
         };
-        let measurement = Value::String(read_string(&mut c)?);
-        let timestamp = Value::I64(c.read_i64::<BigEndian>()?);
+        let measurement = Value::from(read_string(&mut c)?);
+        let timestamp = Value::from(c.read_u64::<BigEndian>()?);
         let tag_count = c.read_u16::<BigEndian>()? as usize;
         let mut tags = Object::with_capacity(tag_count);
         for _i in 0..tag_count {
             let key = read_string(&mut c)?;
             let value = read_string(&mut c)?;
-            tags.insert(key, Value::String(value));
+            tags.insert(key, Value::from(value));
         }
         let field_count = c.read_u16::<BigEndian>()? as usize;
         let mut fields = Object::with_capacity(field_count);
@@ -205,21 +205,21 @@ impl BInflux {
             match kind {
                 TYPE_I64 => {
                     let value = c.read_i64::<BigEndian>()?;
-                    fields.insert(key, Value::I64(value));
+                    fields.insert(key, Value::from(value));
                 }
                 TYPE_F64 => {
                     let value = c.read_f64::<BigEndian>()?;
-                    fields.insert(key, Value::F64(value));
+                    fields.insert(key, Value::from(value));
                 }
                 TYPE_STRING => {
                     let value = read_string(&mut c)?;
-                    fields.insert(key, Value::String(value));
+                    fields.insert(key, Value::from(value));
                 }
                 TYPE_TRUE => {
-                    fields.insert(key, Value::Bool(true));
+                    fields.insert(key, Value::from(true));
                 }
                 TYPE_FALSE => {
-                    fields.insert(key, Value::Bool(false));
+                    fields.insert(key, Value::from(false));
                 }
                 o => error!("bad field type: {}", o),
             }

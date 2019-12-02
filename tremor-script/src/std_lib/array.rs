@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -84,9 +84,10 @@ pub fn load(registry: &mut Registry) {
             }),
         )
         .insert(tremor_const_fn!(array::coalesce(_context, _input: Array) {
-            Ok(Value::Array(_input.iter().filter_map(|v| match v {
-                Value::Null => None,
-                other => Some(other.clone())
+            Ok(Value::Array(_input.iter().filter_map(|v| if v.is_null()  {
+                None 
+            }else {
+                Some(v.clone())
             }).collect()))
         }));
 }
@@ -108,7 +109,7 @@ fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use simd_json::{BorrowedValue as Value, ValueBuilder};
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
             assert_eq!($e, Ok(Value::from($r)))
@@ -275,15 +276,15 @@ mod test {
         let f = fun("array", "coalesce");
         let v = Value::Array(vec![
             Value::from("this"),
-            Value::Null,
+            Value::null(),
             Value::from("cake"),
             Value::from("is"),
             Value::from("really"),
-            Value::Null,
+            Value::null(),
             Value::from("a"),
             Value::from("good"),
             Value::from("test"),
-            Value::Null,
+            Value::null(),
             Value::from("cake"),
             Value::from("!"),
         ]);

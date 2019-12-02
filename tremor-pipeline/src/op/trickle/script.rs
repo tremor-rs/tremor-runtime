@@ -117,7 +117,7 @@ impl TrickleScript {
 
         let script_ref: &mut tremor_script::ast::ScriptDecl =
             unsafe { mem::transmute(script.suffix()) };
-        script_ref.script.consts = vec![Value::Null, Value::Null, Value::Null];
+        script_ref.script.consts = vec![Value::null(), Value::null(), Value::null()];
         script_ref.script.consts[ARGS_CONST_ID] = args;
 
         Ok(Self {

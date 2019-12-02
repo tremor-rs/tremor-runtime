@@ -39,7 +39,7 @@ use glob;
 use kv;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
-use simd_json::value::ValueTrait;
+use simd_json::{Value as ValueTrait, ValueBuilder};
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
@@ -361,7 +361,7 @@ impl Extractor {
                 Self::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
                         let matches: HashMap<std::borrow::Cow<str>, Value> = re
                             .capture_names()
@@ -382,7 +382,7 @@ impl Extractor {
                 }
                 Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
-                        Ok(Value::Bool(true))
+                        Ok(Value::from(true))
                     } else {
                         Err(ExtractorError {
                             msg: "glob expression didn't match".into(),
@@ -392,7 +392,7 @@ impl Extractor {
                 Self::Kv(kv) => {
                     if let Some(r) = kv.run(s) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
                         Ok(Value::from(r).into_static())
                     } else {
@@ -405,7 +405,7 @@ impl Extractor {
                     let encoded = s.to_string().clone();
                     let decoded = base64::decode(&encoded)?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     }
 
                     Ok(Value::String(
@@ -425,7 +425,7 @@ impl Extractor {
                             msg: "Error in decoding to a json object".to_string(),
                         })?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     }
                     Ok(decoded.into())
                 }
@@ -438,7 +438,7 @@ impl Extractor {
                     })?;
                     if combiner.combiner.contains(input) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
 
                         Ok(Value::from(Object::from(Cidr::from_str(s)?)))
@@ -451,7 +451,7 @@ impl Extractor {
                 Self::Cidr { range: None, .. } => {
                     let c = Cidr::from_str(s)?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
                     Ok(Value::from(Object::from(c)))
                 }
@@ -472,12 +472,12 @@ impl Extractor {
                 } => {
                     let o = pattern.matches(s.as_bytes())?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
                     Ok(o.into())
                 }
                 Self::Influx => match influx::parse(s, ctx.ingest_ns()) {
-                    Ok(ref _x) if !result_needed => Ok(Value::Null),
+                    Ok(ref _x) if !result_needed => Ok(Value::null()),
                     Ok(Some(r)) => Ok(r.into_static()),
                     Ok(None) | Err(_) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
@@ -492,7 +492,7 @@ impl Extractor {
                             msg: format!("Invalid datetime specified: {}", e.to_string()),
                         })?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
                     Ok(Value::from(d))
                 }
@@ -595,7 +595,7 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(
+                    Ok(Value::from(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
                     ))
                 );
@@ -617,7 +617,7 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! {
+                    Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
                     }))
@@ -641,7 +641,7 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! {
+                    Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
                         "c".into() => "d".into()
                     }))
@@ -665,7 +665,7 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Bool(true))
+                    Ok(Value::from(true))
                 );
             }
             _ => unreachable!(),
@@ -707,7 +707,7 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! {
+                    Ok(Value::from(hashmap! {
                         "name".into() => Value::from("John")
                     }))
                 );
@@ -729,7 +729,7 @@ mod test {
 
                 assert_eq!(
                     output,
-                    Ok(Value::Object(hashmap!(
+                    Ok(Value::from(hashmap!(
                     "syslog_timestamp1".into() =>  "".into(),
                               "syslog_ingest_timestamp".into() => "2019-04-01T09:59:19+0010".into(),
                               "wf_datacenter".into() => "dc".into(),
@@ -761,9 +761,9 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! (
-                        "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                        "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
+                    Ok(Value::from(hashmap! (
+                        "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
 
 
                     )))
@@ -777,9 +777,9 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! (
-                                        "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                                        "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 0.into()])
+                    Ok(Value::from(hashmap! (
+                                        "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
 
 
                     )))
@@ -794,9 +794,9 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap!(
-                                "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                                "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
+                    Ok(Value::from(hashmap!(
+                                "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                                "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
                     )))
                 );
 
@@ -809,9 +809,9 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap!(
-                                "prefix".into() => Value::from(vec![Value::I64(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
-                                "mask".into() => Value::from(vec![Value::I64(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
+                    Ok(Value::from(hashmap!(
+                                "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
+                                "mask".into() => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
                     )))
                 );
             }
@@ -830,9 +830,9 @@ mod test {
                             origin_uri: None
                         }
                     ),
-                    Ok(Value::Object(hashmap! (
-                            "prefix".into() => Value::from(vec![Value::I64(10), 22.into(), 0.into(), 254.into()]),
-                            "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()]),
+                    Ok(Value::from(hashmap! (
+                            "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
+                            "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
                     )))
                 );
 
@@ -869,12 +869,11 @@ mod test {
                         origin_uri: None
                     }
                 ),
-                Ok(Value::Object(hashmap! (
+                Ok(Value::from(hashmap! (
                        "measurement".into() => "wea ther".into(),
-                       "tags".into() => Value::Object(hashmap!( "location".into() => "us-midwest".into())),
-                    "fields".into() => Value::Object(hashmap!("temperature".into() => 82.0f64.into
-                                                              ())),
-                       "timestamp".into() => Value::I64(1_465_839_830_100_400_200)
+                       "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
+                       "fields".into() => Value::from(hashmap!("temperature".into() => 82.0f64.into())),
+                       "timestamp".into() => Value::from(1_465_839_830_100_400_200_u64)
                 )))
             ),
             _ => unreachable!(),
@@ -894,7 +893,7 @@ mod test {
                         origin_uri: None
                     }
                 ),
-                Ok(Value::I64(1_560_988_800_000_000_000))
+                Ok(Value::from(1_560_988_800_000_000_000_u64))
             ),
             _ => unreachable!(),
         }

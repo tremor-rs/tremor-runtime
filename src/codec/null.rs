@@ -14,6 +14,7 @@
 
 use super::Codec;
 use crate::errors::*;
+use simd_json::ValueBuilder;
 use tremor_script::{LineValue, Value};
 
 #[derive(Clone)]
@@ -21,7 +22,7 @@ pub struct Null {}
 
 impl Codec for Null {
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        Ok(Some(LineValue::new(vec![data], |_| Value::Null.into())))
+        Ok(Some(LineValue::new(vec![data], |_| Value::null().into())))
     }
     fn encode(&self, _data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Ok(vec![])
@@ -36,7 +37,7 @@ mod test {
 
     #[test]
     fn test_null_codec() -> Result<()> {
-        let seed: OwnedValue = OwnedValue::Null;
+        let seed: OwnedValue = OwnedValue::null();
         let seed: BorrowedValue = seed.into();
 
         let mut codec = Null {};

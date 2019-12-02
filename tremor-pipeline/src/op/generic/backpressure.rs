@@ -27,9 +27,8 @@
 
 use crate::errors::*;
 use crate::{ConfigImpl, Event, Operator};
-use simd_json::value::borrowed::Value;
-use simd_json::ValueTrait;
 use std::borrow::Cow;
+use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -265,7 +264,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
-            data: (Value::Null, m).into(),
+            data: (Value::null(), m).into(),
             kind: None,
         };
 
@@ -345,7 +344,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            data: (Value::Null, m).into(),
+            data: (Value::null(), m).into(),
             kind: None,
         };
 
@@ -359,7 +358,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 2,
-            data: (Value::Null, m).into(),
+            data: (Value::null(), m).into(),
             kind: None,
         };
 
@@ -438,7 +437,7 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
-            data: (Value::Null, m).into(),
+            data: (Value::null(), m).into(),
             kind: None,
         };
 

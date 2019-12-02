@@ -17,7 +17,7 @@ use crate::tremor_fn;
 use crate::EventContext;
 use rand::distributions::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use simd_json::{BorrowedValue as Value, ValueTrait};
+use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 
 pub fn load(registry: &mut Registry) {
     // TODO see if we can cache the RNG here across function calls (or at least
@@ -41,36 +41,32 @@ pub fn load(registry: &mut Registry) {
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
-                    match (low, high) {
-                    (Value::I64(low), Value::I64(high)) if low < high => Ok(Value::I64(
-                        // random integer between low and high (not including high)
-                        rng.gen_range(low, high),
-                    )),
-                    (Value::I64(_), Value::I64(_)) => Err(FunctionError::RuntimeError {
-                        mfa: this_mfa(),
-                        error:
-                            "Invalid arguments. First argument must be lower than second argument"
-                                .to_string(),
-                    }),
-                    _ => Err(FunctionError::BadType { mfa: this_mfa() }),
-                }
+                    if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
+                        if low < high {
+                            // random integer between low and high (not including high)
+                            Ok(Value::from(rng.gen_range(low, high)))
+                        } else {
+                            Err(FunctionError::RuntimeError {
+                                mfa: this_mfa(),
+                                error:
+                                    "Invalid arguments. First argument must be lower than second argument".to_string(),
+                            })
+                        }
+                    } else {
+                        Err(FunctionError::BadType { mfa: this_mfa() })
+                    }
                 }
                 1 => {
                     let input = &args[0];
-                    match input {
-                        Value::I64(input) if *input > 0 => Ok(Value::I64(
-                            // random integer between 0 and input (not including input)
-                            rng.gen_range(0, input),
-                        )),
-                        Value::I64(_) => Err(FunctionError::RuntimeError {
-                            mfa: this_mfa(),
-                            error: "Invalid argument. Must be greater than 0".to_string(),
-                        }),
-                        _ => Err(FunctionError::BadType { mfa: this_mfa() }),
+                    if let Some(input) = input.as_u64() {
+                        // random integer between 0 and input (not including input)
+                        Ok(Value::from(rng.gen_range(0, input)))
+                    } else {
+                        Err(FunctionError::BadType { mfa: this_mfa() })
                     }
                 }
-                0 => Ok(Value::I64(
-                    rng.gen(), // random integer
+                0 => Ok(Value::from(
+                    rng.gen::<i64>(), // random integer
                 )),
                 _ => Err(FunctionError::BadArity {
                     mfa: this_mfa(),
@@ -103,36 +99,32 @@ pub fn load(registry: &mut Registry) {
             match args.len() {
                 2 => {
                     let (low, high) = (&args[0], &args[1]);
-                    match (low, high) {
-                    (Value::F64(low), Value::F64(high)) if low < high => Ok(Value::F64(
-                        // random float between low and high (not including high)
-                        rng.gen_range(low, high),
-                    )),
-                    (Value::F64(_), Value::F64(_)) => Err(FunctionError::RuntimeError {
-                        mfa: this_mfa(),
-                        error:
-                            "Invalid arguments. First argument must be lower than second argument"
-                                .to_string(),
-                    }),
-                    _ => Err(FunctionError::BadType { mfa: this_mfa() }),
-                }
+                    if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
+                        if low < high {
+                            // random integer between low and high (not including high)
+                            Ok(Value::from(rng.gen_range(low, high)))
+                        } else {
+                            Err(FunctionError::RuntimeError {
+                                mfa: this_mfa(),
+                                error:
+                                    "Invalid arguments. First argument must be lower than second argument".to_string(),
+                            })
+                        }
+                    } else {
+                        Err(FunctionError::BadType { mfa: this_mfa() })
+                    }
                 }
                 1 => {
                     let input = &args[0];
-                    match input {
-                        Value::F64(input) if *input > 0.0 => Ok(Value::F64(
-                            // random float between 0 and input (not including input)
-                            rng.gen_range(0.0, input),
-                        )),
-                        Value::F64(_) => Err(FunctionError::RuntimeError {
-                            mfa: this_mfa(),
-                            error: "Invalid argument. Must be greater than 0.0".to_string(),
-                        }),
-                        _ => Err(FunctionError::BadType { mfa: this_mfa() }),
+                    if let Some(input) = input.cast_f64() {
+                        // random integer between 0 and input (not including input)
+                        Ok(Value::from(rng.gen_range(0.0, input)))
+                    } else {
+                        Err(FunctionError::BadType { mfa: this_mfa() })
                     }
                 }
-                0 => Ok(Value::F64(
-                    rng.gen(), // random float (between 0.0 and 1.0, not including 1.0)
+                0 => Ok(Value::from(
+                    rng.gen::<f64>(), // random integer
                 )),
                 _ => Err(FunctionError::BadArity {
                     mfa: this_mfa(),
@@ -153,9 +145,9 @@ pub fn load(registry: &mut Registry) {
     }
     registry
         .insert(tremor_fn! (random::bool(_context) {
-            Ok(Value::Bool(
+            Ok(Value::from(
                 SmallRng::seed_from_u64(_context.ingest_ns())
-                    .gen()
+                    .gen::<bool>()
             ))
         }))
         // TODO support specifying range of characters as a second (optional) arg
@@ -185,8 +177,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
-
+    use simd_json::{BorrowedValue as Value, Value as ValueTrait};
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
             assert_eq!($e, Ok(Value::from($r)))
@@ -196,10 +187,7 @@ mod test {
     #[test]
     fn bool() {
         let f = fun("random", "bool");
-        assert!(match f(&[]) {
-            Ok(Value::Bool(_)) => true,
-            _ => false,
-        });
+        assert!(f(&[]).ok().map(|v| v.is_bool()).unwrap_or_default());
     }
 
     #[test]
@@ -225,10 +213,7 @@ mod test {
         assert_val!(f(&[&v1, &v2]), -42);
         let v = Value::from(1);
         assert_val!(f(&[&v]), 0);
-        assert!(match f(&[]) {
-            Ok(Value::I64(_)) => true,
-            _ => false,
-        });
+        assert!(f(&[]).ok().map(|v| v.is_i64()).unwrap_or_default());
     }
 
     #[test]
@@ -236,18 +221,21 @@ mod test {
         let f = fun("random", "float");
         let v1 = 0.0;
         let v2 = 100.0;
-        assert!(match f(&[&Value::from(v1), &Value::from(v2)]) {
-            Ok(Value::F64(a)) if a >= v1 && a < v2 => true,
-            _ => false,
-        });
+        assert!(f(&[&Value::from(v1), &Value::from(v2)])
+            .ok()
+            .and_then(|v| v.as_f64())
+            .map(|a| a >= v1 && a < v2)
+            .unwrap_or_default());
         let v = 100.0;
-        assert!(match f(&[&Value::from(v)]) {
-            Ok(Value::F64(a)) if a >= 0.0 && a < v => true,
-            _ => false,
-        });
-        assert!(match f(&[]) {
-            Ok(Value::F64(a)) if a >= 0.0 && a < 1.0 => true,
-            _ => false,
-        });
+        assert!(f(&[&Value::from(v)])
+            .ok()
+            .and_then(|v| v.as_f64())
+            .map(|a| a >= 0.0 && a < v)
+            .unwrap_or_default());
+        assert!(f(&[])
+            .ok()
+            .and_then(|v| v.as_f64())
+            .map(|a| a >= 0.0 && a < 1.0)
+            .unwrap_or_default());
     }
 }

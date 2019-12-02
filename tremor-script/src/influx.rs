@@ -16,7 +16,7 @@
 use crate::errors::*;
 use halfbrown::HashMap;
 use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::ValueTrait;
+use simd_json::value::Value as ValueTrait;
 use std::borrow::Cow;
 use std::io::Write;
 use std::str::Chars;
@@ -93,15 +93,18 @@ pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
         write_escaped_key(&mut output, key.as_bytes())?;
         output.write_all(&[b'=']).ok()?;
 
-        match value {
-            Value::String(s) => write_escaped_value(&mut output, s.as_bytes())?,
-            Value::F64(_) | Value::Bool(_) => value.write(&mut output).ok()?,
-            Value::I64(_) => {
-                value.write(&mut output).ok()?;
-                output.write_all(&[b'i']).ok()?
+        if let Some(s) = value.as_str() {
+            write_escaped_value(&mut output, s.as_bytes())?
+        } else {
+            match value.value_type() {
+                ValueType::F64 | ValueType::Bool => value.write(&mut output).ok()?,
+                ValueType::U64 | ValueType::I64 => {
+                    value.write(&mut output).ok()?;
+                    output.write_all(&[b'i']).ok()?
+                }
+                _ => return None,
             }
-            _ => return None,
-        };
+        }
     }
 
     output.write_all(&[b' ']).ok()?;
@@ -157,8 +160,8 @@ fn float_or_bool(s: &str) -> Result<Value<'static>> {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::from(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::from(false)),
-        _ => Ok(Value::F64(
-            s.parse()
+        _ => Ok(Value::from(
+            s.parse::<f64>()
                 .map_err(|_| ErrorKind::InvalidInfluxData(s.to_owned()))?,
         )),
     }
@@ -177,7 +180,7 @@ fn parse_value<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>
             c @ Some(',') | c @ Some(' ') | c @ None => return Ok((float_or_bool(&res)?, c)),
             Some('i') => match chars.next() {
                 c @ Some(' ') | c @ Some(',') | c @ None => {
-                    return Ok((Value::I64(res.parse()?), c))
+                    return Ok((Value::from(res.parse::<i64>()?), c))
                 }
                 Some(c) => {
                     return Err(ErrorKind::InvalidInfluxData(format!(

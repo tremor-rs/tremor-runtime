@@ -30,9 +30,9 @@ use futures::future::{loop_fn, Future, Loop};
 use futures::sync::mpsc::{channel, Receiver};
 use futures::Stream;
 use futures_state_stream::StateStream;
+use hashbrown::HashMap;
 use serde_json;
 use serde_yaml;
-use hashbrown::HashMap;
 use std::{boxed, f64, str, thread, time};
 use tiberius::ty::{ColumnData, FromColumnData};
 use tiberius::{self, SqlConnection};
@@ -95,9 +95,9 @@ fn row_to_json(row: &tiberius::query::QueryRow) -> serde_json::Value {
             ColumnData::F64(f) => {
                 serde_json::Value::Number(serde_json::Number::from_f64(*f).unwrap())
             }
-            ColumnData::Bit(b) => serde_json::Value::Bool(*b),
+            ColumnData::Bit(b) => serde_json::Value::from(*b),
 
-            ColumnData::None => serde_json::Value::Null,
+            ColumnData::None => serde_json::Value::null(),
             ColumnData::String(s) => serde_json::Value::String(s.to_string()),
             ColumnData::BString(s) => serde_json::Value::String(String::from(s.as_str())),
             ColumnData::Binary(s) => {

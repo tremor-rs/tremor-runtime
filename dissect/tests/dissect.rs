@@ -306,7 +306,7 @@ mod tests {
         let output = output.extract(input).expect("dissect doesn't do types");
         let mut expected = HashMap::new();
         expected.insert("name".into(), SimdValue::String("John".into()));
-        expected.insert("age".into(), SimdValue::I64(22));
+        expected.insert("age".into(), SimdValue::from(22));
         assert_eq!(output, Dissect(expected));
     }
 
@@ -322,7 +322,7 @@ mod tests {
             Some(&SimdValue::String("John".into()))
         );
         match output.0.get("tax".into()) {
-            Some(SimdValue::F64(f)) => assert!((f - 414.203).abs() < 0.001),
+            Some(SimdValue::from(f)) => assert!((f - 414.203).abs() < 0.001),
             _ => unreachable!(),
         };
     }
@@ -525,8 +525,8 @@ mod tests {
         let output = Pattern::try_from(pattern).expect("cannot parse pattern");
         let output = output.extract(input).expect("");
         let mut expected = HashMap::new();
-        expected.insert("tremor".into(), SimdValue::I64(1));
-        expected.insert("logstash".into(), SimdValue::I64(0));
+        expected.insert("tremor".into(), SimdValue::from(1));
+        expected.insert("logstash".into(), SimdValue::from(0));
         assert_eq!(output, Dissect(expected));
     }
 
@@ -624,7 +624,7 @@ mod tests {
     fn type_float() {
         let p = "%{f:float}";
         let mut m = HashMap::new();
-        m.insert("f".into(), SimdValue::F64(1.0));
+        m.insert("f".into(), SimdValue::from(1.0));
 
         let pattern = Pattern::try_from(p).expect("can parse token");
         assert_eq!(
@@ -654,7 +654,7 @@ mod tests {
     fn type_int() {
         let p = "%{i: int}";
         let mut m = HashMap::new();
-        m.insert("i".into(), SimdValue::I64(1));
+        m.insert("i".into(), SimdValue::from(1));
 
         let i = lex(p).expect("");
         assert_eq!(
@@ -971,8 +971,8 @@ mod tests {
     fn do_repeat_kv() {
         let p = "%{?count}: %{&count:int}, %{?count}: %{&count:int}";
         let mut m = HashMap::new();
-        m.insert("logstash".into(), SimdValue::I64(0));
-        m.insert("tremor".into(), SimdValue::I64(1));
+        m.insert("logstash".into(), SimdValue::from(0));
+        m.insert("tremor".into(), SimdValue::from(1));
         assert_eq!(
             Pattern::try_from(p)
                 .expect("")

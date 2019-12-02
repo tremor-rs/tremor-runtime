@@ -22,7 +22,7 @@ use crate::errors::*;
 use crate::registry::{Registry, TremorAggrFnWrapper};
 use crate::stry;
 use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::ValueTrait;
+use simd_json::value::Value as ValueTrait;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::mem;

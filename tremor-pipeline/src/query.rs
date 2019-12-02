@@ -22,7 +22,7 @@ use halfbrown::HashMap;
 use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
-use simd_json::ValueTrait;
+use simd_json::Value as ValueTrait;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;

@@ -15,5 +15,6 @@
 pub use super::{AggrRegistry, LineValue, Registry, TremorFnWrapper, ValueAndMeta};
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::{EventContext, EventOriginUri, Return};
+pub use crate::{FALSE, NULL, TRUE};
 pub use simd_json::value::borrowed::{Object, Value};
-pub use simd_json::ValueTrait;
+pub use simd_json::{MutableValue, Value as ValueTrait, ValueBuilder};

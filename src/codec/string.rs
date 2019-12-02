@@ -15,7 +15,7 @@
 use super::Codec;
 use crate::errors::*;
 use serde_json;
-use simd_json::{self, BorrowedValue as Value};
+use simd_json::{self, BorrowedValue as Value, Value as ValueTrait};
 use tremor_script::LineValue;
 
 #[derive(Clone)]
@@ -31,9 +31,10 @@ impl Codec for String {
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        match data {
-            Value::String(s) => Ok(s.as_bytes().to_vec()),
-            data => Ok(serde_json::to_vec(&data)?),
+        if let Some(s) = data.as_str() {
+            Ok(s.as_bytes().to_vec())
+        } else {
+            Ok(serde_json::to_vec(&data)?)
         }
     }
 }

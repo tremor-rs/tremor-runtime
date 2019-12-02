@@ -15,6 +15,7 @@
 use crate::registry::Registry;
 use crate::tremor_fn;
 use halfbrown::hashmap;
+use simd_json::ValueBuilder;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -22,12 +23,12 @@ pub fn load(registry: &mut Registry) {
             if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.to_string().into()))
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }))
         .insert(tremor_fn! (origin::as_uri_record(context) {
             if let Some(uri) = context.origin_uri() {
-                Ok(Value::Object(
+                Ok(Value::from(
                     hashmap! {
                         "scheme".into() => Value::from(uri.scheme().to_string()),
                         "host".into() => Value::from(uri.host().to_string()),
@@ -35,38 +36,38 @@ pub fn load(registry: &mut Registry) {
                             Some(n) => Value::from(*n),
                             // TODO would be nice to support this?
                             //None => Value::from(None),
-                            None => Value::Null,
+                            None => Value::null(),
                         },
                         // TODO avoid uri path clone here?
                         "path".into() => Value::from(uri.path().clone()),
                     }
                 ))
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }))
         .insert(tremor_fn! (origin::scheme(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.scheme().to_string().into()))
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }))
         .insert(tremor_fn! (origin::host(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(Value::String(uri.host().to_string().into()))
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }))
         .insert(tremor_fn! (origin::port(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(match uri.port() {
-                    Some(n) => Value::I64(i64::from(*n)),
-                    None => Value::Null,
+                    Some(n) => Value::from(*n),
+                    None => Value::null(),
                 })
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }))
         .insert(tremor_fn! (origin::path(context) {
@@ -76,7 +77,7 @@ pub fn load(registry: &mut Registry) {
                 // TODO avoid uri path clone here?
                 Ok(Value::from(uri.path().clone()))
             } else {
-                Ok(Value::Null)
+                Ok(Value::null())
             }
         }));
 }
