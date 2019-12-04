@@ -34,7 +34,7 @@ macro_rules! time_fn {
 }
 macro_rules! time_fn_32 {
     ($name:ident, $fn:ident) => {
-        tremor_const_fn! (math::$name(_context, _value) {
+        tremor_const_fn! (datetime::$name(_context, _value) {
             _value.as_u32().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
         })
     };
