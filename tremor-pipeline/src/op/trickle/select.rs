@@ -541,6 +541,7 @@ impl Operator for TrickleSelect {
                     #[allow(clippy::transmute_ptr_to_ptr)]
                     let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
                     consts[GROUP_CONST_ID] = group_value.clone_static();
+                    consts[GROUP_CONST_ID].push(group_str.clone()).ok();
 
                     let env = Env {
                         context: &ctx,
@@ -600,11 +601,9 @@ impl Operator for TrickleSelect {
                             },
                         )
                     });
-                let mut group_clone_static = group_value.clone_static();
-                if let Some(g) = group_clone_static.as_array_mut() {
-                    g.push(Value::from(group_str));
-                }
-                consts[GROUP_CONST_ID] = group_clone_static;
+                consts[GROUP_CONST_ID] = group_value.clone_static();
+                consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
@@ -638,6 +637,7 @@ impl Operator for TrickleSelect {
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
                 consts[GROUP_CONST_ID] = group_value.clone_static();
+                consts[GROUP_CONST_ID].push(group_str.clone()).ok();
 
                 let env = Env {
                     context: &ctx,
