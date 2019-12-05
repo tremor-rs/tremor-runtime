@@ -1,7 +1,7 @@
 [package]
 name = "window"
 version = "0.1.0"
-authors = ["Heinz Gies <hgies@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
 

@@ -1,8 +1,9 @@
 [package]
 name = "kv"
 version = "0.1.0"
-authors = ["Heinz Gies <hgies@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 simd-json = {version = "0.2", features = ["known-key"]}

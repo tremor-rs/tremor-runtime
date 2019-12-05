@@ -1,8 +1,9 @@
 [package]
 name = "tremor-tool"
 version = "0.1.0"
-authors = ["Darach Ennis <dennis@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 tremor-runtime = { path = "../" }

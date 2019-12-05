@@ -2,7 +2,7 @@
 name = "tremor-runtime"
 version = "0.6.0"
 description = "Tremor Runtime"
-authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
 
