@@ -38,10 +38,10 @@ force:
 	true
 
 chk_copyright:
-	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || (echo "##[error] No copyright in $$f") done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2020, Wayfair GmbH' > /dev/null || (echo "##[error] No copyright in $$f") done
 
 chk_copyright_ci:
-	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2020, Wayfair GmbH' > /dev/null || exit 1; done
 
 chk_unwrap:
 	@./checks/safety.sh -u
