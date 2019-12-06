@@ -258,7 +258,7 @@ impl ErrorKind {
                 _ => None
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
-            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
+            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, _) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),

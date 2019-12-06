@@ -244,8 +244,8 @@ impl PartialEq for TremorFnWrapper {
 
 #[derive(Debug, Clone)]
 pub struct Registry {
-    functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
-    modules: Vec<String>,
+    pub functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
+    pub modules: Vec<String>,
 }
 
 #[macro_export]
