@@ -22,6 +22,7 @@ use crossbeam_channel::Sender;
 use serde_yaml::Value;
 use std::fmt;
 mod blaster;
+mod crononome;
 mod file;
 mod gsub;
 mod kafka;
@@ -63,6 +64,7 @@ pub fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         "gsub" => gsub::GSub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "metronome" => metronome::Metronome::from_config(config),
+        "crononome" => crononome::Crononome::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "tcp" => tcp::Tcp::from_config(config),
         "rest" => rest::Rest::from_config(config),

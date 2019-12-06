@@ -103,7 +103,7 @@ onramp:
 
 ### metronome
 
-This sends a periodic tick down the output. It is an excelent tool to generate some test traffic to validate pipelines.
+This sends a periodic tick downstream. It is an excellent tool to generate some test traffic to validate pipelines.
 
 The default [codec](../codecs) is `pass`. (since we already output decoded JSON)
 
@@ -120,6 +120,42 @@ onramp:
     config:
       interval: 10000
 ```
+
+### crononome
+
+This sends a scheduled tick down the offramp. Schedules can be one-off or repeating and use a cron-like format.
+
+Multiple cron entries can be configured, each with a symbolic name and an optional JSON payload in addition to the cron expression.
+
+Supported configuration options are:
+
+* `entries` - A sequence of entries
+
+Example
+
+```yaml
+onramp:
+  - id: crononome
+    type: crononome
+    codec: json
+    config:
+      entries:
+## every second
+        - name: 1s
+          expr: "* * * * * *"
+## every 5 seconds
+        - name: 5s
+          expr: "0/5 * * * * *"
+## every minute
+        - name: 1m
+          expr: "0 * * * * *"
+          payload:
+            snot: badger
+```
+
+Cron entries that are historic or in the past ( relative to the current UTC time ) will be ignored.
+Cron entries beyond 2038 will not work due to underlying libraries ( rust, chrono, cron.rs ) suffering
+from the [year 2038 problem](https://en.wikipedia.org/wiki/Year_2038_problem).
 
 ### blaster
 

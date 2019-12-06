@@ -93,6 +93,9 @@ hdrhistogram = {version = "6", optional = true }
 rdkafka = {version = "0.21", optional = true}
 rdkafka-sys = {version = "1", optional = true}
 
+# crononome
+cron = "0.6.0"
+
 #Google cloud stuff
 google-storage1 = "1"
 google-pubsub1 = "1"
