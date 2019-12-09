@@ -13,4 +13,4 @@ Click for an [Architectural overview](./overview) or [Canned History](./history)
 
 ## Contact
 
-The tremor team is available on slack at __#tremor-forum__ during ordinarily during Berlin business hours.
+The tremor team is available on slack at __#tremor-forum__ ordinarily during Berlin business hours.
