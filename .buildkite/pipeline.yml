@@ -1,14 +1,6 @@
-agents:
-  queue: "docker"
-
 steps:
-  - command: .buildkite/scripts/test.sh
-    agents:
-      queue: "docker"
+  - label: "mkdocs"
     plugins:
-      - ssh://git@git.csnzoo.com/wayfair/docker-buildkite-plugin.git:
-          image: "wayfair/tremor/dataeng-rust:1.33.0"
-
-env:
-  GITLAB_API_TOKEN: "A Super Real Token"
-
+      - ssh://git@github.csnzoo.com/shared/mkdocs-buildkite-plugin.git#v0.5.0:
+    agents:
+      queue: mkdocs
