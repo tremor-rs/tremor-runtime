@@ -2,8 +2,6 @@
 
 This section compares the latest stable version of Tremor with other alternative products. 
 
-
-
 | Feature                        |    Tremor    |  Hindsight   |       Logstash        |
 | ------------------------------ | :----------: | :----------: | :-------------------: |
 | Pipeline Architecture          |      Y       |      Y       |           Y           |
@@ -16,14 +14,10 @@ This section compares the latest stable version of Tremor with other alternative
 |                                |              |              |                       |
 |                                |              |              |                       |
 
-
-
-## Logstash:
+## Logstash
 
 Logstash is an open source data collection engine with real time pipelining capabilities written by Elasticsearch.  We compare Tremor with the Logstash 7.0 which is the latest stable version at the time of writing.
 
-## Hindsight:
+## Hindsight
 
-Hindsight is a C based data processing infrastructure based on the Lua sandbox. 
-
-​	
+Hindsight is a C based data processing infrastructure based on the Lua sandbox.
