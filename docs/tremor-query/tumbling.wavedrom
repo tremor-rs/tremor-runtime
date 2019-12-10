@@ -1,0 +1,17 @@
+// Tumbling window [wavedrom]
+{signal: [
+  {name: 'time (clock, seconds)', wave: 'p............|.'},
+  {name: 'event (data)', wave: 'z3z3z3z3z3zzz|z', data: ['1', '2', '3', '4', '5']},
+  {},
+  {name: 'windows 2 events wide', wave: 'z7..z7..z7|....', data: ['w0', 'w1', 'w2', 'w3']},
+  {name: 'emissions', wave: 'zzzz9zzz9zzzz|z', data: ['a', 'b']},
+  {},
+  {name: 'windows 10 seconds wide', wave: 'z7........7..|.', data: ['w0', 'w1']},
+  {name: 'emissions', wave: 'zzzzzzzzzz9zz|z', data: ['a']},
+  {},
+],
+ head: {
+   text: 'Tumbling Window Temporal Mechanics',
+   tick: 0
+ }
+}

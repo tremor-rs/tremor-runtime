@@ -1,0 +1,23 @@
+// tilting [wavedrom]
+{signal: [
+  {name: '1 hour', wave: 'z9...........9|', node: '.a............j' },
+  {},
+  {},
+  {},
+  {name: '15 minutes', wave: 'z9..9..9..9..9|', node: '.a..e..f..g..h.' },
+  {},
+  {},
+  {},
+  {name: '5 minutes', wave: 'z9999999999999|', node: '.123456789abc...' },
+],
+  edge: [
+    '1~>e', '2~>e', '3~>e merge',
+    '4~>f', '5~>f', '6~>f merge',
+    '7~>g', '8~>g', '9~>g merge',
+    'a~>h', 'b~>h', 'c~>h merge',
+    'e~>j merge', 'f~>j merge', 'g~>j merge', 'h~>j merge'
+  ],
+ head: {
+   text: 'Tilt Frame Mechanics',
+ }
+}

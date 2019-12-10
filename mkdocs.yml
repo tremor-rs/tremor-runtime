@@ -22,6 +22,7 @@ nav:
   - 'Architecture Overview': overview.md
   - Tremor Query:
     - Overview: tremor-query/index.md
+    - Walkthrough: tremor-query/walkthrough.md
     - Aggregate Function Reference:
       - Overview: tremor-query/functions.md
       - stats: tremor-query/functions/stats.md
