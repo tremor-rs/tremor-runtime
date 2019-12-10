@@ -1,6 +1,6 @@
 # Operators
 
-Operators are part of the pipeline configuration. 
+Operators are part of the pipeline configuration.
 
 Operators process events and signals in the context of a pipeline. An operator, upon receiving an event from an upstream operator or stream, MAY produce one or many events to one or many downstream directly connected operators. An operator MAY drop events which halts any further processing.
 
@@ -16,7 +16,7 @@ pipeline:
     nodes:
       - id: <pipeline unique node id>
         op: <namespace>::<opertor>
-        config: 
+        config:
           <config key>: <config value>
 ```
 
@@ -105,7 +105,7 @@ The bucket operator generates additional metrics. For each class the following t
 
 This tells us the following, up until this measurement was published in the class `test`:
 
-* (`pass`) Passed 93 events 
+* (`pass`) Passed 93 events
 * (`overflow`) Marked 127 events as overflow due to not fitting in the limit
 
 ## generic::backpressure

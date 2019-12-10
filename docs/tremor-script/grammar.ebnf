@@ -10,7 +10,9 @@ Exprs ::=
 
 Expr ::= Expr 'or' AndExpr | AndExpr
 
-AndExpr ::= EqExpr 'and' EqExpr | EqExpr
+AndExpr ::= EqExpr 'and' EqExpr | BinExpr
+
+BinExpr ::= EqExpr ( '&&' | '||' ) EqExpr | EqExpr
 
 EqExpr ::= CmpExpr ( '==' | '!=' ) CmpExpr | CmpExpr
 
@@ -63,7 +65,7 @@ RecordPatternFields ::= ( Id '=' )? Id '~=' ( TestExpr | RecordPattern | ArrayPa
 TestExpr ::= Id TEST_LITERAL
 
 ArrayCase ::= ( Id '=' )? ArrayPattern
-ArrayPattern ::= '%[' ArrayPatternFilters '%]'
+ArrayPattern ::= '%[' ArrayPatternFilters ']'
 ArrayPatternFilters ::= ArrayPatternFilters ',' ArrayPatternFilter | ArrayPatternFilter
 ArrayPatternFilter ::= '~' TestExpr | Expr | RecordPattern
 
@@ -87,7 +89,7 @@ ForCaseClause ::= 'case' '(' Id ',' Id ')' Expr | 'case' '(' Id ',' Id ')' 'when
 FnCall ::= Id '::' Id '(' FnArgs ')' | Id '::' '(' ')'
 FnArgs ::= FnArgs ',' Expr | Expr
 
-Path ::= '$' QualifiedSegments | '$' | 'event' '.' QualifiedSegments | 'event' | Id LocalSegments
+Path ::= '$' QualifiedSegments | '$' | 'event' '.' QualifiedSegments | 'event' | 'args' '.' QualifiedSegments  | 'args' '[' ArraySegment ']'  | 'args'  | Id LocalSegments
 
 QualifiedSegments ::= QualifiedSegments '.' PathSegment
     | QualifiedSegments '[' ArraySegment ']'
