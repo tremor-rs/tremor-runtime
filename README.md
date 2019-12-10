@@ -1,12 +1,12 @@
 # Tremor ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Rust/badge.svg) ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Security%20audit/badge.svg)
 
-In short, tremor is a event processing system, it was originally designed as a replacement for software such as Logstash or Telegraf. However as of the time writing this, while this is still the case, tremor has outgrown this singular use case by supporting more complex workflows such as aggregatiosn, roolups, a ETL language and a query language. 
+In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language and a query language. 
 
 More about the [history](docs/history.md) and [architecture](docs/architecture.md) can be found in [the documentation](docs/index.md).
 
 ## Audience
 
-Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with Kafka, other message systems should be easily pluggable.
+Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
 
 ## Use Cases
 
