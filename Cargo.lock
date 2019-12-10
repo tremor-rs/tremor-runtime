@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "actix-web-actors"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1405,7 +1405,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "google-pubsub1"
-version = "1.0.10+20190625"
+version = "1.0.12+20190625"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "hyper 0.10.16 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "google-storage1"
-version = "1.0.11+20190624"
+version = "1.0.12+20190624"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "hyper 0.10.16 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3853,7 +3853,7 @@ dependencies = [
  "actix-codec 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-router 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "actix-web-actors 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web-actors 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "awc 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3865,8 +3865,8 @@ dependencies = [
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "google-pubsub1 1.0.10+20190625 (registry+https://github.com/rust-lang/crates.io-index)",
- "google-storage1 1.0.11+20190624 (registry+https://github.com/rust-lang/crates.io-index)",
+ "google-pubsub1 1.0.12+20190625 (registry+https://github.com/rust-lang/crates.io-index)",
+ "google-storage1 1.0.12+20190624 (registry+https://github.com/rust-lang/crates.io-index)",
  "grok 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "halfbrown 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "hashbrown 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4428,7 +4428,7 @@ dependencies = [
 "checksum actix-threadpool 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6b5ae85d13da7e6fb86b1b7bc83185e0e3bd4cc5f421c887e1803796c034d35d"
 "checksum actix-utils 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)" = "908c3109948f5c37a8b57fd343a37dcad5bb1d90bfd06300ac96b17bbe017b95"
 "checksum actix-web 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)" = "af3a1b967cdbacb903c4b9ae71257a7f098d881b25eb483d0c468b7dac579b03"
-"checksum actix-web-actors 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "e10aa864e841618a5c03b4d1aa1716ee3f149dea2745e5fce1e4f1f844935f64"
+"checksum actix-web-actors 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "42ebee30be1864aa8dfccea853468516ae4c82303c73df96563728284e246f3b"
 "checksum actix-web-codegen 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "068a33520e21c1eea89726be4d6b3ce2e6b81046904367e1677287695a043abb"
 "checksum actix_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0bf5f6d7bf2d220ae8b4a7ae02a572bb35b7c4806b24049af905ab8110de156c"
 "checksum adler32 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "5d2e7343e7fc9de883d1b0341e0b13970f764c14101234857d2ddafa1cb1cac2"
@@ -4555,8 +4555,8 @@ dependencies = [
 "checksum getrandom 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "e7db7ca94ed4cd01190ceee0d8a8052f08a247aa1b469a7f68c6a3b71afcf407"
 "checksum glob 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)" = "8be18de09a56b60ed0edf84bc9df007e30040691af7acd1c41874faac5895bfb"
 "checksum glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
-"checksum google-pubsub1 1.0.10+20190625 (registry+https://github.com/rust-lang/crates.io-index)" = "75d7b4cc13e766a4978548fc3bb860c070fd5ae1a72a77f8b786b92d566c3f6e"
-"checksum google-storage1 1.0.11+20190624 (registry+https://github.com/rust-lang/crates.io-index)" = "385b675439fd6c9e1602bf1e17773fc58907939f00f9d273e9e0b1b5892a1cf3"
+"checksum google-pubsub1 1.0.12+20190625 (registry+https://github.com/rust-lang/crates.io-index)" = "b7295fe729c3d8d7ec13974c1d07b6c0640f67ca647d3c03ed41faca44a22ffc"
+"checksum google-storage1 1.0.12+20190624 (registry+https://github.com/rust-lang/crates.io-index)" = "066c44ec4fdf5d4a4aaf7a09aec3dc2e23bb203e762b15a052941f9fffc06edb"
 "checksum grok 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "90fb44bc58a4498cb307425b787531381c41b455119033af8f541370362d6c0e"
 "checksum h2 0.1.26 (registry+https://github.com/rust-lang/crates.io-index)" = "a5b34c246847f938a410a03c5458c7fee2274436675e76d8b903c08efc29c462"
 "checksum halfbrown 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)" = "f28ee31ba5bb3a3251606db26de2e807552c5f295429d03f756bdc4e00f54c7a"
