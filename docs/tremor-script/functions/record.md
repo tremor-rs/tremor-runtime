@@ -2,6 +2,8 @@
 
 The `record` module contains functions to work with records.
 
+## Functions
+
 ### record::len(record) -> bool
 
 Returns the length of an record (number of key value pairs).
@@ -18,7 +20,7 @@ Returns if an record contains a given key.
 
 Returns an array of record keys.
 
-```rust
+```tremor
 record::keys({"a": 1, "b": 2}) == ["a", "b"]
 ```
 
@@ -26,7 +28,7 @@ record::keys({"a": 1, "b": 2}) == ["a", "b"]
 
 Returns an array of record values.
 
-```rust
+```tremor
 record::values({"a": 1, "b": 2}) == [1, 2]
 ```
 
@@ -34,7 +36,7 @@ record::values({"a": 1, "b": 2}) == [1, 2]
 
 Turns the `record` into an array of key value pairs.
 
-```rust
+```tremor
 record::to_array({"a": 1, "b": 2}) == [["a", 1], ["b", 2]]
 ```
 
@@ -44,7 +46,7 @@ Turns an `array` of key value pairs into an record.
 
 Note: `array`'s elements need to be arrays of two elements with the first element being a string.
 
-```rust
+```tremor
 record::from_array([["a", 1], ["b", 2]]) == {"a": 1, "b": 2}
 ```
 
@@ -52,7 +54,7 @@ record::from_array([["a", 1], ["b", 2]]) == {"a": 1, "b": 2}
 
 'Selects' a given set of field from an `record`, removing all others.
 
-```rust
+```tremor
 record::select({"a": 1, "b": 2, "c": 3}, ["a", "c"]) == {"a": 1, "c": 3}
 ```
 
@@ -60,7 +62,7 @@ record::select({"a": 1, "b": 2, "c": 3}, ["a", "c"]) == {"a": 1, "c": 3}
 
 Merges the two records `left` and `right` overwriting existing values in `left` with those provided in `right`
 
-```rust
+```tremor
 record::merge({"a": 1, "b": 2, "c": 4}, {"c": 3, "d": 4}) == {"a": 1, "b": 2, "c": 3, "d": 4}
 ```
 
@@ -68,6 +70,6 @@ record::merge({"a": 1, "b": 2, "c": 4}, {"c": 3, "d": 4}) == {"a": 1, "b": 2, "c
 
 Renames the keys in the record  `target` based on the key value pairs in the record `changes` where the `key` is the current name and the `value` is the new name.
 
-```rust
+```tremor
 record::rename({"a": 1, "b": 2, "c": 4}, {"a": "A", "b": "B"}) == {"A": 1, "B": 2, "c": 4}
 ```

@@ -1,3 +1,7 @@
+# match to functional
+
+A useful step by step followup on transforming match style to functional style.
+
 ```rust
 pub fn get_servant(
     (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),

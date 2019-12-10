@@ -15,9 +15,10 @@ The query language interpreter constructs a directed-acyclic-graph or __DAG__ by
 ### Safety
 
 The language is explicitly not Turing-complete:
- - there are no unstructured `goto` grammar forms
- - there are no unbounded `for`, `while` or `do..while` looping constructs
- - the language is built on top of rust, inheriting its robustness and safety features, without the development overheads
+
+* there are no unstructured `goto` grammar forms
+* there are no unbounded `for`, `while` or `do..while` looping constructs
+* the language is built on top of rust, inheriting its robustness and safety features, without the development overheads
 
 ### Developer friendly
 
@@ -45,7 +46,6 @@ The SQL-based nature of `tremor-query` means that complex branching, combining o
 
 The expression-based expression language derived from `tremor-script` allows computational forms to be extended.
 
-
 The language core is designed for reuse - currently the expression language is reused in the query langauge, as are the library of functions available to both. The addition of aggregate functions is currently exclusive to tremor-query as these are only relevant when processing multiple in-flight ( or cached ) events at the same time.
 
 In the future, `tremor-query` may be retargeted as a JIT-compiled language and other domain specific languages may be integrated as the tremor runtime evolves to meet new uses, demands, and stake-holders.
@@ -66,12 +66,10 @@ The tool-chain inherits most of its core capabilities from the `tremor-script` a
 
 This section details the major components of the `tremor-query` language.
 
-
 ### Tremor-Script
 
 Comments, Literals, Paths and Expression forms supported in __trickle__ are the
 same as in `tremor-script`.
-
 
 ### Queries
 
@@ -80,11 +78,12 @@ Queries are one or many statements separated by `;`
 Queries are compiled into a DAG of operator nodes and validated at compile time. At runtime, the resulting executable tremor pipeline is evaluated/interpreted.
 
 Query grammar:
-![](grammar/diagram/query.png)
+> ![query grammar](grammar/diagram/query.png)
 
 ### Statements
 
 Statements can be one of:
+
 * Stream definitions
 * Window definitions
 * Custom Operator definitions
@@ -96,7 +95,7 @@ Statements can be one of:
 Stream definitions in `tremor-query` allow private intermediate streams to be named so that they can be used as the source or sinks in other continuous queries.
 
 Stream definition grammar:
-![](grammar/diagram/CreateStreamDefn.png)
+> ![create stream grammar](grammar/diagram/CreateStreamDefn.png)
 
 ```trickle
 create stream passthrough;
@@ -108,15 +107,13 @@ select event from passthrough into out; # select passthrough into default public
 
 Window definitions in `tremor-query` can be either tumbling or sliding.
 
-A tumbling window is a window configued with a fixed non-overlapping period of time. The aggregates events once opened, and continues aggregating until it closes. The window can emit synthetic events upon closing. The window
-reopens for its next cycle when it closes.
+A tumbling window is a window configued with a fixed non-overlapping period of time. The aggregates events once opened, and continues aggregating until it closes. The window can emit synthetic events upon closing. The window reopens for its next cycle when it closes.
 
 Window definition grammar:
-![](grammar/diagram/DefineWindowDefn.png)
-
-![](grammar/diagram/WithParams.png)
-![](grammar/diagram/WithPartialParams.png)
-![](grammar/diagram/EmbeddedScript.png)
+> ![window definition grammar](grammar/diagram/DefineWindowDefn.png)
+> ![with params grammar](grammar/diagram/WithParams.png)
+> ![with partial paraqms grammar](grammar/diagram/WithPartialParams.png)
+> ![embedded script grammar](grammar/diagram/EmbeddedScript.png)
 
 For example a 15 second tumbling window can be defined as follows
 
@@ -129,16 +126,15 @@ end;
 
 #### Customer Operator definitions
 
-Custom operators allow legacy operators written before the query language was designed to be used with the query language. As the query langauge and legacy yaml format share the same DAG model and pipeline formats, they are
-interoperable at runtime and are backwards compatible:
+Custom operators allow legacy operators written before the query language was designed to be used with the query language. As the query langauge and legacy yaml format share the same DAG model and pipeline formats, they are interoperable at runtime and are backwards compatible:
 
 Operator definition grammar:
-![](grammar/diagram/DefineOperatorDefn.png)
-![](grammar/diagram/WithParams.png)
+> ![operator definition grammar](grammar/diagram/DefineOperatorDefn.png)
+> ![with params grammar](grammar/diagram/WithParams.png)
 
 Creating an operator:
-![](grammar/diagram/CreateOperatorDefn.png)
-![](grammar/diagram/WithParams.png)
+> ![create operator grammar](grammar/diagram/CreateOperatorDefn.png)
+> ![with params grammar](grammar/diagram/WithParams.png)
 
 ```trickle
 # create a bucketing operator
@@ -157,13 +153,13 @@ select event from kfc into out;
 The tremor-script language can be embedded in the query language natively and this mirrors legacy usage where it was embedded within yaml-based pipeline configuration. However, the tooling that ships with `tremor-query` understands both the query language and scripting language dialects with better syntax highlighting and error checking built in for ease of operator productivity over the legacy yaml syntax.
 
 Script definition grammar:
-![](grammar/diagram/DefineScriptDefn.png)
-![](grammar/diagram/WithPartialParams.png)
-![](grammar/diagram/EmbeddedScript.png)
+> ![script definition grammar](grammar/diagram/DefineScriptDefn.png)
+> ![with partial params grammar](grammar/diagram/WithPartialParams.png)
+> ![embeded script grammar](grammar/diagram/EmbeddedScript.png)
 
 Script an operator:
-![](grammar/diagram/CreateScriptDefn.png)
-![](grammar/diagram/WithParams.png)
+> ![create script grammar](grammar/diagram/CreateScriptDefn.png)
+> ![with params grammar](grammar/diagram/WithParams.png)
 
 ```trickle
 define grouper::bucket operator kfc;
@@ -194,15 +190,15 @@ The select query is a builtin operation that is the workhorse of the tremor-quer
 
 The select operation is of the general form:
 
-![](grammar/diagram/SelectStmt.png)
-![](grammar/diagram/FromClause.png)
-![](grammar/diagram/WhereClause.png)
-![](grammar/diagram/GroupByClause.png)
-![](grammar/diagram/IntoClause.png)
-![](grammar/diagram/HavingClause.png)
-![](grammar/diagram/GroupByDimension.png)
-![](grammar/diagram/SetBasedGroup.png)
-![](grammar/diagram/EachBasedGroup.png)
+> ![select grammar](grammar/diagram/SelectStmt.png)
+> ![from grammar](grammar/diagram/FromClause.png)
+> ![where grammar](grammar/diagram/WhereClause.png)
+> ![group by grammar](grammar/diagram/GroupByClause.png)
+> ![group by dimensions grammar](grammar/diagram/GroupByDimension.png)
+> ![set group grammar](grammar/diagram/SetBasedGroup.png)
+> ![each group grammar](grammar/diagram/EachBasedGroup.png)
+> ![into grammar](grammar/diagram/IntoClause.png)
+> ![having grammar](grammar/diagram/HavingClause.png)
 
 A example select operation configured to pass through data from a pipelines default `in` stream to a pipelines default `out` stream:
 

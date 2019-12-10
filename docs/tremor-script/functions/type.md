@@ -2,6 +2,8 @@
 
 The type module contains functions that help inspecting types of values.
 
+## Functions
+
 ### type::as_string(value)
 
 Returns a string representation for the value type:

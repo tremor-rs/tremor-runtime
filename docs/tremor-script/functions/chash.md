@@ -2,6 +2,8 @@
 
 The `chash` module contains functions for consistent hashing of values. This can be used to achieve consistent routing over multiple outputs.
 
+## Functions
+
 ### chash::jump(key, _slot_count) -> int
 
 Hashes an input `key` (string) and determine its placement in a slot list.
@@ -20,13 +22,9 @@ let hosts = ["host1", "host2", "host3", "host4", "host5"];
 }
 ```
 
-
-
 ### chash::jump_with_keys(k1, k2, key, _slot_count) -> int
 
 The same as `chash::jump` but uses the integers `k1` and  `k2` to initialise the hashing instead of using default values.
-
-
 
 ### chash::sorted_serialize(any) -> string
 

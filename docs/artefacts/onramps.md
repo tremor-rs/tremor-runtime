@@ -20,7 +20,7 @@ onramp:
       <key>: <value>
 ```
 
-The [`codec`](../codecs) field is optional and if not provided will use Onramps default codec.
+The [`codec`](codecs.md) field is optional and if not provided will use Onramps default codec.
 
 The `config` contains a map (key-value pairs) specific to the onramp type.
 
@@ -30,7 +30,7 @@ The `config` contains a map (key-value pairs) specific to the onramp type.
 
 The Kafka onramp connects to one or more Kafka topics. It uses librdkafka to handle connections and can use the full set of [librdkaka configuration options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -84,7 +84,7 @@ onramp:
 
 The file onramp reads the content of a file, line by line. And sends each line as an event. It has the ability to shut down the system upon completion. Files can be `xz` compressed.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -105,7 +105,7 @@ onramp:
 
 This sends a periodic tick downstream. It is an excellent tool to generate some test traffic to validate pipelines.
 
-The default [codec](../codecs) is `pass`. (since we already output decoded JSON)
+The default [codec](codecs.md#pass) is `pass`. (since we already output decoded JSON)
 
 Supported configuration options are:
 
@@ -163,7 +163,7 @@ NOTE: This onramp is for benchmarking use, it should not be deployed in a live p
 
 The blaster onramp is built for performance testing, but it can be used for spaced out replays of events as well. Files to replay can be `xz` compressed. It will keep looping over the file.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -189,7 +189,7 @@ This listens on a specified port for inbound tcp data.
 The onramp can leverage preprocessors to segment data before codecs are applied and events are forwarded
 to pipelines.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 

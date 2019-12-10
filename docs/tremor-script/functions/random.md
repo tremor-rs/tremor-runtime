@@ -6,6 +6,8 @@ The generated values are uniformly distributed over the specified type (and rang
 
 The random number generator under the hood is seeded based on tremor's event ingestion time and thus the output here is deterministic. Should we choose to replay a tremor data dump (something to be added in future tremor versions), we will always get the same value for an event.
 
+## Functions
+
 ### random::bool() -> bool
 
 Generates a random boolean.
@@ -13,7 +15,6 @@ Generates a random boolean.
 ```tremor
 random::bool() # either true or false
 ```
-
 
 ### random::string(length) -> string
 
@@ -23,7 +24,6 @@ Generates a random string of given `length` with ASCII letters and numbers: a-z,
 random::string(16) # 16 alphanumeric characters. eg: "QuSFjpW8PBNewRml"
 random::string(0)  # ""
 ```
-
 
 ### random::integer([a][, b]) -> int
 
@@ -56,7 +56,6 @@ Generates a random [integer](../index.md#integer-numerics).
 ```tremor
 random::integer() # an integer
 ```
-
 
 ### random::float([a][, b]) -> float
 

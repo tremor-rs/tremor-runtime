@@ -22,8 +22,7 @@ Prefixes the data with a network byte order (big endian) lenght of the data in b
 
 Compresses event data.
 
-Unlike decompression processors, the compression algorithm must be selected. The following
-compression post-processors are supported. Each format can be configured as a postprocessor.
+Unlike decompression processors, the compression algorithm must be selected. The following compression post-processors are supported. Each format can be configured as a postprocessor.
 
 Supported formats:
 
@@ -32,4 +31,3 @@ Supported formats:
 * xz        - Xz2 level 9 compression
 * snappy    - Snappy compression
 * lz4       - Lz level 4 compression
-

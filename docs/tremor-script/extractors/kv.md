@@ -1,10 +1,8 @@
 # KV
 
- Parses a string into a map. It is possible to split based on different characters that represent
- either field or key value boundaries.
+ Parses a string into a map. It is possible to split based on different characters that represent  either field or key value boundaries.
 
- A good part of the logstash functionality will be handled ouYeside of this function and in a
- generic way in tremor script.
+ A good part of the logstash functionality will be handled ouYeside of this function and in a  generic way in tremor script.
 
 ## Predicate
 
@@ -42,8 +40,6 @@ If the predicate passes, it converts the target into its equivalent map.
 | value_split_pattern    |             No              |
 | whitespace             |     (via tremor script)     |
 
-
-
 To specify a value separator (the separator used between key and value) use the pattern form `kv|%{key}=%{val}|`. Both `%{key}` and `%{val}` are fixed keywords and can not be substituted for other names. The pattern `kv|%{key}=%{val}|` would lead to `=` being the separator. Multiple of those pairs can be given to use multiple separators.
 
 To specify field separators they need to be either before or after a value separator or on their own. `kv|&|` would separate the fields by `&`.
@@ -52,13 +48,9 @@ Both field and value separators can be related without harm.
 
 Field and value separators can not overlap, even partially.
 
-
-
 Complex patterns can be given by using multiple key value pairs with different separators, their order does not matter and they will not be required to be present.
 
-
-
-**Example**:
+## Example
 
 All of the following are equivalent:
 
@@ -77,14 +69,14 @@ end;
 
 This will output:
 
-```bash
-  "test": {
-	 "foo": "bar",
-     "snot": "badger"
-  }
+```json
+"test": {
+  "foo": "bar",
+  "snot": "badger"
+}
 ```
 
-**Example 2**:
+## Example 2
 
 Match query parameters
 
@@ -93,7 +85,4 @@ match event of
   case cake = %{test ~= kv|%{key}=%{val}&|} => cake
   default => "ko"
 end;
-
-  
 ```
-

@@ -11,9 +11,10 @@ A well-formed JSON document is a legal tremor-script expression.
 ### Safety
 
 The language is explicitly not Turing-complete:
- - there are no unstructured `goto` grammar forms
- - there are no unbounded `for`, `while` or `do..while` looping constructs
- - the language is built on top of rust, inheriting its robustness and safety features, without the development overheads
+
+* there are no unstructured `goto` grammar forms
+* there are no unbounded `for`, `while` or `do..while` looping constructs
+* the language is built on top of rust, inheriting its robustness and safety features, without the development overheads
 
 ### Developer friendly
 
@@ -112,8 +113,8 @@ The language does not support literal character or Unicode code-points at this t
 
 ##### String Interpolation
 
-For strings tremor allows string polation, this means embedding code directly into strings to create strings out of them. This
-is a convinience as an alternative of using the string::format function. 
+For strings tremor allows string polation, this means embedding code directly into strings to create strings out of them. This is a convinience as an alternative of using the string::format function.
+
 ```tremor
 "I am a { "string with {1} interpolation." }"
 ```
@@ -139,7 +140,7 @@ The above **heredoc** would truncate 3 spaces characters since `...a` has 3 spac
 #### Arrays
 
 Array grammar:
-> ![](grammar/diagram/Array.png)
+> ![array grammar](grammar/diagram/Array.png)
 
 Array literals in `tremor-script` are a comma-delimited set of expressions bracketed by the square brakcets '[' and ']'.
 
@@ -150,11 +151,10 @@ Array literals in `tremor-script` are a comma-delimited set of expressions brack
 #### Records
 
 Record grammar:
-> ![](grammar/diagram/Record.png)
-
+> ![record grammar](grammar/diagram/Record.png)
 
 Field grammar:
-> ![](grammar/diagram/Field.png)
+> ![field grammar](grammar/diagram/Field.png)
 
 Record literals in `tremor-script` are syntactically equivalent to JSON document objects
 
@@ -169,18 +169,18 @@ Record literals in `tremor-script` are syntactically equivalent to JSON document
 ### Paths
 
 Path grammar:
-> ![](grammar/diagram/Path.png)
+> ![path grammar](grammar/diagram/Path.png)
 
 Qualified Segments grammar:
-> ![](grammar/diagram/QualifiedSegments.png)
+> ![qualified segment grammar](grammar/diagram/QualifiedSegments.png)
 
 PathSegment grammar:
-> ![](grammar/diagram/PathSegment.png)
+> ![segment grammar](grammar/diagram/PathSegment.png)
 
 ArraySegment grammar:
-> ![](grammar/diagram/ArraySegment.png)
+> ![array grammar](grammar/diagram/ArraySegment.png)
 
-Path-like structures in `tremor-script` allow a subset of an ingested event, meta-data passed to the tremor-script function and script-local data to be indexed. 
+Path-like structures in `tremor-script` allow a subset of an ingested event, meta-data passed to the tremor-script function and script-local data to be indexed.
 
 Example event for illustration purposes:
 
@@ -220,7 +220,7 @@ Example event for illustration purposes:
 
 Grab the entire event document:
 
-```
+```tremor
 let capture = event;
 ```
 
@@ -259,14 +259,14 @@ Path's in `tremor-script` are themselves expressions in their own right.
 
 Const grammer:
 
-![](grammar/diagram/Const.png)
+![const grammar](grammar/diagram/Const.png)
 
 Const can be used to define immutable, constant values that get evaluated at compile time. This is more performant then `let` as all logic can happen at compile time and is helpful for setting up lookup tables or other never changing data structures.
 
 ### Let
 
 Let grammar:
-> ![](grammar/diagram/Let.png)
+> ![let grammar](grammar/diagram/Let.png)
 
 The let expression allows data pointed to by a path to be destructively mutated, and the pointed-to value reassigned. If the path does not yet exist, it will be created in-situ:
 
@@ -291,7 +291,7 @@ let $a = a;
 ### Drop
 
 Drop grammar:
-> ![](grammar/diagram/Drop.png)
+> ![drop grammar](grammar/diagram/Drop.png)
 
 Drop expressions enable short-circuiting the execution of a `tremor-script` when badly formed data is discovered. If no argument is supplied, `drop` will return the event record. If an argument is supplied, the result of evaluating the expression will be returned. Tremor or other processing tools can process dropped events or data using purpose-built error-handling.
 
@@ -305,7 +305,7 @@ drop; # As the first emit always wins, this expression never executes
 ### Emit
 
 Emit grammar:
-> ![](grammar/diagram/Emit.png)
+> ![emit grammar](grammar/diagram/Emit.png)
 
 Emit expressions enable short-circuiting the execution of a `tremor-script` when processing is known to be complete and further processing can be avoided. If no argument is supplied, emit` will return the event record. If an argument is supplied, the result of evaluating the expression will be returned. Tremor or other processing tools can process emitted events or data using their default flow-based or stream-based data processing pipelines.
 
@@ -331,7 +331,7 @@ emit "oh noes!"
 emit "never happens"; # As the first emit always wins, this expression never executes
 ```
 
-There are times when it is necessary to emit synthetic events from `tremor-script` within a tremor` `pipeline` to an alternate `operator` port than the default success route. For example, when data is well-formed but not valid and the data needs to be __diverted__ into an alternate flow. The emit clause can be deployed for this purpose by specifying an optional named port.
+There are times when it is necessary to emit synthetic events from `tremor-script` within a tremor `pipeline` to an alternate `operator` port than the default success route. For example, when data is well-formed but not valid and the data needs to be __diverted__ into an alternate flow. The emit clause can be deployed for this purpose by specifying an optional named port.
 
 ```tremor
 emit {
@@ -345,10 +345,10 @@ emit {
 ### Match
 
 Match grammar:
-> ![](grammar/diagram/Match.png)
+> ![match grammar](grammar/diagram/Match.png)
 
 Match case grammar:
-> ![](grammar/diagram/MatchCaseClause.png)
+> ![case grammar](grammar/diagram/MatchCaseClause.png)
 
 Match expressions enable data to be filtered or queried using case-based reasoning. Match expressions take the form:
 
@@ -361,10 +361,11 @@ end
 ```
 
 Where:
-- target: An expression that is the target of case-based queries
-- case-expr: A predicate test, literal  value or pattern to match against
-- guard: An optional predicate expression to gate whether or not an otherwise matching case-clause will in fact match
-- block: The expression to be evaluated if the case matches, and any supplied guard evaluates to true
+
+* target: An expression that is the target of case-based queries
+* case-expr: A predicate test, literal  value or pattern to match against
+* guard: An optional predicate expression to gate whether or not an otherwise matching case-clause will in fact match
+* block: The expression to be evaluated if the case matches, and any supplied guard evaluates to true
 
 Examples:
 
@@ -390,7 +391,7 @@ emit found;
 
 #### Matching literal expressions
 
-> ![](grammar/diagram/ExprCase.png)
+> ![expression grammar](grammar/diagram/ExprCase.png)
 
 The simplest form of case expression in match expressions is matching a literal value. Values can be any legal tremor-script type and they can be provided as literals, computed values or path references to local variables, metadata or values arriving via events.
 
@@ -452,15 +453,13 @@ end;
 
 #### Matching array patterns
 
-> ![](grammar/diagram/ArrayCase.png)
+> ![array case grammar](grammar/diagram/ArrayCase.png)
 
 Array Pattern grammar:
-
-> ![](grammar/diagram/ArrayPattern.png)
+> ![array pattern grammar](grammar/diagram/ArrayPattern.png)
 
 Array Pattern filter grammar:
-
-> ![](grammar/diagram/ArrayPatternFilter.png)
+> ![array filter grammar](grammar/diagram/ArrayPatternFilter.png)
 
 In addition to literal array matching, where the case expression array literal must exactly match the target of the match expression, array patterns enable testing for matching elements within an array and filtering on the basis of matched elements.
 
@@ -484,15 +483,13 @@ end;
 
 #### Matching record patterns
 
-> ![](grammar/diagram/RecordCase.png)
+> ![record case grammar](grammar/diagram/RecordCase.png)
 
 Record Pattern grammar
-
-> ![](grammar/diagram/RecordPattern.png)
+> ![record pattern grammar](grammar/diagram/RecordPattern.png)
 
 Record Pattern Fields grammar
-
-> ![](grammar/diagram/RecordPatternFields.png)
+> ![record pattern field grammar](grammar/diagram/RecordPatternFields.png)
 
 Similarly to record literal matching where the case expression record must exactly match the target of the match expression, record patterns enable testing for matching fields or sub-structures within a record and extracting and elementizing data on the basis of matched predicate tests ( via `~=` ).
 
@@ -545,7 +542,7 @@ end;
 
 #### Guard clauses
 
-> ![](grammar/diagram/Guard.png)
+> ![guard clause grammar](grammar/diagram/Guard.png)
 
 Guard expressions in Match case clauses enable matching data structures to be further filtered based on predicate expressions. For example they can be used to restrict the match to a subset of matching cases where appropriate.
 
@@ -558,15 +555,13 @@ end
 
 ### Merge
 
-> ![](grammar/diagram/Merge.png)
+> ![merge grammar](grammar/diagram/Merge.png)
 
 Merge expressions defines a difference against a targetted record and applies that difference to produce a result record. Merge operations in `tremor-script` follow merge-semantics defined in [RFC 7386](https://tools.ietf.org/html/rfc7386).
 
 ```tremor
 let event = merge event of {"some": "record"} end
 ```
-
-
 
 |Given|Merge|Result|Explanation|
 |---|---|---|---|
@@ -576,14 +571,12 @@ let event = merge event of {"some": "record"} end
 |`{"a":"b","b":"c"}`|`{"a":null}`|`{"b":"c"}`|Erase field 'a'|
 |`{"a": [{"b":"c"}]}`|`{"a": [1]}`|`{"a": [1]}`|Replace field 'a' with literal array|
 
-
 ### Patch
 
-> ![](grammar/diagram/Patch.png)
+> ![patch grammar](grammar/diagram/Patch.png)
 
 Patch operation grammar
-
-> ![](grammar/diagram/PatchOperation.png)
+> ![patch operation grammar](grammar/diagram/PatchOperation.png)
 
 Patch expressions define a set of record level field operations to be applied to a target record in order to transform a targetted record. Patch allows fields to be: inserted where there was no field before; removed where there was a field before; updated where there was a field before; or inserted or updated regardless of whether or not there was a field before. Patch also allows field level merge operations on records or for the targetted document itself to be merged. Merge operations in patch are syntax sugar in that they are both based on the merge operation.
 
@@ -597,11 +590,10 @@ Patch follows the semantics of [RFC 6902](https://tools.ietf.org/html/rfc6902) w
 
 ### For comprehensions
 
-> ![](grammar/diagram/For.png)
+> ![for grammar](grammar/diagram/For.png)
 
 For Case Clause grammar
-
-> ![](grammar/diagram/ForCaseClause.png)
+> ![for case clause grammar](grammar/diagram/ForCaseClause.png)
 
 For expressions are case-based record or array comprehensions that can iterate over index/element or key/value pairs in record or array literals respectively.
 
@@ -619,21 +611,20 @@ end
 
 ## Extractors
 
-> ![](grammar/diagram/TestExpr.png)
+> ![test expression grammar](grammar/diagram/TestExpr.png)
+> ![test literal grammar](grammar/diagram/TEST_LITERAL.png)
+> ![test literal escape grammar](grammar/diagram/TEST_ESCAPE.png)
 
-> ![](grammar/diagram/TEST_LITERAL.png)
-
-> ![](grammar/diagram/TEST_ESCAPE.png)
-
-The language has pluggable support for a number of microformats with two basic modes of operation that enable predicate tests ( does a particular value match the expected micro-format ) and elementization ( if a value does match a specific micro-format, then extract and elementize accordingly.
+The language has pluggable support for a number of microformats with two basic modes of operation that enable predicate tests ( does a particular value match the expected micro-format ) and elementization ( if a value does match a specific micro-format, then extract and elementize accordingly ).
 
 The general form of a supported micro-format is as follows:
 
-```
+```text
 <name>|<format>|
 ```
 
 Where:
+
 * name - The key for the micro-format being used for testing or extraction
 * format - An optional multi-line micro-format specific format encoding used for testing and extraction
 

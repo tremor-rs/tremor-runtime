@@ -1,8 +1,6 @@
-## Periodic Synthetic Metrics Events
+# Periodic Synthetic Metrics Events
 
-Periodically, produce basic statistics and percentiles / quartiles from a
-stream of ingested events, for a particular value in the inbound event
-stream.
+Periodically, produce basic statistics and percentiles / quartiles from a stream of ingested events, for a particular value in the inbound event stream.
 
 ```trickle
 # Every 10 seconds
@@ -47,4 +45,3 @@ select {
 from normalize
 into out;
 ```
-

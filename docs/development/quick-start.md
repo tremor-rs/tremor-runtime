@@ -1,8 +1,6 @@
+# Quick Start Guide
 
-
-# Quick Start Guide 
-
-This page explains how to get tremor running on a local system for development or testing. There are 2 ways of installing tremor: 
+This page explains how to get tremor running on a local system for development or testing. There are 2 ways of installing tremor:
 
 1) Installing tremor on the system without docker
 2) Using docker
@@ -11,7 +9,7 @@ This page explains how to get tremor running on a local system for development o
 
 ### Install Rust
 
-Tremor can be run on any platform without using docker by installing the rust ecosystem. To install the rust ecosystem you can use `rustup` which is a toolchain installer. 
+Tremor can be run on any platform without using docker by installing the rust ecosystem. To install the rust ecosystem you can use `rustup` which is a toolchain installer.
 
 To install rustup, you run the following command on *nix systems and follow the on-screen instructions:
 
@@ -21,13 +19,11 @@ curl https://sh.rustup.rs -sSf | sh
 
 For Windows (64-bit) you can download the rustup installer by clicking [here](https://win.rustup.rs/x86_64)
 
-Rustup will install all the necessary tools required for rust which includes the compiler and cargo which is the package management tool for rust. 
+Rustup will install all the necessary tools required for rust which includes the compiler and cargo which is the package management tool for rust.
 
-Tremor is built using the latest stable toolchain, so when asked to select the toolchain during installation, select stable. 
+Tremor is built using the latest stable toolchain, so when asked to select the toolchain during installation, select stable.
 
 Now activate it by adding `source $HOME/.cargo/env` to your `.rc file` and open a new console.
-
-
 
 ### Install XCode
 
@@ -44,18 +40,19 @@ brew install bison #make sure to follow the printed instructions!
 
 ### Running Tremor
 
-After installing rust and cloning the repository from `git.csnzoo.com`, you can start tremor server by changing to `tremor-server` directory in tremor and running: 
+After installing rust and cloning the repository from `git.csnzoo.com`, you can start tremor server by changing to `tremor-server` directory in tremor and running:
 
 ```bash
-cargo run 
+cargo run
 ```
 
-To run the test suite, in the root (`tremor-runtime`) directory you can run : 
+To run the test suite, in the root (`tremor-runtime`) directory you can run:
+
 ```bash
 cargo test
 ```
 
-this will run all the tests in the suite, except those which are feature-gated and not needed to quickly test tremor. 
+this will run all the tests in the suite, except those which are feature-gated and not needed to quickly test tremor.
 
 ### Additional Rust libraries
 
@@ -83,7 +80,7 @@ cargo fmt
 
 #### Clippy
 
-`Clippy` is a linting tool that catches common mistakes and improves the rust code. It is available as a toolchain component and can be installed by running: 
+`Clippy` is a linting tool that catches common mistakes and improves the rust code. It is available as a toolchain component and can be installed by running:
 
 ```bash
 rustup component add clippy
@@ -109,15 +106,15 @@ To run it, you can run:
 cargo fix
 ```
 
-####Tree
+#### Tree
 
-`Cargo tree` is a subcommand that visualizes a crate's dependency-graph and display a tree structure of them. To install it: 
+`Cargo tree` is a subcommand that visualizes a crate's dependency-graph and display a tree structure of them. To install it:
 
 ```bash
 cargo install cargo-tree
 ```
 
-To run it: 
+To run it:
 
 ```bash
 cargo tree
@@ -125,21 +122,19 @@ cargo tree
 
 #### Flamegraph
 
-`Flamegraph` is a profiling tool that visualises where time is spent in a program. It generates a SVG image based on the current location of the code and the function that were called to get there. 
+`Flamegraph` is a profiling tool that visualises where time is spent in a program. It generates a SVG image based on the current location of the code and the function that were called to get there.
 
-To install it: 
+To install it:
 
 ```bash
 cargo install cargo-flamegraph
 ```
 
-To run it: 
+To run it:
 
 ```bash
 cargo flamegraph
 ```
-
-
 
 ### Integration Tests
 
@@ -155,12 +150,14 @@ Tremor contains a `Dockerfile` which makes it easier to run and build using dock
 
 Make sure docker has at least 4GB of memory.
 
-To build tremor you can run: 
+To build tremor you can run:
+
 ```bash
 make image
 ```
 
 To run the images:
+
 ```bash
 make demo
 ```

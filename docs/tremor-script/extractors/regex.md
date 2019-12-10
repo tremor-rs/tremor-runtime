@@ -2,15 +2,15 @@
 
 The regex extractor extracts fields from data by parsing a regular expression provided by the user. It accepts a "perl-style regular expression"
 
-## Predicate:
+## Predicate
 
 When used with `~`, the predicate passes if a valid regular expression is passed.
 
-## Extraction:
+## Extraction
 
 If the predicate passes, the extractor returns the matched values from the target. Returns an error if the regex fails to match.
 
-## Example:
+## Example
 
 ```tremor
 drop match { "test": "http://example.com/", "footle": "bar" } of
@@ -23,9 +23,9 @@ The extractor is called by using the `~=` operator and specifying `re` as the ex
 
 The following syntax is supported:
 
-#### Matching one character:
+### Matching one character
 
-```
+```text
 .             any character except new line (includes new line with s flag)
 \d            digit (\p{Nd})
 \D            not digit
@@ -37,7 +37,7 @@ The following syntax is supported:
 
 ### Character classes
 
-```
+```text
 [xyz]         A character class matching either x, y or z (union).
 [^xyz]        A character class matching any character except x, y and z.
 [a-z]         A character class matching any character in range a-z.
@@ -62,14 +62,14 @@ Precedence in character classes, from most binding to least:
 
 #### Composites
 
-```
+```text
 xy    concatenation (x followed by y)
 x|y   alternation (x or y, prefer x)
 ```
 
 #### Repetitions
 
-```
+```text
 x*        zero or more of x (greedy)
 x+        one or more of x (greedy)
 x?        zero or one of x (greedy)
@@ -86,7 +86,7 @@ x{n}?     exactly n x
 
 #### Empty matches
 
-```
+```text
 ^     the beginning of text (or start-of-line with multi-line mode)
 $     the end of text (or end-of-line with multi-line mode)
 \A    only the beginning of text (even with multi-line mode enabled)
@@ -97,7 +97,7 @@ $     the end of text (or end-of-line with multi-line mode)
 
 #### Grouping and flags
 
-```
+```text
 (exp)          numbered capture group (indexed by opening parenthesis)
 (?P<name>exp)  named (also numbered) capture group (allowed chars: [_0-9a-zA-Z])
 (?:exp)        non-capturing group
@@ -109,7 +109,7 @@ Flags are each a single character. For example, `(?x)` sets the flag `x` and `(?
 
 All flags are by default disabled unless stated otherwise. They are:
 
-```
+```text
 i     case-insensitive: letters match both upper and lower case
 m     multi-line mode: ^ and $ match begin/end of line
 s     allow . to match \n

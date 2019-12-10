@@ -6,7 +6,7 @@ Tremor has been running in production since October 2018, processes 6 terabytes 
 
 Tremor runs 24x7 365 days per year and is implemented in the Rust programming language.
 
-Click for an [Architectural overview](./overview) or [Canned History](./history) of the project.
+Click for an [Architectural overview](./overview.md) or [Canned History](./history.md) of the project.
 
 ## Contact
 

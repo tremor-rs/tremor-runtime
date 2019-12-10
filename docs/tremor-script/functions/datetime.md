@@ -1,4 +1,4 @@
-## Datetime Namespace
+# The `datetime` Namespace
 
 The time namespace contains functions that provide easier retrieval, manipulation and conversion to or from timestamps.
 
@@ -6,6 +6,7 @@ The time namespace contains functions that provide easier retrieval, manipulatio
 * Timestamps have nanosecond precision
 * All timestamps are considered as UTC
 
+## Functions
 
 ### datetime::parse(datetime, input_format)
 
@@ -13,13 +14,13 @@ Creates a new timestamp from the datetime string passed to the function and the 
 
 The function errors if:
 
-- Incorrect input is passed
-- Input doesn't match the format passed
-- Input doesn't contain the Year, Month, Day, Hour & Minute section irrespective of the format passed.
-- Input contains more components than the format passed
+* Incorrect input is passed
+* Input doesn't match the format passed
+* Input doesn't contain the Year, Month, Day, Hour & Minute section irrespective of the format passed.
+* Input contains more components than the format passed
 
 ```tremor
-datetime::parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z") 
+datetime::parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z")
 ## output: 419083754274000000
 ```
 
@@ -36,7 +37,7 @@ datetime::format(event.syslog_timestamp, "%Y-%m-%d %H:%M:%S%.9f")
 
 Converts a timestamp to the format conforming to the iso8601 specification.
 
-* reference: <https://www.iso.org/obp/ui#iso:std:iso:8601:-1:ed-1:v1:en>
+Full ![reference](https://www.iso.org/obp/ui#iso:std:iso:8601:-1:ed-1:v1:en)
 
 ```tremor
 datetime::iso8601(event.syslog_timestamp)
@@ -45,7 +46,7 @@ datetime::iso8601(event.syslog_timestamp)
 
 ### datetime::year(datetime)
 
-Returns the year from a given timestamp. 
+Returns the year from a given timestamp.
 
 ```tremor
 datetime::year(1559655782000000000)
@@ -56,23 +57,23 @@ datetime::year(1559655782000000000)
 
 Returns the month from a given timestamp in a numerical format
 
-```
+```tremor
 datetime::month(1559655782000000000)
 ## output: 6
 ```
 
 ### datetime::day(datetime)
 
-Returns the day of the month from a given timestamp. 
+Returns the day of the month from a given timestamp.
 
-```
+```tremor
 datetime::day(1559655782000000000)
 ## output: 17
 ```
 
 ### datetime::hour(datetime)
 
-Returns the hour from a given timestamp. 
+Returns the hour from a given timestamp.
 
 ```tremor
 datetime::hour(1559655782000000000)
@@ -81,18 +82,18 @@ datetime::hour(1559655782000000000)
 
 ### datetime::minute(datetime)
 
-Returns the minute from a given timestamp. 
+Returns the minute from a given timestamp.
 
-```
+```tremor
 datetime::minute(1559655782000000000)
 ## output: 43
 ```
 
 ### datetime::second(datetime)
 
-Returns the second from a given timestamp. 
+Returns the second from a given timestamp.
 
-```
+```tremor
 datetime::second(1559655782000000000)
 ## output: 2
 ```
@@ -101,7 +102,7 @@ datetime::second(1559655782000000000)
 
 Returns the corresponding millisecond, microsecond or nanosecond component of the timestamp.
 
-```
+```tremor
 datetime::millisecond(1559655782123456789)
 ## output: 123
 datetime::microsecond(1559655782123456789)
@@ -109,8 +110,6 @@ datetime::microsecond(1559655782123456789)
 datetime::nanosecond(1559655782123456789)
 ## output: 789
 ```
-
-
 
 ### datetime::to_nearest_millisecond(datetime) / datetime::to_nearest_microsecond(datetime) / datetime::to_nearest_second()
 
@@ -125,11 +124,9 @@ datetime::to_nearest_nsecond(1559655782123456789)
 ## output: 1558655782000000000
 ```
 
-
-
 ### datetime::from_human_format(human_format_string)
 
-Returns a timestamp representing the interval specified in human format (e.g. "5 minutes", "10 hours"). Fails if an incorrect format is given. 
+Returns a timestamp representing the interval specified in human format (e.g. "5 minutes", "10 hours"). Fails if an incorrect format is given.
 
 ```tremor
 datetime::from_human_format("1 minute")
@@ -153,31 +150,31 @@ datetime::today()
 
 ### datetime::with_nanoseconds(n)
 
-Returns a timestamp representing an interval of _n_ nanoseconds
+Returns a timestamp representing an interval of `n` nanoseconds
 
 ### datetime::with_milliseconds(n)
 
-Returns a timestamp representing an interval of _n_ milliseconds
+Returns a timestamp representing an interval of `n` milliseconds
 
-### datetime::with_hours(n) 
+### datetime::with_hours(n)
 
-Returns a timestamp representing an interval of _n_ hours.
+Returns a timestamp representing an interval of `n` hours.
 
 ### datetime::with_days(n)
 
-Returns a timestamp representing an interval of _n_ days.
+Returns a timestamp representing an interval of `n` days.
 
 ### datetime::with_minutes(n)
 
-Returns a timestamp representing interval of _n_ minutes.
+Returns a timestamp representing interval of `n` minutes.
 
 ### datetime::with_seconds(n)
 
-Returns a timestamp representing an interval of _n_ seconds
+Returns a timestamp representing an interval of `n` seconds
 
 ### datetime::with_weeks(n)
 
-Returns a timestamp representing an interval of _n_ weeks
+Returns a timestamp representing an interval of `n` weeks
 
 ```tremor
 datetime::with_naoseconds(134)
@@ -198,23 +195,15 @@ datetime::with_years(10)
 315532800000000000
 ```
 
-
-
 ### datetime::without_subseconds()
 
-Returns the timestamp  subseconds component.
+Returns the timestamp subseconds component.
 
 ```tremor
 datetime::without_subseconds()
 ```
 
-
-
-## Input formats:
-
-The input format can contain any of the following tokens:
-
-## Input Formats:
+## Input Formats
 
 Input formats can contain the following tokens:
 
@@ -303,4 +292,3 @@ It is possible to override the default padding behavior of numeric specifiers `%
 | `%-?`    | Suppresses any padding including spaces and zeroes. (e.g. `%j` = `012`, `%-j` = `12`) |
 | `%_?`    | Uses spaces as a padding. (e.g. `%j` = `012`, `%_j` = `12`)  |
 | `%0?`    | Uses zeroes as a padding. (e.g. `%e` = `9`, `%0e` = `09`)    |
-

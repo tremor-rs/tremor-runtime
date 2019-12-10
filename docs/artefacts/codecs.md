@@ -59,8 +59,8 @@ For all numbers netwokr byte order is used (big endian). The data is represented
    1. *2 byte* (u16) lenght of the tag name in bytes
    2. *n byte* (utf8) tag name (utf8 encoded string)
    3. *1 byte* (tag) type of the field value can be one of:
-   4. `TYPE_I64 = 0` followed by *8 byte* (i64) 
-      1. `TYPE_F64 = 1` followed by *8 byte* (f64) 
+   4. `TYPE_I64 = 0` followed by *8 byte* (i64)
+      1. `TYPE_F64 = 1` followed by *8 byte* (f64)
       2. `TYPE_TRUE = 2` no following data
       3. `TYPE_FALSE = 3` no following data
       4. `TYPE_STRING = 4` followed by *2 byte* (u16) length of the string in bytes and *n byte* string value (utf8 encoded string)

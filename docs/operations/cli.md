@@ -10,10 +10,7 @@ This document summarises tremor tool commands
 
 Tremor operators and developers
 
-
 ## Usage
-
-
 
 ### General flags and switches
 

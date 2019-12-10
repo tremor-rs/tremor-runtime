@@ -168,7 +168,7 @@ In tremor, publishing a mapping results in instances being deployed as a side-ef
 
 ### Metrics
 
-Metrics in tremor are implemented as a pipeline and deployed during startup. 
+Metrics in tremor are implemented as a pipeline and deployed during startup.
 
 Metrics are builtin and can not be undeployed.
 

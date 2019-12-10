@@ -1,7 +1,6 @@
 # Extractors
 
-The `tremor-script` language can recognize micro-formats and extract or elementize
-data from those micro-formats.
+The `tremor-script` language can recognize micro-formats and extract or elementize data from those micro-formats.
 
 There are two basic variants of this in the language:
 
@@ -21,8 +20,7 @@ In the above example a regular expression `re` extractor is tested ( by use of t
 
 ## Extraction Form
 
-The extraction for is similar. In this case the predicate conditions must pass, but the
-regular expression can be written with match groups and named matches extracted into a key/value record for further processing.
+The extraction for is similar. In this case the predicate conditions must pass, but the regular expression can be written with match groups and named matches extracted into a key/value record for further processing.
 
 ## Usage
 
@@ -32,11 +30,12 @@ When only validity against the pattern is desired, then the extraction overhead 
 
 Extractors implicitly check if a field is present. If a field isn't present in the record, the predicate will fail and it will check the next predicate. Thus, no further explicit check such as `present <field>` is required.
 
-## Note:
+## Note
 
 Extractors should not be followed by a function that uses the same field as the one in the extractor. This could result in unintended behaviour as the latter function might return the original value instead of the extracted value
 
 e.g.
+
 ```tremor
 match { "superman" = "message_key: ruler: batman" } of
   case r = %{superman ~= grok|(?<message_key>(.\|\\n){0,200})|, present superman}
@@ -44,19 +43,20 @@ match { "superman" = "message_key: ruler: batman" } of
  default => "switch to marvel"
 end;
 ```
+
 This will result in unintended behaviour because `present` will return the original string instead of the record extracted by grok.
 
 ## Available extractors
 
 The different extractors available are:
 
-* [Base64](./base64)
-* [CIDR](./cidr)
-* [Datetime](./datetime)
-* [Dissect](./dissect)
-* [Glob](./glob)
-* [Grok](./grok)
-* [Influx](./influx)
-* [JSON](./json)
-* [KV](./kv)
-* [Regex (Re)](./regex)
+* [Base64](extractors/base64.md)
+* [CIDR](extractors/cidr.md)
+* [Datetime](extractors/datetime.md)
+* [Dissect](extractors/dissect.md)
+* [Glob](extractors/glob.md)
+* [Grok](extractors/grok.md)
+* [Influx](extractors/influx.md)
+* [JSON](extractors/json.md)
+* [KV](extractors/kv.md)
+* [Regex (Re)](extractors/regex.md)

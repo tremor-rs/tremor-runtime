@@ -6,8 +6,7 @@ This is a short canned synopsis of debugging tremor.
 
 We use rust-lldb, to drive breakpoint debugging in tremor.
 
-Alternately, rust integration with IntelliJ CLION also offers interactive
-breakpoint debugging in an IDE environment.
+Alternately, rust integration with IntelliJ CLION also offers interactive breakpoint debugging in an IDE environment.
 
 ### Setup on Mac OS X
 
@@ -36,7 +35,7 @@ Current executable set to 'target/debug/tremor-server' (x86_64).
 ```bash
 (lldb) br set -n malloc_error_break
 (lldb) run
-````
+```
 
 ### Take a backtrace ( stacktrace ) upon hitting a breakpoint
 
@@ -59,4 +58,3 @@ Current executable set to 'target/debug/tremor-server' (x86_64).
 ## References
 
 For a more detailed synopsis check out lldb project documentation or the [lldb cheatsheet](https://www.nesono.com/sites/default/files/lldb%20cheat%20sheet.pdf).
-

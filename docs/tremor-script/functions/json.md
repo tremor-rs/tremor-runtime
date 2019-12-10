@@ -2,11 +2,13 @@
 
 The `json` module contains functions that work with son structures
 
+## Functions
+
 ### json::decode(string) -> any
 
 Decodes a string containing a JSON structure.
 
-```rust
+```tremor
 json::decode("[1, 2, 3, 4]") => [1, 2, 3, 4]
 ```
 
@@ -14,7 +16,7 @@ json::decode("[1, 2, 3, 4]") => [1, 2, 3, 4]
 
 Encodes a data structure into a json string using minimal encoding.
 
-```rust
+```tremor
 json::encode([1, 2, 3, 4]) = "[1,2,3,4]"
 ```
 
@@ -22,7 +24,7 @@ json::encode([1, 2, 3, 4]) = "[1,2,3,4]"
 
 Encodes a data structure into a prettified json string.
 
-```rust
+```tremor
 json::encode_pretty([1, 2, 3, 4]) =
 "[
   1,

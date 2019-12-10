@@ -4,7 +4,7 @@ Monitoring tremor is done using tremor itself. This has some interesting implica
 
 Each pipeline emits metrics on its operations into a pipeline called `/pipeline/system::metrics/system` this allows to both write this messages to an destination system such as InfluxDB as well as to a message queue such as Kafka.
 
-Metrics are formatted following the same structure as the [Influx Codec](../codecs/#influx). For example:
+Metrics are formatted following the same structure as the [Influx Codec](../artefacts/codecs.md#influx). For example:
 
 ```json
 {
@@ -22,11 +22,9 @@ Metrics are formatted following the same structure as the [Influx Codec](../code
 
 In in influx format:
 
-```
+```influx
 events,port=out,direction=output,node=in,pipeline=tremor:///pipeline/main/01 count=20 1553077007898214000
 ```
-
-
 
 In this structure `measurement` is always `events` as that is what this is measuring. The number of events is always in the field `cost` as we are counting them.
 
@@ -51,7 +49,7 @@ In addition to the metrics provided by the pipeline itself, some operators can  
 
 The details are documented on a per operator level. Currently the following operators provide custom metrics:
 
-* [grouper::bucket](../../artefacts/operators/#grouperbucket)
+* [grouper::bucket](../artefacts/operators.md#grouperbucket)
 
 ## Enriching
 
@@ -66,7 +64,7 @@ pipeline:
       outputs:
         - out
         - outliers
-    nodes: 
+    nodes:
       - id: enrich
         op: runtime::tremor
         config:
@@ -86,7 +84,7 @@ binding:
 
 This will take the metrics from the metrics pipeline and execute a tremor script to add the `host` tag to each event.
 
-# Example
+## Example
 
 Lets walk through a example to see how where and why metrics are generated. Lets configure the following configuration:
 
@@ -146,9 +144,7 @@ binding:
 
 ```
 
-
-
-```
+```text
 +---------+                                        +---------+
 |  Kafka  |                                        | elastic |
 +---------+                                        +---------+
@@ -169,21 +165,15 @@ binding:
 
 Tremor instruments this pipeline on the points `a` to `l`. As follows (timestamp abbreviated by `…`, assuming `40` events were passed in):
 
-
-
-- `a` as `events,node=in,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=40 …` counting the events entering the pipeline
-- `b` as `events,node=runtime,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it to the runtime (should be equal to `a`)
-- `c` as `events,node=runtime,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it out of the runtime (should be equal to `b`)
-- `d` as `events,node=bucket,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it to the bucketer (should be equal to `c`)
-- `e` as `events,node=bucket,port=overflow,direction=output,pipeline=tremor:///pipeline/main/01 count=10 …` as the events that the overflowed from the bucketer (aka they exceeded the limits in `$rate`) - we assume 10 of the 40 messages hit this criteria
-- `f` as `events,node=bucket,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=30 …` as the events that make it out of the bucketer (we assume 30 here since in `e` we had 10 events overflow)
-- `d` as `events,node=bp,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=30 …` as the events that make it to the  back-pressure (`bp`) step  (should be equal to `f`)
-- `h` as `events,node=bp,port=overflow,direction=output,pipeline=tremor:///pipeline/main/01 count=5 …` as the events that the overflowed from the back-pressure step (aka the offramp asked is to back off a bit) - we assume 5 events fell into the back-pressure period.
-
-- `i` as `events,node=bp,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=25 …` as the events that make it out of the back pressure step (we assume 25 here since in `h` we had 5 events overflow)
-
-- `j` as `events,node=batch,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=25 …` as the events that make it to the batch step (should be equal to `i`)
-- `k` as `events,node=batch,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=1 …` this is a tricky one, we got 25 events into this, however we batch by 20 events, so the first 20 events that come in get send out as a batch so we have `1` as a count - it should be noted that at the time of this snapshot `5` more events are currently held by the batch step but not send out. If we had a batch size of 30 defined we would see no output events here.
-- `b` as `events,node=out,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=1 …` the events that make it to the output to be written, since we wrote only a single batch we get a count of `1` here as in `k`
-
-
+* `a` as `events,node=in,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=40 …` counting the events entering the pipeline
+* `b` as `events,node=runtime,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it to the runtime (should be equal to `a`)
+* `c` as `events,node=runtime,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it out of the runtime (should be equal to `b`)
+* `d` as `events,node=bucket,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=40 …` as the events that make it to the bucketer (should be equal to `c`)
+* `e` as `events,node=bucket,port=overflow,direction=output,pipeline=tremor:///pipeline/main/01 count=10 …` as the events that the overflowed from the bucketer (aka they exceeded the limits in `$rate`) - we assume 10 of the 40 messages hit this criteria
+* `f` as `events,node=bucket,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=30 …` as the events that make it out of the bucketer (we assume 30 here since in `e` we had 10 events overflow)
+* `d` as `events,node=bp,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=30 …` as the events that make it to the  back-pressure (`bp`) step  (should be equal to `f`)
+* `h` as `events,node=bp,port=overflow,direction=output,pipeline=tremor:///pipeline/main/01 count=5 …` as the events that the overflowed from the back-pressure step (aka the offramp asked is to back off a bit) - we assume 5 events fell into the back-pressure period.
+* `i` as `events,node=bp,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=25 …` as the events that make it out of the back pressure step (we assume 25 here since in `h` we had 5 events overflow)
+* `j` as `events,node=batch,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=25 …` as the events that make it to the batch step (should be equal to `i`)
+* `k` as `events,node=batch,port=out,direction=output,pipeline=tremor:///pipeline/main/01 count=1 …` this is a tricky one, we got 25 events into this, however we batch by 20 events, so the first 20 events that come in get send out as a batch so we have `1` as a count - it should be noted that at the time of this snapshot `5` more events are currently held by the batch step but not send out. If we had a batch size of 30 defined we would see no output events here.
+* `b` as `events,node=out,port=in,direction=input,pipeline=tremor:///pipeline/main/01 count=1 …` the events that make it to the output to be written, since we wrote only a single batch we get a count of `1` here as in `k`

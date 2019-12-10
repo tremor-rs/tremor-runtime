@@ -59,7 +59,7 @@ offramp:
 
 The Kafka offramp connects sends events to a Kafka topics. It uses librdkafka to handle connections and can use the full set of [librdkaka configuration options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
-The default codec is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -85,7 +85,7 @@ offramp:
 
 Sends events over a websocket connection. Each event is a websocket message.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -106,7 +106,7 @@ onramp:
 
 The UDP offramp sends data to a given host and port as UDP datagram.
 
-The default codec is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 When the UDP onramp gets a batch of messages it will send each element of the batch as a own UDP datagram.
 
@@ -161,7 +161,7 @@ offramp:
 
 The file offramp writes events to a file, one event per line. The file is overwritten if it exists.
 
-The default codec is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 
@@ -237,7 +237,7 @@ This connects on a specified port for distributing outbound tcp data.
 The offramp can leverage postprocessors to frame data after codecs are applied and events are forwarded
 to external TCP protocol distribution endpoints.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
 
 Supported configuration options are:
 

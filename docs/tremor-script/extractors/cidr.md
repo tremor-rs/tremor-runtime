@@ -1,10 +1,8 @@
 # CIDR
 
-Classless Inter-Domain Routing ( CIDR) is a method of allocating IP addresses
-and IP routing paths. CIDR notation is a compact representation of an IP address and
-its associated routing prefix.
+Classless Inter-Domain Routing ( CIDR ) is a method of allocating IP addresses and IP routing paths. CIDR notation is a compact representation of an IP address and its associated routing prefix.
 
-The notation is constructed from a possibly incomplete IP address, followed by a slash (`/`) character, and then a decimal number. 
+The notation is constructed from a possibly incomplete IP address, followed by a slash (`/`) character, and then a decimal number.
 
 The number is the count of leading *1* bits in the subnet mask demarcating routing boundaries for the range of addresses being routed over.
 
@@ -12,21 +10,15 @@ Larger values here indicate smaller networks. The maximum size of the network is
 
 ## Predicate
 
-When used as a predicate test with `~`, and no arguments are provided, then any valid IP
-address will pass the predicate test.
+When used as a predicate test with `~`, and no arguments are provided, then any valid IP address will pass the predicate test.
 
-When used as a predicate test with `~`, with one or many command delimited CIDR forms, then any valid IP address must be within the specified set of CIDR patterns for the predicate
-to pass.
+When used as a predicate test with `~`, with one or many command delimited CIDR forms, then any valid IP address must be within the specified set of CIDR patterns for the predicate to pass.
 
 Pattern forms may be based on IPv4 or IPv6.
 
 ## Extraction
 
-When used as an extraction operation with `~=` the predicate test must pass for
-successful extraction.  If the predicate test succeeds, then the the prefix and
-network mask for each CIDR is provided as a key/value record with the original
-pattern form as key.
-
+When used as an extraction operation with `~=` the predicate test must pass for successful extraction.  If the predicate test succeeds, then the the prefix and network mask for each CIDR is provided as a key/value record with the original pattern form as key.
 
 ## Examples
 

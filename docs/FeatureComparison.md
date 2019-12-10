@@ -1,6 +1,6 @@
 # FEATURE COMPARISON
 
-This section compares the latest stable version of Tremor with other alternative products. 
+This section compares the latest stable version of Tremor with other alternative products.
 
 | Feature                        |    Tremor    |  Hindsight   |       Logstash        |
 | ------------------------------ | :----------: | :----------: | :-------------------: |
@@ -11,7 +11,6 @@ This section compares the latest stable version of Tremor with other alternative
 | Grok support                   |      Y       |      N       |           Y           |
 | JSON Codec                     |      Y       |      Y       |           Y           |
 | Windows support                |      N       |      Y       |           Y           |
-|                                |              |              |                       |
 |                                |              |              |                       |
 
 ## Logstash
