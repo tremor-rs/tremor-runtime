@@ -78,7 +78,7 @@ Queries are one or many statements separated by `;`
 Queries are compiled into a DAG of operator nodes and validated at compile time. At runtime, the resulting executable tremor pipeline is evaluated/interpreted.
 
 Query grammar:
-> ![query grammar](grammar/diagram/query.png)
+> ![query grammar](grammar/diagram/Query.png)
 
 ### Statements
 

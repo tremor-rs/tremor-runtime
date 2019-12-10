@@ -290,9 +290,6 @@ let $a = a;
 
 ### Drop
 
-Drop grammar:
-> ![drop grammar](grammar/diagram/Drop.png)
-
 Drop expressions enable short-circuiting the execution of a `tremor-script` when badly formed data is discovered. If no argument is supplied, `drop` will return the event record. If an argument is supplied, the result of evaluating the expression will be returned. Tremor or other processing tools can process dropped events or data using purpose-built error-handling.
 
 As the content of the dropped event is user-defined, operators can standardise the format of the error emitted on drop from `tremor-script`
