@@ -200,6 +200,8 @@ Tremor does not ( yet ) have an out-of-the-box network protocol. A native tremor
 
 As such, the distribution model for tremor is currently limited to the set of available onramp and offramp connectors.
 
+However the[websocket [on](artefacts/onramps.md#ws) and [offramp](artefacts/offramps.md#ws) can be used for tremor to tremor communication.
+
 ### Client/Server
 
 Tremor, in its current form, is a client-server system. Tremor exposes a synchronous blocking RESTful API over HTTP for conducting operations related to its high throughput and relatively high performance pipeline-oriented data plane.
