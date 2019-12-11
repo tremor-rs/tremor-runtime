@@ -269,7 +269,7 @@ impl WindowTrait for TumblingWindowOnTime {
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnNumber {
-    next_window: Option<u64>,
+    count: u64,
     size: u64,
     ttl: Option<u64>,
     script: Option<rentals::Window>,
@@ -286,7 +286,7 @@ impl TumblingWindowOnNumber {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
         });
         Self {
-            next_window: None,
+            count: 0,
             size,
             script,
             ttl,
@@ -320,33 +320,21 @@ impl WindowTrait for TumblingWindowOnNumber {
                 data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
             })
             .unwrap_or(Ok(1))?;
-        match self.next_window {
-            None => {
-                self.next_window = Some(0);
-                Ok(WindowEvent {
-                    open: true,
-                    emit: false,
-                })
-            }
-            Some(next_window) if next_window < (self.size - count) => {
-                self.next_window = Some(next_window + count);
-                Ok(WindowEvent {
-                    open: false,
-                    emit: false,
-                })
-            }
-            Some(next_window) if next_window >= (self.size - count) => {
-                self.next_window = Some(0);
-                Ok(WindowEvent {
-                    open: true,
-                    emit: true,
-                })
-            }
-            Some(_) => Ok(WindowEvent {
-                // FIXME should never occur in practice
+
+        // If we're above count we emit and  set the new count to 1
+        // ( we emit on the ) previous event
+        if self.count >= self.size {
+            self.count = 1;
+            Ok(WindowEvent {
+                open: false,
+                emit: true,
+            })
+        } else {
+            self.count += count;
+            Ok(WindowEvent {
                 open: false,
                 emit: false,
-            }),
+            })
         }
     }
 }
@@ -523,6 +511,7 @@ impl Operator for TrickleSelect {
         for group_value in group_values {
             let group_str = sorsorted_serialize(&group_value)?;
             let mut windows = self.windows.iter_mut().peekable();
+            let mut i = 0;
             while let Some(this) = windows.next() {
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
@@ -541,8 +530,11 @@ impl Operator for TrickleSelect {
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
+                dbg!(i, &this_group.window);
+                i += 1;
                 // If this window should emit
                 if window_event.emit {
+                    dbg!("emit");
                     // See if we need to merge into the next tiltframe
                     // If so merge the aggregates
                     if let Some(next) = windows.peek() {
@@ -557,7 +549,7 @@ impl Operator for TrickleSelect {
                                 (
                                     group_str.clone(),
                                     last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                        window: this.window_impl.clone(),
+                                        window: next.window_impl.clone(),
                                         aggrs: aggregates.clone(),
                                         group: group_value.clone_static(),
                                     }),
@@ -624,6 +616,8 @@ impl Operator for TrickleSelect {
                             data: (result, event_meta.clone()).into(),
                         },
                     ));
+                } else {
+                    break;
                 }
             }
             if let Some(this) = self.windows.first() {
