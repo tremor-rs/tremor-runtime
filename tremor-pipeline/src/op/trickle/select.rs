@@ -326,7 +326,7 @@ impl WindowTrait for TumblingWindowOnNumber {
         if self.count >= self.size {
             self.count = 1;
             Ok(WindowEvent {
-                open: false,
+                open: true,
                 emit: true,
             })
         } else {
@@ -530,8 +530,33 @@ impl Operator for TrickleSelect {
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
-                dbg!(i, &this_group.window);
+                dbg!(event.id, i, &this_group.window);
                 i += 1;
+                // FIXME
+                // The issue with the windows is the following:
+                // We emit on the first event of the next windows, this works well for the inital frame
+                // on a second frame, we have the coordinate with the first we have a problem as we
+                // merge the higher resolution data into the lower resolution data before we get a chance
+                // to emit the lower res frame - causing us to have an element too much
+                //
+                // event | size 2 | tilt | size 3 |
+                //     1 | [1]    |        |
+                //     2 | [1, 2] |        |
+                //     3 | emit   | [1, 2] | [1, 2]
+                //       | [3]    |        | [1, 2]
+                //     4 | [3, 4] |        | [1, 2]
+                //     5 | emit   | [3, 4] | [1, 2, 3, 4] 
+                //       | [5]    |        | [1, 2, 3, 4]
+                //     6 | [5, 6] |        | [1, 2, 3, 4]
+                //     7 | emit   | [5, 6] | [1, 2, 3, 4, 5, 6]
+                //       | [7]    |        | [1, 2, 3, 4, 5, 6]
+                //     8 | [7, 8] |        | [1, 2, 3, 4, 5, 6]
+                //     9 | emit   | [7, 8] | [1, 2, 3, 4, 5, 6, 7, 8] // this is where things break
+                //       | [9]    |        | [1, 2, 3, 4, 5, 6, 7, 8] // since we tilt up before we check
+                //       |        |        | emit                     // the next window we collect one too many elements
+                
+
+
                 // If this window should emit
                 if window_event.emit {
                     dbg!("emit");
