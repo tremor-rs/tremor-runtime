@@ -4,6 +4,25 @@ Tremor started with a straight forward problem statement:
 
 **During peak events logs and metrics going to Elastic Search and InfluxDB back up in Kafka queues  removing visibility from the system.**
 
+## tremor-0.6 (develop)
+
+In this release the event by event scripting language is used as the basis for a structured query language
+that supports time-series windowing, aggregate functions and expressive composition grouping functions via
+select statements. The language supercedes the now deprecated pipeline YAML format whilst providing a
+backwards compatible runtime that can leverage existing pipeline operators, allows branching and combining
+streams to form a graph, and specifying and overriding default operator port assignments.
+
+The release includes basic statistics (min, max, count, mean, stdev, var) and quartile/percentile estimation
+via the high dynamic range (HDR) and DDS (distributed data sketch) based algorithms.
+
+The SQL language, trickle, supports aggregate of aggregate summary statistics without error amplification
+through a tilt-frame mechanism combined with merge-capable aggregate functions and opens up use cases for
+tremor to aggregate/summary processing for metrics, alerting, prediction/forecasting and anomaly/outlier
+detection.
+
+Small enhancements to the scripting language include string interpolation, bitwise and shift binary
+expressions. A cron-based onramp for scheduled/periodic one-shot or repeated events has been added.
+
 ## tremor-0.5.3 (stable)
 
 In this release the focus was set on the ingest layer for Logstash and Telegraf. By adding support for UDP as well as reassembling GELF chunks we can replace both Telegraf, Logstash as well as the home grown GELF proxy that currently needs to be deployed alongside of Logstash.
