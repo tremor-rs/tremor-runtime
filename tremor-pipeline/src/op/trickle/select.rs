@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PERF0001: handle select without grouping or windows easier.
+// [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::*;
 use crate::{Event, Operator};
@@ -457,6 +457,47 @@ impl Operator for TrickleSelect {
                     &mut group_values,
                 )?
             };
+        }
+        if self.windows.is_empty() && group_values.is_empty() {
+            let group_value = Value::from(vec![()]);
+            let group_str = sorsorted_serialize(&group_value)?;
+
+            let data = event.data.suffix();
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
+            #[allow(clippy::transmute_ptr_to_ptr)]
+            let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            consts[GROUP_CONST_ID] = group_value.clone_static();
+            consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+
+            let env = Env {
+                context: &ctx,
+                consts: &consts,
+                aggrs: &NO_AGGRS,
+                meta: &node_meta,
+            };
+            let value = stmt
+                .target
+                .run(opts, &env, unwind_event, event_meta, &local_stack)?;
+
+            let result = value.into_owned();
+            if let Some(guard) = &stmt.maybe_having {
+                let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                if let Some(test) = test.as_bool() {
+                    if !test {
+                        return Ok(vec![]);
+                    }
+                } else {
+                    return tremor_script::errors::query_guard_not_bool(
+                        stmt.borrow(),
+                        guard,
+                        &test,
+                        &node_meta,
+                    )?;
+                }
+            }
+            *unwind_event = result;
+            return Ok(vec![("out".into(), event)]);
         }
         if group_values.is_empty() {
             group_values.push(vec![Value::null()])
