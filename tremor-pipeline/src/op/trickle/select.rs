@@ -269,7 +269,7 @@ impl WindowTrait for TumblingWindowOnTime {
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnNumber {
-    next_window: Option<u64>,
+    count: u64,
     size: u64,
     ttl: Option<u64>,
     script: Option<rentals::Window>,
@@ -286,7 +286,7 @@ impl TumblingWindowOnNumber {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
         });
         Self {
-            next_window: None,
+            count: 0,
             size,
             script,
             ttl,
@@ -320,33 +320,21 @@ impl WindowTrait for TumblingWindowOnNumber {
                 data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
             })
             .unwrap_or(Ok(1))?;
-        match self.next_window {
-            None => {
-                self.next_window = Some(0);
-                Ok(WindowEvent {
-                    open: true,
-                    emit: false,
-                })
-            }
-            Some(next_window) if next_window < (self.size - count) => {
-                self.next_window = Some(next_window + count);
-                Ok(WindowEvent {
-                    open: false,
-                    emit: false,
-                })
-            }
-            Some(next_window) if next_window >= (self.size - count) => {
-                self.next_window = Some(0);
-                Ok(WindowEvent {
-                    open: true,
-                    emit: true,
-                })
-            }
-            Some(_) => Ok(WindowEvent {
-                // FIXME should never occur in practice
+
+        // If we're above count we emit and  set the new count to 1
+        // ( we emit on the ) previous event
+        if self.count >= self.size {
+            self.count = count;
+            Ok(WindowEvent {
+                open: true,
+                emit: true,
+            })
+        } else {
+            self.count += count;
+            Ok(WindowEvent {
                 open: false,
                 emit: false,
-            }),
+            })
         }
     }
 }
@@ -397,7 +385,11 @@ impl TrickleSelect {
 }
 
 impl Operator for TrickleSelect {
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[allow(
+        mutable_transmutes,
+        clippy::transmute_ptr_to_ptr,
+        clippy::too_many_lines
+    )]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
@@ -523,6 +515,9 @@ impl Operator for TrickleSelect {
         for group_value in group_values {
             let group_str = sorsorted_serialize(&group_value)?;
             let mut windows = self.windows.iter_mut().peekable();
+            let mut emit_depth = 0;
+
+            // We first iterate through the windows and emit as far as we would have to emit.
             while let Some(this) = windows.next() {
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
@@ -541,41 +536,34 @@ impl Operator for TrickleSelect {
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
+                // FIXME
+                // The issue with the windows is the following:
+                // We emit on the first event of the next windows, this works well for the inital frame
+                // on a second frame, we have the coordinate with the first we have a problem as we
+                // merge the higher resolution data into the lower resolution data before we get a chance
+                // to emit the lower res frame - causing us to have an element too much
+                //
+                // event | size 2 | tilt | size 3 |
+                //     1 | [1]    |        |
+                //     2 | [1, 2] |        |
+                //     3 | emit   | [1, 2] | [1, 2]
+                //       | [3]    |        | [1, 2]
+                //     4 | [3, 4] |        | [1, 2]
+                //     5 | emit   | [3, 4] | [1, 2, 3, 4]
+                //       | [5]    |        | [1, 2, 3, 4]
+                //     6 | [5, 6] |        | [1, 2, 3, 4]
+                //     7 | emit   | [5, 6] | [1, 2, 3, 4, 5, 6]
+                //       | [7]    |        | [1, 2, 3, 4, 5, 6]
+                //     8 | [7, 8] |        | [1, 2, 3, 4, 5, 6]
+                //     9 | emit   | [7, 8] | [1, 2, 3, 4, 5, 6, 7, 8] // this is where things break
+                //       | [9]    |        | [1, 2, 3, 4, 5, 6, 7, 8] // since we tilt up before we check
+                //       |        |        | emit                     // the next window we collect one too many elements
+
                 // If this window should emit
                 if window_event.emit {
+                    emit_depth += 1;
                     // See if we need to merge into the next tiltframe
                     // If so merge the aggregates
-                    if let Some(next) = windows.peek() {
-                        let next_groups: &mut Groups =
-                            unsafe { std::mem::transmute(next.dims.suffix()) };
-                        let (_, next_group) = next_groups
-                            .raw_entry_mut()
-                            .from_key(&group_str)
-                            .or_insert_with(|| {
-                                let last_groups: &mut Groups =
-                                    unsafe { std::mem::transmute(this.last_dims.suffix()) };
-                                (
-                                    group_str.clone(),
-                                    last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                        window: this.window_impl.clone(),
-                                        aggrs: aggregates.clone(),
-                                        group: group_value.clone_static(),
-                                    }),
-                                )
-                            });
-                        for (i, aggr) in this_group.aggrs.iter().enumerate() {
-                            let aggr_static: &InvokeAggrFn<'static> =
-                                unsafe { std::mem::transmute(aggr) };
-                            next_group.aggrs[i]
-                                .invocable
-                                .merge(&aggr_static.invocable)
-                                .map_err(|e| {
-                                    // FIXME nice error
-                                    let r: Option<&Registry> = None;
-                                    e.into_err(aggr, aggr, r, &node_meta)
-                                })?;
-                        }
-                    }
                     // Then emit the window itself
                     consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
                     let data = event.data.suffix();
@@ -624,8 +612,105 @@ impl Operator for TrickleSelect {
                             data: (result, event_meta.clone()).into(),
                         },
                     ));
+                } else {
+                    break;
                 }
             }
+
+            // Next we take care of propagating the data from narrower to wider
+            // windows and clearning windows that we have already emitted (in this
+            // order!).
+
+            // calculate the count (depth + 1) since in the remaining code
+            // we do not care about the index
+            let emit_count = emit_depth;
+            // Check if we are emitting all the windows, if not we need to take
+            // special care in the code below
+            let mut clear_all = emit_count == self.windows.len();
+            let mut windows = self
+                .windows
+                .iter_mut()
+                // We look one beyond the emit count this is required
+                // since we go 'backwards' from the widest to the narrowest.
+                // Since we do not want to clean the next not emitted
+                // frame we calcualted emit_all above.
+                .take(emit_count + 1)
+                // We reverse the iterator since we want to start with
+                // the widest window
+                .rev()
+                .peekable();
+
+            while let Some(this) = windows.next() {
+                // First start with getting our group
+                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                let (_, this_group) = this_groups
+                    .raw_entry_mut()
+                    .from_key(&group_str)
+                    .or_insert_with(|| {
+                        let last_groups: &mut Groups =
+                            unsafe { std::mem::transmute(this.last_dims.suffix()) };
+                        (
+                            group_str.clone(),
+                            last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
+                                window: this.window_impl.clone(),
+                                aggrs: aggregates.clone(),
+                                group: group_value.clone_static(),
+                            }),
+                        )
+                    });
+
+                // Check if we want to clear all the following window
+                // this is false for a non terminal widest window
+                if clear_all {
+                    for aggr in &this_group.aggrs {
+                        let aggr_static: &mut InvokeAggrFn<'static> =
+                            unsafe { std::mem::transmute(aggr) };
+                        aggr_static.invocable.init();
+                    }
+                } else {
+                    // If we skipped the widest window we can clear the rest
+                    clear_all = true;
+                }
+
+                // Remember we iterate backwards so we the next element in the iterator
+                // is the previous window.
+                // We grab it and then merge the data from the previous window into this
+                // This ensures that in the next iteration of the leep we can clear
+                // the previous window since we already pulled all needed data out here.
+                if let Some(prev) = windows.peek() {
+                    let prev_groups: &mut Groups =
+                        unsafe { std::mem::transmute(prev.dims.suffix()) };
+                    let (_, prev_group) = prev_groups
+                        .raw_entry_mut()
+                        .from_key(&group_str)
+                        .or_insert_with(|| {
+                            let last_groups: &mut Groups =
+                                unsafe { std::mem::transmute(prev.last_dims.suffix()) };
+                            (
+                                group_str.clone(),
+                                last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
+                                    window: prev.window_impl.clone(),
+                                    aggrs: aggregates.clone(),
+                                    group: group_value.clone_static(),
+                                }),
+                            )
+                        });
+                    for (i, aggr) in prev_group.aggrs.iter().enumerate() {
+                        let aggr_static: &InvokeAggrFn<'static> =
+                            unsafe { std::mem::transmute(aggr) };
+                        this_group.aggrs[i]
+                            .invocable
+                            .merge(&aggr_static.invocable)
+                            .map_err(|e| {
+                                // FIXME nice error
+                                let r: Option<&Registry> = None;
+                                e.into_err(aggr, aggr, r, &node_meta)
+                            })?;
+                    }
+                }
+            }
+
+            // If we had at least one window ingest the event into this window
             if let Some(this) = self.windows.first() {
                 let (unwind_event, event_meta) = event.data.parts();
                 consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
@@ -653,7 +738,7 @@ impl Operator for TrickleSelect {
                     aggrs: &NO_AGGRS,
                     meta: &node_meta,
                 };
-                for aggr in this_group.aggrs.iter_mut() {
+                for aggr in &mut this_group.aggrs {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
@@ -674,6 +759,7 @@ impl Operator for TrickleSelect {
                     })?;
                 }
             } else {
+                // otherwise we just pass it through the select portion of the statement
                 let data = event.data.suffix();
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
@@ -909,29 +995,29 @@ mod test {
         assert_eq!(event.data.suffix().value, 2);
         // Add another event prior to 30
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
-        // This emits the rollup to 30s as well
-        let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(30))?.expect("no event 2");
-        assert_eq!("out", out1);
-        assert_eq!(event1.data.suffix().value, 2);
-        assert_eq!("out", out2);
-        assert_eq!(event2.data.suffix().value, 4);
+        // This emits only the initial event since the rollup
+        // will only be emitted once it gets the first event
+        // if the next window
+        let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
         // Add another event prior to 45 to the first window
         assert!(try_enqueue(&mut op, test_event(31))?.is_none());
 
-        // At 45 the 15s window wmits
-        let (out, event) = try_enqueue(&mut op, test_event(45))?.expect("no event 1");
-        assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
-        assert!(try_enqueue(&mut op, test_event(46))?.is_none());
-
-        // Add 60 the 15 and 30s window emits
+        // At 45 the 15s window emits the rollup with the previous data
         let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(60))?.expect("no event 3");
+            try_enqueue_two(&mut op, test_event(45))?.expect("no event 3");
+
         assert_eq!("out", out1);
         assert_eq!("out", out2);
         assert_eq!(event1.data.suffix().value, 2);
         assert_eq!(event2.data.suffix().value, 4);
+        assert!(try_enqueue(&mut op, test_event(46))?.is_none());
+
+        // Add 60 only the 15s window emits
+        let (out, event) = try_enqueue(&mut op, test_event(60))?.expect("no event 4");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
         Ok(())
     }
 

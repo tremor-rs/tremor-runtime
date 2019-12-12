@@ -48,7 +48,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -121,7 +121,7 @@ impl Onramp for Metronome {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);

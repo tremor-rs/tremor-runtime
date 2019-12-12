@@ -183,7 +183,7 @@ fn onramp_loop(
     config: Config,
     preprocessors: Vec<String>,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let (main_tx, main_rx) = bounded(10);
 
@@ -261,7 +261,7 @@ impl Onramp for Ws {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();

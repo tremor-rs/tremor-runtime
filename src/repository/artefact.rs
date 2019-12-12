@@ -14,7 +14,7 @@
 
 use crate::codec;
 use crate::errors::*;
-use crate::metrics::RampMetricsReporter;
+use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
 use crate::registry::ServantId;
@@ -228,8 +228,7 @@ impl Artefact for OfframpArtefact {
         } else {
             vec![]
         };
-        let metrics_reporter =
-            RampMetricsReporter::new(servant_id.clone(), self.metrics_interval_s);
+        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
         let res = world
             .system
             .send(offramp::Create {
@@ -325,8 +324,7 @@ impl Artefact for OnrampArtefact {
         } else {
             vec![]
         };
-        let metrics_reporter =
-            RampMetricsReporter::new(servant_id.clone(), self.metrics_interval_s);
+        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
         let res = world
             .system
             .send(onramp::Create {
@@ -423,6 +421,7 @@ impl Artefact for Binding {
         Ok(self.clone())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn link(
         &self,
         system: &World,

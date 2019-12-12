@@ -25,8 +25,8 @@
 //!
 //! let output = filter.run(input).unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("a".into(), Value::from("John".into()));
-//! expected.insert("b".into(), Value::from("Doe".into()));
+//! expected.insert("a".into(), Value::from("John"));
+//! expected.insert("b".into(), Value::from("Doe"));
 //!
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
@@ -46,8 +46,8 @@
 //! let output = Pattern::compile("%{name}, %{age}")?;
 //! let output = output.run("John Doe, 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("John Doe".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("name".into(), Value::from("John Doe"));
+//! expected.insert("age".into(), Value::from("22"));
 //!
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
@@ -63,8 +63,8 @@
 //! let output = Pattern::compile( "%{+name} %{+name}, %{age}")?;
 //! let output = output.run("John Doe, 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("John Doe".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("name".into(), Value::from("John Doe"));
+//! expected.insert("age".into(), Value::from("22"));
 //!
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
@@ -91,7 +91,7 @@
 //! let output = Pattern::compile("%{?name}, %{&name}")?;
 //! let output = output.run( "John Doe, 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("John Doe".into(), Value::from("22".into()));
+//! expected.insert("John Doe".into(), Value::from("22"));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```
@@ -107,8 +107,8 @@
 //! let output = Pattern::compile("%{name}, %{age}")?;
 //! let output = output.run(", 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("name".into(), Value::from(""));
+//! expected.insert("age".into(), Value::from("22"));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```
@@ -123,8 +123,8 @@
 //! let output = Pattern::compile("%{?first_name} %{last_name}, %{age}")?;
 //! let output = output.run("John Doe, 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("last_name".into(), Value::from("Doe".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("last_name".into(), Value::from("Doe"));
+//! expected.insert("age".into(), Value::from("22"));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```
@@ -142,7 +142,7 @@
 //! let output = Pattern::compile("%{name}, %{age:int}")?;
 //! let output = output.run( "John Doe, 22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("John Doe".into()));
+//! expected.insert("name".into(), Value::from("John Doe"));
 //! expected.insert("age".into(),Value::from(22));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
@@ -159,8 +159,8 @@
 //! let output = Pattern::compile("%{name}, %{_}%{age}")?;
 //! let output = output.run("John Doe,                22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("John Doe".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("name".into(), Value::from("John Doe"));
+//! expected.insert("age".into(), Value::from("22"));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```
@@ -171,8 +171,8 @@
 //! let output = Pattern::compile("%{name}, %{_(-)}%{age}")?;
 //! let output = output.run("John Doe, -----------------------22").unwrap_or_default();
 //! let mut expected = halfbrown::HashMap::new();
-//! expected.insert("name".into(), Value::from("John Doe".into()));
-//! expected.insert("age".into(), Value::from("22".into()));
+//! expected.insert("name".into(), Value::from("John Doe"));
+//! expected.insert("age".into(), Value::from("22"));
 //! assert_eq!(output, expected);
 //! # Ok::<(), Error>(())
 //! ```

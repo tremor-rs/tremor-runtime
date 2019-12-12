@@ -14,7 +14,7 @@
 
 pub use crate::codec::{self, Codec};
 pub use crate::errors::*;
-pub use crate::metrics::RampMetricsReporter;
+pub use crate::metrics::RampReporter;
 pub use crate::onramp::{self, Onramp};
 pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
 pub use crate::repository::ServantId;
@@ -63,12 +63,16 @@ pub fn handle_pp(
 }
 
 // We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(clippy::borrowed_box)]
+#[allow(
+    clippy::borrowed_box,
+    clippy::too_many_lines,
+    clippy::too_many_arguments
+)]
 pub fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
-    metrics_reporter: &mut RampMetricsReporter,
+    metrics_reporter: &mut RampReporter,
     ingest_ns: &mut u64,
     origin_uri: &tremor_pipeline::EventOriginUri,
     id: u64,

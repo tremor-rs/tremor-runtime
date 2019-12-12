@@ -47,6 +47,7 @@ pub fn nanotime() -> u64 {
 }
 
 #[cfg_attr(tarpaulin, skip)]
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let matches = App::new("tremor-query")
         .version("0.6.0")

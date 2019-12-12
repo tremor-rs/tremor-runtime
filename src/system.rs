@@ -129,6 +129,7 @@ impl PipelineDest {
 
 impl Handler<CreatePipeline> for Manager {
     type Result = Result<PipelineAddr>;
+    #[allow(clippy::too_many_lines)]
     fn handle(&mut self, req: CreatePipeline, _ctx: &mut Self::Context) -> Self::Result {
         #[inline]
         fn send_events(

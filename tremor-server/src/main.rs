@@ -154,6 +154,7 @@ fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 }
 
 #[cfg_attr(tarpaulin, skip)]
+#[allow(clippy::too_many_lines)]
 fn run_dun() -> Result<()> {
     functions::load()?;
 

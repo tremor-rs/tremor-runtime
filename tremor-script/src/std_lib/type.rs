@@ -42,8 +42,7 @@ pub fn load(registry: &mut Registry) {
             Ok(match _input.value_type() {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
-                ValueType::I64 => Value::from("integer"),
-                ValueType::U64 => Value::from("integer"),
+                ValueType::U64 | ValueType::I64 => Value::from("integer"),
                 ValueType::F64 => Value::from("float"),
                 ValueType::String => Value::from("string"),
                 ValueType::Array => Value::from("array"),

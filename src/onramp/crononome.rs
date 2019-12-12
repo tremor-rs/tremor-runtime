@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,14 +43,14 @@ impl std::fmt::Debug for CronEntry {
 
 impl Clone for CronEntry {
     fn clone(&self) -> Self {
-        let mut fresh = CronEntry {
+        let mut fresh = Self {
             name: self.name.clone(),
             expr: self.expr.clone(),
             sched: None,
             payload: self.payload.clone(),
         };
         fresh.parse().ok();
-        return fresh;
+        fresh
     }
 }
 
@@ -224,21 +224,16 @@ impl ChronomicQueue {
                 payload: entry.payload.clone(),
             };
             let x = entry2.parse();
-            match x {
-                Ok(_) => {
-                    self.tpq.enqueue(TemporalItem {
-                        // ALLOW: fixme
-                        at: next[0],
-                        what: entry2,
-                    });
-                }
-                _ => {
-                    () // FIXME propagate any errors
-                }
-            };
-        } else {
-            // No future events for this entry => drop
+            // FIXME propagate any errors
+            if x.is_ok() {
+                self.tpq.enqueue(TemporalItem {
+                    // ALLOW: fixme
+                    at: next[0],
+                    what: entry2,
+                });
+            }
         }
+        // No future events for this entry => drop
     }
 
     pub fn drain(&mut self) -> Vec<(String, Option<Value>)> {
@@ -258,7 +253,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -346,11 +341,11 @@ impl Onramp for Crononome {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let mut config = self.config.clone();
 
-        for ref mut entry in config.entries.iter_mut() {
+        for entry in &mut config.entries {
             if entry.parse().ok().is_none() {
                 return Err(format!(
                     "Bad configuration in crononome - expression {} is illegal",

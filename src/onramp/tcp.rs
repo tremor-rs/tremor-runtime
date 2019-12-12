@@ -73,13 +73,13 @@ impl TremorTcpConnection {
 
 // We got to allow this because of the way that the onramp works
 // by creating new instances during runtime.
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
 fn onramp_loop(
     rx: &Receiver<onramp::Msg>,
     config: &Config,
     preprocessors: Vec<String>,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
@@ -252,7 +252,7 @@ impl Onramp for Tcp {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();

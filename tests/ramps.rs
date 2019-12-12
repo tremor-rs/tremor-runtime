@@ -192,7 +192,7 @@ links:
 
     #[test]
     fn tcp_onramp() -> Result<()> {
-        let port = find_free_port(9000..10000).expect("no free port");
+        let port = find_free_port(9000..9099).expect("no free port");
         rampercize!(
             // onramp config
             json!({
@@ -230,7 +230,7 @@ links:
 
     #[test]
     fn udp_onramp() -> Result<()> {
-        let port = find_free_port(9000..10000).expect("no free port");
+        let port = find_free_port(9100..9199).expect("no free port");
         rampercize!(
             // onramp config
             json!({
@@ -267,7 +267,7 @@ links:
 
     #[test]
     fn rest_onramp() -> Result<()> {
-        let port = find_free_port(9000..10000).expect("no free port");
+        let port = find_free_port(9200..9299).expect("no free port");
         rampercize!(
             // onramp config
             json!({

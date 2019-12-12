@@ -95,12 +95,13 @@ impl ConsumerContext for LoggingConsumerContext {
 
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn onramp_loop(
     rx: &Receiver<onramp::Msg>,
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let context = LoggingConsumerContext;
@@ -285,7 +286,7 @@ impl Onramp for Kafka {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();

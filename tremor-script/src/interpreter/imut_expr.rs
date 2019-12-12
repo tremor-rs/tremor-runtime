@@ -296,6 +296,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn present(
         &'script self,
         opts: ExecOpts,
@@ -568,7 +569,6 @@ where
                 let r: Option<&Registry> = None;
                 e.into_err(self, self, r, &env.meta)
             })?;
-            invocable.init();
             Ok(r)
         }
     }
