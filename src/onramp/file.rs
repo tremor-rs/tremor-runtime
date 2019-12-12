@@ -79,7 +79,14 @@ fn onramp_loop(
     for line in reader.lines() {
         while pipelines.is_empty() {
             match rx.recv()? {
-                onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
+                onramp::Msg::Connect(mut ps) => {
+                    // TODO better destructuring here
+                    if ps[0].0 == *METRICS_PIPELINE {
+                        metrics_reporter.set_metrics_pipeline(ps[0].0.clone(), ps[0].1.clone());
+                    } else {
+                        pipelines.append(&mut ps);
+                    }
+                }
                 onramp::Msg::Disconnect { tx, .. } => {
                     tx.send(true)?;
                     return Ok(());

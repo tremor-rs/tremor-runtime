@@ -242,7 +242,14 @@ fn onramp_loop(
     loop {
         if pipelines.is_empty() {
             match rx.recv() {
-                Ok(onramp::Msg::Connect(ps)) => pipelines.append(&mut ps.clone()),
+                Ok(onramp::Msg::Connect(ps)) => {
+                    // TODO better destructuring here
+                    if ps[0].0 == *METRICS_PIPELINE {
+                        metrics_reporter.set_metrics_pipeline(ps[0].0.clone(), ps[0].1.clone());
+                    } else {
+                        pipelines.append(&mut ps.clone());
+                    }
+                }
                 Ok(onramp::Msg::Disconnect { tx, .. }) => {
                     tx.send(true)?;
                     return Ok(());
