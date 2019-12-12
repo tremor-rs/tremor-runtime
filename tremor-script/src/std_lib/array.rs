@@ -85,7 +85,7 @@ pub fn load(registry: &mut Registry) {
         )
         .insert(tremor_const_fn!(array::coalesce(_context, _input: Array) {
             Ok(Value::Array(_input.iter().filter_map(|v| if v.is_null()  {
-                None 
+                None
             }else {
                 Some(v.clone())
             }).collect()))
