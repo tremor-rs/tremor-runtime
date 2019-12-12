@@ -218,12 +218,13 @@ fn onramp_loop(
             recv(rx) -> msg => match msg {
                 Err(e) => return Err(format!("Crossbream receive error: {}", e).into()),
 
-                Ok(onramp::Msg::Connect(mut ps)) => {
-                    // TODO better destructuring here
-                    if ps[0].0 == *METRICS_PIPELINE {
-                        metrics_reporter.set_metrics_pipeline(ps[0].0.clone(), ps[0].1.clone());
-                    } else {
-                        pipelines.append(&mut ps);
+                Ok(onramp::Msg::Connect(ps)) => {
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            pipelines.push(p.clone());
+                        }
                     }
                 }
                 Ok(onramp::Msg::Disconnect { id, tx }) => {

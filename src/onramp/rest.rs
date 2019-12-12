@@ -243,11 +243,12 @@ fn onramp_loop(
         if pipelines.is_empty() {
             match rx.recv() {
                 Ok(onramp::Msg::Connect(ps)) => {
-                    // TODO better destructuring here
-                    if ps[0].0 == *METRICS_PIPELINE {
-                        metrics_reporter.set_metrics_pipeline(ps[0].0.clone(), ps[0].1.clone());
-                    } else {
-                        pipelines.append(&mut ps.clone());
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            pipelines.push(p.clone());
+                        }
                     }
                 }
                 Ok(onramp::Msg::Disconnect { tx, .. }) => {

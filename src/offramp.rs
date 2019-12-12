@@ -156,7 +156,7 @@ impl Handler<Create> for Manager {
                                 "[Offramp::{}] Connecting system metrics pipeline {}",
                                 offramp_id, id
                             );
-                            req.metrics_reporter.set_metrics_pipeline(id, addr);
+                            req.metrics_reporter.set_metrics_pipeline((id, addr));
                         } else {
                             info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
                             req.offramp.add_pipeline(id, addr);

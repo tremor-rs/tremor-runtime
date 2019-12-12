@@ -52,8 +52,8 @@ impl RampMetricsReporter {
         }
     }
 
-    pub fn set_metrics_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
-        self.metrics_pipeline = Some((id, addr));
+    pub fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, PipelineAddr)) {
+        self.metrics_pipeline = Some(pipeline_tuple);
     }
 
     // TODO inline useful on these?
