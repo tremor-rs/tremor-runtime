@@ -324,7 +324,7 @@ impl WindowTrait for TumblingWindowOnNumber {
         // If we're above count we emit and  set the new count to 1
         // ( we emit on the ) previous event
         if self.count >= self.size {
-            self.count = 1;
+            self.count = count;
             Ok(WindowEvent {
                 open: true,
                 emit: true,
@@ -927,7 +927,6 @@ mod test {
         event: Event,
     ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
         let mut action = op.on_event("in", event)?;
-        dbg!(&action);
         let r = action
             .pop()
             .and_then(|second| Some([action.pop()?, second]));
