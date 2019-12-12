@@ -294,7 +294,13 @@ pub fn exec_unary<'run, 'event: 'run>(
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
     use UnaryOpKind::*;
-    if let Some(x) = val.as_u64() {
+    if let Some(x) = val.as_f64() {
+        match &op {
+            Minus => Some(Cow::Owned(Value::from(-x))),
+            Plus => Some(Cow::Owned(Value::from(x))),
+            _ => None,
+        }
+    } else if let Some(x) = val.as_u64() {
         match &op {
             Minus => x
                 .try_into()
@@ -318,7 +324,7 @@ pub fn exec_unary<'run, 'event: 'run>(
         }
     } else if let Some(x) = val.as_bool() {
         match &op {
-            BitNot | Not => Some(static_bool!(x)),
+            BitNot | Not => Some(static_bool!(!x)),
             _ => None,
         }
     } else {
