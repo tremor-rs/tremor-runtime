@@ -99,7 +99,7 @@ impl std::default::Default for Pattern {
     }
 }
 
-fn handle_scapes(s: &str) -> Result<String, Error> {
+fn handle_escapes(s: &str) -> Result<String, Error> {
     let mut res = String::with_capacity(s.len());
     let mut cs = s.chars();
     while let Some(c) = cs.next() {
@@ -133,7 +133,7 @@ impl Pattern {
                 i += 6;
                 if let Some(i1) = pattern[i..].find("%{val}") {
                     if i1 != 0 {
-                        key_seperators.push(handle_scapes(&pattern[i..i + i1])?);
+                        key_seperators.push(handle_escapes(&pattern[i..i + i1])?);
                     }
                     i += i1 + 6;
                 } else {
@@ -141,13 +141,13 @@ impl Pattern {
                 }
             } else if let Some(i1) = pattern[i..].find("%{key}") {
                 if i1 != 0 {
-                    field_seperators.push(handle_scapes(&pattern[i..i + i1])?);
+                    field_seperators.push(handle_escapes(&pattern[i..i + i1])?);
                 }
                 i += i1;
             } else if pattern[i..].is_empty() {
                 break;
             } else {
-                field_seperators.push(handle_scapes(&pattern[i..])?);
+                field_seperators.push(handle_escapes(&pattern[i..])?);
                 break;
             }
         }
