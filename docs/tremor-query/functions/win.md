@@ -30,7 +30,7 @@ In the case of tilt frames,  flattens out any tilt frame sub-arrays
 win::collect_flattened()
 ```
 
-#### win::collect_nested() -> [[event]]|[event]
+### win::collect_nested() -> [[event]]|[event]
 
 Captures all events in a window into an array of events.
 

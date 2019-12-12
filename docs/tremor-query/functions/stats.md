@@ -29,7 +29,7 @@ Determines the largest event value in the current windowed operation.
 stats::max(event.value)
 ```
 
-#### stats::sum(int|float) -> int|float
+### stats::sum(int|float) -> int|float
 
 Determines the arithmetic sum of event values in the current windowed operation.
 
@@ -37,7 +37,7 @@ Determines the arithmetic sum of event values in the current windowed operation.
 stats::sum(event.value)
 ```
 
-#### stats::var(int|float) -> float
+### stats::var(int|float) -> float
 
 Calculates the sample variance of event values in the current windowed operation.
 
@@ -45,7 +45,7 @@ Calculates the sample variance of event values in the current windowed operation
 stats::var(event.value)
 ```
 
-#### stats::stdev(int|float) -> float
+### stats::stdev(int|float) -> float
 
 Calculates the sample standard deviation of event values in the current windowed operation.
 
@@ -61,7 +61,7 @@ Calculates the stastical mean of the event values in the current windowed operat
 stats::mean(event.value)
 ```
 
-#### stats::hdr(int|float) -> record
+### stats::hdr(int|float) -> record
 
 Uses a High Dynamic Range ( HDR ) Histogram to calculate all primitive statistics against the event values sin the current windowed operation. The function additionally interpolates percentiles or quartiles based on a configuration specification passed in as an argument to the aggregater function.
 
@@ -71,7 +71,7 @@ The HDR Histogram trades off memory utilisation for accuracy and is configured i
 stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
 ```
 
-#### stats::dds(int|float) -> record
+### stats::dds(int|float) -> record
 
 Uses a Distributed data-stream Sketch ( [DDS (paper)](http://www.vldb.org/pvldb/vol12/p2195-masson.pdf) Histogram to calculate count, min, max, mean and quartiles with quartile relative-error accurate over the range of points in the histogram. The DDS histogram trades off accuracy ( to a very low error and guaranteed low relative error ) and unlike HDR histograms does not need bounds specified.
 
