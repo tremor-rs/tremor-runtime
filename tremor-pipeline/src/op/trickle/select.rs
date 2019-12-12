@@ -512,6 +512,8 @@ impl Operator for TrickleSelect {
             let group_str = sorsorted_serialize(&group_value)?;
             let mut windows = self.windows.iter_mut().peekable();
             let mut emit_depth = 0;
+
+            // We first iterate through the windows and emit as far as we would have to emit.
             while let Some(this) = windows.next() {
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
@@ -530,7 +532,6 @@ impl Operator for TrickleSelect {
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
-                dbg!(event.id, emit_depth, &this_group.window);
                 // FIXME
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the inital frame
@@ -557,7 +558,6 @@ impl Operator for TrickleSelect {
                 // If this window should emit
                 if window_event.emit {
                     emit_depth += 1;
-                    dbg!("emit");
                     // See if we need to merge into the next tiltframe
                     // If so merge the aggregates
                     // Then emit the window itself
@@ -612,13 +612,32 @@ impl Operator for TrickleSelect {
                     break;
                 }
             }
-            let mut windows = self.windows.iter_mut().peekable();
+
+            // Next we take care of propagating the data from narrower to wider
+            // windows and clearning windows that we have already emitted (in this
+            // order!).
+
+            // calculate the count (depth + 1) since in the remaining code
+            // we do not care about the index
+            let emit_count = emit_depth;
+            // Check if we are emitting all the windows, if not we need to take
+            // special care in the code below
+            let mut clear_all = emit_count == self.windows.len();
+            let mut windows = self
+                .windows
+                .iter_mut()
+                // We look one beyond the emit count this is required
+                // since we go 'backwards' from the widest to the narrowest.
+                // Since we do not want to clean the next not emitted
+                // frame we calcualted emit_all above.
+                .take(emit_count + 1)
+                // We reverse the iterator since we want to start with
+                // the widest window
+                .rev()
+                .peekable();
 
             while let Some(this) = windows.next() {
-                if emit_depth == 0 {
-                    break;
-                };
-                emit_depth -= 1;
+                // First start with getting our group
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
@@ -636,30 +655,46 @@ impl Operator for TrickleSelect {
                         )
                     });
 
-                if let Some(next) = windows.peek() {
-                    let next_groups: &mut Groups =
-                        unsafe { std::mem::transmute(next.dims.suffix()) };
-                    let (_, next_group) = next_groups
+                // Check if we want to clear all the following window
+                // this is false for a non terminal widest window
+                if clear_all {
+                    for aggr in this_group.aggrs.iter() {
+                        let aggr_static: &mut InvokeAggrFn<'static> =
+                            unsafe { std::mem::transmute(aggr) };
+                        aggr_static.invocable.init();
+                    }
+                } else {
+                    // If we skipped the widest window we can clear the rest
+                    emit_all = true;
+                }
+
+                // Remember we iterate backwards so we the next element in the iterator
+                // is the previous window.
+                // We grab it and then merge the data from the previous window into this
+                // This ensures that in the next iteration of the leep we can clear
+                // the previous window since we already pulled all needed data out here.
+                if let Some(prev) = windows.peek() {
+                    let prev_groups: &mut Groups =
+                        unsafe { std::mem::transmute(prev.dims.suffix()) };
+                    let (_, prev_group) = prev_groups
                         .raw_entry_mut()
                         .from_key(&group_str)
                         .or_insert_with(|| {
                             let last_groups: &mut Groups =
-                                unsafe { std::mem::transmute(this.last_dims.suffix()) };
+                                unsafe { std::mem::transmute(prev.last_dims.suffix()) };
                             (
                                 group_str.clone(),
-                                last_groups.remove(&group_str).unwrap_or_else(|| {
-                                    GroupData {
-                                        window: next.window_impl.clone(),
-                                        aggrs: aggregates.clone(),
-                                        group: group_value.clone_static(),
-                                    }
+                                last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
+                                    window: prev.window_impl.clone(),
+                                    aggrs: aggregates.clone(),
+                                    group: group_value.clone_static(),
                                 }),
                             )
                         });
-                    for (i, aggr) in this_group.aggrs.iter().enumerate() {
+                    for (i, aggr) in prev_group.aggrs.iter().enumerate() {
                         let aggr_static: &InvokeAggrFn<'static> =
                             unsafe { std::mem::transmute(aggr) };
-                        next_group.aggrs[i]
+                        this_group.aggrs[i]
                             .invocable
                             .merge(&aggr_static.invocable)
                             .map_err(|e| {
@@ -669,12 +704,9 @@ impl Operator for TrickleSelect {
                             })?;
                     }
                 }
-                
-                for (_i, aggr) in this_group.aggrs.iter().enumerate() {
-                    let aggr_static: &mut InvokeAggrFn<'static> = unsafe { std::mem::transmute(aggr) };
-                    aggr_static.invocable.init();
-                }
             }
+
+            // If we had at least one window ingest the event into this window
             if let Some(this) = self.windows.first() {
                 let (unwind_event, event_meta) = event.data.parts();
                 consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
@@ -723,6 +755,7 @@ impl Operator for TrickleSelect {
                     })?;
                 }
             } else {
+                // otherwise we just pass it through the select portion of the statement
                 let data = event.data.suffix();
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
