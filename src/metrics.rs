@@ -22,26 +22,26 @@ use tremor_script::prelude::*;
 pub static mut INSTANCE: &str = "tremor";
 
 #[derive(Debug)]
-pub struct RampMetrics {
+pub struct Ramp {
     r#in: u64,
     out: u64,
     error: u64,
 }
 
 #[derive(Debug)]
-pub struct RampMetricsReporter {
+pub struct RampReporter {
     artefact_url: TremorURL,
-    metrics: RampMetrics,
+    metrics: Ramp,
     metrics_pipeline: Option<(TremorURL, PipelineAddr)>,
     flush_interval: Option<u64>, // as nano-seconds
     last_flush_ns: u64,
 }
 
-impl RampMetricsReporter {
+impl RampReporter {
     pub fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,
-            metrics: RampMetrics {
+            metrics: Ramp {
                 r#in: 0,
                 out: 0,
                 error: 0,

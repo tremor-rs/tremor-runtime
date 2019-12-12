@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// We want to keep the names here
+#![allow(clippy::module_name_repetitions)]
+
 use super::super::raw::*;
 use super::*;
 use crate::impl_expr;

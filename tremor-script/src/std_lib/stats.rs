@@ -359,7 +359,7 @@ struct Dds {
 
 impl std::clone::Clone for Dds {
     // DDSKetch does not implement clone
-    fn clone(&self) -> Dds {
+    fn clone(&self) -> Self {
         Self {
             histo: match &self.histo {
                 Some(dds) => {
@@ -439,7 +439,17 @@ impl TremorAggrFn for Dds {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
+        fn err<T>(e: &T) -> FunctionError
+        where
+            T: ToString,
+        {
+            FunctionError::RuntimeError {
+                mfa: mfa("stats", "dds", 2),
+                error: e.to_string(),
+            }
+        }
         let mut p = hashmap! {};
         if let Some(histo) = &self.histo {
             let count = histo.count();
@@ -463,33 +473,9 @@ impl TremorAggrFn for Dds {
                     }
                 }
             }
-            let min = match histo.min() {
-                Some(min) => min,
-                _ => {
-                    return Err(FunctionError::RuntimeError {
-                        mfa: mfa("stats", "dds", 2),
-                        error: format!("Unable to calculate min"),
-                    })
-                }
-            };
-            let max = match histo.max() {
-                Some(max) => max,
-                _ => {
-                    return Err(FunctionError::RuntimeError {
-                        mfa: mfa("stats", "dds", 2),
-                        error: format!("Unable to calculate max"),
-                    })
-                }
-            };
-            let sum = match histo.sum() {
-                Some(sum) => sum,
-                _ => {
-                    return Err(FunctionError::RuntimeError {
-                        mfa: mfa("stats", "dds", 2),
-                        error: format!("Unable to calculate sum"),
-                    })
-                }
-            };
+            let min = histo.min().ok_or_else(|| err(&"Unable to calculate min"))?;
+            let max = histo.max().ok_or_else(|| err(&"Unable to calculate max"))?;
+            let sum = histo.sum().ok_or_else(|| err(&"Unable to calculate sum"))?;
             Ok(Value::from(hashmap! {
                             "count".into() => Value::from(count),
                             "min".into() => Value::from(min),
@@ -527,14 +513,14 @@ impl TremorAggrFn for Dds {
                 }
             }
             let min = if count == 0 {
-                0f64
+                0_f64
             } else {
                 match histo.min() {
                     Some(min) => min,
                     _ => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
-                            error: format!("Unable to calculate min"),
+                            error: "Unable to calculate min".to_string(),
                         })
                     }
                 }
@@ -547,20 +533,20 @@ impl TremorAggrFn for Dds {
                     _ => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
-                            error: format!("Unable to calculate max"),
+                            error: "Unable to calculate max".to_string(),
                         })
                     }
                 }
             };
             let sum = if count == 0 {
-                0f64
+                0_f64
             } else {
                 match histo.sum() {
                     Some(sum) => sum,
                     _ => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
-                            error: format!("Unable to calculate sum"),
+                            error: "Unable to calculate sum".to_string(),
                         })
                     }
                 }
@@ -583,7 +569,7 @@ impl TremorAggrFn for Dds {
     }
 
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
-        let other: Option<&Dds> = src.downcast_ref::<Self>();
+        let other: Option<&Self> = src.downcast_ref::<Self>();
         if let Some(other) = other {
             if !self.percentiles_set {
                 self.percentiles = other.percentiles.clone();

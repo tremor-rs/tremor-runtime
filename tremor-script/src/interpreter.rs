@@ -52,10 +52,13 @@ pub const NULL: Value<'static> = Value::Static(StaticNode::Null);
 
 macro_rules! static_bool {
     ($e:expr) => {
-        if $e {
-            Cow::Borrowed(&TRUE)
-        } else {
-            Cow::Borrowed(&FALSE)
+        #[allow(clippy::if_not_else)]
+        {
+            if $e {
+                Cow::Borrowed(&TRUE)
+            } else {
+                Cow::Borrowed(&FALSE)
+            }
         }
     };
 }
@@ -146,7 +149,11 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     }
 }
 
-#[allow(clippy::cognitive_complexity, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cognitive_complexity,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines
+)]
 #[inline]
 pub fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
     outer: &'run OuterExpr,
@@ -305,8 +312,9 @@ pub fn exec_unary<'run, 'event: 'run>(
             Minus => x
                 .try_into()
                 .ok()
-                .and_then(|x: i64| x.checked_neg())
-                .map(|x| Cow::Owned(Value::from(x))),
+                .and_then(i64::checked_neg)
+                .map(Value::from)
+                .map(Cow::Owned),
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
             _ => None,
@@ -316,8 +324,9 @@ pub fn exec_unary<'run, 'event: 'run>(
             Minus => x
                 .try_into()
                 .ok()
-                .and_then(|x: i64| x.checked_neg())
-                .map(|x| Cow::Owned(Value::from(x))),
+                .and_then(i64::checked_neg)
+                .map(Value::from)
+                .map(Cow::Owned),
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
             _ => None,
@@ -333,6 +342,7 @@ pub fn exec_unary<'run, 'event: 'run>(
 }
 
 #[inline]
+#[allow(clippy::too_many_lines)]
 pub fn resolve<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
@@ -742,6 +752,7 @@ where
 }
 
 #[inline]
+#[allow(clippy::too_many_lines)]
 fn test_predicate_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
@@ -873,6 +884,7 @@ where
 }
 
 #[inline]
+#[allow(clippy::too_many_lines)]
 fn match_rp_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,

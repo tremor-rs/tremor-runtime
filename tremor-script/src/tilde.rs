@@ -346,6 +346,7 @@ impl Extractor {
         Ok(e)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn extract<'event, 'run, 'script>(
         &'script self,
         result_needed: bool,

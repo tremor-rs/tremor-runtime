@@ -385,7 +385,11 @@ impl TrickleSelect {
 }
 
 impl Operator for TrickleSelect {
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[allow(
+        mutable_transmutes,
+        clippy::transmute_ptr_to_ptr,
+        clippy::too_many_lines
+    )]
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
@@ -658,7 +662,7 @@ impl Operator for TrickleSelect {
                 // Check if we want to clear all the following window
                 // this is false for a non terminal widest window
                 if clear_all {
-                    for aggr in this_group.aggrs.iter() {
+                    for aggr in &this_group.aggrs {
                         let aggr_static: &mut InvokeAggrFn<'static> =
                             unsafe { std::mem::transmute(aggr) };
                         aggr_static.invocable.init();
@@ -734,7 +738,7 @@ impl Operator for TrickleSelect {
                     aggrs: &NO_AGGRS,
                     meta: &node_meta,
                 };
-                for aggr in this_group.aggrs.iter_mut() {
+                for aggr in &mut this_group.aggrs {
                     let invocable = &mut aggr.invocable;
                     let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());

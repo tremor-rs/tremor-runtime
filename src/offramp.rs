@@ -14,7 +14,7 @@
 
 use crate::codec::Codec;
 use crate::errors::*;
-use crate::metrics::RampMetricsReporter;
+use crate::metrics::RampReporter;
 use crate::registry::ServantId;
 use crate::system::{PipelineAddr, Stop, METRICS_PIPELINE};
 use crate::url::TremorURL;
@@ -112,7 +112,7 @@ pub struct Create {
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
     pub postprocessors: Vec<String>,
-    pub metrics_reporter: RampMetricsReporter,
+    pub metrics_reporter: RampReporter,
 }
 
 impl fmt::Debug for Create {

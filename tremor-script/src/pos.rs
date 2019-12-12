@@ -107,7 +107,7 @@ impl Location {
 
     pub fn move_up_lines(&self, lines: usize) -> Self {
         let mut new = *self;
-        new.line = self.line.checked_sub(lines).unwrap_or(0);
+        new.line = self.line.saturating_sub(lines);
         new
     }
 

@@ -256,7 +256,11 @@ where
         Ok(Cont::Cont(Cow::Owned(Value::Array(value_vec))))
     }
 
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[allow(
+        mutable_transmutes,
+        clippy::transmute_ptr_to_ptr,
+        clippy::too_many_lines
+    )]
     fn assign(
         &'script self,
         opts: ExecOpts,

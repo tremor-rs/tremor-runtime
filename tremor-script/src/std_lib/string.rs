@@ -30,6 +30,7 @@ macro_rules! map_function {
         })
     }
 }
+#[allow(clippy::too_many_lines)]
 pub fn load(registry: &mut Registry) {
     #[derive(Clone, Debug, Default)]
     struct StringFormat {}

@@ -79,7 +79,7 @@ impl Onramp for Rest {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let config = self.config.clone();
         let (tx, rx) = bounded(0);
@@ -217,7 +217,7 @@ fn onramp_loop(
     config: Config,
     preprocessors: Vec<String>,
     mut codec: std::boxed::Box<dyn codec::Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let host = format!("{}:{}", config.host, config.port);
     let (tx, dr) = bounded::<RestOnrampMessage>(1);

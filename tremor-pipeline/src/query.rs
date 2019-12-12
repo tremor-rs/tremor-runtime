@@ -90,6 +90,7 @@ impl Query {
             script, reg, aggr_reg,
         )?))
     }
+    #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self) -> Result<crate::ExecutableGraph> {
         use crate::op::Operator;
         use crate::ExecutableGraph;

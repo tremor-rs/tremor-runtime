@@ -19,6 +19,7 @@ use rand::distributions::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 
+#[allow(clippy::too_many_lines)]
 pub fn load(registry: &mut Registry) {
     // TODO see if we can cache the RNG here across function calls (or at least
     // at the thread level, like via rand::thread_rng()

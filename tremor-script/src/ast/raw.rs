@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// We want to keep the names here
+#![allow(clippy::module_name_repetitions)]
 use super::upable::Upable;
 use super::*;
 use crate::errors::*;
@@ -491,6 +493,7 @@ pub enum ImutExprRaw<'script> {
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExpr<'script>;
+    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ImutExprRaw::Binary(b) => match b.up(helper)? {
@@ -1629,18 +1632,18 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?;
-        let mid = helper.add_meta(self.start, self.end);
+        let invoke_meta_id = helper.add_meta(self.start, self.end);
         helper.aggregates.push(InvokeAggrFn {
-            mid,
+            mid: invoke_meta_id,
             invocable,
             args,
             module: self.module.clone(),
             fun: self.fun.clone(),
         });
         helper.is_in_aggr = false;
-        let mid = helper.add_meta(self.start, self.end);
+        let aggr_meta_id = helper.add_meta(self.start, self.end);
         Ok(InvokeAggr {
-            mid,
+            mid: aggr_meta_id,
             module: self.module,
             fun: self.fun,
             aggr_id,

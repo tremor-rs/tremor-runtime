@@ -59,7 +59,7 @@ fn onramp_loop(
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampMetricsReporter,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
 
@@ -173,7 +173,7 @@ impl Onramp for GSub {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();

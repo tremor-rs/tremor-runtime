@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::*;
-use crate::metrics::RampMetricsReporter;
+use crate::metrics::RampReporter;
 use crate::repository::ServantId;
 use crate::system::{PipelineAddr, Stop};
 use crate::url::TremorURL;
@@ -50,7 +50,7 @@ pub trait Onramp: Send {
         &mut self,
         codec: &str,
         preprocessors: &[String],
-        metrics_reporter: RampMetricsReporter,
+        metrics_reporter: RampReporter,
     ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
@@ -88,7 +88,7 @@ pub struct Create {
     pub stream: Box<dyn Onramp>,
     pub codec: String,
     pub preprocessors: Vec<String>,
-    pub metrics_reporter: RampMetricsReporter,
+    pub metrics_reporter: RampReporter,
 }
 
 impl fmt::Debug for Create {

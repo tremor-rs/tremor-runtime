@@ -296,6 +296,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn present(
         &'script self,
         opts: ExecOpts,

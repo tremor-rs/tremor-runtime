@@ -62,6 +62,7 @@ extern crate serde_derive;
 
 use crate::registry::Registry;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let matches = App::new("tremor-script")
         .version("0.5.0")

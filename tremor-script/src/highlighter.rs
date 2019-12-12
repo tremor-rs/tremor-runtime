@@ -110,7 +110,7 @@ pub trait Highlighter {
         self.highlight_errors(extracted, error)
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
@@ -153,8 +153,7 @@ pub trait Highlighter {
                             //
                             let delta = end.column as i64 - start.column as i64;
                             let len = usize::try_from(delta).unwrap_or(1);
-                            let prefix =
-                                String::from(" ").repeat(start.column.checked_sub(1).unwrap_or(0));
+                            let prefix = String::from(" ").repeat(start.column.saturating_sub(1));
                             let underline = String::from("^").repeat(len);
 
                             if let Some(token) = token {

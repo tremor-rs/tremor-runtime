@@ -400,6 +400,7 @@ impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
 //
 #[cfg_attr(tarpaulin, skip)]
 impl<'input> fmt::Display for Token<'input> {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::Whitespace(ref ws) => write!(f, "{}", ws),
@@ -1260,6 +1261,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.take_while(start, is_dec_digit);
 
