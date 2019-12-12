@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// PERF0001: handle select without grouping or windows easier.
+
 use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
@@ -633,7 +635,7 @@ impl Operator for TrickleSelect {
             } else {
                 let data = event.data.suffix();
                 #[allow(clippy::transmute_ptr_to_ptr)]
-                let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
+                let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
                 #[allow(clippy::transmute_ptr_to_ptr)]
                 let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
                 consts[GROUP_CONST_ID] = group_value.clone_static();
@@ -674,7 +676,7 @@ impl Operator for TrickleSelect {
                         origin_uri: event.origin_uri.clone(),
                         is_batch: event.is_batch,
                         kind: event.kind,
-                        data: (result, event_meta.clone()).into(),
+                        data: (result.into_static(), event_meta.clone()).into(),
                     },
                 ));
             }
