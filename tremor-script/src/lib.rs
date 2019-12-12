@@ -28,6 +28,7 @@ pub mod ast;
 mod compat;
 mod ctx;
 mod datetime;
+pub mod docs;
 pub mod errors;
 pub mod grok;
 pub mod highlighter;
