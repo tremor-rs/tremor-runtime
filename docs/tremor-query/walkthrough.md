@@ -177,6 +177,61 @@ So in the above example, the `categorize` script and the `categorize` node have 
 or specification __and__ an instance node that participates in the graph at runtime. It is often
 convenient to use the same name where there is only one instance of an operator of a given type.
 
+## Building Query Graph Algorithms
+
+Data streams can be branched and combined in the trickle query language via
+the select statement. The resulting graphs must be acyclic with no direct or
+indirect looping cycles.
+
+### Branching
+
+Branching data streams to multiple streams is performed via select operations
+
+Branch data into 3 different output stream ports
+
+```sql
+select event from in into out/a;
+select event from in into out/b;
+select event from in inout out/c;
+```
+
+Branch data into 3 different intermediate streams
+
+```sql
+create stream a;
+create stream b;
+create stream c;
+
+select event from in into a;
+select event from in into b;
+select event from in into c;
+```
+
+## Combining
+
+Multiple data streams can also be combined via select operations.
+
+Combine 3 data streams into a single output stream
+
+```sql
+...
+
+select event from a into out;
+select event from b into out;
+select event from c inout out;
+```
+
+Combine 3 data stream ports from 1 or many streams into a single output stream
+
+```sql
+...
+
+select event from a/1 into out;
+select event from a/2 into out;
+select event from b inout out;
+```
+
+
 ## Aggregations
 
 A key feature of the tremor query langauge are aggregations. These are supported with:
@@ -296,3 +351,99 @@ merge-capable aggregate functions.
 The converged statistics under merge exhibit the same relative accuracy at a fraction of the computational
 and memory overhead without the using the tilt-frame mechanism. 
 
+
+## Group Mechanics
+
+The group clause in the query language partitions streams before windows and tilt frames
+are applied. Groups can be set-based,  each-based or composites thereof.
+
+### Set based grouping
+
+Grouping by set partitions streams by a concatenation of expressions.
+
+```sql
+select event from in
+group by set(event.country, event.region)
+into out;
+```
+
+In the example expression we are partitioning into a composite group that is
+composed of the country and  region of each inbound event.
+
+So we expect data of the following form
+
+```json
+{ "country": "US", "region": "east", "az": "1", ... }
+{ "country": "US", "region": "east", "az": "2", ... }
+```
+
+### Each based grouping
+
+Given that our data can be nested, however, our data could be structured differently:
+
+```json
+{
+  "country": "US",
+  regions: {
+    "east": [ "1", "2"],
+  }
+  ...
+}
+```
+
+```sql
+select event from in
+group by each(record::keys(event.regions))
+into out;
+```
+
+Each field in the nested `locations` field becomes a component of our
+set and qualified by country ...
+
+### Limitations
+
+There are cases however that are not currently easily partitionable with a
+single sql expression due to limitations with the grouping clause. For example
+what is we wanted to make availability zones a component of our group partitions?
+
+How would we structure such a query?
+
+```json
+{
+  "country": "US",
+  regions: {
+    "east": [ "1", "2"], # AZs by region
+  }
+  ...
+}
+```
+
+```sql
+create stream by_country_region;
+
+select { "country": event.country, "region": group[0], "azs": event.regions[group[0]] }
+from in
+group by each(record::keys(event.regions))
+into by_country_region;
+```
+
+We can preprocess our inbound stream and collapse our locations
+sub-record a single level by hoisting the `region` field to the
+top level of a synthetic intermediate outbound stream `by_country_region`.
+
+We can postprocess the intermediate stream `by_country_region` into a
+single outbound stream that further extracts and hoists the 'az' dimension
+
+```sql
+select { "country": event.country, "region": event.region, "az": group[0], }
+from by_country_region
+group by each(event.azs)
+into out;
+```
+
+So, we need 2 select statements to compose a solution where there are multiple
+nesting levels via successive extraction of group components. The same principle
+works with more complex grouping requirements.
+
+Once the grouping mechanics are resolved, windowing, aggregation and tilt-frames
+can be applied to further refine queries.

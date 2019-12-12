@@ -1,0 +1,19 @@
+create stream by_co_re;
+
+select {
+  "country": event.country,
+   "region": group[0],
+   "azs": event.regions[group[0]],
+}
+from in
+group by each(record::keys(event.regions))
+into by_co_re;
+
+select {
+  "country": event.country,
+  "region": event.region,
+  "az": group[0],
+}
+from by_co_re
+group by each(event.azs)
+into out;
