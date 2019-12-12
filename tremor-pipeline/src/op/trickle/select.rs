@@ -665,7 +665,7 @@ impl Operator for TrickleSelect {
                     }
                 } else {
                     // If we skipped the widest window we can clear the rest
-                    emit_all = true;
+                    clear_all = true;
                 }
 
                 // Remember we iterate backwards so we the next element in the iterator
@@ -927,6 +927,7 @@ mod test {
         event: Event,
     ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
         let mut action = op.on_event("in", event)?;
+        dbg!(&action);
         let r = action
             .pop()
             .and_then(|second| Some([action.pop()?, second]));
@@ -991,29 +992,29 @@ mod test {
         assert_eq!(event.data.suffix().value, 2);
         // Add another event prior to 30
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
-        // This emits the rollup to 30s as well
-        let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(30))?.expect("no event 2");
-        assert_eq!("out", out1);
-        assert_eq!(event1.data.suffix().value, 2);
-        assert_eq!("out", out2);
-        assert_eq!(event2.data.suffix().value, 4);
+        // This emits only the initial event since the rollup
+        // will only be emitted once it gets the first event
+        // if the next window
+        let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
         // Add another event prior to 45 to the first window
         assert!(try_enqueue(&mut op, test_event(31))?.is_none());
 
-        // At 45 the 15s window wmits
-        let (out, event) = try_enqueue(&mut op, test_event(45))?.expect("no event 1");
-        assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
-        assert!(try_enqueue(&mut op, test_event(46))?.is_none());
-
-        // Add 60 the 15 and 30s window emits
+        // At 45 the 15s window emits the rollup with the previous data
         let [(out1, event1), (out2, event2)] =
-            try_enqueue_two(&mut op, test_event(60))?.expect("no event 3");
+            try_enqueue_two(&mut op, test_event(45))?.expect("no event 3");
+
         assert_eq!("out", out1);
         assert_eq!("out", out2);
         assert_eq!(event1.data.suffix().value, 2);
         assert_eq!(event2.data.suffix().value, 4);
+        assert!(try_enqueue(&mut op, test_event(46))?.is_none());
+
+        // Add 60 only the 15s window emits
+        let (out, event) = try_enqueue(&mut op, test_event(60))?.expect("no event 4");
+        assert_eq!("out", out);
+        assert_eq!(event.data.suffix().value, 2);
         Ok(())
     }
 
