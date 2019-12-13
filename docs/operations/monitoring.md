@@ -2,31 +2,38 @@
 
 Monitoring tremor is done using tremor itself. This has some interesting implications.
 
-Each pipeline emits metrics on its operations into a pipeline called `/pipeline/system::metrics/system` this allows to both write this messages to an destination system such as InfluxDB as well as to a message queue such as Kafka.
+Each onramp, pipeline and offramp emits metrics on its operations into a pipeline called `/pipeline/system::metrics/system`. This allows to both write these messages to a destination system such as InfluxDB, as well as to a message queue such as Kafka.
 
-Metrics are formatted following the same structure as the [Influx Codec](../artefacts/codecs.md#influx). For example:
+Metrics are published to the `system::metrics` pipeline every 10 second or if an event was received by the pipeline (whatever happened later).
 
+To enable monitoring, the `metrics_interval_s` key must be specified as part of onramp, pipeline and offramp config (depending on which metrics you want to capture), followed by the amount of seconds that should pass between emits.
+
+Metrics are formatted following the same structure as the [Influx Codec](../artefacts/codecs.md#influx).
+
+## Pipeline metrics
+
+Example:
 ```json
 {
   "measurement":"events",
   "tags":{
     "direction":"output",
     "node":"in",
-    "pipeline":"main",
-    "port":"tremor:///pipeline/main/01"
+    "pipeline":"tremor:///pipeline/main/01",
+    "port":"out"
   },
   "fields":{"count":20},
   "timestamp":1553077007898214000
 }
 ```
 
-In in influx format:
+In influx format:
 
 ```influx
 events,port=out,direction=output,node=in,pipeline=tremor:///pipeline/main/01 count=20 1553077007898214000
 ```
 
-In this structure `measurement` is always `events` as that is what this is measuring. The number of events is always in the field `cost` as we are counting them.
+In this structure `measurement` is always `events` as that is what this is measuring. The number of events is always in the field `count` as we are counting them.
 
 The `tags` section explains where this measurement was taken:
 
@@ -37,11 +44,42 @@ The `tags` section explains where this measurement was taken:
 
 The example above measures all events that left the `in` of pipeline `main`.
 
-Metrics are published to the `system::metrics` pipeline every 10 second or if an event was received by the pipeline (whatever happened later).=
+In addition to the general pipeline metrics, some operators do generate their own metrics, for details please check on the documentation for the operator in question.
 
-In addition to the general pipeline metrics some operators do generate their own metrics, for details please check on the documentation for the operator in question.
+## Ramp metrics
 
-To enable monitoring you have to specify the `metrics_interval_s` key in the pipeline, followed by the amount of seconds that should pass between emits
+```json
+{
+   "measurement":"ramp_events",
+   "tags":{
+      "port":"out",
+      "ramp":"tremor:///offramp/main/01/in"
+   },
+   "fields":{"count":42},
+   "timestamp":1576215344378248634
+}
+```
+
+In influx format:
+
+```influx
+ramp_events,port=out,ramp=tremor:///offramp/main/01 count=42 1576215344378248634
+```
+
+In this structure `measurement` is always `ramp_events` as that is what this is measuring. The number of events is always in the field `count` as we are counting them.
+
+The `tags` section explains where this measurement was taken:
+
+* `ramp` is the `id` of the onramp/offramp
+* `port` is one of `in`, `out` and `error`
+
+The example above measures all events that were emitted out by the offramp `main`.
+
+Notes:
+
+* Preprocessor and codec level failures count as errors for onramp metrics.
+* For onramps, count for `in` port is always zero since an event in tremor is something concrete only after the initial onramp processing. Furthermore, for stream-based onramps like tcp, the idea of counting `in` events does not make sense.
+* If your pipeline is using the [batch operator](../artefacts/operators.md#genericbatch) and offramp is receiving events from it, no of events tracked at offramp is going to be dictated by the batching config.
 
 ## Operator level metrics
 
@@ -63,13 +101,13 @@ pipeline:
         - in
       outputs:
         - out
-        - outliers
     nodes:
       - id: enrich
         op: runtime::tremor
         config:
-          script: >
-            _ { tags.host := system::hostname(); }
+          script: |
+            let event.tags.host = system::hostname();
+            event;
     links:
       in: [ enrich ]
       enrich: [ out ]
@@ -79,7 +117,6 @@ binding:
     links:
       '/pipeline/system::metrics/system/out': [ '/pipeline/enrich/system/in' ]
       '/pipeline/enrich/system/out': [ '/offramp/system::stdout/system/in' ]
-
 ```
 
 This will take the metrics from the metrics pipeline and execute a tremor script to add the `host` tag to each event.
