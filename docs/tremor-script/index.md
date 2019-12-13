@@ -166,6 +166,25 @@ Record literals in `tremor-script` are syntactically equivalent to JSON document
 }
 ```
 
+#### Operators
+
+List of binary and unary operators in `tremor-script`, ordered by precedence (from low to high):
+
+|Symbol | Name | Example |
+|-------|------|---------|
+| or | Logical OR |`true or false` |
+| and |Logical AND | `true and false` |
+| \| | Bitwise OR | *Bitwise OR has not been implemented yet* |
+| ^ | Bitwise XOR | `42 ^ 42, true ^ true` |
+| & | Bitwise AND | `42 & 0, true & false` |
+| ==, != | Equality, Inequality | `"snot" != "badger"` |
+| <, <=, >, >= | Comparison Operators | `42 > 0` |
+| <<, >>, >>> | Bitwise shift -- Left, Right(signed), Right(unsigned) | `42 >> 2` |
+| +, - | Addition, Subtraction | `42 + 0` |
+| \*, /, % | Multiplication, Division, Modulus | `42 * 1` |
+| +, - | Unary Plus, Unary Minus | `+42` |
+| not , ! | Unary Logical NOT, Unary Bitwise NOT | `not false`, *Bitwise NOT has not been implemented yet* |
+
 ### Paths
 
 Path grammar:
