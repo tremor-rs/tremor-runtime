@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,40 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
+use crate::registry::Registry;
+use crate::tremor_const_fn;
 use regex::Regex;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(
-            tremor_fn! (re::replace(_context, _re: String, _input: String, _to: String) {
+            tremor_const_fn! (re::replace(_context, _re: String, _input: String, _to: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
-                Ok(Value::String(re.replace(input, to).to_string().into()))
+                Ok(Value::from(re.replace(input, to).to_string()))
             }),
         )
         .insert(
-            tremor_fn! (re::replace_all(_context, _re: String, _input: String, _to: String) {
+            tremor_const_fn! (re::replace_all(_context, _re: String, _input: String, _to: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
-                Ok(Value::String(re.replace_all(input, to).to_string().into()))
+                Ok(Value::from(re.replace_all(input, to).to_string()))
             }),
         )
         .insert(
-            tremor_fn! (re::is_match(_context, _re: String, _input: String) {
+            tremor_const_fn! (re::is_match(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
-                Ok(Value::Bool(re.is_match(input)))
+                Ok(Value::from(re.is_match(input)))
             }),
         )
         .insert(
-            tremor_fn! (re::split(_context, _re: String, _input: String) {
+            tremor_const_fn! (re::split(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
-                Ok(Value::Array(re.split(input).map(|v| Value::from(v.to_string())).collect()))
+                let res: Vec<Value> = re.split(input).map(|v| Value::from(v.to_string())).collect();
+                Ok(Value::from(res))
             }),
         );
 }

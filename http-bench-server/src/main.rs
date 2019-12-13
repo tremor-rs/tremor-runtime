@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(warnings)]
+#![recursion_limit = "1024"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
+
 use actix_web::{error, web, App, Error, HttpResponse, HttpServer};
 use bytes::BytesMut;
 use futures::{Future, Stream};
@@ -24,7 +37,8 @@ const MAX_SIZE: usize = 2_621_440; // max payload size is 256k
 struct State {
     counter: AtomicUsize,
     size: AtomicUsize,
-    work_delay: u64,
+    _work_delay: u64,
+    last_print: AtomicUsize,
 }
 
 fn index(
@@ -56,17 +70,22 @@ fn index(
             let size = body.len();
             let c = data.counter.fetch_add(items, Ordering::Relaxed) + items;
             let s = data.size.fetch_add(size, Ordering::Relaxed) + size;
-            let d = format!("{} / {} MB", c, s / 1024 / 1024);
-            println!("{}", d);
+            let d = if c - data.last_print.load(Ordering::Relaxed) > 1000 {
+                format!("{} / {} MB", c, s / 1024 / 1024)
+            } else {
+                String::new()
+            };
             Ok(HttpResponse::Ok().body(d)) // <- send response
         })
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() -> std::io::Result<()> {
     let data = web::Data::new(State {
         counter: AtomicUsize::new(0),
         size: AtomicUsize::new(0),
-        work_delay: 0,
+        _work_delay: 0,
+        last_print: AtomicUsize::new(0),
     });
     HttpServer::new(move || {
         App::new()

@@ -1,0 +1,42 @@
+onramp:
+  - id: crononome
+    type: crononome
+    codec: json
+    config:
+      entries:
+## every second
+        - name: 1s
+          expr: "* * * * * *"
+## every 5 seconds
+        - name: 5s
+          expr: "0/5 * * * * *"
+## every minute
+        - name: 1m
+          expr: "0 * * * * *"
+          payload:
+            snot: badger
+
+
+offramp:
+  - id: console
+    type: stdout
+
+binding:
+  - id: main
+    links:
+      '/onramp/crononome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+
+mapping:
+  /binding/main/01:
+    instance: "01"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]

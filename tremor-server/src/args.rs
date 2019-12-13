@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,16 @@ pub fn parse<'a>() -> clap::App<'a, 'a> {
                 .long("config")
                 .short("c")
                 .help("config file to load")
+                .takes_value(true)
+                .min_values(1)
+                .max_values(10000) // there is no 'as many as you want' but this comes close
+                .required(false),
+        )
+        .arg(
+            Arg::with_name("query")
+                .long("query")
+                .short("q")
+                .help("query file to load")
                 .takes_value(true)
                 .min_values(1)
                 .max_values(10000) // there is no 'as many as you want' but this comes close

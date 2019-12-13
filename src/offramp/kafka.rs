@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,21 +20,12 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use futures::Future;
 use halfbrown::HashMap;
 use hostname::get_hostname;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use serde_yaml;
 use std::fmt;
 use tokio_threadpool as thread_pool;
 
@@ -64,6 +55,8 @@ pub struct Config {
     pub key: Option<String>,
 }
 
+impl ConfigImpl for Config {}
+
 fn d_host() -> String {
     match get_hostname() {
         Some(h) => h,
@@ -87,10 +80,10 @@ impl fmt::Debug for Kafka {
     }
 }
 
-impl OfframpImpl for Kafka {
+impl offramp::Impl for Kafka {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let mut producer_config = ClientConfig::new();
             let producer_config = producer_config
                 .set("client.id", &format!("tremor-{}-{}", config.hostname, 0))
@@ -102,15 +95,14 @@ impl OfframpImpl for Kafka {
                 .rdkafka_options
                 .iter()
                 .fold(producer_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
-                .create()
-                .expect("Producer creation failed");
+                .create()?;
             let key = config.key.clone();
             // Create the thread pool where the expensive computation will be performed.
             let pool = thread_pool::Builder::new()
                 .name_prefix("kafka-pool-")
                 .pool_size(config.threads)
                 .build();
-            Ok(Box::new(Kafka {
+            Ok(Box::new(Self {
                 pool,
                 producer,
                 topic: config.topic.clone(),
@@ -126,28 +118,28 @@ impl OfframpImpl for Kafka {
 
 impl Offramp for Kafka {
     // TODO
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            if let Ok(raw) = codec.encode(event.value) {
-                let mut record = FutureRecord::to(&self.topic);
-                record = record.payload(&raw);
-                //TODO: Key
-                let r = if let Some(ref k) = self.key {
-                    self.producer.send(record.key(k.as_str()), 1)
-                } else {
-                    self.producer.send(record, 1)
-                };
-                let producer_future = r.then(|_result| {
-                    // match result {
-                    //     Ok(Ok(_delivery)) => ret.send(),
-                    //     Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
-                    //     Err(_) => ret.with_value(Err("Future cancled".into())).send(),
-                    // }
-                    Ok(())
-                });
-                self.pool.spawn(producer_future);
-            }
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        for value in event.value_iter() {
+            let raw = codec.encode(value)?;
+            let mut record = FutureRecord::to(&self.topic);
+            record = record.payload(&raw);
+            //TODO: Key
+            let r = if let Some(ref k) = self.key {
+                self.producer.send(record.key(k.as_str()), 1)
+            } else {
+                self.producer.send(record, 1)
+            };
+            let producer_future = r.then(|_result| {
+                // match result {
+                //     Ok(Ok(_delivery)) => ret.send(),
+                //     Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
+                //     Err(_) => ret.with_value(Err("Future cancled".into())).send(),
+                // }
+                Ok(())
+            });
+            self.pool.spawn(producer_future);
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);
@@ -159,8 +151,8 @@ impl Offramp for Kafka {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

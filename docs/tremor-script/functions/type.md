@@ -2,6 +2,8 @@
 
 The type module contains functions that help inspecting types of values.
 
+## Functions
+
 ### type::as_string(value)
 
 Returns a string representation for the value type:
@@ -12,7 +14,7 @@ Returns a string representation for the value type:
 * `"float"`
 * `"string"`
 * `"array"`
-* `"object"`
+* `"record"`
 
 ### type::is_null(value)
 
@@ -42,6 +44,6 @@ Returns if the value is a string.
 
 Returns if the value is an array.
 
-### type::is_object(value)
+### type::is_record(value)
 
-Returns if the object is an object.
+Returns if the value is a record.

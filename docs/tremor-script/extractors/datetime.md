@@ -10,7 +10,7 @@ When used with `~`, the predicate parses if the target can be parsed to a nanose
 
 If the predicate parses, the extractor returns the 64-bit nanosecond-precise UTC UNIX timestamp.
 
-## Example:
+## Example
 
 ```tremor
 match { "test" : "2019-01-01 09:42" } of
@@ -20,7 +20,7 @@ end;
 ## output: 1546335720000000000
 ```
 
-## Errors:
+## Errors
 
 The extractor will fail due to one of the following:
 

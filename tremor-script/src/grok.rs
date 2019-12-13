@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,21 +23,15 @@ use std::str;
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
-#[allow(unused)]
-pub fn resolve(pattern: String) -> GrokPattern {
-    GrokPattern::from_file(PATTERNS_FILE_DEFAULT_PATH.to_string(), pattern)
-        .expect("Could not create grok pattern recognizer")
-}
-
 #[derive(Debug)]
-pub struct GrokPattern {
+pub struct Pattern {
     pub definition: String,
     pub pattern: grok::Pattern,
 }
 
-impl GrokPattern {
-    pub fn from_file(file_path: String, definition: String) -> Result<GrokPattern> {
-        let file = File::open(file_path.clone())?;
+impl Pattern {
+    pub fn from_file(file_path: &str, definition: &str) -> Result<Self> {
+        let file = File::open(file_path)?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
         let mut grok = Grok::default();
@@ -45,36 +39,27 @@ impl GrokPattern {
 
         let mut result = Grok::default();
 
-        let mut error_count = 0;
-        for (_num, line) in input.lines().enumerate() {
+        for (num, line) in input.lines().enumerate() {
             let l = line?;
             if l.is_empty() || l.starts_with('#') {
                 continue;
             }
 
-            match recognizer.match_against(&l) {
-                Some(m) => {
-                    if let Some(alias) = m.get("alias") {
-                        let pattern = m.get("pattern").expect("Expected a non-NONE value");
-                        result.insert_definition(alias.to_string(), pattern.to_string())
-                    } else {
-                        return Err(
-                            format!("{}: {:?}", "Expected a non-NONE value", (_num, &l)).into()
-                        );
-                    }
+            if let Some(m) = recognizer.match_against(&l) {
+                if let Some((alias, pattern)) = m
+                    .get("alias")
+                    .and_then(|alias| Some((alias, m.get("pattern")?)))
+                {
+                    result.insert_definition(alias.to_string(), pattern.to_string())
+                } else {
+                    return Err(format!("{}: {:?}", "Expected a non-NONE value", (num, &l)).into());
                 }
-                None => {
-                    dbg!(("error in pattern on line", _num, &l));
-                    error_count += 1
-                }
+            } else {
+                return Err(format!("{}: {:?}", "Error in pattern on line", (num, &l)).into());
             }
         }
 
-        if error_count > 0 {
-            return Err("Bad patterns file".into());
-        }
-
-        Ok(GrokPattern {
+        Ok(Self {
             definition: format!("{}{}", "file://", file_path),
             pattern: result.compile(&definition, true)?,
         })
@@ -83,7 +68,7 @@ impl GrokPattern {
     pub fn new(definition: String) -> Result<Self> {
         let mut grok = Grok::default();
         if let Ok(pattern) = grok.compile(&definition, true) {
-            Ok(GrokPattern {
+            Ok(Self {
                 definition,
                 pattern,
             })
@@ -92,7 +77,7 @@ impl GrokPattern {
         }
     }
 
-    pub fn matches(&self, data: Vec<u8>) -> Result<Value> {
+    pub fn matches(&self, data: &[u8]) -> Result<Value> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {
             Some(m) => {
@@ -107,11 +92,13 @@ impl GrokPattern {
     }
 }
 
-impl std::clone::Clone for GrokPattern {
+impl std::clone::Clone for Pattern {
     fn clone(&self) -> Self {
+        #[allow(clippy::result_unwrap_used)]
         Self {
             definition: self.definition.to_owned(),
-            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).expect(""),
+            //ALLOW: since we clone we know this exists
+            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).unwrap(),
         }
     }
 }
@@ -126,8 +113,8 @@ mod tests {
             let raw: String = $raw.to_string();
             dbg!(pat.clone());
             dbg!(raw.clone());
-            let codec = GrokPattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes().to_vec());
+            let codec = Pattern::new(pat).expect("bad pattern");
+            let decoded = codec.matches(raw.as_bytes());
             dbg!(&decoded);
             match decoded {
                 Ok(j) => assert_eq!(j, $json),
@@ -143,8 +130,8 @@ mod tests {
             let raw: String = $raw.to_string();
             dbg!(pat.clone());
             dbg!(raw.clone());
-            let codec = GrokPattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes().to_vec());
+            let codec = Pattern::new(pat).expect("bad pattern");
+            let decoded = codec.matches(raw.as_bytes());
             match decoded {
                 Err(decoded) => assert_eq!($expr, decoded.description()),
                 _ => eprintln!("{}", "Expected no match"),

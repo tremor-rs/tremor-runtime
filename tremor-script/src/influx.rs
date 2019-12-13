@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,73 +15,106 @@
 
 use crate::errors::*;
 use halfbrown::HashMap;
-use simd_json::value::borrowed::{Map, Value};
-use simd_json::value::ValueTrait;
+use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::Value as ValueTrait;
 use std::borrow::Cow;
+use std::io::Write;
 use std::str::Chars;
 
-#[allow(dead_code)]
+// taken from https://github.com/simd-lite/simdjson-rs/blob/f9af58334b8e1133f2d27a4f34a57d9576eebfff/src/value/generator.rs#L103
+
+#[inline]
+fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
+    let mut start = 0;
+
+    writer.write_all(&[b'"']).ok()?;
+    for (index, ch) in string.iter().enumerate().skip(start) {
+        let ch = *ch;
+        if ch == b'"' || ch == b'\\' {
+            writer.write_all(&string[start..index]).ok()?;
+            writer.write_all(&[b'\\', ch]).ok()?;
+            start = index + 1;
+        }
+    }
+    writer.write_all(&string[start..]).ok()?;
+    writer.write_all(&[b'"']).ok()?;
+    Some(())
+}
+
+#[inline]
+fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
+    let mut start = 0;
+
+    for (index, ch) in string.iter().enumerate().skip(start) {
+        let ch = *ch;
+        if ch == b'"' || ch == b'\\' || ch == b',' || ch == b' ' || ch == b'=' {
+            writer.write_all(&string[start..index]).ok()?;
+            writer.write_all(&[b'\\', ch]).ok()?;
+            start = index + 1;
+        }
+    }
+    writer.write_all(&string[start..]).ok()?;
+    Some(())
+}
+
 pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
-    let mut output = v.get("measurement")?.as_string()?.escape();
+    let mut output: Vec<u8> = Vec::with_capacity(512);
+    write_escaped_key(&mut output, v.get("measurement")?.as_str()?.as_bytes())?;
+    //let mut output: String = v.get("measurement")?.as_str()?.escape();
 
     let mut tag_collection = v
         .get("tags")?
         .as_object()?
         .iter()
-        .filter_map(|(key, value)| {
-            let mut op = key.escape().to_owned();
-            op.push('=');
-            op.push_str(&value.as_string()?.escape());
-            Some(op)
-        })
-        .collect::<Vec<String>>();
-    tag_collection.sort();
+        .filter_map(|(key, value)| Some((key, value.as_str()?.to_owned())))
+        .collect::<Vec<(&Cow<'input, str>, String)>>();
+    tag_collection.sort_by_key(|v| v.0);
 
-    let tags = tag_collection.join(",");
-    if !tags.is_empty() {
-        output.push_str(",");
-        output.push_str(&tags);
+    for (key, value) in tag_collection {
+        output.write_all(&[b',']).ok()?;
+        write_escaped_key(&mut output, key.as_bytes())?;
+        output.write_all(&[b'=']).ok()?;
+        // For the fields we escape differently then for values ...
+        write_escaped_key(&mut output, value.as_bytes())?;
     }
 
-    output.push_str(" ");
+    output.write_all(&[b' ']).ok()?;
+
     let fields = v.get("fields")?.as_object()?;
-    let mut field_collection = Vec::with_capacity(fields.len());
-    for (key, field) in fields.iter() {
-        let value = match field {
-            Value::String(s) => process_string(s),
-            Value::F64(num) => num.to_string(),
-            Value::I64(num) => num.to_string() + "i",
-            Value::Bool(b) => b.to_string(),
-            _ => return None,
-        };
-
-        let mut op = key.escape().to_owned();
-        op.push('=');
-        op.push_str(&value);
-        field_collection.push(op);
-    }
-    field_collection.sort();
-    let fields = field_collection.join(",");
-    output.push_str(&fields);
-    output.push(' ');
-
-    output.push_str(&v.get("timestamp")?.as_u64()?.to_string());
-
-    Some(output.into())
-}
-
-#[allow(dead_code)]
-fn process_string(s: &str) -> String {
-    let mut out = String::from(r#"""#);
-    s.chars().for_each(|ch| match ch {
-        c if c == '\\' || c == '\"' => {
-            out.push('\\');
-            out.push(c);
+    let mut field_collection: Vec<(&Cow<'input, str>, &Value)> = fields.iter().collect();
+    field_collection.sort_by_key(|v| v.0);
+    let mut first = true;
+    for (key, value) in field_collection {
+        if first {
+            first = false;
+        } else {
+            output.write_all(&[b',']).ok()?;
         }
-        c => out.push(c),
-    });
-    out.push('"');
-    out
+        write_escaped_key(&mut output, key.as_bytes())?;
+        output.write_all(&[b'=']).ok()?;
+
+        if let Some(s) = value.as_str() {
+            write_escaped_value(&mut output, s.as_bytes())?
+        } else {
+            match value.value_type() {
+                ValueType::F64 | ValueType::Bool => value.write(&mut output).ok()?,
+                ValueType::U64 | ValueType::I64 => {
+                    value.write(&mut output).ok()?;
+                    output.write_all(&[b'i']).ok()?
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    output.write_all(&[b' ']).ok()?;
+    let t = v.get("timestamp")?;
+    if t.is_u64() {
+        t.write(&mut output).ok()?;
+        Some(output)
+    } else {
+        None
+    }
 }
 
 pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'input>>> {
@@ -96,7 +129,7 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'
     let tags = if c == ',' {
         parse_tags(&mut chars)?
     } else {
-        Map::new()
+        Object::new()
     };
 
     let fields = parse_fields(&mut chars)?;
@@ -107,12 +140,12 @@ pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'
         chars.as_str().parse()?
     };
 
-    let mut m = Map::with_capacity(4);
+    let mut m = Object::with_capacity(4);
     m.insert_nocheck("measurement".into(), Value::String(measurement));
-    m.insert_nocheck("tags".into(), Value::Object(tags));
-    m.insert_nocheck("fields".into(), Value::Object(fields));
+    m.insert_nocheck("tags".into(), Value::from(tags));
+    m.insert_nocheck("fields".into(), Value::from(fields));
     m.insert_nocheck("timestamp".into(), timestamp.into());
-    Ok(Some(Value::Object(m)))
+    Ok(Some(Value::from(m)))
 }
 
 fn parse_string<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>)> {
@@ -127,8 +160,8 @@ fn float_or_bool(s: &str) -> Result<Value<'static>> {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::from(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::from(false)),
-        _ => Ok(Value::F64(
-            s.parse()
+        _ => Ok(Value::from(
+            s.parse::<f64>()
                 .map_err(|_| ErrorKind::InvalidInfluxData(s.to_owned()))?,
         )),
     }
@@ -147,7 +180,7 @@ fn parse_value<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>
             c @ Some(',') | c @ Some(' ') | c @ None => return Ok((float_or_bool(&res)?, c)),
             Some('i') => match chars.next() {
                 c @ Some(' ') | c @ Some(',') | c @ None => {
-                    return Ok((Value::I64(res.parse()?), c))
+                    return Ok((Value::from(res.parse::<i64>()?), c))
                 }
                 Some(c) => {
                     return Err(ErrorKind::InvalidInfluxData(format!(
@@ -169,7 +202,7 @@ fn parse_value<'input>(chars: &mut Chars) -> Result<(Value<'input>, Option<char>
     }
 }
 
-fn parse_fields<'input>(chars: &mut Chars) -> Result<Map<'input>> {
+fn parse_fields<'input>(chars: &mut Chars) -> Result<Object<'input>> {
     let mut res = HashMap::new();
     loop {
         let key = parse_to_char(chars, '=')?;
@@ -183,24 +216,24 @@ fn parse_fields<'input>(chars: &mut Chars) -> Result<Map<'input>> {
                 res.insert(key, val);
                 return Ok(res);
             }
-            _ => unreachable!(),
+            _ => return Err(ErrorKind::InvalidInfluxData("Failed to parse fields.".into()).into()),
         };
     }
 }
 
-fn parse_tags<'input>(chars: &mut Chars) -> Result<Map<'input>> {
+fn parse_tags<'input>(chars: &mut Chars) -> Result<Object<'input>> {
     let mut res = HashMap::new();
     loop {
-        let (key, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c != '=' {
+        let (key, c_key) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        if c_key != '=' {
             return Err(ErrorKind::InvalidInfluxData("Tag without value".into()).into());
         };
-        let (val, c) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c == '=' {
+        let (val, c_val) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        if c_val == '=' {
             return Err(ErrorKind::InvalidInfluxData("= found in tag value".into()).into());
         }
         res.insert(key, Value::String(val));
-        if c == ' ' {
+        if c_val == ' ' {
             return Ok(res);
         }
     }
@@ -255,49 +288,10 @@ fn parse_to_char<'input>(chars: &mut Chars, end: char) -> Result<Cow<'input, str
     Ok(res)
 }
 
-trait Escaper {
-    type Escaped;
-    fn escape(&self) -> Self::Escaped;
-}
-impl<'input> Escaper for Cow<'input, str> {
-    type Escaped = String;
-    // type Unescaped = String;
-
-    fn escape(&self) -> Self::Escaped {
-        let mut out = String::new();
-        self.chars().for_each(|ch| match ch {
-            c if c == ',' || c == ' ' || c == '\\' || c == '=' || c == '\"' => {
-                out.push('\\');
-                out.push(c);
-            }
-            c => out.push(c),
-        });
-
-        out
-    }
-}
-impl Escaper for String {
-    type Escaped = String;
-    // type Unescaped = String;
-
-    fn escape(&self) -> Self::Escaped {
-        let mut out = String::new();
-        self.chars().for_each(|ch| match ch {
-            c if c == ',' || c == ' ' || c == '\\' || c == '=' || c == '\"' => {
-                out.push('\\');
-                out.push(c);
-            }
-            c => out.push(c),
-        });
-
-        out
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use pretty_assertions::assert_eq;
     use simd_json::json;
 
     #[test]
@@ -311,7 +305,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -328,7 +322,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -347,7 +341,7 @@ mod tests {
                 "bug_concentration": 98.0,
 
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -356,14 +350,14 @@ mod tests {
     #[test]
     fn parse_no_timestamp() {
         let s = "weather temperature=82i";
-        let parsed = parse(s, 1465839830100400200u64).expect("failed to parse");
+        let parsed = parse(s, 1_465_839_830_100_400_200u64).expect("failed to parse");
         let r: Value = json!({
             "measurement": "weather",
             "tags": {},
             "fields": {
                 "temperature": 82
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Some(r), parsed);
@@ -378,7 +372,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -393,7 +387,7 @@ mod tests {
             "fields": {
                 "temperature": 82
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -410,7 +404,7 @@ mod tests {
             "fields": {
                 "temperature": "too warm"
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -432,7 +426,7 @@ mod tests {
             "fields": {
                 "too_hot": true
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         for s in sarr {
@@ -456,14 +450,13 @@ mod tests {
             "fields": {
                 "too_hot": false
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         for s in sarr {
             assert_eq!(Ok(Some(r.clone())), parse(s, 0));
         }
     }
-    // Note: Escapes are escaped twice since we need one level of escaping for rust!
     #[test]
     fn parse_escape1() {
         let s = "weather,location=us\\,midwest temperature=82 1465839830100400200";
@@ -475,7 +468,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -492,7 +485,7 @@ mod tests {
             "fields": {
                 "temp=rature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -508,7 +501,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -525,7 +518,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -541,7 +534,7 @@ mod tests {
             "fields": {
                 "temperature": 82.0
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -558,7 +551,7 @@ mod tests {
             "fields": {
                 "temperature": "too\"hot\""
             },
-            "timestamp": 1465839830100400200i64,
+            "timestamp": 1_465_839_830_100_400_200i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -575,7 +568,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot/cold"
             },
-            "timestamp": 1465839830100400201i64,
+            "timestamp": 1_465_839_830_100_400_201i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0));
@@ -592,7 +585,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\cold"
             },
-            "timestamp": 1465839830100400202i64,
+            "timestamp": 1_465_839_830_100_400_202i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -610,7 +603,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\cold"
             },
-            "timestamp": 1465839830100400203i64,
+            "timestamp": 1_465_839_830_100_400_203i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -628,7 +621,7 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\\\cold"
             },
-            "timestamp": 1465839830100400204i64,
+            "timestamp": 1_465_839_830_100_400_204i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
@@ -662,10 +655,9 @@ mod tests {
             "fields": {
                 "temperature_str": "too hot\\\\\\cold"
             },
-            "timestamp": 1465839830100400206i64,
+            "timestamp": 1_465_839_830_100_400_206i64,
         })
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
     }
-
 }

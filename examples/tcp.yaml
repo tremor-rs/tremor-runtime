@@ -2,17 +2,18 @@ onramp:
   - id: tcp
     type: tcp
     preprocessors:
-      - decompress
-      - gelf-chunking-tcp
-    codec: json
+      - lines-pipe
+    codec: string
     config:
-      host: "localhost"
+      # TODO support strings here
+      #host: "localhost"
+      host: 127.0.0.1
       port: 9000
-      ttl: 64
 
 offramp:
   - id: console
     type: stdout
+    codec: string
     config:
       prefix: "TCP "
 

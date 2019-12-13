@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,26 +20,39 @@ mod float;
 mod integer;
 mod json;
 mod math;
+mod origin;
 mod random;
+mod range;
 mod re;
 mod record;
+mod stats;
 mod string;
+mod system;
 mod r#type;
+mod win;
 
-use crate::registry::{Context, Registry};
+use crate::registry::{Aggr as AggrRegistry, Registry};
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     array::load(registry);
     chash::load(registry);
     datetime::load(registry);
     dummy::load(registry);
-    integer::load(registry);
     float::load(registry);
+    integer::load(registry);
     json::load(registry);
     math::load(registry);
-    r#type::load(registry);
+    origin::load(registry);
     random::load(registry);
     re::load(registry);
     record::load(registry);
     string::load(registry);
+    system::load(registry);
+    r#type::load(registry);
+    range::load(registry);
+}
+
+pub fn load_aggr(registry: &mut AggrRegistry) {
+    stats::load_aggr(registry);
+    win::load_aggr(registry);
 }

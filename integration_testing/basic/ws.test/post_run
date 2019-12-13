@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+TEST_DIR=$1
+code=$2
+sleep 5
+kill `cat ${TEST_DIR}/server.pid`
+rm ${TEST_DIR}/server.pid
+exit $code

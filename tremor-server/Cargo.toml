@@ -1,12 +1,15 @@
 [package]
 name = "tremor-server"
 version = "0.1.0"
-authors = ["Darach Ennis <dennis@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 tremor-runtime = { path = "../" }
 tremor-api = { path = "../tremor-api" }
+tremor-pipeline = { path = "../tremor-pipeline" }
+tremor-script = { path = "../tremor-script" }
 serde_yaml = "0.8"
 clap = { version = "2", features = ["yaml"] }
 env_logger = "0.6"

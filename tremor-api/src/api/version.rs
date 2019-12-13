@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::api::{reply, resource_models as rm, State};
+use crate::api::{reply, State};
 use actix_web::{web::Data, HttpRequest, Responder};
+use tremor_runtime::version::VERSION;
 
-pub fn get_version((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    let payload = rm::Version::new();
-    reply(req, data, Ok(payload), false, 200)
+#[derive(Serialize, Deserialize)]
+pub struct Version {
+    version: String,
+}
+impl Version {
+    pub fn default() -> Self {
+        Self {
+            version: VERSION.to_string(),
+        }
+    }
+}
+
+pub fn get((req, data): (HttpRequest, Data<State>)) -> impl Responder {
+    reply(&req, &data, Ok(Version::default()), false, 200)
 }

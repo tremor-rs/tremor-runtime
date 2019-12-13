@@ -10,8 +10,6 @@ When used with `~`, the predicate will pass if the input is a valid JSON
 
 If the predicate passes, the extractor will return the JSON representation of the target.
 
-
-
 ```tremor
 match { "test" : "{ foo:bar, snot:badger }" } of
    case foo  = %{ test ~= json|| } => foo

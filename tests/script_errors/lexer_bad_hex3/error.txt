@@ -1,0 +1,3 @@
+Error: 
+    1 | let f = 0x;
+      |         ^^ An invalid hexadecimal

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use super::{Offramp, OfframpAddr};
+pub use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub use crate::codec::{self, Codec};
+pub use crate::dflt::{self, *};
 pub use crate::errors::*;
+pub use crate::offramp::{self, Offramp};
 pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
 pub use crate::system::{PipelineAddr, PipelineMsg};
 pub use crate::url::TremorURL;
-use crate::utils::nanotime;
+pub use crate::utils::ConfigImpl;
+pub use crate::utils::{duration_to_millis, nanotime};
+pub use crate::{Event, OpConfig};
 pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
 use std::mem;
 pub use std::thread;
-pub use tremor_pipeline::Event;
 
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
     postprocessors
@@ -34,6 +37,7 @@ pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> 
 #[allow(clippy::borrowed_box)]
 pub fn postprocess(
     postprocessors: &mut [Box<dyn Postprocessor>],
+    ingres_ns: u64,
     data: Vec<u8>,
 ) -> Result<Vec<Vec<u8>>> {
     let egress_ns = nanotime();
@@ -43,7 +47,7 @@ pub fn postprocess(
     for pp in postprocessors {
         data1.clear();
         for d in &data {
-            match pp.process(egress_ns, d) {
+            match pp.process(ingres_ns, egress_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(_e) => {
                     return Err("Postprocessor error {}".into());

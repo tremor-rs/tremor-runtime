@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
+use crate::registry::Registry;
+use crate::tremor_const_fn;
 use serde_json;
 use simd_json::to_owned_value;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (json::decode(_context, _input: String) {
+        .insert(tremor_const_fn! (json::decode(_context, _input: String) {
             // We need to clone here since we do not want to destroy the
             // original value
             let mut s: String = _input.to_string();
@@ -29,10 +29,10 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             // We need to do this since otherwise we depend on the clone of s
             to_owned_value(&mut bytes).map_err(to_runtime_error).map(Value::from)
         }))
-        .insert(tremor_fn! (json::encode(_context, _input) {
+        .insert(tremor_const_fn! (json::encode(_context, _input) {
             serde_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
         }))
-        .insert(tremor_fn! (json::encode_pretty(_context, _input) {
+        .insert(tremor_const_fn! (json::encode_pretty(_context, _input) {
             serde_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
         }));
 }

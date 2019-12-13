@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,34 +14,36 @@
 
 use super::Codec;
 use crate::errors::*;
-use simd_json::value::borrowed::{Map, Value};
-use simd_json::value::ValueTrait;
+use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::Value as ValueTrait;
 use std::str;
-use tremor_script::LineValue;
+use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct StatsD {}
 
 impl Codec for StatsD {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(Box::new(data), |raw| decode(raw, ingest_ns))
-            .map_err(|e| e.0)
-            .map(Some)
+        LineValue::try_new(vec![data], |raw| {
+            decode(&raw[0], ingest_ns).map(ValueAndMeta::from)
+        })
+        .map_err(|e| e.0)
+        .map(Some)
     }
 
-    fn encode(&self, data: LineValue) -> Result<Vec<u8>> {
-        data.rent(encode)
+    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+        encode(data)
     }
 }
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
     let mut r = String::new();
-    if let Some(m) = value.get("metric").and_then(|v| v.as_string()) {
+    if let Some(m) = value.get("metric").and_then(|v| v.as_str()) {
         r.push_str(&m);
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
     };
-    let t = if let Some(s) = value.get("type").and_then(|v| v.as_string()) {
+    let t = if let Some(s) = value.get("type").and_then(|v| v.as_str()) {
         s
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
@@ -49,8 +51,8 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("value") {
         r.push(':');
         if t == "g" {
-            if let Some(s) = value.get("action").and_then(|v| v.as_string()) {
-                match s.as_str() {
+            if let Some(s) = value.get("action").and_then(Value::as_str) {
+                match s {
                     "add" => r.push('+'),
                     "sub" => r.push('-'),
                     _ => (),
@@ -58,7 +60,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
             }
         };
         if val.is_i64() || val.is_f64() {
-            r.push_str(&val.to_string());
+            r.push_str(&val.encode());
         } else {
             return Err(ErrorKind::InvalidStatsD.into());
         }
@@ -72,7 +74,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("sample_rate") {
         r.push_str("|@");
         if val.is_i64() || val.is_f64() {
-            r.push_str(&val.to_string());
+            r.push_str(&val.encode());
         } else {
             return Err(ErrorKind::InvalidStatsD.into());
         }
@@ -88,7 +90,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         None,
     };
     let mut d = data.iter().enumerate().peekable();
-    let mut m = Map::with_capacity(4);
+    let mut m = Object::with_capacity(4);
     let value_start: usize;
     let mut is_float = false;
     loop {
@@ -145,10 +147,12 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 }
                 Sign::Minus => {
                     // If it was a `-` we got to negate the number
-                    value = match value {
-                        Value::I64(v) => Value::I64(-v),
-                        Value::F64(v) => Value::F64(-v),
-                        _ => return Err(ErrorKind::InvalidStatsD.into()),
+                    value = if let Some(v) = value.as_i64() {
+                        Value::from(-v)
+                    } else if let Some(v) = value.as_f64() {
+                        Value::from(-v)
+                    } else {
+                        return Err(ErrorKind::InvalidStatsD.into());
                     };
                     m.insert("action".into(), "sub".into());
                 }
@@ -172,7 +176,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         _ => return Err(ErrorKind::InvalidStatsD.into()),
     };
     m.insert("value".into(), value);
-    Ok(Value::Object(m))
+    Ok(Value::from(m))
 }
 
 #[cfg(test)]

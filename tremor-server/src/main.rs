@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![warn(unused_extern_crates)]
+#![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
 
 use mimalloc::MiMalloc;
 #[global_allocator]
@@ -31,10 +40,16 @@ extern crate log;
 
 mod args;
 
+use crate::errors::*;
 use crate::system::World;
+use crate::url::TremorURL;
+use actix_cors::Cors;
+use actix_files as fs;
 use env_logger;
 use serde_yaml;
 use tremor_api;
+use tremor_pipeline::query::Query;
+use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -44,11 +59,6 @@ use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system;
 use tremor_runtime::url;
 use tremor_runtime::version;
-
-use crate::errors::*;
-use crate::url::TremorURL;
-use actix_cors::Cors;
-use actix_files as fs;
 
 use actix_web::{
     //error,
@@ -60,7 +70,9 @@ use actix_web::{
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
+use std::path::Path;
 
+#[cfg_attr(tarpaulin, skip)]
 fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
     let mut count = 0;
@@ -73,28 +85,28 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     for o in config.offramps {
         let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_offramp(id, false, o)?;
+        world.repo.publish_offramp(&id, false, o)?;
         count += 1;
     }
     for pipeline in config.pipes {
         let id = TremorURL::parse(&format!("/pipeline/{}", pipeline.id))?;
-        info!("Loading {} from file.", id);
+        warn!("The pipeline {} is defined in the YAML file {}, this functionality is depricated please migrate to trickle pipelines.", id, file_name);
         world
             .repo
-            .publish_pipeline(id, false, PipelineArtefact { pipeline })?;
+            .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
         count += 1;
     }
     for o in config.onramps {
         let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_onramp(id, false, o)?;
+        world.repo.publish_onramp(&id, false, o)?;
         count += 1;
     }
     for binding in config.bindings {
         let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
         info!("Loading {} from file.", id);
         world.repo.publish_binding(
-            id,
+            &id,
             false,
             BindingArtefact {
                 binding,
@@ -104,11 +116,45 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         count += 1;
     }
     for (binding, mapping) in config.mappings {
-        world.link_binding(binding, mapping)?;
+        world.link_binding(&binding, mapping)?;
         count += 1;
     }
     Ok(count)
 }
+
+#[cfg_attr(tarpaulin, skip)]
+fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
+    use std::ffi::OsStr;
+    use std::io::Read;
+    info!("Loading configuration from {}", file_name);
+    let path = Path::new(file_name);
+    let id = path
+        .file_stem()
+        .unwrap_or_else(|| OsStr::new(file_name))
+        .to_string_lossy();
+    let mut file = File::open(path)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+    let mut raw = String::new();
+
+    file.read_to_string(&mut raw)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+
+    // FIXME: We should have them constanted
+    let aggr_reg = tremor_script::registry::aggr();
+
+    let query = Query::parse(&raw, &*FN_REGISTRY.lock()?, &aggr_reg)?;
+
+    let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
+    info!("Loading {} from file.", id);
+    world
+        .repo
+        .publish_pipeline(&id, false, PipelineArtefact::Query(query))?;
+
+    Ok(1)
+}
+
+#[cfg_attr(tarpaulin, skip)]
+#[allow(clippy::too_many_lines)]
 fn run_dun() -> Result<()> {
     functions::load()?;
 
@@ -117,7 +163,7 @@ fn run_dun() -> Result<()> {
     // Logging
 
     if let Some(logger_config) = matches.value_of("logger") {
-        log4rs::init_file(logger_config, Default::default())?;
+        log4rs::init_file(logger_config, log4rs::file::Deserializers::default())?;
     } else {
         env_logger::init();
     }
@@ -142,6 +188,13 @@ fn run_dun() -> Result<()> {
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
     let (world, handle) = World::start(50, storage_directory)?;
+
+    // We load queries first since those are only pipelines.
+    if let Some(query_files) = matches.values_of("query") {
+        for query_file in query_files {
+            load_query_file(&world, query_file)?;
+        }
+    }
 
     if let Some(config_files) = matches.values_of("config") {
         for config_file in config_files {
@@ -205,9 +258,7 @@ fn run_dun() -> Result<()> {
                     .route(web::get().to(tremor_api::offramp::get_artefact))
                     .route(web::delete().to(tremor_api::offramp::unpublish_artefact)),
             )
-            .service(
-                web::resource("/version").route(web::get().to(tremor_api::version::get_version)),
-            )
+            .service(web::resource("/version").route(web::get().to(tremor_api::version::get)))
             .service(fs::Files::new("/api-docs", "static").index_file("index.html"))
     });
     eprintln!("Listening at: http://{}", host);
@@ -220,11 +271,14 @@ fn run_dun() -> Result<()> {
         warn!("API stopped");
         world.stop();
     }
-    let _ = handle.join();
+    if let Err(e) = handle.join() {
+        error!("Tremor terminated badly: {:?}", e);
+    }
     warn!("World stopped");
     Ok(())
 }
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     version::print();
     if let Err(ref e) = run_dun() {
@@ -242,6 +296,7 @@ fn main() {
             eprintln!("backtrace: {:?}", backtrace);
         }
 
+        // ALLOW: main.rs
         ::std::process::exit(1);
     }
 }

@@ -1,6 +1,0 @@
-match {"a": "a multi line regular expression"} of
-  case %{ a ~= re|\
-   a multi line \
-   regular expression| } => "ok"
-  default => "ko"
-end

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,11 +17,17 @@
 #![allow(clippy::large_enum_variant)]
 
 use error_chain::*;
+use regex;
 use serde_yaml;
 use std;
 impl<P> From<std::sync::PoisonError<P>> for Error {
-    fn from(e: std::sync::PoisonError<P>) -> Error {
-        Error::from(format!("poison Error: {:?}", e))
+    fn from(e: std::sync::PoisonError<P>) -> Self {
+        Self::from(format!("Poison Error: {:?}", e))
+    }
+}
+impl From<regex::Error> for Error {
+    fn from(e: regex::Error) -> Self {
+        Self::from(format!("Regex Error: {:?}", e))
     }
 }
 
@@ -30,7 +36,7 @@ error_chain! {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
     }
     foreign_links {
-        YAMLError(serde_yaml::Error) #[doc = "Error during yalm parsing"];
+        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);
         SerdeError(serde_json::Error);
         Io(std::io::Error) #[cfg(unix)];
@@ -41,6 +47,14 @@ error_chain! {
     }
 
     errors {
+        /*
+         * Query langauge pipeline conversion errors
+         */
+        PipelineError(g: String) {
+            description("Error detected in pipeline conversion")
+                display("Error detected in trickle: {}", g)
+        }
+
         CyclicGraphError(g: String) {
             description("Cycle detected in graph")
                 display("Cycle detected in graph: {}", g)
@@ -113,4 +127,8 @@ error_chain! {
                 display("Bad output pipeline id {}", i - 1)
         }
     }
+}
+
+pub fn error_missing_config(f: &str) -> Error {
+    ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
 }

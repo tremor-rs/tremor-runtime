@@ -1,4 +1,0 @@
-emit match { "test" : "{ foo: 8J+MiiBzbm90IGJhZGdlcg==, footle: bar }" } of
-  case foo = %{test ~= json|| } => foo
-  default => "ko"
-end;

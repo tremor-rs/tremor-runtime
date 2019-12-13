@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::ast::Warning;
-use crate::errors::*;
+use crate::errors::{Error as ScriptError, *};
 use crate::lexer::{Token, TokenFuns, TokenSpan};
 use crate::pos::*;
-use lalrpop_util::ParseError;
+//use lalrpop_util::ParseError;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -30,14 +31,14 @@ pub enum ErrorLevel {
 impl ErrorLevel {
     fn to_color(&self) -> Color {
         match self {
-            ErrorLevel::Error => Color::Red,
-            ErrorLevel::Warning => Color::Yellow,
-            ErrorLevel::Hint => Color::Green,
+            Self::Error => Color::Red,
+            Self::Warning => Color::Yellow,
+            Self::Hint => Color::Green,
         }
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HighlighterError {
+pub struct Error {
     pub start: Location,
     pub end: Location,
     pub callout: String,
@@ -46,8 +47,8 @@ pub struct HighlighterError {
     pub token: Option<String>,
 }
 
-impl From<&Error> for HighlighterError {
-    fn from(error: &Error) -> Self {
+impl From<&ScriptError> for Error {
+    fn from(error: &ScriptError) -> Self {
         let (start, end) = match error.context() {
             (_, Some(inner)) => (inner.0, inner.1),
             _ => (Location::default(), Location::default()),
@@ -63,7 +64,7 @@ impl From<&Error> for HighlighterError {
     }
 }
 
-impl From<&Warning> for HighlighterError {
+impl From<&Warning> for Error {
     fn from(warning: &Warning) -> Self {
         Self {
             start: warning.inner.0,
@@ -94,7 +95,8 @@ pub trait Highlighter {
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors(tokens, None)
+        self.highlight_errors(tokens, None)?;
+        self.finalize()
     }
 
     fn highlight_runtime_error(
@@ -102,42 +104,40 @@ pub trait Highlighter {
         tokens: Vec<Result<TokenSpan>>,
         expr_start: Location,
         expr_end: Location,
-        error: Option<HighlighterError>,
+        error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
         self.highlight_errors(extracted, error)
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
-        error: Option<HighlighterError>,
+        error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let mut printed_error = false;
         let mut line = 0;
         match error {
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Error,
                 ..
             }) => writeln!(self.get_writer(), "Error: ")?,
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Warning,
                 ..
             }) => writeln!(self.get_writer(), "Warning: ")?,
-            Some(HighlighterError {
+            Some(Error {
                 level: ErrorLevel::Hint,
                 ..
             }) => writeln!(self.get_writer(), "Hint: ")?,
             _ => (),
         }
         for t in tokens {
-            if t.is_err() {
-                //break;
-            } else {
-                let t = t.expect("expected a legal token");
-                if t.span.start().line.0 != line {
-                    line = t.span.start().line.0;
-                    if let Some(HighlighterError {
+            if let Ok(t) = t {
+                if t.span.start().line != line {
+                    line = t.span.start().line;
+                    if let Some(Error {
                         start,
                         end,
                         callout,
@@ -146,11 +146,14 @@ pub trait Highlighter {
                         token,
                     }) = &error
                     {
-                        if end.line.0 == line - 1 {
+                        if end.line == line - 1 {
                             printed_error = true;
-                            let len = std::cmp::max((end.column.0 - start.column.0) as usize, 1);
-                            let prefix = String::from(" ")
-                                .repeat(start.column.0.checked_sub(1).unwrap_or(0) as usize);
+                            // FIXME This isn't perfect, there are cases in trickle where more specific
+                            // hygienic errors would be preferable ( eg: for-locals integration test )
+                            //
+                            let delta = end.column as i64 - start.column as i64;
+                            let len = usize::try_from(delta).unwrap_or(1);
+                            let prefix = String::from(" ").repeat(start.column.saturating_sub(1));
                             let underline = String::from("^").repeat(len);
 
                             if let Some(token) = token {
@@ -167,8 +170,7 @@ pub trait Highlighter {
                             writeln!(self.get_writer(), "{} {}", underline, callout)?;
                             self.reset()?;
                             if let Some(hint) = hint {
-                                let prefix =
-                                    String::from(" ").repeat(start.column.0 as usize + len);
+                                let prefix = String::from(" ").repeat(start.column + len);
                                 self.set_color(ColorSpec::new().set_bold(true))?;
                                 write!(self.get_writer(), "      | {}", prefix)?;
                                 self.set_color(
@@ -206,14 +208,10 @@ pub trait Highlighter {
                     Token::DocComment(_) => {
                         c.set_intense(true).set_fg(Some(Color::Cyan));
                     }
-                    Token::TestLiteral(_, _) => {
+                    Token::TestLiteral(_, _) | Token::StringLiteral(_) => {
                         c.set_intense(true).set_fg(Some(Color::Magenta));
                     }
-
-                    Token::StringLiteral(_) => {
-                        c.set_intense(true).set_fg(Some(Color::Magenta));
-                    }
-                    Token::BadToken(_) => {
+                    Token::Bad(_) => {
                         c.set_bold(true)
                             .set_intense(true)
                             .set_bg(Some(Color::Red))
@@ -271,7 +269,7 @@ pub trait Highlighter {
                 self.reset()?;
             };
         }
-        if let Some(HighlighterError {
+        if let Some(Error {
             start,
             end,
             callout,
@@ -280,21 +278,20 @@ pub trait Highlighter {
             token,
         }) = &error
         {
-            if !printed_error || start.line.0 == line {
-                if end.line.0 > line {
+            if !printed_error || start.line == line {
+                if end.line > line {
                     line += 1;
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     writeln!(self.get_writer(), "{:5} | ", line)?;
                     self.reset()?;
                 }
-                printed_error = true;
 
-                let len = if end.column.0 > start.column.0 {
-                    (end.column.0 - start.column.0) as usize
+                let len = if end.column > start.column {
+                    end.column - start.column
                 } else {
                     1
                 };
-                let prefix = String::from(" ").repeat(start.column.0 as usize - 1);
+                let prefix = String::from(" ").repeat(start.column - 1);
                 let underline = String::from("^").repeat(len);
                 if let Some(token) = token {
                     write!(self.get_writer(), "{}", token)?;
@@ -309,7 +306,7 @@ pub trait Highlighter {
                 writeln!(self.get_writer(), "{} {}", underline, callout)?;
                 self.reset()?;
                 if let Some(hint) = hint {
-                    let prefix = String::from(" ").repeat(start.column.0 as usize + len);
+                    let prefix = String::from(" ").repeat(start.column + len);
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     write!(self.get_writer(), "      | {}", prefix)?;
                     self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
@@ -320,52 +317,55 @@ pub trait Highlighter {
         }
 
         self.reset()?;
-        writeln!(self.get_writer());
-        self.finalize()
+        writeln!(self.get_writer())
     }
 }
 
 /// Highlights data to allow extracting it as a plain,
 /// unhighlighted string.
 #[derive(Default)]
-pub struct DumbHighlighter {
+pub struct Dumb {
     buff: Vec<u8>,
 }
-impl DumbHighlighter {
+impl Dumb {
     pub fn new() -> Self {
-        DumbHighlighter::default()
+        Self::default()
     }
 }
 
-impl Highlighter for DumbHighlighter {
+impl Highlighter for Dumb {
     type W = Vec<u8>;
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
     }
 }
 
-impl ToString for DumbHighlighter {
+impl ToString for Dumb {
     fn to_string(&self) -> String {
-        String::from_utf8(self.buff.clone()).expect("Highlighted source isn't a valid string")
+        String::from_utf8_lossy(&self.buff).to_string()
     }
 }
 
 /// Highlights data colorized and directly to the terminal
-pub struct TermHighlighter {
+pub struct Term {
     bufwtr: BufferWriter,
     buff: Buffer,
 }
 
+// This is a terminal highlighter it simply adds colors
+// so we skip it in tests.
+#[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::new_without_default)]
-impl TermHighlighter {
+impl Term {
     pub fn new() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
         let buff = bufwtr.buffer();
-        TermHighlighter { bufwtr, buff }
+        Self { bufwtr, buff }
     }
 }
 
-impl Highlighter for TermHighlighter {
+#[cfg_attr(tarpaulin, skip)]
+impl Highlighter for Term {
     type W = Buffer;
     fn set_color(&mut self, spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
         self.buff.set_color(spec)

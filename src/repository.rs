@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,17 +19,17 @@ use crate::system;
 use crate::url::TremorURL;
 use actix::prelude::*;
 use futures::future::Future;
-use hashbrown::HashMap;
+use hashbrown::{hash_map::Entry, HashMap};
 use std::default::Default;
 use std::fmt;
 use std::marker::PhantomData;
 
 pub use crate::registry::ServantId;
-pub use artefact::BindingArtefact;
+pub use artefact::Binding as BindingArtefact;
 pub use artefact::OfframpArtefact;
 pub use artefact::OnrampArtefact;
-pub use artefact::PipelineArtefact;
-pub use artefact::{Artefact, ArtefactId};
+pub use artefact::Pipeline as PipelineArtefact;
+pub use artefact::{Artefact, Id as ArtefactId};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoWrapper<A: Artefact> {
@@ -77,40 +77,34 @@ impl<A: Artefact> Repository<A> {
     }
 
     pub fn publish(&mut self, mut id: ArtefactId, system: bool, artefact: A) -> Result<&A> {
-        if self.map.contains_key(&id) {
-            id.trim_to_artefact();
-            Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into())
-        } else {
-            self.map.insert(
-                id.clone(),
-                RepoWrapper {
+        id.trim_to_artefact();
+        match self.map.entry(id.clone()) {
+            Entry::Occupied(_) => Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into()),
+            Entry::Vacant(e) => Ok(&e
+                .insert(RepoWrapper {
                     instances: Vec::new(),
                     artefact,
                     system,
-                },
-            );
-            if let Some(w) = self.find(id) {
-                Ok(&w.artefact)
-            } else {
-                unreachable!()
-            }
+                })
+                .artefact),
         }
     }
 
     pub fn unpublish(&mut self, mut id: ArtefactId) -> Result<A> {
         id.trim_to_artefact();
-        if let Some(wrapper) = self.map.get(&id) {
-            if wrapper.system {
-                Err(ErrorKind::UnpublishFailedSystemArtefact(id.to_string()).into())
-            } else if !wrapper.instances.is_empty() {
-                Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
-            } else if let Some(w) = self.map.remove(&id) {
-                Ok(w.artefact)
-            } else {
-                unreachable!()
+        match self.map.entry(id.clone()) {
+            Entry::Vacant(_) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            Entry::Occupied(e) => {
+                let wrapper = e.get();
+                if wrapper.system {
+                    Err(ErrorKind::UnpublishFailedSystemArtefact(id.to_string()).into())
+                } else if wrapper.instances.is_empty() {
+                    let (_, w) = e.remove_entry();
+                    Ok(w.artefact)
+                } else {
+                    Err(ErrorKind::UnpublishFailedNonZeroInstances(id.to_string()).into())
+                }
             }
-        } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -352,7 +346,7 @@ impl Repositories {
         self.pipeline.send(SerializeArtefacts::new()).wait()?
     }
 
-    pub fn find_pipeline(&self, id: TremorURL) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
+    pub fn find_pipeline(&self, id: &TremorURL) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
         Ok(self
             .pipeline
             .send(FindArtefact::new(PipelineArtefact::artefact_id(id)?))
@@ -361,7 +355,7 @@ impl Repositories {
 
     pub fn publish_pipeline(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         system: bool,
         artefact: PipelineArtefact,
     ) -> Result<PipelineArtefact> {
@@ -374,7 +368,7 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn unpublish_pipeline(&self, id: TremorURL) -> Result<PipelineArtefact> {
+    pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(UnpublishArtefact {
                 id: PipelineArtefact::artefact_id(id)?,
@@ -383,19 +377,19 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn bind_pipeline(&self, id: TremorURL) -> Result<PipelineArtefact> {
+    pub fn bind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(RegisterInstance::new(
-                PipelineArtefact::artefact_id(id.clone())?,
+                PipelineArtefact::artefact_id(id)?,
                 PipelineArtefact::servant_id(id)?,
             ))
             .wait()?
     }
 
-    pub fn unbind_pipeline(&self, id: TremorURL) -> Result<PipelineArtefact> {
+    pub fn unbind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(UnregisterInstance::new(
-                PipelineArtefact::artefact_id(id.clone())?,
+                PipelineArtefact::artefact_id(id)?,
                 PipelineArtefact::servant_id(id)?,
             ))
             .wait()?
@@ -409,7 +403,7 @@ impl Repositories {
         self.onramp.send(SerializeArtefacts::new()).wait()?
     }
 
-    pub fn find_onramp(&self, id: TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
+    pub fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
         Ok(self
             .onramp
             .send(FindArtefact::new(OnrampArtefact::artefact_id(id)?))
@@ -418,7 +412,7 @@ impl Repositories {
 
     pub fn publish_onramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         system: bool,
         artefact: OnrampArtefact,
     ) -> Result<OnrampArtefact> {
@@ -431,7 +425,7 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn unpublish_onramp(&self, id: TremorURL) -> Result<OnrampArtefact> {
+    pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(UnpublishArtefact {
                 id: OnrampArtefact::artefact_id(id)?,
@@ -440,19 +434,19 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn bind_onramp(&self, id: TremorURL) -> Result<OnrampArtefact> {
+    pub fn bind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(RegisterInstance::new(
-                OnrampArtefact::artefact_id(id.clone())?,
+                OnrampArtefact::artefact_id(id)?,
                 OnrampArtefact::servant_id(id)?,
             ))
             .wait()?
     }
 
-    pub fn unbind_onramp(&self, id: TremorURL) -> Result<OnrampArtefact> {
+    pub fn unbind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(UnregisterInstance::new(
-                OnrampArtefact::artefact_id(id.clone())?,
+                OnrampArtefact::artefact_id(id)?,
                 OnrampArtefact::servant_id(id)?,
             ))
             .wait()?
@@ -466,7 +460,7 @@ impl Repositories {
         self.offramp.send(SerializeArtefacts::new()).wait()?
     }
 
-    pub fn find_offramp(&self, id: TremorURL) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
+    pub fn find_offramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
         Ok(self
             .offramp
             .send(FindArtefact::new(OfframpArtefact::artefact_id(id)?))
@@ -475,7 +469,7 @@ impl Repositories {
 
     pub fn publish_offramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         system: bool,
         artefact: OfframpArtefact,
     ) -> Result<OfframpArtefact> {
@@ -488,7 +482,7 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn unpublish_offramp(&self, id: TremorURL) -> Result<OfframpArtefact> {
+    pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(UnpublishArtefact {
                 id: OfframpArtefact::artefact_id(id)?,
@@ -497,19 +491,19 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn bind_offramp(&self, id: TremorURL) -> Result<OfframpArtefact> {
+    pub fn bind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(RegisterInstance::new(
-                OfframpArtefact::artefact_id(id.clone())?,
+                OfframpArtefact::artefact_id(id)?,
                 OfframpArtefact::servant_id(id)?,
             ))
             .wait()?
     }
 
-    pub fn unbind_offramp(&self, id: TremorURL) -> Result<OfframpArtefact> {
+    pub fn unbind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(UnregisterInstance::new(
-                OfframpArtefact::artefact_id(id.clone())?,
+                OfframpArtefact::artefact_id(id)?,
                 OfframpArtefact::servant_id(id)?,
             ))
             .wait()?
@@ -523,7 +517,7 @@ impl Repositories {
         self.binding.send(SerializeArtefacts::new()).wait()?
     }
 
-    pub fn find_binding(&self, id: TremorURL) -> Result<Option<RepoWrapper<BindingArtefact>>> {
+    pub fn find_binding(&self, id: &TremorURL) -> Result<Option<RepoWrapper<BindingArtefact>>> {
         Ok(self
             .binding
             .send(FindArtefact::new(BindingArtefact::artefact_id(id)?))
@@ -532,7 +526,7 @@ impl Repositories {
 
     pub fn publish_binding(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         system: bool,
         artefact: BindingArtefact,
     ) -> Result<BindingArtefact> {
@@ -545,7 +539,7 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn unpublish_binding(&self, id: TremorURL) -> Result<BindingArtefact> {
+    pub fn unpublish_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(UnpublishArtefact {
                 id: BindingArtefact::artefact_id(id)?,
@@ -554,19 +548,19 @@ impl Repositories {
             .wait()?
     }
 
-    pub fn bind_binding(&self, id: TremorURL) -> Result<BindingArtefact> {
+    pub fn bind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(RegisterInstance::new(
-                BindingArtefact::artefact_id(id.clone())?,
+                BindingArtefact::artefact_id(id)?,
                 BindingArtefact::servant_id(id)?,
             ))
             .wait()?
     }
 
-    pub fn unbind_binding(&self, id: TremorURL) -> Result<BindingArtefact> {
+    pub fn unbind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(UnregisterInstance::new(
-                BindingArtefact::artefact_id(id.clone())?,
+                BindingArtefact::artefact_id(id)?,
                 BindingArtefact::servant_id(id)?,
             ))
             .wait()?

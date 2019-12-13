@@ -1,0 +1,3 @@
+Error: 
+    2 | record::from_array(a)
+      | ^^^^^^^^^^^^^^^^^^^^^ Bad type passed to function record::from_array/1

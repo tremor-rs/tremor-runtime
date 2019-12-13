@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 extern crate lalrpop;
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     lalrpop::process_root().expect("Unable to initialize LALRPOP");
 

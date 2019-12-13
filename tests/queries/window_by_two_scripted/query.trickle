@@ -1,0 +1,9 @@
+define tumbling window by_two
+with
+  # Since we count each event by two, we set a size of 4
+  size = 4
+script
+  2
+end;
+
+select win::collect_flattened(event) from in[by_two] into out;

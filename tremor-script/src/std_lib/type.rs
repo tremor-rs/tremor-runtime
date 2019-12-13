@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,49 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//cuse crate::errors::*;
-
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
-use simd_json::{ValueTrait, ValueType};
+use crate::registry::Registry;
+use crate::tremor_const_fn;
+use simd_json::{Value as ValueTrait, ValueType};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
-        tremor_fn! (type::$name(_context, _input) {
+        tremor_const_fn! (type::$name(_context, _input) {
             Ok(Value::from(_input.$fun()))
         })
     };
         ($fun:ident) => {
-            tremor_fn!(type::$fun(_context, _input) {
+            tremor_const_fn!(type::$fun(_context, _input) {
                 Ok(Value::from(_input.$fun()))
             })
         }
     }
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
         .insert(map_function!(is_null))
         .insert(map_function!(is_bool))
         .insert(map_function!(is_integer, is_i64))
         .insert(map_function!(is_float, is_f64))
-        .insert(map_function!(is_string))
+        .insert(map_function!(is_string, is_str))
         .insert(map_function!(is_array))
         .insert(map_function!(is_record, is_object))
-        .insert(tremor_fn! (type::as_string(_context, _input) {
-            Ok(match _input.kind() {
+        .insert(tremor_const_fn! (type::as_string(_context, _input) {
+            Ok(match _input.value_type() {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
-                ValueType::I64 => Value::from("integer"),
+                ValueType::U64 | ValueType::I64 => Value::from("integer"),
                 ValueType::F64 => Value::from("float"),
                 ValueType::String => Value::from("string"),
                 ValueType::Array => Value::from("array"),
                 ValueType::Object => Value::from("record"),
             })
         }))
-        .insert(tremor_fn! (type::is_number(_context, _input) {
-            Ok(match _input.kind() {
-                ValueType::I64 => Value::from(true),
-                ValueType::F64 => Value::from(true),
+        .insert(tremor_const_fn! (type::is_number(_context, _input) {
+            Ok(match _input.value_type() {
+                ValueType::I64 | ValueType::F64 => Value::from(true),
                 _ => Value::from(false),
             })
         }));
@@ -63,8 +60,8 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::value::borrowed::Map;
-    use simd_json::BorrowedValue as Value;
+    use simd_json::value::borrowed::Object;
+    use simd_json::{BorrowedValue as Value, ValueBuilder};
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
@@ -77,7 +74,7 @@ mod test {
         let f = fun("type", "is_null");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        assert_val!(f(&[&Value::Null]), true)
+        assert_val!(f(&[&Value::null()]), true)
     }
 
     #[test]
@@ -85,7 +82,7 @@ mod test {
         let f = fun("type", "is_bool");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        let v = Value::Bool(true);
+        let v = Value::from(true);
         assert_val!(f(&[&v]), true)
     }
 
@@ -141,16 +138,16 @@ mod test {
         let f = fun("type", "is_record");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        let v = Value::Object(Map::new());
+        let v = Value::from(Object::new());
         assert_val!(f(&[&v]), true);
     }
 
     #[test]
     fn as_string() {
         let f = fun("type", "as_string");
-        let v = Value::Null;
+        let v = Value::null();
         assert_val!(f(&[&v]), "null");
-        let v = Value::Bool(true);
+        let v = Value::from(true);
         assert_val!(f(&[&v]), "bool");
         let v = Value::from(42);
         assert_val!(f(&[&v]), "integer");
@@ -160,8 +157,7 @@ mod test {
         assert_val!(f(&[&v]), "string");
         let v = Value::Array(vec![]);
         assert_val!(f(&[&v]), "array");
-        let v = Value::Object(Map::new());
+        let v = Value::from(Object::new());
         assert_val!(f(&[&v]), "record");
     }
-
 }

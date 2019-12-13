@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ use super::Preprocessor;
 use crate::errors::*;
 use hashbrown::{hash_map::Entry, HashMap};
 use rand::{self, RngCore};
-use std::any::Any;
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
@@ -31,7 +30,7 @@ pub struct GELF {
 
 impl GELF {
     pub fn default() -> Self {
-        GELF {
+        Self {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
@@ -40,7 +39,7 @@ impl GELF {
         }
     }
     pub fn tcp() -> Self {
-        GELF {
+        Self {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
@@ -122,12 +121,9 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
 }
 
 impl Preprocessor for GELF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn process(&mut self, ingest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
-        if let Some(data) = self.enqueue(ingest_ns, msg) {
+        if let Some(data) = self.enqueue(*ingest_ns, msg) {
             let len = if self.is_tcp {
                 data.len() - 1
             } else {
@@ -247,7 +243,7 @@ impl GELF {
 
 fn assemble(key: u64, m: GELFMsgs) -> Option<Vec<u8>> {
     let mut result = Vec::with_capacity(m.bytes);
-    for v in m.segments.into_iter() {
+    for v in m.segments {
         if let Some(mut v) = v {
             result.append(&mut v)
         } else {

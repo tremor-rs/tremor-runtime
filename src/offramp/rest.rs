@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,28 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Offramp, OfframpImpl};
-use crate::async_sink::{AsyncSink, SinkDequeueError};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
+use crate::offramp::prelude::*;
 use crate::rest::HttpC;
-use crate::system::{PipelineAddr, PipelineMsg};
-use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, OpConfig};
+use crossbeam_channel::bounded;
 use halfbrown::HashMap;
-use serde_yaml;
-use simd_json::json;
-use std::convert::From;
 use std::str;
-use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
-use tremor_pipeline::MetaMap;
-use tremor_script::{LineValue, Value};
+use tremor_script::prelude::*;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -49,6 +35,8 @@ pub struct Config {
     pub headers: HashMap<String, String>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Rest {
     client_idx: usize,
     clients: Vec<HttpC>,
@@ -59,10 +47,10 @@ pub struct Rest {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Rest {
+impl offramp::Impl for Rest {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients = config
                 .endpoints
                 .iter()
@@ -71,7 +59,7 @@ impl OfframpImpl for Rest {
 
             let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
-            Ok(Box::new(Rest {
+            Ok(Box::new(Self {
                 client_idx: 0,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
@@ -87,47 +75,47 @@ impl OfframpImpl for Rest {
 }
 
 impl Rest {
-    fn flush(client: &HttpC, config: Config, payload: &str) -> Result<u64> {
+    fn flush(client: &HttpC, config: Config, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
         let c = if config.put {
-            client.put("".to_string())?
+            client.put("")?
         } else {
-            client.post("".to_string())?
+            client.post("")?
         };
         let c = config
             .headers
             .into_iter()
             .fold(c, |c, (k, v)| c.header(k.as_str(), v.as_str()));
-        c.body(payload.to_owned()).send()?;
+        c.body(payload).send()?;
         let d = duration_to_millis(start.elapsed());
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: String) -> Result<()> {
+    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
-        let (tx, rx) = channel();
+        let (tx, rx) = bounded(1);
+        let config = self.config.clone();
         let pipelines: Vec<(TremorURL, PipelineAddr)> = self
             .pipelines
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
-        let config = self.config.clone();
         self.pool.execute(move || {
-            let r = Self::flush(&destination, config, payload.as_str());
-            let mut m = MetaMap::new();
+            let r = Self::flush(&destination, config, payload);
+            let mut m = Object::new();
             if let Ok(t) = r {
-                m.insert("time".into(), json!(t));
+                m.insert("time".into(), t.into());
             } else {
                 error!("REST offramp error: {:?}", r);
-                m.insert("error".into(), json!("Failed to send"));
+                m.insert("error".into(), "Failed to send".into());
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
-                meta: m,
-                value: LineValue::new(Box::new(vec![]), |_| Value::Null),
+                data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
+                origin_uri: None,
                 kind: None,
             };
 
@@ -137,16 +125,41 @@ impl Rest {
                 };
             }
 
-            // TODO: Handle contraflow for notification
-            let _ = tx.send(r);
+            if let Err(e) = tx.send(r) {
+                error!("Failed to send reply: {}", e)
+            }
         });
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: String) -> Result<()> {
+    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                //TODO: how do we handle this?
+                let mut m = Object::new();
+                m.insert(
+                    "error".into(),
+                    "Dropped data due to REST endpoint overload".into(),
+                );
+
+                let insight = Event {
+                    is_batch: false,
+                    id: 0,
+                    data: (Value::null(), m).into(),
+                    ingest_ns: nanotime(),
+                    origin_uri: None,
+                    kind: None,
+                };
+
+                let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+                    .pipelines
+                    .iter()
+                    .map(|(i, p)| (i.clone(), p.clone()))
+                    .collect();
+                for (pid, p) in pipelines {
+                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
                 error!("Dropped data due to overload");
                 Err("Dropped data due to overload".into())
             }
@@ -164,29 +177,21 @@ impl Rest {
 }
 
 impl Offramp for Rest {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        let mut payload = String::from("");
-        for event in event.into_iter() {
-            match codec.encode(event.value) {
-                Ok(raw) => {
-                    if let Ok(s) = str::from_utf8(&raw) {
-                        payload.push_str(s);
-                        payload.push('\n');
-                    } else {
-                        error!("Contant is not valid utf8")
-                    }
-                }
-                _ => error!("Event data needs to be raw"),
-            }
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        let mut payload = Vec::with_capacity(4096);
+        for value in event.value_iter() {
+            let mut raw = codec.encode(value)?;
+            payload.append(&mut raw);
+            payload.push(b'\n');
         }
-        let _ = self.maybe_enque(payload);
+        self.maybe_enque(payload)
     }
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);

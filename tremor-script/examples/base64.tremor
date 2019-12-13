@@ -1,4 +1,0 @@
-emit match { "test": "8J+MiiBzbm90IGJhZGdlcg==", "footle":"bar" } of
-  case foo = %{test ~= base64|| } => foo
-  default => "ko"
-end;

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,64 +11,70 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::cast_precision_loss)]
 
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
+use crate::registry::Registry;
+use crate::tremor_const_fn;
+use simd_json::Value as ValueTrait;
+use std::cmp::{max, min};
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+macro_rules! math_fn {
+    ($name:ident) => {
+        tremor_const_fn! (math::$name(_context, _input) {
+            if let Some(v) = _input.as_u64() {
+                Ok(Value::from(v))
+            } else if let Some(v) = _input.as_i64() {
+                Ok(Value::from(v))
+            } else if let Some(v) = _input.cast_f64() {
+                let f = v.$name();
+                if f < 0.0 {
+                    Ok(Value::from(f as i64))
+                } else {
+                    Ok(Value::from(f as u64))
+
+                }
+            } else{
+                Err(FunctionError::BadType{mfa: this_mfa()})
+            }
+        })
+    };
+}
+// ALLOW: Until we have u64 support in clippy
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (math::floor(_context, _input) {
-            match _input {
-                Value::I64(v) => Ok(Value::I64(*v)),
-                Value::F64(v) => Ok(Value::I64(v.floor() as i64)),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+        .insert(math_fn!(floor))
+        .insert(math_fn!(ceil))
+        .insert(math_fn!(round))
+        .insert(math_fn!(trunc))
+        .insert(tremor_const_fn! (math::max(_context, a, b) {
+            if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
+                Ok(Value::from(max(a, b)))
+            } else if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
+                Ok(Value::from(max(a, b)))
+            } else if let (Some(a), Some(b)) = (a.cast_f64(), b.cast_f64()) {
+                if a >= b {
+                    Ok(Value::from(a))
+                } else {
+                    Ok(Value::from(b))
+                }
+            } else {
+                Err(FunctionError::BadType{mfa: this_mfa()})
             }
         }))
-        .insert(tremor_fn! (math::ceil(_context, _input) {
-            match _input {
-                Value::I64(v) => Ok(Value::I64(*v)),
-                Value::F64(v) => Ok(Value::I64(v.ceil() as i64)),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
-        }))
-        .insert(tremor_fn! (math::round(_context, _input) {
-            match _input {
-                Value::I64(v) => Ok(Value::I64(*v)),
-                Value::F64(v) => Ok(Value::I64(v.round() as i64)),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
-        }))
-        .insert(tremor_fn! (math::trunc(_context, _input) {
-            match _input {
-                Value::I64(v) => Ok(Value::I64(*v)),
-                Value::F64(v) => Ok(Value::I64(v.trunc() as i64)),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
-        }))
-        .insert(tremor_fn! (math::max(_context, a, b) {
-            match (a, b) {
-                (Value::F64(a), Value::F64(b)) if a > b  => Ok(Value::from(a.to_owned())),
-                (Value::F64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::I64(a), Value::I64(b)) if a > b  => Ok(Value::from(a.to_owned())),
-                (Value::I64(_a), Value::I64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::F64(a), Value::I64(b)) if *a > *b as f64 => Ok(Value::from(a.to_owned())),
-                (Value::F64(_a), Value::I64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::I64(a), Value::F64(b)) if (*a as f64) > *b => Ok(Value::from(a.to_owned())),
-                (Value::I64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
-            }
-        }))
-        .insert(tremor_fn!(math::min(_context, a, b) {
-            match (a, b) {
-                (Value::F64(a), Value::F64(b)) if a < b  => Ok(Value::from(a.to_owned())),
-                (Value::F64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::I64(a), Value::I64(b)) if a < b  => Ok(Value::from(a.to_owned())),
-                (Value::I64(_a), Value::I64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::F64(a), Value::I64(b)) if *a < *b as f64 => Ok(Value::from(a.to_owned())),
-                (Value::F64(_a), Value::I64(b)) => Ok(Value::from(b.to_owned())),
-                (Value::I64(a), Value::F64(b)) if (*a as f64) < *b => Ok(Value::from(a.to_owned())),
-                (Value::I64(_a), Value::F64(b)) => Ok(Value::from(b.to_owned())),
-                _ => Err(FunctionError::BadType{mfa: this_mfa()}),
+        .insert(tremor_const_fn! (math::min(_context, a, b) {
+            if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
+                Ok(Value::from(min(a, b)))
+            } else if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
+                Ok(Value::from(min(a, b)))
+            } else if let (Some(a), Some(b)) = (a.cast_f64(), b.cast_f64()) {
+                if a <= b {
+                    Ok(Value::from(a))
+                } else {
+                    Ok(Value::from(b))
+                }
+            } else {
+                Err(FunctionError::BadType{mfa: this_mfa()})
             }
         }));
 }
@@ -128,7 +134,7 @@ mod test {
         assert_val!(f(&[&v1, &v2]), 42);
         let v1 = Value::from(41.5);
         let v2 = Value::from(42);
-        assert_val!(f(&[&v1, &v2]), 42);
+        assert_val!(f(&[&v1, &v2]), 42.0);
     }
     #[test]
     fn min() {
@@ -138,6 +144,6 @@ mod test {
         assert_val!(f(&[&v1, &v2]), 42);
         let v1 = Value::from(42);
         let v2 = Value::from(42.5);
-        assert_val!(f(&[&v1, &v2]), 42);
+        assert_val!(f(&[&v1, &v2]), 42.0);
     }
 }

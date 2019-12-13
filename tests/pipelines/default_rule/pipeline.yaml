@@ -1,0 +1,20 @@
+id: main
+interface:
+  inputs:
+    - in
+  outputs:
+    - out
+nodes:
+  - id: r
+    op: runtime::tremor
+    config:
+      script: |
+        let $class = "default";
+        let $rate = 250;
+        event
+  - id: b
+    op: grouper::bucket
+links:
+  in: [ r ]
+  r: [ b ]
+  b: [ out ]

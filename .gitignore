@@ -1,5 +1,6 @@
 .DS_Store
 /target*
+*/target*
 **/*.rs.bk
 .rpm
 /window/target*
@@ -27,3 +28,11 @@ tremor-script/c_src/*.o
 tremor-script/priv
 **/*.gcda
 **/*.gcno
+*.swp
+.*.swp
+target.vsc
+ccov.zip
+grcov
+cobertura.xml
+coverage.html
+temp/

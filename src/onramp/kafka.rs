@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,15 +57,17 @@ pub struct Config {
     pub rdkafka_options: Option<HashMap<String, String>>,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Kafka {
     pub config: Config,
 }
 
-impl OnrampImpl for Kafka {
+impl onramp::Impl for Kafka {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Kafka { config }))
+            let config: Config = Config::new(config)?;
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -93,19 +95,15 @@ impl ConsumerContext for LoggingConsumerContext {
 
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn onramp_loop(
-    rx: Receiver<OnrampMsg>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    rx: &Receiver<onramp::Msg>,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
-    let hostname = match get_hostname() {
-        Some(h) => h,
-        None => "tremor-host.local".to_string(),
-    };
+    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let context = LoggingConsumerContext;
     let tid = 0; //TODO: get a good thread id
     let mut client_config = ClientConfig::new();
@@ -133,15 +131,25 @@ fn onramp_loop(
     };
 
     let client_config = client_config.to_owned();
-    let consumer: LoggingConsumer = client_config
-        .create_with_context(context)
-        .expect("Consumer creation failed");
+    let consumer: LoggingConsumer = client_config.create_with_context(context)?;
 
     let topics: Vec<&str> = config
         .topics
         .iter()
         .map(std::string::String::as_str)
         .collect();
+
+    let first_broker: Vec<&str> = config.brokers[0].split(':').collect();
+    let mut origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-kafka".to_string(),
+        // picking the first host for these
+        host: first_broker[0].to_string(),
+        port: match first_broker.get(1) {
+            Some(n) => Some(n.parse()?),
+            None => None,
+        },
+        path: vec![],
+    };
 
     let stream = consumer.start();
 
@@ -167,13 +175,17 @@ fn onramp_loop(
                     .collect();
                 match errors.as_slice() {
                     [None] => good_topics.push(topic),
-                    [Some(e)] => {
-                        error!("Kafka error for topic '{}': {:?}. Not subscring!", topic, e)
-                    }
-                    _ => error!("Unknown kafka error for topic '{}'. Not subscring!", topic),
+                    [Some(e)] => error!(
+                        "Kafka error for topic '{}': {:?}. Not subscribing!",
+                        topic, e
+                    ),
+                    _ => error!(
+                        "Unknown kafka error for topic '{}'. Not subscribing!",
+                        topic
+                    ),
                 }
             }
-            Err(e) => error!("Kafka error for topic '{}': {}. Not subscring!", topic, e),
+            Err(e) => error!("Kafka error for topic '{}': {}. Not subscribing!", topic, e),
         };
     }
 
@@ -186,9 +198,17 @@ fn onramp_loop(
     // as this could lead to timeouts
     while pipelines.is_empty() {
         match rx.recv()? {
-            OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
-            OnrampMsg::Disconnect { tx, .. } => {
-                let _ = tx.send(true);
+            onramp::Msg::Connect(ps) => {
+                for p in &ps {
+                    if p.0 == *METRICS_PIPELINE {
+                        metrics_reporter.set_metrics_pipeline(p.clone());
+                    } else {
+                        pipelines.push(p.clone());
+                    }
+                }
+            }
+            onramp::Msg::Disconnect { tx, .. } => {
+                tx.send(true)?;
                 return Ok(());
             }
         };
@@ -196,9 +216,17 @@ fn onramp_loop(
     for m in stream.wait() {
         while pipelines.is_empty() {
             match rx.recv()? {
-                OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
-                OnrampMsg::Disconnect { tx, .. } => {
-                    let _ = tx.send(true);
+                onramp::Msg::Connect(ps) => {
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            pipelines.push(p.clone());
+                        }
+                    }
+                }
+                onramp::Msg::Disconnect { tx, .. } => {
+                    tx.send(true)?;
                     return Ok(());
                 }
             };
@@ -206,14 +234,14 @@ fn onramp_loop(
         match rx.try_recv() {
             Err(TryRecvError::Empty) => (),
             Err(_e) => return Err("Crossbream receive error".into()),
-            Ok(OnrampMsg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(OnrampMsg::Disconnect { id, tx }) => {
+            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
+            Ok(onramp::Msg::Disconnect { id, tx }) => {
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
-                    let _ = tx.send(true);
+                    tx.send(true)?;
                     break;
                 } else {
-                    let _ = tx.send(false);
+                    tx.send(false)?;
                 }
             }
         };
@@ -223,10 +251,19 @@ fn onramp_loop(
                 if let Some(data) = m.payload_view::<[u8]>() {
                     if let Ok(data) = data {
                         id += 1;
+                        let mut ingest_ns = nanotime();
+                        origin_uri.path = vec![
+                            m.topic().to_string(),
+                            m.partition().to_string(),
+                            m.offset().to_string(),
+                        ];
                         send_event(
                             &pipelines,
                             &mut preprocessors,
                             &mut codec,
+                            &mut metrics_reporter,
+                            &mut ingest_ns,
+                            &origin_uri,
                             id,
                             data.to_vec(),
                         );
@@ -245,14 +282,20 @@ fn onramp_loop(
 }
 
 impl Onramp for Kafka {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        metrics_reporter: RampReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
-        //        let id = self.id.clone();
+        let codec = codec::lookup(&codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-kafka-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

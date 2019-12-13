@@ -1,6 +1,7 @@
 # Dissect
 
 The Dissect extractor is loosely based on logstash's dissect plugin. It extracts data from strings in form of key-value pairs based on the pattern specified. It supports simple patterns which makes it lightweight compared to other extractors such as grok or regex.
+
 Tokens are enclosed within `%{ }` and any characters placed between tokens is considered as a delimiter. There should  be at least one delimiter in between 2 tokens except if one of them is a padding token.
 
 ## Predicate
@@ -19,7 +20,7 @@ The pattern can contain any of the following types:
 | -------------- | ----------------------- | ------------------------------------------------------------ | ------------------------------- | ------------- | ----------------------------------------- | ------------------------------------------------------------ |
 | Simple         | `%{ field }`            | Given field is used as the key for the pattern extracted     | `%{name}`                       | John          | `"name"  : "John"`                        |                                                              |
 | Append         | `% { + field }`         | Appends the value to another field specified with the same field name. | `% {+name} %{+name}`            | John Doe      | `"name" : "John Doe"`                     | `+` symbol on the first token is optional<br />Does not support types |
-| Named keys     | `%{& field}`            | Returns key value pair of the field. Takes the key from the previously matched field. | `%{ code }  % {country}`        | DE Germany    | `"DE" : "Germany" `                       | Needs a field present earlier with the same name             |
+| Named keys     | `%{& field}`            | Returns key value pair of the field. Takes the key from the previously matched field. | `%{ code }  % {country}`        | DE Germany    | `"DE" : "Germany"`                       | Needs a field present earlier with the same name             |
 | Empty field    | `% { field }`           | Will return an empty value if no data is present             | `%{ code }     %{country}`      | Germany       | `"code" : "",<br />"country" : "Germany"` |                                                              |
 | Skipped fields | `%{? field}`            | Skips the extracted value                                    | `%{ ? first_name}  {last_name}` | John Doe      | `"name" : "Doe"`                          |                                                              |
 | Typed Values   | `% { field : type}`     | Extracts the value from the data and converts it to another type specified | `%{age : int}`                  | 22            | `"age" : 22`                              | Supported Types: int, float                                  |

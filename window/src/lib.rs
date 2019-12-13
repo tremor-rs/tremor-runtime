@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
+#![forbid(warnings)]
+#![recursion_limit = "1024"]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
+
 extern crate chrono;
 use chrono::Timelike;
 use chrono::Utc;
@@ -48,7 +57,7 @@ where
     /// * `size` - is the number of slots in the windows
     /// * `max` - is the maximum the current window allows
     pub fn new(size: usize, max: T) -> Self {
-        SlidingWindow {
+        Self {
             buffer: vec![T::from(0); size],
             sum: T::from(0),
             max,
@@ -117,6 +126,8 @@ pub struct TimeWindow {
 
 fn nanotime() -> u64 {
     let now = Utc::now();
+    // If this is negative we have other problems
+    #[allow(clippy::cast_sign_loss)]
     let seconds: u64 = now.timestamp() as u64;
     let nanoseconds: u64 = u64::from(now.nanosecond());
 
@@ -140,7 +151,7 @@ impl TimeWindow {
     /// ````
 
     pub fn new(size: usize, slot_time: u64, max: u64) -> Self {
-        TimeWindow {
+        Self {
             window: SlidingWindow::new(size, max),
             window_time: slot_time * size as u64,
             slot_time,
@@ -262,7 +273,6 @@ mod tests {
         println!("{:?}", tw);
         assert!(r.is_ok());
     }
-
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,19 +20,13 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::utils;
-use crate::{Event, OpConfig};
+// This is OK, Blackhole is benchmark only
+#![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
-use serde_yaml;
 use std::fmt::Display;
 use std::io::{self, stdout, Read, Write};
 use std::process;
@@ -50,6 +44,8 @@ pub struct Config {
     pub warmup_secs: u64,
 }
 
+impl ConfigImpl for Config {}
+
 /// A null offramp that records histograms
 pub struct Blackhole {
     // config: Config,
@@ -63,12 +59,12 @@ pub struct Blackhole {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Blackhole {
+impl offramp::Impl for Blackhole {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            let now_ns = utils::nanotime();
-            Ok(Box::new(Blackhole {
+            let config: Config = Config::new(config)?;
+            let now_ns = nanotime();
+            Ok(Box::new(Self {
                 // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
                 stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
@@ -76,7 +72,7 @@ impl OfframpImpl for Blackhole {
                 has_stop_limit: config.stop_after_secs != 0,
                 delivered: Histogram::new_with_bounds(
                     1,
-                    1_000_000_000,
+                    100_000_000_000,
                     config.significant_figures as u8,
                 )?,
                 pipelines: HashMap::new(),
@@ -97,42 +93,43 @@ impl Offramp for Blackhole {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            let now_ns = utils::nanotime();
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        for value in event.value_iter() {
+            let now_ns = nanotime();
 
             if self.has_stop_limit && now_ns > self.stop_after {
                 let mut buf = Vec::new();
                 let mut serializer = V2Serializer::new();
 
-                if let Err(e) = serializer.serialize(&self.delivered, &mut buf) {
-                    error!("Failed to serialize histogram: {:?}", e);
-                };
-                quantiles(buf.as_slice(), stdout(), 5, 2).expect("Failed to serialize histogram");
-                println!(
-                    "\n\nThroughput: {:.1} MB/s",
-                    (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
-                );
+                serializer.serialize(&self.delivered, &mut buf)?;
+                if quantiles(buf.as_slice(), stdout(), 5, 2).is_ok() {
+                    println!(
+                        "\n\nThroughput: {:.1} MB/s",
+                        (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
+                    );
+                } else {
+                    eprintln!("Failed to serialize histogram");
+                }
+                // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
                 process::exit(0);
             };
 
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(v) = codec.encode(event.value) {
+                if let Ok(v) = codec.encode(value) {
                     self.bytes += v.len();
                 };
-                self.delivered
-                    .record(delta_ns)
-                    .expect("HDR Histogram error");
+                self.delivered.record(delta_ns)?
             }
         }
+        Ok(())
     }
     fn default_codec(&self) -> &str {
         "null"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }
 
@@ -142,6 +139,22 @@ fn quantiles<R: Read, W: Write>(
     quantile_precision: usize,
     ticks_per_half: u32,
 ) -> Result<()> {
+    fn write_extra_data<T1: Display, T2: Display, W: Write>(
+        writer: &mut W,
+        label1: &str,
+        data1: T1,
+        label2: &str,
+        data2: T2,
+    ) -> result::Result<(), io::Error> {
+        writer.write_all(
+            format!(
+                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
+                label1, data1, label2, data2
+            )
+            .as_ref(),
+        )
+    }
+
     let hist: Histogram<u64> = Deserializer::new().deserialize(&mut reader)?;
 
     writer.write_all(
@@ -189,23 +202,6 @@ fn quantiles<R: Read, W: Write>(
             )?;
         }
     }
-
-    fn write_extra_data<T1: Display, T2: Display, W: Write>(
-        writer: &mut W,
-        label1: &str,
-        data1: T1,
-        label2: &str,
-        data2: T2,
-    ) -> result::Result<(), io::Error> {
-        writer.write_all(
-            format!(
-                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
-                label1, data1, label2, data2
-            )
-            .as_ref(),
-        )
-    }
-
     write_extra_data(
         &mut writer,
         "Mean",

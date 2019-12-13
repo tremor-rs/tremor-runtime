@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![warn(unused_extern_crates)]
+#![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
+)]
+
 #[macro_use]
 extern crate serde_derive;
 #[cfg(feature = "kafka")]
@@ -30,7 +40,6 @@ extern crate tokio_threadpool;
 use clap::load_yaml;
 use dirs;
 use http::status::StatusCode;
-use tremor_pipeline::TremorContext as Context;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -38,13 +47,16 @@ use tremor_runtime::functions as tr_fun;
 use tremor_runtime::rest;
 use tremor_runtime::utils;
 use tremor_script::grok;
+use tremor_script::interpreter::AggrType;
+use tremor_script::EventContext as Context;
 
 use clap::ArgMatches;
 use std::io;
 use tremor_pipeline;
 
 use crate::errors::*;
-use halfbrown::{hashmap, HashMap};
+use halfbrown::HashMap;
+use simd_json::borrowed::{Object, Value};
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
@@ -68,35 +80,23 @@ struct TremorApp<'a> {
     config: TargetConfig,
 }
 
-fn tremor_home_dir() -> String {
-    let tremor_root = dirs::home_dir().expect("Expected home_dir");
-    let tremor_root = tremor_root.to_str().expect("Expected home_dir");
-    format!("{}/{}", tremor_root, ".tremor")
+fn tremor_home_dir() -> Result<String> {
+    dirs::home_dir()
+        .and_then(|s| s.to_str().map(ToString::to_string))
+        .ok_or_else(|| Error::from("Expected home_dir"))
+        .map(|tremor_root| format!("{}/{}", tremor_root, ".tremor"))
 }
 
-fn save_config(config: &TargetConfig) {
-    let tremor_root = tremor_home_dir();
+fn save_config(config: &TargetConfig) -> Result<()> {
+    let tremor_root = tremor_home_dir()?;
     let dot_config = format!("{}/config.yaml", tremor_root);
-    let raw = serde_yaml::to_string(&config);
-    let file = File::create(&dot_config);
-    match raw {
-        Ok(raw) => match file {
-            Ok(mut f) => {
-                f.write_all(&raw.into_bytes())
-                    .expect("Config file is not readlable error");
-            }
-            _ => {
-                eprintln!("Unable to create bootstrap config for tremor-tool");
-            }
-        },
-        _ => {
-            eprintln!("Expected non-empty config.yaml");
-        }
-    }
+    let raw = serde_yaml::to_vec(&config)?;
+    let mut file = File::create(&dot_config)?;
+    Ok(file.write_all(&raw)?)
 }
 
-fn load_config() -> TargetConfig {
-    let tremor_root = tremor_home_dir();
+fn load_config() -> Result<TargetConfig> {
+    let tremor_root = tremor_home_dir()?;
     let dot_config = format!("{}/config.yaml", tremor_root);
     let mut default = TargetConfig {
         instances: HashMap::new(),
@@ -113,49 +113,42 @@ fn load_config() -> TargetConfig {
                 match meta {
                     Ok(meta) => {
                         if meta.is_file() {
-                            let mut source = File::open(&dot_config)
-                                .expect("Unable to open tremor tool config file");
+                            let mut source = File::open(&dot_config)?;
                             let mut raw = vec![];
-                            source
-                                .read_to_end(&mut raw)
-                                .expect("Expected readable file");
-
-                            let r: TargetConfig = serde_yaml::from_slice(raw.as_slice())
-                                .expect("Unable to map slice to yaml");
-                            r
+                            source.read_to_end(&mut raw)?;
+                            Ok(serde_yaml::from_slice(raw.as_slice())?)
                         } else {
-                            default
+                            Ok(default)
                         }
                     }
                     Err(_file) => {
-                        save_config(&default);
+                        save_config(&default)?;
                         load_config()
                     }
                 }
             } else {
-                default
+                Ok(default)
             }
         }
         Err(_dir) => {
-            fs::create_dir(&tremor_root).expect("Unable to create tremor home directory");
+            fs::create_dir(&tremor_root)?;
             load_config()
         }
     }
 }
 
 impl<'a> TremorApp<'a> {
-    fn new(app: &'a clap::App) -> Self {
+    fn try_new(app: &'a clap::App) -> Result<Self> {
         let cmd = app.clone().get_matches();
         let format = match cmd.value_of("format") {
             Some("json") => FormatKind::Json,
-            Some("yaml") => FormatKind::Yaml,
-            _ => FormatKind::Yaml,
+            Some("yaml") | _ => FormatKind::Yaml,
         };
-        Self {
+        Ok(Self {
             app: cmd,
             format,
-            config: load_config(),
-        }
+            config: load_config()?,
+        })
     }
 }
 
@@ -166,10 +159,10 @@ fn usage(app: &TremorApp) -> Result<()> {
     Ok(())
 }
 
-fn slurp(file: &str) -> config::Config {
-    let file = File::open(file).expect("could not open file");
+fn slurp(file: &str) -> Result<config::Config> {
+    let file = File::open(file)?;
     let buffered_reader = BufReader::new(file);
-    serde_yaml::from_reader(buffered_reader).expect("Failed to read config file")
+    Ok(serde_yaml::from_reader(buffered_reader)?)
 }
 
 fn run(mut app: TremorApp) -> Result<()> {
@@ -187,18 +180,17 @@ fn run(mut app: TremorApp) -> Result<()> {
     }
 }
 
-fn main() {
+#[cfg_attr(tarpaulin, skip)]
+fn main() -> Result<()> {
     use clap::App;
     let yaml = load_yaml!("./cli.yaml");
     let app = App::from_yaml(yaml);
-    let app = TremorApp::new(&app);
-    if let Err(e) = run(app) {
-        eprintln!("Error: {}", e)
-    }
+    let app = TremorApp::try_new(&app)?;
+    run(app)
 }
 
 fn script_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
-    tr_fun::load().expect("Unable to load builtin tremor-script registry functions");
+    tr_fun::load()?;
     if let Some(matches) = cmd.subcommand_matches("run") {
         script_run_cmd(&matches)
     } else {
@@ -210,32 +202,30 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
     let f = cmd.value_of("SCRIPT").ok_or("SCRIPT not provided")?;
     let mut file = File::open(f)?;
     let mut script = String::new();
-    file.read_to_string(&mut script)
-        .expect("Unable to read the file");
+    file.read_to_string(&mut script)?;
 
     let input: Box<dyn BufRead> = match cmd.value_of("DATA") {
         None => Box::new(BufReader::new(io::stdin())),
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };
 
-    let context = Context { ingest_ns: 666 };
+    let context = Context {
+        at: 666,
+        origin_uri: None,
+    };
     let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
     for (num, line) in input.lines().enumerate() {
         let l = line?;
         if l.is_empty() || l.starts_with('#') {
             continue;
         }
-        let mut codec =
-            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
+        let mut codec = tremor_runtime::codec::lookup("json")?;
 
         match codec.decode(l.as_bytes().to_vec(), 0) {
             Ok(Some(ref json)) => {
-                let mut global_map = simd_json::borrowed::Value::Object(hashmap! {});
-                #[allow(mutable_transmutes)]
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                let mut unwind_event: &mut simd_json::borrowed::Value =
-                    unsafe { std::mem::transmute(json.suffix()) };
-                match s.run(&context, &mut unwind_event, &mut global_map) {
+                let mut global_map = Value::from(Object::new());
+                let (mut unwind_event, _) = json.parts();
+                match s.run(&context, AggrType::Emit, &mut unwind_event, &mut global_map) {
                     Ok(_result) => {
                         println!(
                             "{}",
@@ -289,16 +279,16 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
     };
 
     let grok = if cmd.is_present("patterns") {
-        grok::GrokPattern::from_file(patterns_file.to_string(), test_pattern.to_string())?
+        grok::Pattern::from_file(patterns_file, test_pattern)?
     } else {
-        grok::GrokPattern::new(test_pattern.to_string())?
+        grok::Pattern::new(test_pattern.to_string())?
     };
     for (num, line) in input.lines().enumerate() {
         let l = line?;
         if l.is_empty() || l.starts_with('#') {
             continue;
         }
-        let result = grok.matches(l.as_bytes().to_vec());
+        let result = grok.matches(l.as_bytes());
 
         match result {
             Ok(j) => {
@@ -331,7 +321,7 @@ fn pipe_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
 fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
-    let config = slurp(script);
+    let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
     let mut flow = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
@@ -343,24 +333,19 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
     for (num, line) in input.lines().enumerate() {
         let l = line?;
-        let mut codec =
-            tremor_runtime::codec::lookup("json").expect("Failed to initalize JSON codec");
-        let json = codec
-            .decode(l.as_bytes().to_vec(), 0)
-            .expect("Failed to decode input JSON")
-            .expect("Failed to decode input JSON");
-        let m = hashmap! {};
+        let mut codec = tremor_runtime::codec::lookup("json")?;
+        let data = codec
+            .decode(l.as_bytes().to_vec(), 0)?
+            .ok_or_else(|| Error::from("Failed to decode input JSON"))?;
 
         let mut eventset = Vec::new();
         flow.enqueue(
             "in1",
             tremor_pipeline::Event {
-                is_batch: false,
                 id: num as u64,
                 ingest_ns: utils::nanotime(),
-                meta: m,
-                value: json,
-                kind: None,
+                data,
+                ..tremor_pipeline::Event::default()
             },
             &mut eventset,
         )?;
@@ -374,7 +359,7 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 
 fn pipe_to_dot_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
-    let config = slurp(script);
+    let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
     println!("{}", pipeline.to_dot());
@@ -421,22 +406,22 @@ struct Binding {
 
 fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_target_list_cmd(app, &matches);
+        conductor_target_list_cmd(app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_target_create_cmd(app, &matches);
+        conductor_target_create_cmd(app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_target_delete_cmd(app, &matches);
+        conductor_target_delete_cmd(app, &matches)
     } else {
-        println!("{}", serde_json::to_string(&app.config.instances)?)
+        println!("{}", serde_json::to_string(&app.config.instances)?);
+        Ok(())
     }
-    Ok(())
 }
 
 /////////////////////////////
 // API endpoint targetting //
 /////////////////////////////
 
-fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) {
+fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
     println!(
         "{:?}",
         app.config
@@ -445,30 +430,22 @@ fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) {
             .cloned()
             .collect::<Vec<String>>()
     );
+    Ok(())
 }
 
-fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) {
-    let id = cmd
-        .value_of("TARGET_ID")
-        .ok_or("TARGET_ID not provided")
-        .expect("TARGET_ID not provided");
-    let path_to_file = cmd
-        .value_of("SOURCE")
-        .ok_or("SOURCE not provided")
-        .expect("SOURCE not provided");
-    let json = load(path_to_file.to_string()).expect("Bad source path");
-    let endpoints: Vec<String> = serde_json::from_value(json).expect("Unable to parse json");
+fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+    let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
+    let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
+    let json = load(path_to_file)?;
+    let endpoints: Vec<String> = serde_json::from_value(json)?;
     app.config.instances.insert(id.to_string(), endpoints);
-    save_config(&app.config);
+    save_config(&app.config)
 }
 
-fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) {
-    let id = cmd
-        .value_of("TARGET_ID")
-        .ok_or("TARGET_ID not provided")
-        .expect("TARGET_ID not provided");
+fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+    let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     app.config.instances.remove(&id.to_string());
-    save_config(&app.config);
+    save_config(&app.config)
 }
 
 //////////////////
@@ -483,9 +460,8 @@ fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     println!(
         "{}",
         match cmd.value_of("format") {
-            Some("json") => serde_json::to_string(&version)?,
             Some("yaml") => serde_yaml::to_string(&version)?,
-            _ => serde_json::to_string(&version)?,
+            Some("json") | _ => serde_json::to_string(&version)?,
         }
     );
     Ok(())
@@ -522,7 +498,7 @@ fn conductor_pipeline_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -533,7 +509,7 @@ fn conductor_pipeline_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -541,7 +517,7 @@ fn conductor_pipeline_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "pipeline".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -549,11 +525,11 @@ fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "pipeline";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -564,14 +540,14 @@ fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
 fn conductor_pipeline_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("pipeline/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let endpoint = format!("pipeline/{id}/{instance}", id = a_id, instance = s_id);
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -606,7 +582,7 @@ fn conductor_binding_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -617,7 +593,7 @@ fn conductor_binding_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -625,7 +601,7 @@ fn conductor_binding_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "binding".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -633,11 +609,11 @@ fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "binding";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -648,32 +624,32 @@ fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
 fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
 fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -684,14 +660,14 @@ fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
 fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("binding/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -722,7 +698,7 @@ fn conductor_offramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -733,7 +709,7 @@ fn conductor_offramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -741,7 +717,7 @@ fn conductor_offramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "offramp".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -749,11 +725,11 @@ fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "offramp";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -764,14 +740,14 @@ fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
 fn conductor_offramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("offramp/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let endpoint = format!("offramp/{id}/{instance}", id = a_id, instance = s_id);
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -802,7 +778,7 @@ fn conductor_onramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -813,7 +789,7 @@ fn conductor_onramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.delete(endpoint)?.send()?;
+    let mut response = restc.delete(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -821,7 +797,7 @@ fn conductor_onramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "onramp".to_string();
-    let mut response = restc.get(endpoint)?.send()?;
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -829,11 +805,11 @@ fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file.to_string())?;
+    let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "onramp";
     let mut response = restc
-        .post(endpoint.to_string())?
+        .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
@@ -844,14 +820,14 @@ fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
 fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
-    let aid = cmd
+    let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let sid = cmd
+    let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!("onramp/{id}/{instance}", id = aid, instance = sid);
-    let mut response = restc.get(endpoint)?.send()?;
+    let endpoint = format!("onramp/{id}/{instance}", id = a_id, instance = s_id);
+    let mut response = restc.get(&endpoint)?.send()?;
     handle_response(&mut response)
 }
 
@@ -859,16 +835,14 @@ fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
 // Utility code //
 //////////////////
 
-fn load(path_to_file: String) -> Result<serde_json::Value> {
-    let mut source = File::open(&path_to_file)?;
-    let ext = Path::new(&path_to_file)
+fn load(path_to_file: &str) -> Result<serde_json::Value> {
+    let mut source = File::open(path_to_file)?;
+    let ext = Path::new(path_to_file)
         .extension()
         .and_then(OsStr::to_str)
         .ok_or("Could not create fail path")?;
     let mut raw = vec![];
-    source
-        .read_to_end(&mut raw)
-        .expect("Expected readable file");
+    source.read_to_end(&mut raw)?;
 
     if ext == "yaml" || ext == "yml" {
         Ok(serde_yaml::from_slice(raw.as_slice())?)
@@ -896,8 +870,7 @@ fn accept(app: &TremorApp) -> &'static str {
 fn handle_response(response: &mut reqwest::Response) -> Result<()> {
     let status = response.status();
     match status {
-        StatusCode::OK => println!("{}", &response.text()?),
-        StatusCode::CREATED => println!("{}", &response.text()?),
+        StatusCode::OK | StatusCode::CREATED => println!("{}", &response.text()?),
         StatusCode::NOT_FOUND => eprintln!("Not found"),
         StatusCode::CONFLICT => eprintln!("Conflict"),
         _ => eprintln!("Unexpected response ( status: {} )", status.as_u16()),

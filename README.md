@@ -1,11 +1,12 @@
-# Tremor [![Build Status](https://badge.buildkite.com/61fabc7d2e79dbab6eb504b311d840d31fa81d41814952792b.svg?branch=master)](https://buildkite.com/wayfair/tremor-runtime)
+# Tremor ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Rust/badge.svg) ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Security%20audit/badge.svg)
 
-This tool allows configuring a pipeline that moves data from a source to a destination. The pipeline consists of multiple steps which are executed in order. Each step is configurable on a plugin basis.
+In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language and a query language. 
 
+More about the [history](docs/history.md) and [architecture](docs/architecture.md) can be found in [the documentation](docs/index.md).
 
 ## Audience
 
-Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with Kafka, other message systems should be easily pluggable.
+Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
 
 ## Use Cases
 
@@ -17,26 +18,20 @@ Tremor has been successfully used to replace logstash as a Kafka to Elastic Sear
 
 Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead only relying on HTTP as its transport.
 
-### PHP Execution
-
-Executing short-lived code, such as PHP scripts, against events from a queue can be challenging. It quickly results in either a poll loop or other problematic patterns. Tremor can embed runtimes, such as the PHP and then only execute the short-lived code when an event arrives.
-
 
 ### When to use Tremor
 
-* You are currently using Logstash
+* You are currently using software such as Logstash or Telgraf
 * You have a high volume of events to handle
 * You want to protect a downstream system from overload
-* You have short running code, microservices or FaaS based code that you wish to connect to a queue
-* **<more suggestions please, I sure have overlooked something>**
+* You wish to perform ETL like tasks on data.
 
 ### When not to use Tremor
 
 Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reallity your contributions are more then welcome.
 
-* You require complex or advanced scripting on your events such as ruby shellouts in Logstash.
-* Your events are neither JSON nor Influx line protocol encoded. (this might not an intentional limitation just the most used formats so far.)
-* Your onramps or offramps are not supported. (Again this might not an intended limitation, contribution of more on or offramps are more then welcome.)
+* Your events structure can not be represented by JSONesque data structures. (If unsure feel free to reach out and create a ticket and explain your use case - [codecs](docs/artefacts/codecs.md) are easy to write!)
+* Your onramps or offramps are not supported. (If you sitll wish to use tremor please reach out and create a ticket - [onramps](docs/artefacts/onramps.md) and [offramps](docs/artefacts/offramps.md) too are easy to write!)
 
 ## Building
 
@@ -48,9 +43,7 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 
 If you are not comfortable with managing library packages on your system or don't have experience with , please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `clang`, `openssl-static`, and `libstdc++-static` are required, for different distributions or operating systems, please install packages accordingly.
-
-Bison version 3.0.5 or later is also required and needs to be set in the PATH variable of your system.
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required, for different distributions or operating systems, please install packages accordingly.
 
 ## Running locally
 
@@ -81,7 +74,7 @@ docker exec -it 838f22d9cb98 sh
 
 ## Configuration file
 
-Tremor uses YAML to configure pipelines.
+Tremor uses YAML, or [tremor-query](docs/tremor-query/index.md) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
 
 ### Operations
 
@@ -105,60 +98,13 @@ onramps:
       pipeline: main
 ```
 
-#### `pipelines`
-
-A list of pipelines started in tremor. Each pipeline lives in its thread. It consists of a `name` string, that is used to identify the pipeline. A list of `steps`, which are operations - where each steps default output is the next step in the list. Along with a set of `subpipelines` which act as a named pipeline that runs in the same thread as the main pipeline.
-
-```yaml
-# ...
-pipelines:
-  - name: main
-      steps:
-        - ...
-      subpipelines:
-        - ...
-```
-
-#### `step`
-
-A step is a single operation within the pipeline. The list of possible operations and their configuration can be found in the generated documentation. Also, two parameters can be passed to the step: `on-error`, the step to perform if an error occurs in step, and `outputs` a list of additional outputs - commonly used for routing.
-
-There are two special steps:
-- `pipeline::<pipeline name>` sends the event to a given pipeline
-- `sub::<pipeline name>` sends the event to a given subpipeline of the current pipeline
-
-```yaml
-# ...
-steps:
-  - classifier::json:
-    rules:
-      - class: 'info'
-        rule: 'short_message:"INFO"'
-      - class: 'error'
-        rule: 'short_message:"ERROR"'
-# ...
-```
-
-#### `subpipelines`
-
-A list of subpipelines that can be called form the main pipeline. Be aware that a subpipeline can only call subpipelines that were defined before it. It has a `name` with which it can be called. Along with `steps` which follow the same rule as `steps` in a pipeline.
-
-```yaml
-# ...
-subpipelines:
-  - name: done
-    steps:
-      - offramp::stdout
-# ...
-```
-
 ### Example
 
-Please look at the [demo](demo/configs/tremor-demo.yaml) for a fully documented example
+Please look at the [demo](demo/configs/tremor) for a fully documented example
 
 ### Configuration file usage in the docker container
 
-To use the configuration file as part of the Docker container, you can either mount the file and point the `CONFIG_FILE` to its location or define the `CONFIG` environment variable with the content of the file, and it will be created from this on startup. Note: If `CONFIG` is set `CONFIG_FILE` will be ignored.
+To use the configuration file as part of the Docker container mount the configuration files to `/etc/tremor/config`.
 
 
 ## Local demo mode

@@ -1,0 +1,3 @@
+Error: 
+    2 | not snot
+      |     ^^^^ The unary operation `not` is not defined for the type `string`

@@ -1,0 +1,3 @@
+match true of
+  case true => true
+end

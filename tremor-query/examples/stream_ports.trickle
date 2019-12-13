@@ -1,0 +1,10 @@
+# 'in', 'out' and 'err' streams are builtin
+# events flow from the 'in' stream through its default 'out' port
+# events ' flow to the 'out' stream through its default 'in' port
+# events' flow to the 'out' stream through its default 'in' port
+select event from in/out into out/in;
+
+# where default inbound and outbound ports are used ( frequent )
+# the port does not need to be specified
+# in/out is equivalent to in
+

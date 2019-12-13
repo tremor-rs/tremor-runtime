@@ -1,0 +1,3 @@
+Error: 
+    1 | patch [] of
+      |       ^^ Conflicting types, got array but expected record

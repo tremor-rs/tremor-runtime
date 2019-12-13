@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,24 +14,15 @@
 
 #[cfg(feature = "kafka")]
 use rdkafka::util::get_rdkafka_version;
-use std::io::Write;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// println_stderr and run_command_or_fail are copied from rdkafka-sys
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
-
 pub fn print() {
-    println_stderr!("tremor version: {}", VERSION);
+    eprintln!("tremor version: {}", VERSION);
     #[cfg(feature = "kafka")]
     {
         let (version_n, version_s) = get_rdkafka_version();
-        println_stderr!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+        eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
     }
 }
 
@@ -41,5 +32,16 @@ pub fn log() {
     {
         let (version_n, version_s) = get_rdkafka_version();
         info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn for_coverage_only() {
+        print();
+        log();
     }
 }

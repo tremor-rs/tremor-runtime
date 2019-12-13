@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
-use crate::{Event, Operator};
+use crate::op::prelude::*;
 
 #[derive(Debug, Clone, Hash)]
-pub struct PassthroughOperator {}
+pub struct Passthrough {}
 
 op!(PassthroughFactory (_node) {
-    Ok(Box::new(PassthroughOperator{}))
+    Ok(Box::new(Passthrough{}))
 });
 
 #[allow(unused_mut)]
-impl Operator for PassthroughOperator {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+impl Operator for Passthrough {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         Ok(vec![("out".into(), event)])
     }
 }

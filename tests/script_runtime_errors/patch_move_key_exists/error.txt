@@ -1,0 +1,3 @@
+Error: 
+    1 | patch {"a": 1, "b": 2} of
+      | ^^^^^^^^^^^^^^^^^^^^^^^ The key that is supposed to be written to already exists: b

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,21 +62,21 @@
 //! ```
 
 use crate::errors::*;
-use crate::{Event, MetaMap, Operator};
+use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::{json, OwnedValue, ValueTrait};
-use std::borrow::Borrow;
+use std::borrow::Cow;
+use tremor_script::prelude::*;
 use window::TimeWindow;
 
 op!(BucketGrouperFactory(node) {
     if node.config.is_none() {
-        Ok(Box::new(BucketGrouper {
+        Ok(Box::new(Grouper {
             buckets: HashMap::new(),
             _id: node.id.clone(),
         }))
     } else {
-        Err(ErrorKind::ExtraOpConfig(node.id.clone()).into())
+        Err(ErrorKind::ExtraOpConfig(node.id.to_string()).into())
     }
 });
 /// Single bucket specification
@@ -91,18 +91,15 @@ pub struct Rate {
 }
 
 impl Rate {
-    pub fn from_meta(meta: &MetaMap) -> Option<Self> {
+    pub fn from_meta<'any>(meta: &Value<'any>) -> Option<Self> {
         let rate = meta.get("rate")?.as_u64()?;
 
         let time_range = meta
             .get("time_range")
-            .and_then(OwnedValue::as_u64)
+            .and_then(Value::as_u64)
             .unwrap_or(1000);
-        let windows = meta
-            .get("windows")
-            .and_then(OwnedValue::as_u64)
-            .unwrap_or(100) as usize;
-        Some(Rate {
+        let windows = meta.get("windows").and_then(Value::as_usize).unwrap_or(100);
+        Some(Self {
             rate,
             time_range,
             windows,
@@ -110,7 +107,7 @@ impl Rate {
     }
 }
 
-struct Bucket {
+pub struct Bucket {
     cache: LruCache<String, TimeWindow>,
     pass: u64,
     overflow: u64,
@@ -125,49 +122,41 @@ impl Bucket {
     }
 }
 
-pub struct BucketGrouper {
-    _id: String,
-    buckets: HashMap<String, Bucket>,
+pub struct Grouper {
+    pub _id: Cow<'static, str>,
+    pub buckets: HashMap<String, Bucket>,
 }
 
-impl std::fmt::Debug for BucketGrouper {
+impl std::fmt::Debug for Grouper {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Bucketgrouper")
     }
 }
 
-impl Operator for BucketGrouper {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(String, Event)>> {
-        if let Some(OwnedValue::String(class)) = event.meta.get("class") {
-            let groups = match self.buckets.get_mut(class.borrow() as &str) {
-                Some(g) => g,
-                None => {
-                    let cardinality = event
-                        .meta
+impl Operator for Grouper {
+    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+        let meta = &event.data.suffix().meta;
+        if let Some(class) = meta.get("class").and_then(Value::as_str) {
+            let (_, groups) = self
+                .buckets
+                .raw_entry_mut()
+                .from_key(class)
+                .or_insert_with(|| {
+                    let cardinality = meta
                         .get("cardinality")
-                        .and_then(OwnedValue::as_u64)
-                        .unwrap_or(1000) as usize;
-                    self.buckets
-                        .insert(class.to_string(), Bucket::new(cardinality));
-                    if let Some(g) = self.buckets.get_mut(class.borrow() as &str) {
-                        g
-                    } else {
-                        unreachable!()
-                    }
-                }
-            };
-            let d = if let Some(d) = event.meta.get("dimensions") {
-                d
-            } else {
-                &OwnedValue::Null
-            };
-            let dimensions = serde_json::to_string(d)?;
+                        .and_then(Value::as_usize)
+                        .unwrap_or(1000);
+                    (class.to_string(), Bucket::new(cardinality))
+                });
+
+            let d = meta.get("dimensions").unwrap_or(&NULL);
+            let dimensions = d.encode();
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {
-                    let rate = if let Some(rate) = Rate::from_meta(&event.meta) {
+                    let rate = if let Some(rate) = Rate::from_meta(&meta) {
                         rate
                     } else {
-                        return Ok(vec![("error".to_string(), event)]);
+                        return Ok(vec![("error".into(), event)]);
                     };
                     groups.cache.put(
                         dimensions.clone(),
@@ -180,6 +169,7 @@ impl Operator for BucketGrouper {
                     if let Some(g) = groups.cache.get_mut(&dimensions) {
                         g
                     } else {
+                        //ALLOW: we just put this entry in. The Entry API https://github.com/jeromefroe/lru-rs/issues/30 would solve this
                         unreachable!()
                     }
                 }
@@ -187,45 +177,46 @@ impl Operator for BucketGrouper {
             };
             if window.inc_t(event.ingest_ns).is_ok() {
                 groups.pass += 1;
-                Ok(vec![("out".to_string(), event)])
+                Ok(vec![("out".into(), event)])
             } else {
                 groups.overflow += 1;
-                Ok(vec![("overflow".to_string(), event)])
+                Ok(vec![("overflow".into(), event)])
             }
         } else {
-            Ok(vec![("error".to_string(), event)])
+            Ok(vec![("error".into(), event)])
         }
     }
 
     fn metrics(
         &self,
-        mut tags: HashMap<String, String>,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
-    ) -> Result<Vec<OwnedValue>> {
+    ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
-            tags.insert("class".to_owned(), class.to_owned());
+            tags.insert("class".into(), class.clone().into());
+            tags.insert("action".into(), "pass".into());
+            // TODO: this is ugly
+            // Count good cases
+            let mut m = Object::with_capacity(4);
+            m.insert("measurement".into(), "bucketing".into());
+            m.insert("tags".into(), Value::from(tags.clone()));
+            let mut fields = Object::with_capacity(1);
+            fields.insert("count".into(), b.pass.into());
+            m.insert("fields".into(), Value::from(fields));
+            m.insert("timestamp".into(), timestamp.into());
+            res.push(Value::from(m.clone()));
 
-            tags.insert("action".to_owned(), "pass".to_owned());
-            // TODO: this is ugly
-            res.push(json!({
-                "measurement": "bucketing",
-                "tags": tags,
-                "fields": {
-                    "count": b.pass
-                },
-                "timestamp": timestamp
-            }));
-            tags.insert("action".to_owned(), "overflow".to_owned());
-            // TODO: this is ugly
-            res.push(json!({
-                "measurement": "bucketing",
-                "tags": tags,
-                "fields": {
-                    "count": b.overflow
-                },
-                "timestamp": timestamp
-            }));
+            // Count bad cases
+            tags.insert("action".into(), "overflow".into());
+            let mut m = Object::with_capacity(4);
+            m.insert("measurement".into(), "bucketing".into());
+            m.insert("tags".into(), Value::from(tags.clone()));
+            let mut fields = Object::with_capacity(1);
+            fields.insert("count".into(), b.pass.into());
+            m.insert("fields".into(), Value::from(fields));
+            m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly
+            res.push(Value::from(m.clone()));
         }
         Ok(res)
     }

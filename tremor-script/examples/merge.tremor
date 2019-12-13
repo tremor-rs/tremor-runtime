@@ -1,7 +1,0 @@
-let aa = { "aa": 1, "bb": 2 };
-
-let bb = merge aa of
-    { "cc": 2, "bb": 3, "aa": null }
-end;
-
-emit { "aa": aa, "bb": bb };

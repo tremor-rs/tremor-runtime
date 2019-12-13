@@ -1,0 +1,29 @@
+# to be run with metrics_dev_5.txt.xz
+define tumbling window `1secs`
+ with
+   interval = datetime::with_seconds(1),
+end;
+
+define tumbling window `10secs`
+ with
+   interval = datetime::with_seconds(10),
+end;
+
+select
+  {
+    "measurement": event.measurement,
+    "tags": patch event.tags of insert "window" => "10s" end,
+    "fields": {
+      "sum": stats::sum(event.fields.value),
+      "mean": stats::mean(event.fields.value),
+      "var": stats::var(event.fields.value),
+      "min": stats::min(event.fields.value),
+      "max": stats::max(event.fields.value),
+      "stdev": stats::stdev(event.fields.value),
+      "count": stats::count()
+    }
+  }
+from in[`10secs`]
+where record::contains(event.fields, "value") and record::contains(event.tags, "app")
+group by set([event.measurement, event.tags.app])
+into out;

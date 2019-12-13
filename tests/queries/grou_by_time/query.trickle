@@ -1,0 +1,9 @@
+define tumbling window `20ns`
+with
+  # note: In the framework events are emitted at a nanoseond basis
+  # the input data alternates between two groups so we should
+  # see an emit every 10 events / group here
+  interval = 20
+end;
+
+select {"g": group, "c": stats::sum(event.c)} from in[`20ns`] group by set(event.g) into out;

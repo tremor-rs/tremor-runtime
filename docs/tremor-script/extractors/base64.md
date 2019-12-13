@@ -8,8 +8,7 @@ When used as a predicate test with `~`, and the referent target is a valid strin
 
 ## Extraction
 
-If predicate test succeeds, then the decoded base64 content it extracted and
-returned as a string literal.
+If predicate test succeeds, then the decoded base64 content it extracted and returned as a string literal.
 
 ## Example
 

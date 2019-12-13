@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +17,11 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 
-use crate::ast::{self, BaseExpr, Expr};
+use crate::ast::{self, BaseExpr, Expr, Ident, NodeMetas};
 use crate::errors;
 use crate::lexer;
 use crate::pos;
 use crate::pos::{Location, Range};
-use crate::registry::Context;
 use base64;
 use dissect;
 use error_chain::error_chain;
@@ -31,11 +30,13 @@ use grok;
 use lalrpop_util;
 use lalrpop_util::ParseError as LalrpopError;
 use regex;
+use serde::{Deserialize, Serialize};
 use serde_json;
 pub use simd_json::ValueType;
-use simd_json::{BorrowedValue as Value, ValueTrait};
+use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 use std::num;
-use std::ops::Range as IRange;
+use std::ops::{Range as IRange, RangeInclusive};
+use url;
 
 #[macro_export]
 macro_rules! stry {
@@ -57,6 +58,19 @@ impl PartialEq for Error {
 
 type ParserError<'screw_lalrpop> =
     lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, errors::Error>;
+
+/* waiting for try_trait
+impl From<std::option::NoneError> for Error {
+    fn from(error: std::option::NoneError) -> Self {
+        ErrorKind::NotFound.into()
+    }
+}
+*/
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Self::from(format!("Url Parse Error: {:?}", e))
+    }
+}
 
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
@@ -81,7 +95,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
             .into(),
             LalrpopError::InvalidToken { location: start } => {
                 let mut end = start;
-                end.column.0 += 1;
+                end.column += 1;
                 ErrorKind::InvalidToken(
                     (start.move_up_lines(2), end.move_down_lines(2)).into(),
                     (start, end).into(),
@@ -99,7 +113,7 @@ fn t2s(t: ValueType) -> &'static str {
         ValueType::Null => "null",
         ValueType::Bool => "boolean",
         ValueType::String => "string",
-        ValueType::I64 => "integer",
+        ValueType::I64 | ValueType::U64 => "integer",
         ValueType::F64 => "float",
         ValueType::Array => "array",
         ValueType::Object => "record",
@@ -126,67 +140,77 @@ impl ErrorKind {
     pub fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
-            ArrayOutOfRange(outer, inner, _) => (Some(*outer), Some(*inner)),
-            AssignIntoArray(outer, inner) => (Some(*outer), Some(*inner)),
-            BadAccessInEvent(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadAccessInGlobal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadAccessInLocal(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            BadArity(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
-            BadType(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            BinaryDrop(outer, inner) => (Some(*outer), Some(*inner)),
-            BinaryEmit(outer, inner) => (Some(*outer), Some(*inner)),
-            ExtraToken(outer, inner, _) => (Some(*outer), Some(*inner)),
-            PatchKeyExists(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InvalidAssign(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidBinary(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            InvalidDrop(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidEmit(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidConst(outer, inner) => (Some(*outer), Some(*inner)),
-            AssignToConst(outer, inner, _) => (Some(*outer), Some(*inner)),
-            DoubleConst(outer, inner, _) => (Some(*outer), Some(*inner)),
-            InvalidExtractor(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            InvalidFloatLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidHexLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidIntLiteral(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidToken(outer, inner) => (Some(*outer), Some(*inner)),
-            InvalidUnary(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            MergeTypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            MissingEffectors(outer, inner) => (Some(*outer), Some(*inner)),
-            MissingFunction(outer, inner, _, _, _) => (Some(*outer), Some(*inner)),
-            MissingModule(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            NoClauseHit(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
-            Oops(outer) => (Some(outer.expand_lines(2)), Some(*outer)),
-            RuntimeError(outer, inner, _, _, _, _) => (Some(*outer), Some(*inner)),
-            TypeConflict(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnexpectedCharacter(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnexpectedEscapeCode(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnrecognizedToken(outer, inner, _, _) => (Some(*outer), Some(*inner)),
-            UnterminatedExtractor(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedIdentLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedStringLiteral(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
-            UnterminatedHereDoc(outer, inner, _) => (Some(*outer), Some(*inner)),
-            TailingHereDoc(outer, inner, _, _) => (Some(*outer), Some(*inner)),
+            NoClauseHit(outer) | Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
+            QueryStreamNotDefined(outer, inner, _)
+            | ArrayOutOfRange(outer, inner, _)
+            | AssignIntoArray(outer, inner)
+            | BadAccessInEvent(outer, inner, _, _)
+            | BadAccessInGlobal(outer, inner, _, _)
+            | BadAccessInLocal(outer, inner, _, _)
+            | BadArity(outer, inner, _, _, _, _)
+            | BadType(outer, inner, _, _, _)
+            | BinaryDrop(outer, inner)
+            | BinaryEmit(outer, inner)
+            | ExtraToken(outer, inner, _)
+            | PatchKeyExists(outer, inner, _)
+            | InvalidAssign(outer, inner)
+            | InvalidBinary(outer, inner, _, _, _)
+            | InvalidBitshift(outer, inner)
+            | InvalidDrop(outer, inner)
+            | InvalidEmit(outer, inner)
+            | InvalidConst(outer, inner)
+            | InvalidFn(outer, inner)
+            | AssignToConst(outer, inner, _)
+            | DoubleConst(outer, inner, _)
+            | InvalidExtractor(outer, inner, _, _, _)
+            | InvalidFloatLiteral(outer, inner)
+            | InvalidHexLiteral(outer, inner)
+            | InvalidIntLiteral(outer, inner)
+            | InvalidToken(outer, inner)
+            | InvalidUnary(outer, inner, _, _)
+            | MergeTypeConflict(outer, inner, _, _)
+            | MissingEffectors(outer, inner)
+            | MissingFunction(outer, inner, _, _, _)
+            | MissingModule(outer, inner, _, _)
+            | NoLocalsAllowed(outer, inner)
+            | NoConstsAllowed(outer, inner)
+            | RuntimeError(outer, inner, _, _, _, _)
+            | TypeConflict(outer, inner, _, _)
+            | UnexpectedCharacter(outer, inner, _)
+            | UnexpectedEscapeCode(outer, inner, _, _)
+            | UnrecognizedToken(outer, inner, _, _)
+            | UnterminatedExtractor(outer, inner, _)
+            | UnterminatedIdentLiteral(outer, inner, _)
+            | UnterminatedStringLiteral(outer, inner, _)
+            | UpdateKeyMissing(outer, inner, _)
+            | UnterminatedHereDoc(outer, inner, _)
+            | TailingHereDoc(outer, inner, _, _)
+            | AggrInAggr(outer, inner)
+            | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | NoObjectError(_)
+            | NotFound
             | Grok(_)
             | InvalidInfluxData(_)
             | Io(_)
+            | JSONError(_)
             | Msg(_)
             | ParseIntError(_)
             | ParserError(_)
+            | SerdeJSONError(_)
             | UnexpectedEndOfStream
-            | Utf8Error(_) => (Some(Range::default()), None),
-            ErrorKind::__Nonexhaustive { .. } => (Some(Range::default()), None),
+            | Utf8Error(_)
+            | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
         }
     }
     pub fn token(&self) -> Option<String> {
         use ErrorKind::*;
         match self {
-            UnterminatedExtractor(_, _, token) => Some(token.to_string()),
-            UnterminatedStringLiteral(_, _, token) => Some(token.to_string()),
-            UnterminatedIdentLiteral(_, _, token) => Some(token.to_string()),
-            UnexpectedEscapeCode(_, _, s, _) => Some(s.to_string()),
+            UnterminatedExtractor(_, _, token)
+            | UnterminatedStringLiteral(_, _, token)
+            | UnterminatedIdentLiteral(_, _, token)
+            | UnexpectedEscapeCode(_, _, token, _) => Some(token.to_string()),
             _ => None,
         }
     }
@@ -195,9 +219,18 @@ impl ErrorKind {
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute == outer.1.absolute => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
+            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
+            UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
+            UnrecognizedToken(_, _, key, options) => {
+                match best_hint(&key, &options, 3) {
+                    Some((_d, o)) => Some(format!("Did you mean to use {}?", o)),
+                    _ => None
+                }
+            }
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())
             }
+
             BadAccessInLocal(_, _, key, options) => {
                 let mut options = options.clone();
                 options.push("event".to_owned());
@@ -210,13 +243,7 @@ impl ErrorKind {
                 }
             }
 
-            BadAccessInEvent(_, _, key, options) => {
-                match best_hint(&key, &options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
-                    _ => None
-                }
-            }
-            BadAccessInGlobal(_, _, key, options) => {
+            BadAccessInEvent(_, _, key, options) |BadAccessInGlobal(_, _, key, options) => {
                 match best_hint(&key, &options, 2) {
                     Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
                     _ => None
@@ -230,12 +257,10 @@ impl ErrorKind {
                 _ => None
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
-            MissingModule(_, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
-            MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`", suggestion)),
-            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
-            UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
+            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
+
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
+            Oops(_, _) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
             _ => None,
         }
     }
@@ -273,10 +298,13 @@ where
 
 error_chain! {
     foreign_links {
-        Io(std::io::Error);
         Grok(grok::Error);
-        Utf8Error(std::str::Utf8Error);
+        Io(std::io::Error);
+        JSONError(simd_json::Error);
         ParseIntError(num::ParseIntError);
+        SerdeJSONError(serde_json::Error);
+        Utf8Error(std::str::Utf8Error);
+        NoObjectError(simd_json::KnownKeyError);
     }
     errors {
         /*
@@ -301,20 +329,28 @@ error_chain! {
             description("No expressions were found in the script")
                 display("No expressions were found in the script")
         }
+        NotConstant(expr: Range, inner: Range) {
+            description("The expression isn't constant and can't be evaluated at compile time")
+                display("The expression isn't constant and can't be evaluated at compile time")
+        }
         TypeConflict(expr: Range, inner: Range, got: ValueType, expected: Vec<ValueType>) {
             description("Conflicting types")
                 display("Conflicting types, got {} but expected {}", t2s(*got), choices(&expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))
         }
-        Oops(expr: Range) {
+        Oops(expr: Range, msg: String) {
             description("Something went wrong and we're not sure what it was")
-                display("Something went wrong and we're not sure what it was")
+                display("Something went wrong and we're not sure what it was: {}", msg)
+        }
+        NotFound {
+            description("Something wasn't found, aka NoneError.")
+                display("Something wasn't found, aka NoneError.")
         }
         /*
          * Functions
          */
-        BadArity(expr: Range, inner: Range, m: String, f: String, a: usize, calling_a: usize) {
+        BadArity(expr: Range, inner: Range, m: String, f: String, a: RangeInclusive<usize>, calling_a: usize) {
             description("Bad arity for function")
-                display("Bad arity for function {}::{}/{} but was called with {} arguments", m, f, a, calling_a)
+                display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
         MissingModule(expr: Range, inner: Range, m: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined module")
@@ -323,6 +359,10 @@ error_chain! {
         MissingFunction(expr: Range, inner: Range, m: String, f: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined function")
                 display("Call to undefined function {}::{}", m, f)
+        }
+        AggrInAggr(expr: Range, inner: Range) {
+            description("Aggregates can not be called inside of aggregates")
+                display("Aggregates can not be called inside of aggregates")
         }
         BadType(expr: Range, inner: Range, m: String, f: String, a: usize) {
             description("Bad type passed to function")
@@ -436,8 +476,13 @@ error_chain! {
                 display("You are trying to assing to a value that isn't valid")
         }
         InvalidConst(expr: Range, inner: Range) {
-            description("Can't declare a const here location")
-                display("Can't declare a const here location")
+            description("Can't declare a const here")
+                display("Can't declare a const here")
+        }
+
+        InvalidFn(expr: Range, inner: Range) {
+            description("Can't declare a function here")
+                display("Can't declare a function here")
         }
         DoubleConst(expr: Range, inner: Range, name: String) {
             description("Can't declare a constant twice")
@@ -465,19 +510,23 @@ error_chain! {
                 display("The expression can be read as a binary expression, please put the value you wan to emit in parentheses.")
         }
         BinaryDrop(expr: Range, inner: Range) {
-            description("Please enclose the value you want to rop")
+            description("Please enclose the value you want to drop")
                 display("The expression can be read as a binary expression, please put the value you wan to drop in parentheses.")
         }
         /*
          * Operators
          */
         InvalidUnary(expr: Range, inner: Range, op: ast::UnaryOpKind, val: ValueType) {
-            description("Invalid ynary operation")
-                display("The unary operation operation `{}` is not defined for the type `{}`", op, t2s(*val))
+            description("Invalid unary operation")
+                display("The unary operation `{}` is not defined for the type `{}`", op, t2s(*val))
         }
         InvalidBinary(expr: Range, inner: Range, op: ast::BinOpKind, left: ValueType, right: ValueType) {
-            description("Invalid ynary operation")
-                display("The binary operation operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
+            description("Invalid binary operation")
+                display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
+        }
+        InvalidBitshift(expr: Range, inner: Range) {
+            description("Invalid value for bitshift")
+                display("RHS value is larger than or equal to the number of bits in LHS value")
         }
 
         /*
@@ -517,7 +566,50 @@ error_chain! {
                 display("Invalid Influx Line Protocol data: {}", s)
         }
 
+        /*
+         * Query stream declarations
+         */
+        QueryStreamNotDefined(stmt: Range, inner: Range, name: String) {
+            description("Stream is not defined")
+                display("Stream is not defined: {}", name)
+        }
+        NoLocalsAllowed(stmt: Range, inner: Range) {
+            description("Local variables are not allowed here")
+                display("Local variables are not allowed here")
+        }
+        NoConstsAllowed(stmt: Range, inner: Range) {
+            description("Local variables are not allowed here")
+                display("Local variables are not allowed here")
+        }
     }
+}
+
+// We need this since boxes are terrible
+#[allow(clippy::borrowed_box)]
+pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
+    stmt: &Box<S>,
+    inner: &I,
+    name: String,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into())
+}
+
+// We need this since boxes are terrible
+#[allow(clippy::borrowed_box)]
+pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+    stmt: &Box<O>,
+    inner: &I,
+    _got: &Value,
+    meta: &NodeMetas,
+) -> Result<T> {
+    // FIXME Should actually say expected/actualf or type ( error_type_conflict )
+    Err(ErrorKind::QueryStreamNotDefined(
+        stmt.extent(meta),
+        inner.extent(meta),
+        "snot at error type conflict".to_string(),
+    )
+    .into())
 }
 
 pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
@@ -525,25 +617,78 @@ pub fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     got: ValueType,
     expected: Vec<ValueType>,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::TypeConflict(outer.extent(), inner.extent(), got, expected).into())
+    Err(ErrorKind::TypeConflict(outer.extent(meta), inner.extent(meta), got, expected).into())
 }
 
+pub fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::NoLocalsAllowed(outer.extent(meta), inner.extent(meta)).into())
+}
+
+pub fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
+}
+
+pub fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Object], meta)
+}
+pub fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array], meta)
+}
+
+pub fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::String], meta)
+}
+
+pub fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
+}
 pub fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
     expected: ValueType,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![expected])
+    error_type_conflict_mult(outer, inner, got, vec![expected], meta)
 }
 
 pub fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: &Value,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict(outer, inner, got.kind(), ValueType::Bool)
+    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool, meta)
 }
 
 pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
@@ -551,8 +696,12 @@ pub fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     op: ast::UnaryOpKind,
     val: &Value,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.kind()).into())
+    Err(
+        ErrorKind::InvalidUnary(outer.extent(meta), inner.extent(meta), op, val.value_type())
+            .into(),
+    )
 }
 
 pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
@@ -561,41 +710,61 @@ pub fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     op: ast::BinOpKind,
     left: &Value,
     right: &Value,
+    meta: &NodeMetas,
 ) -> Result<T> {
     Err(ErrorKind::InvalidBinary(
-        outer.extent(),
-        inner.extent(),
+        outer.extent(meta),
+        inner.extent(meta),
         op,
-        left.kind(),
-        right.kind(),
+        left.value_type(),
+        right.value_type(),
     )
     .into())
 }
-pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    Err(ErrorKind::NoClauseHit(outer.extent()).into())
+
+pub fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::InvalidBitshift(outer.extent(meta), inner.extent(meta)).into())
 }
 
-pub fn error_oops<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    Err(ErrorKind::Oops(outer.extent()).into())
+pub fn error_no_clause_hit<T, O: BaseExpr>(outer: &O, meta: &NodeMetas) -> Result<T> {
+    Err(ErrorKind::NoClauseHit(outer.extent(meta)).into())
+}
+
+pub fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
+    outer: &O,
+    msg: &S,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::Oops(outer.extent(meta), msg.to_string()).into())
 }
 
 pub fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     key: String,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::PatchKeyExists(outer.extent(), inner.extent(), key).into())
+    Err(ErrorKind::PatchKeyExists(outer.extent(meta), inner.extent(meta), key).into())
 }
 
 pub fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     key: String,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::UpdateKeyMissing(outer.extent(), inner.extent(), key).into())
+    Err(ErrorKind::UpdateKeyMissing(outer.extent(meta), inner.extent(meta), key).into())
 }
-pub fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::MissingEffectors(outer.extent(), inner.extent()).into())
+pub fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::MissingEffectors(outer.extent(meta), inner.extent(meta)).into())
 }
 
 pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
@@ -603,56 +772,73 @@ pub fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     inner: &I,
     key: String,
     val: &Value,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.kind()).into())
+    Err(ErrorKind::MergeTypeConflict(
+        outer.extent(meta),
+        inner.extent(meta),
+        key,
+        val.value_type(),
+    )
+    .into())
 }
 
-pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
-    Err(ErrorKind::AssignIntoArray(outer.extent(), inner.extent()).into())
+pub fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::AssignIntoArray(outer.extent(meta), inner.extent(meta)).into())
 }
-pub fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O) -> Result<T> {
-    let inner: Range = outer.extent();
+pub fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O, meta: &NodeMetas) -> Result<T> {
+    let inner: Range = outer.extent(meta);
 
     Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
 }
-pub fn error_assign_to_const<T, O: BaseExpr>(outer: &O, name: String) -> Result<T> {
-    let inner: Range = outer.extent();
+pub fn error_assign_to_const<T, O: BaseExpr>(
+    outer: &O,
+    name: String,
+    meta: &NodeMetas,
+) -> Result<T> {
+    let inner: Range = outer.extent(meta);
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
 }
-pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+pub fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script, Ctx>,
+    path: &ast::Path<'script>,
     r: IRange<usize>,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    let expr: Range = outer.extent();
+    let expr: Range = outer.extent(meta);
     Err(match path {
         ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into()
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into()
         }
-        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
-        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r).into(),
+        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
+        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
     })
 }
 
-pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr, Ctx: Context>(
+pub fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script, Ctx>,
+    path: &ast::Path<'script>,
     key: String,
     options: Vec<String>,
+    meta: &NodeMetas,
 ) -> Result<T> {
-    let expr: Range = outer.extent();
+    let expr: Range = outer.extent(meta);
     Err(match path {
         ast::Path::Local(_p) | ast::Path::Const(_p) => {
-            ErrorKind::BadAccessInLocal(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Meta(_p) => {
-            ErrorKind::BadAccessInGlobal(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInGlobal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Event(_p) => {
-            ErrorKind::BadAccessInEvent(expr, inner.extent(), key, options).into()
+            ErrorKind::BadAccessInEvent(expr, inner.extent(meta), key, options).into()
         }
     })
 }

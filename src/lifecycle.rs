@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
 
 impl<A: Artefact> ActivatorLifecycleFsm<A> {
     pub fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
-        let mut fresh = ActivatorLifecycleFsm {
+        let mut fresh = Self {
             artefact,
             world,
             state: ActivationState::Deactivated,
@@ -149,14 +149,14 @@ mod test {
 
         assert!(world
             .repo
-            .find_pipeline(id.clone())
+            .find_pipeline(&id)
             .expect("failed to communicate to repository")
             .is_none());
 
         // Legal <initial> -> Deactivated
         assert_eq!(
             Ok(ActivationState::Deactivated),
-            world.bind_pipeline_from_artefact(id.clone(), pipeline.into())
+            world.bind_pipeline_from_artefact(&id, pipeline.into())
         );
 
         // Legal Deactivated -> Activated
@@ -164,15 +164,13 @@ mod test {
             Ok(ActivationState::Activated),
             world
                 .reg
-                .transition_pipeline(id.clone(), ActivationState::Activated)
+                .transition_pipeline(&id, ActivationState::Activated)
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_pipeline(id.clone(), ActivationState::Zombie)
+            world.reg.transition_pipeline(&id, ActivationState::Zombie)
         );
 
         // Zombies don't return from the dead
@@ -180,7 +178,7 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_pipeline(id.clone(), ActivationState::Deactivated)
+                .transition_pipeline(&id, ActivationState::Deactivated)
         );
 
         // Zombies don't return from the deady
@@ -188,7 +186,7 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_pipeline(id.clone(), ActivationState::Activated)
+                .transition_pipeline(&id, ActivationState::Activated)
         );
     }
 
@@ -202,35 +200,25 @@ mod test {
         let id = TremorURL::parse("/onramp/test/00").expect("artefact not found");
         assert!(world
             .repo
-            .find_onramp(id.clone())
+            .find_onramp(&id)
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world
-            .repo
-            .publish_onramp(id.clone(), false, artefact)
-            .is_ok());
+        assert!(world.repo.publish_onramp(&id, false, artefact).is_ok());
 
         // Legal <initial> -> Deactivated
-        assert_eq!(
-            Ok(ActivationState::Deactivated),
-            world.bind_onramp(id.clone()),
-        );
+        assert_eq!(Ok(ActivationState::Deactivated), world.bind_onramp(&id),);
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world
-                .reg
-                .transition_onramp(id.clone(), ActivationState::Activated)
+            world.reg.transition_onramp(&id, ActivationState::Activated)
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_onramp(id.clone(), ActivationState::Zombie)
+            world.reg.transition_onramp(&id, ActivationState::Zombie)
         );
 
         // Zombies don't return from the dead
@@ -238,15 +226,13 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_onramp(id.clone(), ActivationState::Deactivated)
+                .transition_onramp(&id, ActivationState::Deactivated)
         );
 
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_onramp(id.clone(), ActivationState::Activated)
+            world.reg.transition_onramp(&id, ActivationState::Activated)
         );
     }
 
@@ -260,35 +246,27 @@ mod test {
         let id = TremorURL::parse("/offramp/test/00").expect("artefact not found");
         assert!(world
             .repo
-            .find_offramp(id.clone())
+            .find_offramp(&id)
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world
-            .repo
-            .publish_offramp(id.clone(), false, artefact)
-            .is_ok());
+        assert!(world.repo.publish_offramp(&id, false, artefact).is_ok());
 
         // Legal <initial> -> Deactivated
-        assert_eq!(
-            Ok(ActivationState::Deactivated),
-            world.bind_offramp(id.clone())
-        );
+        assert_eq!(Ok(ActivationState::Deactivated), world.bind_offramp(&id));
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
             world
                 .reg
-                .transition_offramp(id.clone(), ActivationState::Activated)
+                .transition_offramp(&id, ActivationState::Activated)
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_offramp(id.clone(), ActivationState::Zombie)
+            world.reg.transition_offramp(&id, ActivationState::Zombie)
         );
 
         // Zombies don't return from the dead
@@ -296,7 +274,7 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_offramp(id.clone(), ActivationState::Deactivated)
+                .transition_offramp(&id, ActivationState::Deactivated)
         );
 
         // Zombies don't return from the deady
@@ -304,7 +282,7 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_offramp(id.clone(), ActivationState::Activated)
+                .transition_offramp(&id, ActivationState::Activated)
         );
     }
 
@@ -322,30 +300,30 @@ mod test {
 
         assert!(world
             .repo
-            .find_binding(id.clone())
+            .find_binding(&id)
             .expect("failed to communicate to repository")
             .is_none());
 
         assert!(world
             .repo
-            .publish_binding(id.clone(), false, artefact.clone())
+            .publish_binding(&id, false, artefact.clone())
             .is_ok());
 
         assert!(world
             .reg
-            .find_binding(id.clone())
+            .find_binding(&id)
             .expect("failed to communicate to registry")
             .is_none());
 
         // Legal <initial> -> Deactivated
         assert_eq!(
             Ok(ActivationState::Deactivated),
-            world.bind_binding_a(id.clone(), artefact.clone()),
+            world.bind_binding_a(&id, &artefact),
         );
 
         assert!(world
             .reg
-            .find_binding(id.clone())
+            .find_binding(&id)
             .expect("failed to communicate to registry")
             .is_some());
 
@@ -354,15 +332,13 @@ mod test {
             Ok(ActivationState::Activated),
             world
                 .reg
-                .transition_binding(id.clone(), ActivationState::Activated)
+                .transition_binding(&id, ActivationState::Activated)
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_binding(id.clone(), ActivationState::Zombie)
+            world.reg.transition_binding(&id, ActivationState::Zombie)
         );
 
         // Zombies don't return from the dead
@@ -370,7 +346,7 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_binding(id.clone(), ActivationState::Deactivated)
+                .transition_binding(&id, ActivationState::Deactivated)
         );
 
         // Zombies don't return from the deady
@@ -378,23 +354,23 @@ mod test {
             Ok(ActivationState::Zombie),
             world
                 .reg
-                .transition_binding(id.clone(), ActivationState::Activated)
+                .transition_binding(&id, ActivationState::Activated)
         );
 
         // TODO - full undeployment 'white-box' acceptance tests
         //        println!("TODO {:?}", world.repo.unpublish_binding(&id));
-        let _r = world.unbind_binding_a(id.clone(), artefact.clone());
+        let _r = world.unbind_binding_a(&id, &artefact);
         //        assert!(world.repo.unpublish_binding(&id).is_ok());
         println!(
             "TODO {:?}",
             world
                 .reg
-                .find_binding(id.clone())
+                .find_binding(&id)
                 .expect("failed to communicate to registry")
         );
         assert!(world
             .reg
-            .find_binding(id.clone())
+            .find_binding(&id)
             .expect("failed to communicate to registry")
             .is_none());
     }

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 use crate::errors::*;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_script::grok;
+//use tremor_script::grok;
 use tremor_script::tremor_fn;
 
 pub fn load() -> Result<()> {
@@ -23,20 +23,6 @@ pub fn load() -> Result<()> {
         //        .or_ok(Error::from("Could not lock function registry"))?
         .insert(tremor_fn!(system::instance(_context) {
             Ok(Value::from(instance!()))
-        }))
-        .insert(
-            tremor_fn!(logstash::grok(_context, _pattern: String, _text: String) {
-                let recognizer = grok::resolve(_pattern.to_string());
-                match recognizer.matches(_text.to_string().as_bytes().to_vec()) {
-                    Ok(v) => {
-                        // TODO
-                        Ok(v.into())
-                    },
-                    _ => Err(to_runtime_error(format!("{} for pattern: `{}` and text `{}`", "logstash::grok failure", _pattern, _text))),
-                }
-            }),
-        );
+        }));
     Ok(())
-
-    // TODO: ingest_ns requires us to go away from a global registry.
 }

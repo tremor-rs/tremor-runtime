@@ -1,0 +1,2 @@
+let a = 7;
+record::from_array(a)

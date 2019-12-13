@@ -1,0 +1,5 @@
+for event of
+  case (k, v) => let last_key = k, let last_v = v
+end;
+
+{"k": last_key, "v": last_v}

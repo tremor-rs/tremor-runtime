@@ -1,0 +1,21 @@
+define grouper::bucket operator bucket;
+
+define script categorize
+script
+  match event of
+    case %{short_message ~= glob|*INFO*|} => let $class = "info", let $rate = 2
+    case %{short_message ~= glob|*ERROR*|} => let $class = "error", let $rate = 3
+    default => let $m = event.short_message
+  end;
+  event
+end;
+
+create operator bucket;
+
+create script categorize;
+
+select event from in into categorize;
+
+select event from categorize into bucket;
+
+select event from bucket into out;

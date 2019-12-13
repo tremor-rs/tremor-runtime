@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     let args: Vec<String> = env::args().collect();
     let programme = args[0].clone();

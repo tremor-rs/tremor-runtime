@@ -1,0 +1,44 @@
+
+# implicit
+# this is the `in` port of the pipeline
+# create stream in;
+# this is the `out` port of the pipeline
+# create stream out;
+# this is the `err` port of the pipeline
+# create stream err;
+
+select in/out into out/in;
+
+define script error_script
+script
+  # this matches against our error jsons
+  match event of
+  end
+end
+
+select err into my_script;
+
+# pairs
+define tumbling window `1sec`
+with
+   interval = datetime::with_seconds(10),
+script
+  event.time
+end;
+
+select {
+    "window": window,
+    "data": win::collect_flattened(event.value),
+}
+from in/out[`1sec`]
+into out/in;
+
+select {
+    "window": window,
+    "data": win::collect_flattened(event.value),
+}
+from in[`1sec`]
+into err;
+
+crate script snot;
+

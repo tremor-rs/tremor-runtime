@@ -14,12 +14,15 @@ Delimits the output ( events ) into lines ( by '\n' )
 
 Encodes raw data into base64 encoded bytes.
 
+### length-prefixerd
+
+Prefixes the data with a network byte order (big endian) lenght of the data in bytes
+
 ### compression
 
 Compresses event data.
 
-Unlike decompression processors, the compression algorithm must be selected. The following
-compression post-processors are supported. Each format can be configured as a postprocessor.
+Unlike decompression processors, the compression algorithm must be selected. The following compression post-processors are supported. Each format can be configured as a postprocessor.
 
 Supported formats:
 

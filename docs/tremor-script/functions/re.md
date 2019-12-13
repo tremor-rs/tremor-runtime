@@ -2,6 +2,8 @@
 
 The `re` module contains functions for regular expression handing. Please note that if applicable literal regular expressions are faster.
 
+## Functions
+
 ### re::replace(regex, input, to) -> string
 
 Replaces the **first** occurrence of `regex` in the `input` string with `to`.
@@ -25,6 +27,3 @@ Splits the `input` string using the provided regular expression  `regex` as sepa
 ```rust
 re::split(" ", "this is a test") == ["this", "is", "a", "string"].
 ```
-
-
-

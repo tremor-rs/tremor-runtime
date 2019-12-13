@@ -1,0 +1,2 @@
+let key = "badger";
+event[key]

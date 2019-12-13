@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::errors::*;
+use crossbeam_channel::Receiver;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
 use std::result;
-use std::sync::mpsc::Receiver;
 
 #[derive(Debug)]
 pub struct AsyncSink<T> {
@@ -26,23 +26,27 @@ pub struct AsyncSink<T> {
     size: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SinkEnqueueError {
     AtCapacity,
 }
 impl error::Error for SinkEnqueueError {}
+
+#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for SinkEnqueueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SinkDequeueError {
     Empty,
     NotReady,
 }
 impl error::Error for SinkDequeueError {}
+
+#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for SinkDequeueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -53,7 +57,7 @@ impl fmt::Display for SinkDequeueError {
 /// completes.
 impl<T> AsyncSink<T> {
     pub fn new(capacity: usize) -> Self {
-        AsyncSink {
+        Self {
             queue: VecDeque::with_capacity(capacity),
             capacity,
             size: 0,
@@ -83,12 +87,49 @@ impl<T> AsyncSink<T> {
             },
         }
     }
-    pub fn empty(&mut self) {
+    pub fn empty(&mut self) -> Result<()> {
         while let Some(rx) = self.queue.pop_front() {
-            let _ = rx.recv();
+            rx.recv()??;
         }
+        Ok(())
     }
     pub fn has_capacity(&self) -> bool {
         self.size < self.capacity
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crossbeam_channel::bounded;
+
+    #[test]
+    fn dequeue_empty() {
+        let mut q: AsyncSink<u8> = AsyncSink::new(2);
+        assert_eq!(q.dequeue(), Err(SinkDequeueError::Empty));
+    }
+
+    #[test]
+    fn full_cycle() {
+        let mut q: AsyncSink<u8> = AsyncSink::new(2);
+        let (tx1, rx) = bounded(1);
+        assert!(q.enqueue(rx).is_ok());
+        let (tx2, rx) = bounded(1);
+        assert!(q.enqueue(rx).is_ok());
+        let (_tx3, rx) = bounded(1);
+        assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+        assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
+        assert!(tx1.send(Ok(1)).is_ok());
+        assert_eq!(q.dequeue(), Ok(Ok(1)));
+        let (tx4, rx) = bounded(1);
+        assert!(q.enqueue(rx).is_ok());
+        let (_tx5, rx) = bounded(1);
+        assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+        assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
+        assert!(tx2.send(Ok(2)).is_ok());
+        assert_eq!(q.dequeue(), Ok(Ok(2)));
+        assert!(tx4.send(Ok(4)).is_ok());
+        assert_eq!(q.dequeue(), Ok(Ok(4)));
+        assert_eq!(q.dequeue(), Err(SinkDequeueError::Empty));
     }
 }

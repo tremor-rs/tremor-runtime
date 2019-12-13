@@ -1,6 +1,7 @@
+
+# Recepies
+
 This document provides a few recipes for common patterns in tremor script. Please note however that it neither is exhaustive nor should those patterns considered the 'only way' to perform certain tasks.
-
-
 
 ## Extracting a raw message
 
@@ -16,8 +17,6 @@ end;
 # event = {"first" : "John", "last": "Doe"}
 ```
 
-
-
 ## Appending to an array
 
 When appending to an array we can use the `array::push` function
@@ -27,8 +26,6 @@ When appending to an array we can use the `array::push` function
 let event.tags = array::push(event.tags, "tag2");
 # event = {"key": "value", "tags": ["tag1", "tag2"]}
 ```
-
-
 
 ## Validating over extracted data
 
@@ -44,11 +41,9 @@ end
 
 Here we extract the `log_level`  and validate of that the it is one of `ERROR`, `WARN`, `INFO` or `DEBUG` by moving the check into the when guard we don't need to use a regular expression for this validation instead can use array membership.
 
-
-
 ## Replacing a field with an extraction
 
-When extracting a field to merge with with the event and wanting to remove  the extracted field we can take advantage of the `merge` expressions behaviour that it will treat `null` in merged objects as a command to delete the data by setting the field to replace to `null` before merging.
+When extracting a field to merge with with the event and wanting to remove  the extracted field we can take advantage of the `merge` expressions behaviour that it will treat `null` in merged records as a command to delete the data by setting the field to replace to `null` before merging.
 
 ```tremor
 # event = %{"message": "John Doe"}
@@ -58,8 +53,6 @@ let event = merge event of match event of
 end;
 # event = %{"first": "John", "last": "Doe"}
 ```
-
-
 
 ## No effect on non matching case
 
@@ -74,20 +67,16 @@ end;
 # event = %{"message": "John Doe"}
 ```
 
-
-
 ## Boolean decisions
 
 To make boolean decisions we can match on `true` or `false`.
 
 ```tremor
-match type::is_object(event) of
-  case true => let event_type = "object"
+match type::is_record(event) of
+  case true => let event_type = "record"
   case false => let event_type = "other"
 end
 ```
-
-
 
 ## Diverting an event to a different channel
 
@@ -101,8 +90,6 @@ match event.importance of
 end
 ```
 
-
-
 ## The 'null default'
 
 When the result of a match statement isn't needed - as in we use it purely for it's side effects - and we want the `default` to have no effect we can simply use `null` here.
@@ -113,8 +100,6 @@ match event of
   default => null
 end
 ```
-
-
 
 ## Testing against the type of a field
 
@@ -141,9 +126,7 @@ Tremor script can be used to route messages by combining the `emit` feature and 
 
 To route to doing a  `blue` / `green` split based on a field in a record we could use the following code:
 
-
-
-```
+```tremor
 match event of
   case %{key == "blue"} => emit event => "blue"
   case %{key == "green"} => emit event => "green"
@@ -151,12 +134,9 @@ match event of
 end
 ```
 
-
-
 And then in the pipeline configuration instead use parts such as:
 
 ```yaml
-
 pipeline:
   - id: one
     outputs:
@@ -167,7 +147,6 @@ pipeline:
      script/blue: ["blue"]
      script/green: ["green"]
 ```
-
 
 ## Percentage drops of events
 

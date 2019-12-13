@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+TEST_DIR=$1
+run_cmd=$2
+yaml_file="${TEST_DIR}/config.yaml"
+echo "$run_cmd --config ${yaml_file}.out ${TEST_DIR}/server.yaml" > ${TEST_DIR}/server.log
+$run_cmd --config ${yaml_file}.out ${TEST_DIR}/server.yaml >> ${TEST_DIR}/server.log 2>> ${TEST_DIR}/server.log&
+pid=$!
+echo $pid > ${TEST_DIR}/server.pid
+# fixme: this is ugly
+while ! netstat -an | grep 4242 2> /dev/null > /dev/null
+do
+    sleep 1
+done

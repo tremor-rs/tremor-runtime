@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,9 +13,11 @@
 // limitations under the License.
 
 //use crate::url::TremorURL;
+use crate::common_cow;
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml;
+use std::borrow::Cow;
 
 pub type ID = String;
 pub type PipelineInputPort = String;
@@ -24,13 +26,13 @@ pub type PipelineVec = Vec<Pipeline>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InputPort {
-    pub id: String,
-    pub port: String,
-    had_port: bool,
+    pub id: Cow<'static, str>,
+    pub port: Cow<'static, str>,
+    pub had_port: bool,
 }
 
 impl<'de> Deserialize<'de> for InputPort {
-    fn deserialize<D>(deserializer: D) -> Result<InputPort, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -38,14 +40,14 @@ impl<'de> Deserialize<'de> for InputPort {
         let s = String::deserialize(deserializer)?;
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
-            [id, port] => Ok(InputPort {
-                id: id.to_string(),
-                port: port.to_string(),
+            [id, port] => Ok(Self {
+                id: common_cow(id.to_string()),
+                port: common_cow(port.to_string()),
                 had_port: true,
             }),
-            [id] => Ok(InputPort {
-                id: id.to_string(),
-                port: "in".to_string(),
+            [id] => Ok(Self {
+                id: common_cow(id.to_string()),
+                port: "in".into(),
                 had_port: false,
             }),
             _ => Err(Error::custom(
@@ -70,13 +72,13 @@ impl Serialize for InputPort {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct OutputPort {
-    pub id: String,
-    pub port: String,
-    had_port: bool,
+    pub id: Cow<'static, str>,
+    pub port: Cow<'static, str>,
+    pub had_port: bool,
 }
 
 impl<'de> Deserialize<'de> for OutputPort {
-    fn deserialize<D>(deserializer: D) -> Result<OutputPort, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -84,14 +86,14 @@ impl<'de> Deserialize<'de> for OutputPort {
         let s = String::deserialize(deserializer)?;
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
-            [id, port] => Ok(OutputPort {
-                id: id.to_string(),
-                port: port.to_string(),
+            [id, port] => Ok(Self {
+                id: common_cow(id.to_string()),
+                port: common_cow(port.to_string()),
                 had_port: true,
             }),
-            [id] => Ok(OutputPort {
-                id: id.to_string(),
-                port: "out".to_string(),
+            [id] => Ok(Self {
+                id: common_cow(id.to_string()),
+                port: "out".into(),
                 had_port: false,
             }),
             _ => Err(Error::custom(
@@ -119,6 +121,7 @@ pub fn dflt<T: Default>() -> T {
 }
 
 pub type LinkMap = IndexMap<String, String>;
+#[allow(clippy::module_name_repetitions)]
 pub type ConfigMap = Option<serde_yaml::Value>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -154,10 +157,6 @@ pub struct Pipeline {
     pub links: IndexMap<OutputPort, Vec<InputPort>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metrics_interval_s: Option<u64>,
-    // #[serde(default = "d_idxmap")]
-    // pub imports: IndexMap<InputPort, String>,
-    // #[serde(default = "d_idxmap")]
-    // pub exports: IndexMap<OutputPort, Vec<String>>
 }
 
 #[cfg(test)]

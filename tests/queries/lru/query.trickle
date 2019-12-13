@@ -1,0 +1,47 @@
+define grouper::bucket operator bucket;
+
+define script categorize
+script
+  let $class = "test";
+  let $dimensions = event.logger_name;
+  let $rate = 1;
+  let $cardinality = 2;
+  let $windows = 1;
+  event;
+end;
+
+create operator bucket;
+
+create script categorize;
+
+select event from in into categorize;
+
+select event from categorize into bucket;
+
+select event from bucket into out;
+
+
+# id: main
+# interface:
+#   inputs:
+#     - in
+#   outputs:
+#     - out
+# nodes:
+#   - id: r
+#     op: runtime::tremor
+#     config:
+#       script: |
+#         let $class = "test";
+#         let $dimensions = event.logger_name;
+#         let $rate = 1;
+#         let $cardinality = 2;
+#         let $windows = 1;
+#         #let $time_range = 10000;
+#         event;
+#   - id: b
+#     op: grouper::bucket
+# links:
+#   in: [ r ]
+#   r: [ b ]
+#   b: [ out ]

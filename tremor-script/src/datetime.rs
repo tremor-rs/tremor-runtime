@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 use crate::errors::*;
 use chrono::{DateTime, NaiveDateTime};
 
+#[allow(clippy::cast_sign_loss)]
 pub fn _parse(datetime: &str, input_fmt: &str, has_timezone: bool) -> Result<u64> {
     if has_timezone {
         Ok(DateTime::parse_from_str(datetime, input_fmt)
@@ -55,7 +56,7 @@ mod tests {
         let format = "%Y-%m-%dT%T%.6f%:z";
         let output = _parse("2019-08-07T16:41:12.159975-04:00", format, has_tz(format))
             .expect("parse datetime");
-        assert_eq!(output, 1565210472159975000);
+        assert_eq!(output, 1_565_210_472_159_975_000);
     }
 
     #[test]
@@ -63,7 +64,6 @@ mod tests {
         let format = "%Y-%m-%dT%T%.6f";
         let output = _parse("2019-08-07T20:41:12.159975", format, has_tz(format))
             .expect("cannot parse datetime");
-        assert_eq!(output, 1565210472159975000);
+        assert_eq!(output, 1_565_210_472_159_975_000);
     }
-
 }

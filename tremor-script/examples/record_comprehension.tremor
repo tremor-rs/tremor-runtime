@@ -1,9 +1,0 @@
-
-# let k := "snot";
-# let v := "badger";
-emit for { "0": "zip", "1": "one", "2": "two" } of
-  case (k, v) when false => [k,v]
-  case (k, v) => [k,v, "other"]
-  case (k, v) => emit "should never get here"
-end;
-

@@ -1,18 +1,12 @@
 # Operators
 
-Operators are part of the pipeline configuration. 
+Operators are part of the pipeline configuration.
 
-Operators process events and signals in the context of a pipeline. An operator, upon receiving
-an event from an upstream operator or stream, MAY produce one or many events to one or many
-downstream directly connected operators. An operator MAY drop events which halts any further
-processing.
+Operators process events and signals in the context of a pipeline. An operator, upon receiving an event from an upstream operator or stream, MAY produce one or many events to one or many downstream directly connected operators. An operator MAY drop events which halts any further processing.
 
-Operators allow the data processing capabilities of tremor to be extended or specialized without
-changes to runtime behaviour, concurrency, event ordering or other aspects of a running tremor
-systems.
+Operators allow the data processing capabilities of tremor to be extended or specialized without changes to runtime behaviour, concurrency, event ordering or other aspects of a running tremor systems.
 
-Operators are created in the context of a pipeline and configured in the `nodes` section of
-each pipeline. An operator MUST have an identifier that is unique for its owning pipeline.
+Operators are created in the context of a pipeline and configured in the `nodes` section of each pipeline. An operator MUST have an identifier that is unique for its owning pipeline.
 
 Configuration is of the general form:
 
@@ -22,16 +16,15 @@ pipeline:
     nodes:
       - id: <pipeline unique node id>
         op: <namespace>::<opertor>
-        config: 
+        config:
           <config key>: <config value>
 ```
 
-The `config` object is optional and only required for some operators.
-Configuration consists of key / value pairs.
+The `config` object is optional and only required for some operators. Configuration consists of key / value pairs.
 
 ## runtime::tremor
 
-The tremor script runtime that allows to modify events or their metadata. To learn more about Tremor Script please see the [related section](../tremor-script).
+The tremor script runtime that allows to modify events or their metadata. To learn more about Tremor Script please see the [related section](../tremor-script/index.md).
 
 **Configuration options**:
 
@@ -112,7 +105,7 @@ The bucket operator generates additional metrics. For each class the following t
 
 This tells us the following, up until this measurement was published in the class `test`:
 
-* (`pass`) Passed 93 events 
+* (`pass`) Passed 93 events
 * (`overflow`) Marked 127 events as overflow due to not fitting in the limit
 
 ## generic::backpressure
@@ -123,6 +116,7 @@ The backpressure operator is used to introduce delays based on downstream system
 
 * `timeout` - Maximum allowed 'write' time in milliseconds.
 * `steps` - Array of values to delay when a we detect backpressure. (default: `[50, 100, 250, 500, 1000, 5000, 10000]`)
+* `outputs` - Array of outputs, data will be round robined between outputs and backpressure kept track of on a per output basis. (Default: `["out"]`)
 
 **Outputs**:
 

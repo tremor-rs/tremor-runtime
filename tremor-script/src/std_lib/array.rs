@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
-use simd_json::BorrowedValue as Value;
+use crate::registry::Registry;
+use crate::tremor_const_fn;
+use simd_json::{BorrowedValue as Value, Value as ValueTrait};
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (array::len(_context, _input: Array) {
+        .insert(tremor_const_fn! (array::len(_context, _input: Array) {
             Ok(Value::from(_input.len() as i64))
         }))
-        .insert(tremor_fn! (array::is_empty(_context, _input: Array) {
+        .insert(tremor_const_fn! (array::is_empty(_context, _input: Array) {
             Ok(Value::from(_input.is_empty()))
         }))
-        .insert(tremor_fn! (array::contains(_context, _input, _contains) {
+        .insert(tremor_const_fn! (array::contains(_context, _input, _contains) {
             match _input {
                 Value::Array(input) => Ok(Value::from(input.contains(&_contains))),
                 _ => Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
             }
         }))
-        .insert(tremor_fn! (array::push(_context, _input, _value) {
+        .insert(tremor_const_fn! (array::push(_context, _input, _value) {
             match _input {
                 Value::Array(input) => {
                     // We clone because we do NOT want to mutate the value
@@ -43,7 +43,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                 _ => Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
             }
         }))
-        .insert(tremor_fn! (array::unzip(_context, _input: Array) {
+        .insert(tremor_const_fn! (array::unzip(_context, _input: Array) {
                 let r: FResult<Vec<(Value, Value)>> = _input.iter().map(|a| match a {
                     Value::Array(a) => if a.len() == 2 {
                         let second: Value = a[0].clone();
@@ -61,7 +61,7 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
                     Value::Array(r),
                 ]))
         }))
-        .insert(tremor_fn!(array::zip(_context, _left: Array, _right: Array) {
+        .insert(tremor_const_fn!(array::zip(_context, _left: Array, _right: Array) {
             if _left.len() != _right.len() {
                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())});
             };
@@ -74,19 +74,20 @@ pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
             ))
         }))
         .insert(
-            tremor_fn!(array::flatten(_context, _input) {
+            tremor_const_fn!(array::flatten(_context, _input) {
                 Ok(Value::Array(flatten_value(_input)))
             }))
         .insert(
-            tremor_fn!(array::join(_context, _input: Array, _sep: String) {
+            tremor_const_fn!(array::join(_context, _input: Array, _sep: String) {
                 let input: Vec<String> = _input.iter().map(ToString::to_string).collect();
                 Ok(Value::from(input.join(_sep)))
             }),
         )
-        .insert(tremor_fn!(array::coalesce(_context, _input: Array) {
-            Ok(Value::Array(_input.iter().filter_map(|v| match v {
-                Value::Null => None,
-                other => Some(other.clone())
+        .insert(tremor_const_fn!(array::coalesce(_context, _input: Array) {
+            Ok(Value::Array(_input.iter().filter_map(|v| if v.is_null()  {
+                None
+            }else {
+                Some(v.clone())
             }).collect()))
         }));
 }
@@ -108,7 +109,7 @@ fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use simd_json::{BorrowedValue as Value, ValueBuilder};
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
             assert_eq!($e, Ok(Value::from($r)))
@@ -275,15 +276,15 @@ mod test {
         let f = fun("array", "coalesce");
         let v = Value::Array(vec![
             Value::from("this"),
-            Value::Null,
+            Value::null(),
             Value::from("cake"),
             Value::from("is"),
             Value::from("really"),
-            Value::Null,
+            Value::null(),
             Value::from("a"),
             Value::from("good"),
             Value::from("test"),
-            Value::Null,
+            Value::null(),
             Value::from("cake"),
             Value::from("!"),
         ]);

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,11 +54,10 @@ use std::marker::PhantomData;
 
 mod servant;
 
-pub use servant::BindingServant;
-pub use servant::OfframpServant;
-pub use servant::OnrampServant;
-pub use servant::PipelineServant;
-pub use servant::ServantId;
+pub use servant::{
+    Binding as BindingServant, Id as ServantId, Offramp as OfframpServant, Onramp as OnrampServant,
+    Pipeline as PipelineServant,
+};
 
 #[derive(Clone, Debug)]
 pub struct Servant<A>
@@ -77,7 +76,7 @@ pub struct Registry<A: Artefact> {
 
 impl<A: Artefact> Registry<A> {
     pub fn new() -> Self {
-        Registry {
+        Self {
             map: HashMap::new(),
         }
     }
@@ -309,7 +308,7 @@ impl Registries {
     }
     pub fn find_pipeline(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
         Ok(self
             .pipeline
@@ -319,7 +318,7 @@ impl Registries {
 
     pub fn publish_pipeline(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         servant: PipelineServant,
     ) -> Result<ActivationState> {
         self.pipeline
@@ -330,7 +329,7 @@ impl Registries {
             .wait()?
     }
 
-    pub fn unpublish_pipeline(&self, id: TremorURL) -> Result<ActivationState> {
+    pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         self.pipeline
             .send(UnpublishServant {
                 id: PipelineArtefact::servant_id(id)?,
@@ -341,7 +340,7 @@ impl Registries {
     #[cfg(test)]
     pub fn transition_pipeline(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         self.pipeline
@@ -354,7 +353,7 @@ impl Registries {
 
     pub fn find_onramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
     ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
         Ok(self
             .onramp
@@ -362,7 +361,11 @@ impl Registries {
             .wait()?)
     }
 
-    pub fn publish_onramp(&self, id: TremorURL, servant: OnrampServant) -> Result<ActivationState> {
+    pub fn publish_onramp(
+        &self,
+        id: &TremorURL,
+        servant: OnrampServant,
+    ) -> Result<ActivationState> {
         self.onramp
             .send(PublishServant {
                 id: OnrampArtefact::servant_id(id)?,
@@ -371,7 +374,7 @@ impl Registries {
             .wait()?
     }
 
-    pub fn unpublish_onramp(&self, id: TremorURL) -> Result<ActivationState> {
+    pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         self.onramp
             .send(UnpublishServant {
                 id: OnrampArtefact::servant_id(id)?,
@@ -382,7 +385,7 @@ impl Registries {
     #[cfg(test)]
     pub fn transition_onramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         self.onramp
@@ -392,7 +395,7 @@ impl Registries {
 
     pub fn find_offramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
     ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
         Ok(self
             .offramp
@@ -402,7 +405,7 @@ impl Registries {
 
     pub fn publish_offramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         servant: OfframpServant,
     ) -> Result<ActivationState> {
         self.offramp
@@ -413,7 +416,7 @@ impl Registries {
             .wait()?
     }
 
-    pub fn unpublish_offramp(&self, id: TremorURL) -> Result<ActivationState> {
+    pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         self.offramp
             .send(UnpublishServant {
                 id: OfframpArtefact::servant_id(id)?,
@@ -424,7 +427,7 @@ impl Registries {
     #[cfg(test)]
     pub fn transition_offramp(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         self.offramp
@@ -434,7 +437,7 @@ impl Registries {
 
     pub fn find_binding(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
     ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
         Ok(self
             .binding
@@ -444,7 +447,7 @@ impl Registries {
 
     pub fn publish_binding(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         servant: BindingServant,
     ) -> Result<ActivationState> {
         self.binding
@@ -455,7 +458,7 @@ impl Registries {
             .wait()?
     }
 
-    pub fn unpublish_binding(&self, id: TremorURL) -> Result<ActivationState> {
+    pub fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
         self.binding
             .send(UnpublishServant {
                 id: BindingArtefact::servant_id(id)?,
@@ -466,7 +469,7 @@ impl Registries {
     #[cfg(test)]
     pub fn transition_binding(
         &self,
-        id: TremorURL,
+        id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         self.binding

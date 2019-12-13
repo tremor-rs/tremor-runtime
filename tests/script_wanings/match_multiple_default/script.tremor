@@ -1,0 +1,5 @@
+match true of
+  case true => true
+  default => true
+  default => false
+end

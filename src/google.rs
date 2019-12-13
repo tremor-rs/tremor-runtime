@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ pub type GcpServiceAccess = (Client, ServiceAccountAccess<Client>);
 /// Type alias for access to Google Cloud storage
 pub type GcsHub = google_storage1::Storage<Client, ServiceAccountAccess<Client>>;
 
-/// Type alias for access to Google PubSub
+/// Type alias for access to Google `PubSub`
 pub type GpsHub = google_pubsub1::Pubsub<Client, ServiceAccountAccess<Client>>;
 
 pub fn storage_api(secrets_file: &str) -> Result<GcsHub> {

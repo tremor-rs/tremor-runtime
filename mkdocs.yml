@@ -20,6 +20,14 @@ markdown_extensions:
 nav:
   - Home: index.md
   - 'Architecture Overview': overview.md
+  - Tremor Query:
+    - Overview: tremor-query/index.md
+    - Walkthrough: tremor-query/walkthrough.md
+    - Aggregate Function Reference:
+      - Overview: tremor-query/functions.md
+      - stats: tremor-query/functions/stats.md
+      - win: tremor-query/functions/win.md
+    - Recipes: tremor-query/recipes.md
   - Tremor Script:
     - Overview: tremor-script/index.md
     - Function Reference:
@@ -31,6 +39,8 @@ nav:
       - float: tremor-script/functions/float.md
       - json: tremor-script/functions/json.md
       - math: tremor-script/functions/math.md
+      - origin: tremor-script/functions/origin.md
+      - range: tremor-script/functions/range.md
       - random: tremor-script/functions/random.md
       - record: tremor-script/functions/record.md
       - re: tremor-script/functions/re.md

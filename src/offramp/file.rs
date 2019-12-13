@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +20,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
-use serde_yaml;
 use std::fs::File as FSFile;
 use std::io::Write;
 
@@ -46,12 +38,14 @@ pub struct Config {
     pub file: String,
 }
 
-impl OfframpImpl for File {
+impl ConfigImpl for Config {}
+
+impl offramp::Impl for File {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let file = FSFile::create(config.file)?;
-            Ok(Box::new(File {
+            Ok(Box::new(Self {
                 file,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
@@ -64,19 +58,17 @@ impl OfframpImpl for File {
 
 impl Offramp for File {
     // TODO
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
-            if let Ok(ref raw) = codec.encode(event.value) {
-                //TODO: Error handling
-                if let Err(e) = self
-                    .file
-                    .write_all(&raw)
-                    .and_then(|_| self.file.write_all(b"\n"))
-                {
-                    error!("Failed wo write to stdout file: {}", e)
-                }
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        for value in event.value_iter() {
+            let raw = codec.encode(value)?;
+            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+            for packet in packets {
+                self.file
+                    .write_all(&packet)
+                    .and_then(|_| self.file.write_all(b"\n"))?;
             }
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);
@@ -88,8 +80,8 @@ impl Offramp for File {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

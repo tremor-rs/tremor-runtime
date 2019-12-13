@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ const ONRAMP: Token = Token(0);
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// The port to listen on.
-    pub port: u32,
+    pub port: u16,
     pub host: String,
     /*
     #[serde(default = "dflt::d_false")]
@@ -32,15 +32,17 @@ pub struct Config {
     */
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Udp {
     pub config: Config,
 }
 
-impl OnrampImpl for Udp {
+impl onramp::Impl for Udp {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
-            Ok(Box::new(Udp { config }))
+            let config: Config = Config::new(config)?;
+            Ok(Box::new(Self { config }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -48,19 +50,24 @@ impl OnrampImpl for Udp {
 }
 
 fn onramp_loop(
-    rx: Receiver<OnrampMsg>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    rx: &Receiver<onramp::Msg>,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
     // Limit of a UDP package
     let mut buf = [0; 65535];
 
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut id = 0;
+
+    let mut origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-udp".to_string(),
+        host: String::default(),
+        port: None,
+        path: vec![config.port.to_string()], // captures receive port
+    };
 
     info!("[UDP Onramp] listening on {}:{}", config.host, config.port);
     let poll = Poll::new()?;
@@ -72,9 +79,17 @@ fn onramp_loop(
     loop {
         while pipelines.is_empty() {
             match rx.recv()? {
-                OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
-                OnrampMsg::Disconnect { tx, .. } => {
-                    let _ = tx.send(true);
+                onramp::Msg::Connect(ps) => {
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            pipelines.push(p.clone());
+                        }
+                    }
+                }
+                onramp::Msg::Disconnect { tx, .. } => {
+                    tx.send(true)?;
                     return Ok(());
                 }
             };
@@ -82,58 +97,68 @@ fn onramp_loop(
         match rx.try_recv() {
             Err(TryRecvError::Empty) => (),
             Err(_e) => error!("Crossbream receive error"),
-            Ok(OnrampMsg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(OnrampMsg::Disconnect { id, tx }) => {
+            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
+            Ok(onramp::Msg::Disconnect { id, tx }) => {
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
-                    let _ = tx.send(true);
+                    tx.send(true)?;
                     return Ok(());
                 } else {
-                    let _ = tx.send(false);
+                    tx.send(false)?
                 }
             }
         };
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
-        for event in events.iter() {
-            match event.token() {
-                // Our ECHOER is ready to be read from.
-                ONRAMP => loop {
-                    use std::io::ErrorKind;
-                    match socket.recv(&mut buf) {
-                        Ok(n) => {
-                            send_event(
-                                &pipelines,
-                                &mut preprocessors,
-                                &mut codec,
-                                id,
-                                buf[0..n].to_vec(),
-                            );
-                            id += 1;
-                        }
-                        Err(e) => {
-                            if e.kind() == ErrorKind::WouldBlock {
-                                break;
-                            } else {
-                                return Err(e.into());
-                            }
+        let mut ingest_ns = nanotime();
+        for _event in events.iter() {
+            loop {
+                use std::io::ErrorKind;
+                match socket.recv_from(&mut buf) {
+                    Ok((n, sender_addr)) => {
+                        // TODO add a method in origin_uri for changes like this?
+                        origin_uri.host = sender_addr.ip().to_string();
+                        origin_uri.port = Some(sender_addr.port());
+                        send_event(
+                            &pipelines,
+                            &mut preprocessors,
+                            &mut codec,
+                            &mut metrics_reporter,
+                            &mut ingest_ns,
+                            &origin_uri,
+                            id,
+                            buf[0..n].to_vec(),
+                        );
+                        id += 1;
+                    }
+                    Err(e) => {
+                        if e.kind() == ErrorKind::WouldBlock {
+                            break;
+                        } else {
+                            return Err(e.into());
                         }
                     }
-                },
-                _ => unreachable!(),
+                }
             }
         }
     }
 }
 
 impl Onramp for Udp {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        metrics_reporter: RampReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let config = self.config.clone();
+        let codec = codec::lookup(codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-udp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(rx, config, preprocessors, codec) {
+                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

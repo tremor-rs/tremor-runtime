@@ -38,22 +38,31 @@ force:
 	true
 
 chk_copyright:
-	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || (echo "No copyright in $$f") done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2020, Wayfair GmbH' > /dev/null || (echo "##[error] No copyright in $$f") done
 
 chk_copyright_ci:
-	for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2019, Wayfair GmbH' > /dev/null || exit 1; done
+	@for f in `find . -name '*.rs' | grep -v '/target'`; do cat $$f | grep 'Copyright 2018-2020, Wayfair GmbH' > /dev/null || exit 1; done
 
 chk_unwrap:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'unwrap()' $$f > /dev/null && (echo "unwrap found in $$f") done
+	@./checks/safety.sh -u
 
 chk_unwrap_ci:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'unwrap()' > /dev/null && exit 1; done; exit 0
+	@./checks/safety.sh -u
 
 chk_panic:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do grep 'panic!(' $$f > /dev/null && (echo "panic found in $$f") done
+	@./checks/safety.sh -p
 
 chk_panic_ci:
-	for f in `find . -name '*.rs' | grep -v '/target' | grep -v 'property_testing' | grep -v 'depricated'`; do cat $$f | grep 'panic!(' > /dev/null && exit 1; done; exit 0
+	@./checks/safety.sh -p
 
 docserve:
 	mkdocs serve
+
+tarpaulin:
+	@docker build . -f Dockerfile.tarpaulin -t tremor-tarpaulin
+	@docker run --privileged --mount type=bind,source="$$(pwd)",target=/code -t tremor-tarpaulin
+	@echo "To view run: pycobertura show --format html --output coverage.html cobertura.xml && open coverage.html"
+	@echo "  pycobertura can be installed via pip3 install pycobertura"
+
+dep-list:
+	@cargo tree --all | sed -e 's/[^a-z]*\([a-z]\)/\1/' | sort -u

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,50 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Note: We ignore the is_* functions for coverage as they effectively are
+// only lists
+
 use crate::errors::*;
 #[cfg_attr(
     feature = "cargo-clippy",
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
 use crate::parser::grammar::__ToTriple;
-use codespan::ByteIndex;
-use codespan::ByteOffset;
-use codespan::ColumnIndex;
-use codespan::LineIndex;
-use codespan::Span;
+pub use crate::pos::*;
 use lalrpop_util;
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_xid::UnicodeXID;
 
-pub use crate::pos::*;
-//use crate::str_suffix;
-
 pub trait ParserSource {
     fn src(&self) -> &str;
     fn start_index(&self) -> BytePos;
-
-    fn span(&self) -> Span<BytePos> {
-        let start = self.start_index();
-        Span::new(
-            start,
-            start + ByteOffset::from(self.src().chars().count() as i64),
-        )
-    }
-}
-
-impl<'a, S> ParserSource for &'a S
-where
-    S: ?Sized + ParserSource,
-{
-    fn src(&self) -> &str {
-        (**self).src()
-    }
-    fn start_index(&self) -> BytePos {
-        (**self).start_index()
-    }
 }
 
 impl ParserSource for str {
@@ -67,16 +44,7 @@ impl ParserSource for str {
     }
 }
 
-impl ParserSource for codespan::FileMap {
-    fn src(&self) -> &str {
-        codespan::FileMap::src(self)
-    }
-    fn start_index(&self) -> BytePos {
-        codespan::FileMap::span(self).start()
-    }
-}
-
-pub type TokenSpan<'input> = Spanned<Token<'input>, Location>;
+pub type TokenSpan<'input> = Spanned<Token<'input>>;
 
 fn is_ws(ch: char) -> bool {
     ch.is_whitespace() && ch != '\n'
@@ -118,8 +86,8 @@ pub enum Token<'input> {
     NewLine,
     SingleLineComment(&'input str),
     DocComment(&'input str),
-    BadToken(String), // Mark bad tokens in lexical stream
-    LineToken(usize),
+    Bad(String), // Mark bad tokens in lexical stream
+    Line(usize),
 
     // Path
     Ident(Cow<'input, str>, bool),
@@ -131,9 +99,12 @@ pub enum Token<'input> {
     BoolLiteral(bool),
     IntLiteral(i64),
     FloatLiteral(f64, String),
-    StringLiteral(Cow<'input, str>),
     TestLiteral(usize, Vec<String>),
     HereDoc(usize, Vec<String>),
+
+    // String
+    DQuote,
+    StringLiteral(Cow<'input, str>),
 
     // Keywords
     Let,
@@ -176,8 +147,13 @@ pub enum Token<'input> {
 
     // Op
     Not,
+    BitNot,
     And,
     Or,
+    Xor,
+    BitAnd,
+    BitOr,
+    BitXor,
     Eq,
     EqEq,
     NotEq,
@@ -187,6 +163,9 @@ pub enum Token<'input> {
     Gt,
     Lte,
     Lt,
+    RBitShiftSigned,
+    RBitShiftUnsigned,
+    LBitShift,
     Add,
     Sub,
     Mul,
@@ -208,6 +187,28 @@ pub enum Token<'input> {
     RBracket,
 
     EndOfStream,
+
+    // Query
+    Select,
+    From,
+    Where,
+    With,
+    Order,
+    Group,
+    By,
+    Having,
+    Into,
+    Create,
+    Tumbling,
+    Sliding,
+    Window,
+    Stream,
+    Operator,
+    Script,
+    Set,
+    Each,
+    Define,
+    Args,
 }
 
 pub trait TokenFuns {
@@ -223,86 +224,112 @@ impl<'input> TokenFuns for Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     ///
+    #[cfg_attr(tarpaulin, skip)]
     fn is_ignorable(&self) -> bool {
         match *self {
-            Token::DocComment(_) => true,
-            Token::SingleLineComment(_) => true,
-            Token::Whitespace(_) => true,
-            Token::NewLine => true,
-            Token::LineToken(_) => true,
+            Token::DocComment(_)
+            | Token::SingleLineComment(_)
+            | Token::Whitespace(_)
+            | Token::NewLine
+            | Token::Line(_) => true,
             _ => false,
         }
     }
 
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
+    #[cfg_attr(tarpaulin, skip)]
     fn is_keyword(&self) -> bool {
         match *self {
-            Token::Match => true,
-            Token::End => true,
-            Token::Fun => true,
-            Token::Let => true,
-            Token::Const => true,
-            Token::Case => true,
-            Token::Of => true,
-            Token::When => true,
-            Token::Drop => true,
-            Token::Emit => true,
-            Token::Default => true,
-            Token::Patch => true,
-            Token::Insert => true,
-            Token::Upsert => true,
-            Token::Update => true,
-            Token::Erase => true,
-            Token::Move => true,
-            Token::Copy => true,
-            Token::Merge => true,
-            Token::For => true,
-            Token::Event => true,
-            Token::Present => true,
-            Token::Absent => true,
+            Token::Match
+            | Token::End
+            | Token::Fun
+            | Token::Let
+            | Token::Const
+            | Token::Case
+            | Token::Of
+            | Token::When
+            | Token::Drop
+            | Token::Emit
+            | Token::Default
+            | Token::Patch
+            | Token::Insert
+            | Token::Upsert
+            | Token::Update
+            | Token::Erase
+            | Token::Move
+            | Token::Copy
+            | Token::Merge
+            | Token::For
+            | Token::Event
+            | Token::Present
+            | Token::Absent
+            | Token::Stream
+            | Token::Select
+            | Token::From
+            | Token::Where
+            | Token::With
+            | Token::Order
+            | Token::Group
+            | Token::By
+            | Token::Having
+            | Token::Into
+            | Token::Create
+            | Token::Tumbling
+            | Token::Sliding
+            | Token::Window
+            | Token::Script
+            | Token::Set
+            | Token::Each
+            | Token::Define
+            | Token::Args
+            | Token::Operator => true,
             _ => false,
         }
     }
 
     // Is the token a literal, excluding list and record literals
+    #[cfg_attr(tarpaulin, skip)]
     fn is_literal(&self) -> bool {
         match *self {
             // Token::DontCare => true,
-            Token::Nil => true,
-            Token::BoolLiteral(_) => true,
-            Token::IntLiteral(_) => true,
-            Token::FloatLiteral(_, _) => true,
+            Token::Nil
+            | Token::BoolLiteral(_)
+            | Token::IntLiteral(_)
+            | Token::FloatLiteral(_, _) => true,
             _ => false,
         }
     }
 
     // It's text-like or string-like notation such as String, char, regex ...
+    #[cfg_attr(tarpaulin, skip)]
     fn is_string_like(&self) -> bool {
         match *self {
-            Token::StringLiteral(_) => true,
-            Token::TestLiteral(_, _) => true,
-            Token::HereDoc(_, _) => true,
+            Token::StringLiteral(_)
+            | Token::DQuote
+            | Token::TestLiteral(_, _)
+            | Token::HereDoc(_, _) => true,
             _ => false,
         }
     }
 
     // Is the token a builtin delimiter symbol
+    #[cfg_attr(tarpaulin, skip)]
     fn is_symbol(&self) -> bool {
         match *self {
-            Token::Colon => true,
-            Token::ColonColon => true,
-            Token::EqArrow => true,
-            Token::Semi => true,
-            Token::LParen => true,
-            Token::RParen => true,
-            Token::LPatBrace => true,
-            Token::LBrace => true,
-            Token::RBrace => true,
-            Token::LBracket => true,
-            Token::LPatBracket => true,
-            Token::RBracket => true,
-            Token::BSlash => true,
-            Token::Comma => true,
+            Token::Colon
+            | Token::ColonColon
+            | Token::EqArrow
+            | Token::Semi
+            | Token::LParen
+            | Token::RParen
+            | Token::LPatBrace
+            | Token::LBrace
+            | Token::RBrace
+            | Token::LBracket
+            | Token::LPatBracket
+            | Token::RBracket
+            | Token::BSlash
+            | Token::Comma => true,
             //            Token::Pipe => true,
             //            Token::Tilde => true,
             //            Token::DotDotDot => true,
@@ -313,34 +340,43 @@ impl<'input> TokenFuns for Token<'input> {
     }
 
     // Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
+    #[cfg_attr(tarpaulin, skip)]
     fn is_operator(&self) -> bool {
         match *self {
-            Token::Not => true,
-            Token::Or => true,
-            Token::And => true,
-            Token::Eq => true,
-            Token::EqEq => true,
-            Token::NotEq => true,
-            Token::TildeEq => true,
-            Token::Tilde => true,
-            Token::Gte => true,
-            Token::Gt => true,
-            Token::Lte => true,
-            Token::Lt => true,
-            Token::Add => true,
-            Token::Sub => true,
-            Token::Mul => true,
-            Token::Div => true,
-            Token::Mod => true,
-            Token::Dollar => true,
-            Token::Dot => true,
+            Token::Not
+            | Token::BitNot
+            | Token::Or
+            | Token::Xor
+            | Token::And
+            | Token::BitOr
+            | Token::BitXor
+            | Token::BitAnd
+            | Token::Eq
+            | Token::EqEq
+            | Token::NotEq
+            | Token::TildeEq
+            | Token::Tilde
+            | Token::Gte
+            | Token::Gt
+            | Token::Lte
+            | Token::Lt
+            | Token::RBitShiftSigned
+            | Token::RBitShiftUnsigned
+            | Token::LBitShift
+            | Token::Add
+            | Token::Sub
+            | Token::Mul
+            | Token::Div
+            | Token::Mod
+            | Token::Dollar
+            | Token::Dot => true,
             _ => false,
         }
     }
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>, Location>> {
+impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<
@@ -362,23 +398,27 @@ impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>, Location>> {
 // }
 // Format a token for display
 //
+#[cfg_attr(tarpaulin, skip)]
 impl<'input> fmt::Display for Token<'input> {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::Whitespace(ref ws) => write!(f, "{}", ws),
             Token::NewLine => writeln!(f),
-            Token::LineToken(n) => write!(f, "{}: ", n),
+            Token::Line(n) => write!(f, "{}: ", n),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
-            Token::StringLiteral(value) => write!(
-                f,
-                "{}",
-                simd_json::OwnedValue::from(value.to_string()).to_string()
-            ),
+            Token::DQuote => write!(f, "\""),
+            Token::StringLiteral(value) => {
+                // We do thos to ensure proper escaping
+                let s = simd_json::BorrowedValue::String(value.clone()).encode();
+                // Strip the quotes
+                write!(f, "{}", &s[1..s.len() - 1])
+            }
             Token::HereDoc(indent, lines) => {
                 writeln!(f, r#"""""#)?;
                 let space = String::from(" ");
@@ -404,7 +444,7 @@ impl<'input> fmt::Display for Token<'input> {
             }
 
             Token::BoolLiteral(value) => write!(f, "{}", value),
-            Token::BadToken(value) => write!(f, "{}", value),
+            Token::Bad(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),
             Token::Match => write!(f, "match"),
@@ -442,6 +482,7 @@ impl<'input> fmt::Display for Token<'input> {
             //            Token::Question => write!(f, "?"),
             //            Token::Pipe => write!(f, "|"),
             Token::Not => write!(f, "not"),
+            Token::BitNot => write!(f, "!"),
             //            Token::Tilde => write!(f, "~"),
             // Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),
@@ -456,21 +497,49 @@ impl<'input> fmt::Display for Token<'input> {
             Token::RBracket => write!(f, "]"),
             Token::And => write!(f, "and"),
             Token::Or => write!(f, "or"),
-            Token::Gte => write!(f, ">="),
+            Token::Xor => write!(f, "xor"),
+            Token::BitAnd => write!(f, "&"),
+            Token::BitOr => write!(f, "|"),
+            Token::BitXor => write!(f, "^"),
             Token::Eq => write!(f, "="),
             Token::EqEq => write!(f, "=="),
             Token::NotEq => write!(f, "!="),
             Token::TildeEq => write!(f, "~="),
             Token::Tilde => write!(f, "~"),
+            Token::Gte => write!(f, ">="),
             Token::Gt => write!(f, ">"),
             Token::Lte => write!(f, "<="),
             Token::Lt => write!(f, "<"),
+            Token::RBitShiftSigned => write!(f, ">>"),
+            Token::RBitShiftUnsigned => write!(f, ">>>"),
+            Token::LBitShift => write!(f, "<<"),
             Token::Mul => write!(f, "*"),
             Token::Div => write!(f, "/"),
             Token::Add => write!(f, "+"),
             Token::Sub => write!(f, "-"),
             Token::Mod => write!(f, "%"),
             Token::EndOfStream => write!(f, ""),
+            // Query
+            Token::Select => write!(f, "select"),
+            Token::From => write!(f, "from"),
+            Token::Where => write!(f, "where"),
+            Token::With => write!(f, "with"),
+            Token::Order => write!(f, "order"),
+            Token::Group => write!(f, "group"),
+            Token::By => write!(f, "by"),
+            Token::Having => write!(f, "having"),
+            Token::Into => write!(f, "into"),
+            Token::Create => write!(f, "create"),
+            Token::Tumbling => write!(f, "tumbling"),
+            Token::Sliding => write!(f, "sliding"),
+            Token::Window => write!(f, "window"),
+            Token::Stream => write!(f, "stream"),
+            Token::Operator => write!(f, "operator"),
+            Token::Script => write!(f, "script"),
+            Token::Set => write!(f, "set"),
+            Token::Each => write!(f, "each"),
+            Token::Define => write!(f, "define"),
+            Token::Args => write!(f, "args"),
         }
     }
 }
@@ -487,9 +556,9 @@ impl<'input> CharLocations<'input> {
     {
         CharLocations {
             location: Location {
-                line: Line::from(1),
-                column: Column::from(1),
-                absolute: input.start_index(),
+                line: 1,
+                column: 1,
+                absolute: input.start_index().to_usize(),
             },
             chars: input.src().chars().peekable(),
         }
@@ -510,7 +579,7 @@ impl<'input> Iterator for CharLocations<'input> {
 
 pub struct Tokenizer<'input> {
     eos: bool,
-    pos: Span<Location>,
+    pos: Span,
     iter: Peekable<Lexer<'input>>,
     //line: usize,
 }
@@ -518,16 +587,8 @@ pub struct Tokenizer<'input> {
 impl<'input> Tokenizer<'input> {
     fn new(input: &'input str) -> Self {
         let lexer = Lexer::new(input);
-        let start = Location {
-            line: LineIndex(0),
-            column: ColumnIndex(0),
-            absolute: ByteIndex(0),
-        };
-        let end = Location {
-            line: LineIndex(0),
-            column: ColumnIndex(0),
-            absolute: ByteIndex(0),
-        };
+        let start = Location::default();
+        let end = Location::default();
         Tokenizer {
             eos: false,
             iter: lexer.peekable(),
@@ -569,6 +630,7 @@ pub struct Lexer<'input> {
     input: &'input str,
     chars: CharLocations<'input>,
     start_index: BytePos,
+    stored_tokens: VecDeque<TokenSpan<'input>>,
 }
 
 type Lexeme = Option<(Location, char)>;
@@ -584,6 +646,7 @@ impl<'input> Lexer<'input> {
             input: input.src(),
             chars,
             start_index: input.start_index(),
+            stored_tokens: VecDeque::new(),
         }
     }
 
@@ -599,9 +662,8 @@ impl<'input> Lexer<'input> {
 
     /// Return a slice of the source string
     fn slice(&self, start: Location, end: Location) -> Option<&'input str> {
-        let start =
-            (start.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
-        let end = (end.absolute - ByteOffset::from(self.start_index.to_usize() as i64)).to_usize();
+        let start = start.absolute - self.start_index.to_usize();
+        let end = end.absolute - self.start_index.to_usize();
 
         // Our indexes are in characters as we are iterating over codepoints
         // string indexes however are in bytes and might lead to either
@@ -639,10 +701,10 @@ impl<'input> Lexer<'input> {
             }
         }
         if let Some(slice) = self.slice(start, e) {
-            return (e, slice);
+            (e, slice)
         } else {
             // Invalid start end case :(
-            return (e, "<ERROR>");
+            (e, "<ERROR>")
         }
     }
 
@@ -677,7 +739,7 @@ impl<'input> Lexer<'input> {
         match lexeme {
             "::" => Ok(spanned2(start, end, Token::ColonColon)),
             ":" => Ok(spanned2(start, end, Token::Colon)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -686,7 +748,7 @@ impl<'input> Lexer<'input> {
 
         match lexeme {
             "-" => Ok(spanned2(start, end, Token::Sub)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -700,7 +762,10 @@ impl<'input> Lexer<'input> {
             "<=" => Ok(spanned2(start, end, Token::Lte)),
             ">" => Ok(spanned2(start, end, Token::Gt)),
             ">=" => Ok(spanned2(start, end, Token::Gte)),
-            _ => Ok(spanned2(start, end, Token::BadToken(lexeme.to_string()))),
+            "<<" => Ok(spanned2(start, end, Token::LBitShift)),
+            ">>" => Ok(spanned2(start, end, Token::RBitShiftSigned)),
+            ">>>" => Ok(spanned2(start, end, Token::RBitShiftUnsigned)),
+            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -725,7 +790,7 @@ impl<'input> Lexer<'input> {
                 self.bump();
                 Ok(spanned2(start, end, Token::NotEq))
             }
-            Some((end, ch)) => Ok(spanned2(start, end, Token::BadToken(format!("!{}", ch)))),
+            Some((end, ch)) => Ok(spanned2(start, end, Token::Bad(format!("!{}", ch)))),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -771,9 +836,30 @@ impl<'input> Lexer<'input> {
             "false" => Token::BoolLiteral(false),
             "and" => Token::And,
             "or" => Token::Or,
+            "xor" => Token::Xor,
             "not" => Token::Not,
             "drop" => Token::Drop,
             "emit" => Token::Emit,
+            "select" => Token::Select,
+            "from" => Token::From,
+            "where" => Token::Where,
+            "with" => Token::With,
+            "order" => Token::Order,
+            "group" => Token::Group,
+            "by" => Token::By,
+            "having" => Token::Having,
+            "into" => Token::Into,
+            "create" => Token::Create,
+            "tumbling" => Token::Tumbling,
+            "sliding" => Token::Sliding,
+            "window" => Token::Window,
+            "stream" => Token::Stream,
+            "operator" => Token::Operator,
+            "script" => Token::Script,
+            "set" => Token::Set,
+            "each" => Token::Each,
+            "define" => Token::Define,
+            "args" => Token::Args,
             src => Token::Ident(src.into(), false),
         };
 
@@ -850,10 +936,10 @@ impl<'input> Lexer<'input> {
                     // we got to bump end by one so we claim the tailing `"`
                     let e = end;
                     let mut s = start;
-                    s.column.0 += 1;
-                    s.absolute.0 += 1;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
+                    s.column += 1;
+                    s.absolute += 1;
+                    end.column += 1;
+                    end.absolute += 1;
                     if let Some(slice) = self.slice(s, e) {
                         let token = Token::Ident(slice.into(), true);
                         return Ok(spanned2(start, end, token));
@@ -889,16 +975,23 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn qs_or_hd(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let mut string = String::new();
-        match self.bump() {
+    fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
+        let mut end = start;
+        end.column += 1;
+        end.absolute += 1;
+        let q1 = spanned2(start, end, Token::DQuote);
+        let mut res = vec![q1];
+        let string = String::new();
+
+        match self.lookahead() {
             // This would be the second quote
-            Some((mut end, '"')) => match self.lookahead() {
-                Some((end, '"')) => {
+            Some((mut end, '"')) => {
+                self.bump();
+                if let Some((end, '"')) = self.lookahead() {
                     self.bump();
                     // We don't allow anything tailing the initial `"""`
                     match self.bump() {
-                        Some((_end, '\n')) => self.hd(start),
+                        Some((_, '\n')) => self.hd(start).map(|e| vec![e]),
                         Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -913,33 +1006,18 @@ impl<'input> Lexer<'input> {
                         )
                         .into()),
                     }
-                }
-                // We had two quotes followed by something not a quote so
-                // it is an empty string.
-                _ => {
+                } else {
+                    // We had two quotes followed by something not a quote so
+                    // it is an empty string.
                     //TODO :make slice
-                    let token = Token::StringLiteral(string.into());
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
-                    Ok(spanned2(start, end, token))
+                    let start = end;
+                    end.column += 1;
+                    end.absolute += 1;
+                    res.push(spanned2(start, end, Token::DQuote));
+                    Ok(res)
                 }
-            },
-            Some((end, '\\')) => {
-                if let Some(c) = self.escape_code(&string, start)? {
-                    string.push(c);
-                };
-                self.qs(start, end, true, string)
             }
-            Some((end, '\n')) => Err(ErrorKind::UnterminatedStringLiteral(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((start, end)),
-                format!("\"{}\n", string),
-            )
-            .into()),
-            Some((end, ch)) => {
-                string.push(ch);
-                self.qs(start, end, false, string)
-            }
+            Some(_) => self.qs(start, end, false, string, res),
             None => Err(ErrorKind::UnterminatedStringLiteral(
                 Range::from((start, start)).expand_lines(2),
                 Range::from((start, start)),
@@ -970,8 +1048,8 @@ impl<'input> Lexer<'input> {
                             .map(|s| s.split_at(indent).1.to_string())
                             .collect();
                         let token = Token::HereDoc(indent, strings);
-                        end.column.0 += 1;
-                        end.absolute.0 += 1;
+                        end.column += 1;
+                        end.absolute += 1;
                         return Ok(spanned2(start, end, token));
                     }
                 }
@@ -987,14 +1065,16 @@ impl<'input> Lexer<'input> {
         }
         //let mut strings = Vec::new();
     }
+
     /// Handle quote strings `"`  ...
     fn qs(
         &mut self,
-        start: Location,
+        mut start: Location,
         mut end: Location,
         mut has_escapes: bool,
         mut string: String,
-    ) -> Result<TokenSpan<'input>> {
+        mut res: Vec<TokenSpan<'input>>,
+    ) -> Result<Vec<TokenSpan<'input>>> {
         loop {
             match self.bump() {
                 Some((e, '\\')) => {
@@ -1005,24 +1085,80 @@ impl<'input> Lexer<'input> {
                     end = e;
                 }
                 Some((mut end, '"')) => {
-                    // we got to bump end by one so we claim the tailing `"`
-                    let e = end;
-                    let mut s = start;
-                    s.column.0 += 1;
-                    s.absolute.0 += 1;
-                    end.column.0 += 1;
-                    end.absolute.0 += 1;
-                    let token = if has_escapes {
-                        // The string was modified so we can't use the slice
-                        Token::StringLiteral(string.into())
-                    } else if let Some(slice) = self.slice(s, e) {
-                        Token::StringLiteral(slice.into())
-                    } else {
-                        // Invalid start end case :(
-                        Token::StringLiteral(string.into())
-                    };
+                    // If the string is empty we kind of don't need it.
+                    if !string.is_empty() {
+                        // we got to bump end by one so we claim the tailing `"`
 
-                    return Ok(spanned2(start, end, token));
+                        let e = end;
+                        let mut s = start;
+                        s.column += 1;
+                        s.absolute += 1;
+                        let token = if has_escapes {
+                            // The string was modified so we can't use the slice
+                            Token::StringLiteral(string.into())
+                        } else if let Some(slice) = self.slice(s, e) {
+                            Token::StringLiteral(slice.into())
+                        } else {
+                            // Invalid start end case :(
+                            Token::StringLiteral(string.into())
+                        };
+                        res.push(spanned2(start, end, token));
+                    }
+                    let start = end;
+                    end.column += 1;
+                    end.absolute += 1;
+                    res.push(spanned2(start, end, Token::DQuote));
+                    return Ok(res);
+                }
+                Some((end_inner, '{')) => {
+                    if let Some((e, '}')) = self.lookahead() {
+                        string.push('}');
+                        end = e;
+                        continue;
+                    }
+                    let e = end_inner;
+                    let mut s = start;
+                    s.column += 1;
+                    s.absolute += 1;
+                    if !string.is_empty() {
+                        let token = if has_escapes {
+                            // The string was modified so we can't use the slice
+                            Token::StringLiteral(string.into())
+                        } else if let Some(slice) = self.slice(s, e) {
+                            Token::StringLiteral(slice.into())
+                        } else {
+                            // Invalid start end case :(
+                            Token::StringLiteral(string.into())
+                        };
+                        res.push(spanned2(start, end_inner, token));
+                        string = String::new();
+                    }
+                    start = end_inner;
+                    end = end_inner;
+                    end.column += 1;
+                    end.absolute += 1;
+                    res.push(spanned2(start, end, Token::LBrace));
+                    let mut pcount = 0;
+                    // We can't use for because of the borrow checker ...
+                    #[allow(clippy::while_let_on_iterator)]
+                    while let Some(s) = self.next() {
+                        let s = s?;
+                        match &s.value {
+                            Token::RBrace if pcount == 0 => {
+                                start = s.span.start();
+                                res.push(s);
+                                break;
+                            }
+                            Token::RBrace => {
+                                pcount -= 1;
+                            }
+                            Token::LBrace => {
+                                pcount += 1;
+                            }
+                            _ => {}
+                        };
+                        res.push(s);
+                    }
                 }
                 Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
@@ -1084,8 +1220,8 @@ impl<'input> Lexer<'input> {
                 }
                 Some((mut end, '|')) => {
                     strings.push(string);
-                    end.absolute.0 += 1;
-                    end.column.0 += 1;
+                    end.absolute += 1;
+                    end.column += 1;
                     let indent = indentation(&strings);
                     let strings = strings
                         .iter()
@@ -1125,54 +1261,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /*
-    // NOTE rs is a quoted string variant that interprets escapes whereas qs above passes them through
-    #[allow(unused)]
-    fn rs(&mut self, start: Location) -> Result<TokenSpan> {
-        let mut delimiters = 0;
-        while let Some((end, ch)) = self.bump() {
-            match ch {
-                '#' => delimiters += 1,
-                '"' => break,
-                _ => {
-                    return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
-                    )
-                    .into())
-                }
-            }
-        }
-
-        let content_start = self.next_index()?;
-        loop {
-            self.take_until(content_start, |b| b == '"');
-            match self.bump() {
-                Some((_, '"')) => {
-                    let mut found_delimiters = 0;
-                    while let Some((_, ch)) = self.bump() {
-                        match ch {
-                            '#' => found_delimiters += 1,
-                            '"' => found_delimiters = 0,
-                            _ => break,
-                        }
-                        if found_delimiters == delimiters {
-                            let end = self.next_index()?;
-                            let mut content_end = end;
-                            content_end.absolute.0 -= delimiters + 1;
-                            let string = self.slice(content_start, content_end).into();
-
-                            let token = Token::StringLiteral(string);
-                            return Ok(spanned2(start, end, token));
-                        }
-                    }
-                }
-                _ => continue,
-            }
-        }
-    }
-    */
-
+    #[allow(clippy::too_many_lines)]
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.take_while(start, is_dec_digit);
 
@@ -1267,33 +1356,6 @@ impl<'input> Lexer<'input> {
                     }
                 }
             }
-            // Some((_, '')) => {
-            //     self.bump(); // Skip ''
-            //     let end = self.next_index()?;
-            //     match self.lookahead() {
-            //         Some((pos, ch)) if is_ident_start(ch) => {
-            //             let ch = self.chars.chars.as_str_suffix().restore_char(&[ch]);
-            //             // HACK
-            //             return Err(ErrorKind::UnterminatedStringLiteral {
-            //                 start: ByteIndex(0),
-            //                 end: ByteIndex(0),
-            //             });
-            //             //                        return self.error(pos, UnexpectedChar(ch));
-            //         }
-            //         _ => {
-            //             if let Ok(val) = int.parse() {
-            //                 (start, end, Token::ByteLiteral(val))
-            //             } else {
-            //                 //                            return self.error(start, NonParseableInt);
-            //                 // HACK
-            //                 return Err(ErrorKind::UnterminatedStringLiteral {
-            //                     start: ByteIndex(0),
-            //                     end: ByteIndex(0),
-            //                 });
-            //             }
-            //         }
-            //     }
-            // }
             Some((_, ch)) if is_ident_start(ch) => {
                 return Err(ErrorKind::UnexpectedCharacter(
                     Range::from((start, end)).expand_lines(2),
@@ -1336,8 +1398,8 @@ fn i64_from_hex(hex: &str, is_positive: bool) -> Result<i64> {
 }
 
 fn inc_loc(mut l: Location) -> Location {
-    l.column.0 += 1;
-    l.absolute.0 += 1;
+    l.column += 1;
+    l.absolute += 1;
     l
 }
 
@@ -1345,6 +1407,9 @@ impl<'input> Iterator for Lexer<'input> {
     type Item = Result<TokenSpan<'input>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.stored_tokens.pop_front() {
+            return Some(Ok(next));
+        }
         let lexeme = self.bump();
         match lexeme {
             None => None,
@@ -1368,25 +1433,37 @@ impl<'input> Iterator for Lexer<'input> {
                     '[' => Some(Ok(spanned2(start, start, Token::LBracket))),
                     ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
                     '/' => Some(Ok(spanned2(start, start, Token::Div))),
+                    // TODO account for extractors which use | to mark format boundaries
+                    //'|' => Some(Ok(spanned2(start, start, Token::BitOr))),
+                    '^' => Some(Ok(spanned2(start, start, Token::BitXor))),
+                    '&' => Some(Ok(spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
                     '-' => Some(self.sb(start)),
                     '#' => Some(self.cx(start)),
                     '=' => Some(self.eq(start)),
-                    '<' => Some(self.an(start)),
-                    '>' => Some(self.an(start)),
+                    '<' | '>' => Some(self.an(start)),
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),
+                    // TODO account for bitwise not operator
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
                     ch if is_ident_start(ch) => Some(self.id(start)),
-                    '"' => Some(self.qs_or_hd(start)),
+                    '"' => match self.qs_or_hd(start) {
+                        Ok(mut tokens) => {
+                            for t in tokens.drain(..) {
+                                self.stored_tokens.push_back(t)
+                            }
+                            self.next()
+                        }
+                        Err(e) => Some(Err(e)),
+                    },
                     ch if is_test_start(ch) => Some(self.pl(start)),
                     ch if is_dec_digit(ch) => Some(self.nm(start)),
                     ch if ch.is_whitespace() => Some(self.ws(start)),
                     _ => {
                         let str = format!("{}", ch);
-                        Some(Ok(spanned2(start, start, Token::BadToken(str))))
+                        Some(Ok(spanned2(start, start, Token::Bad(str))))
                     }
                 }
             }
@@ -1453,6 +1530,54 @@ mod tests {
      */
 
     #[test]
+    fn interpolat() {
+        lex_ok! {
+            r#"  "" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#"  "hello" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~ "# => Token::StringLiteral("hello".into()),
+            r#"        ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#"  "hello {7}" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
+            r#"         ~ "# => Token::LBrace,
+            r#"          ~ "# => Token::IntLiteral(7),
+            r#"           ~ "# => Token::RBrace,
+            r#"            ~ "# => Token::DQuote,
+
+        };
+        lex_ok! {
+            r#"  "{7} hello" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~ "# => Token::LBrace,
+            r#"    ~ "# => Token::IntLiteral(7),
+            r#"     ~ "# => Token::RBrace,
+            r#"      ~~~~~~ "# => Token::StringLiteral(" hello".into()),
+            r#"            ~ "# => Token::DQuote,
+
+        };
+        lex_ok! {
+            r#"  "hello { "snot {7}" }" "#,
+            r#"  ~ "# => Token::DQuote,
+            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
+            r#"         ~ "# => Token::LBrace,
+            r#"            ~ "# => Token::DQuote,
+            r#"             ~~~~ "# => Token::StringLiteral("snot ".into()),
+            r#"                  ~ "# => Token::LBrace,
+            r#"                   ~ "# => Token::IntLiteral(7),
+            r#"                    ~ "# => Token::RBrace,
+            r#"                     ~ "# => Token::DQuote,
+            r#"                        ~ "# => Token::RBrace,
+            r#"                         ~ "# => Token::DQuote,
+        };
+    }
+    #[test]
     fn paths() {
         lex_ok! {
             "  hello-hahaha8ABC ",
@@ -1482,15 +1607,25 @@ mod tests {
         lex_ok! { " drop ", " ~~~~~~ " => Token::Drop, };
         lex_ok! { " emit ", " ~~~~~~ " => Token::Emit, };
         lex_ok! { " event ", " ~~~~~~ " => Token::Event, };
+        lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
+        lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
     }
 
     #[test]
     fn operators() {
-        lex_ok! { " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
+        lex_ok! {
+        " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
+        // TODO fix this
+        //lex_ok! { " !1 ", " ~  " => Token::BitNot, "  ~ " => Token::IntLiteral(1), };
 
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
+        lex_ok! { " xor ", " ~ " => Token::Xor, };
+        lex_ok! { " & ", " ~ " => Token::BitAnd, };
+        // TODO enable
+        //lex_ok! { " | ", " ~ " => Token::BitOr, };
+        lex_ok! { " ^ ", " ~ " => Token::BitXor, };
         lex_ok! { " = ", " ~ " => Token::Eq, };
         lex_ok! { " == ", " ~ " => Token::EqEq, };
         lex_ok! { " != ", " ~ " => Token::NotEq, };
@@ -1498,6 +1633,9 @@ mod tests {
         lex_ok! { " > ", " ~ " => Token::Gt, };
         lex_ok! { " <= ", " ~ " => Token::Lte, };
         lex_ok! { " < ", " ~ " => Token::Lt, };
+        lex_ok! { " >> ", " ~ " => Token::RBitShiftSigned, };
+        lex_ok! { " >>> ", " ~ " => Token::RBitShiftUnsigned, };
+        lex_ok! { " << ", " ~ " => Token::LBitShift, };
         lex_ok! { " + ", " ~ " => Token::Add, };
         lex_ok! { " - ", " ~ " => Token::Sub, };
         lex_ok! { " * ", " ~ " => Token::Mul, };
@@ -1542,18 +1680,60 @@ mod tests {
 
     #[test]
     fn string() {
-        lex_ok! { r#" "\n" "#, " ~~~~ " => Token::StringLiteral("\n".into()), }
-        lex_ok! { r#" "\r" "#, " ~~~~  " => Token::StringLiteral("\r".into()), }
-        lex_ok! { r#" "\t" "#, " ~~~  " => Token::StringLiteral("\t".into()), }
-        lex_ok! { r#" "\\" "#, " ~~~~  " => Token::StringLiteral("\\".into()), }
-        lex_ok! { r#" "\"" "#, " ~~~~ " => Token::StringLiteral("\"".into()), }
-        lex_ok! { r#" "\"\"" "#, " ~~~~~ " => Token::StringLiteral("\"\"".into()), }
+        lex_ok! {
+            r#" "\n" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\n".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\r" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\r".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\t" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\t".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+             r#" "\\" "#,
+             r#" ~    "# => Token::DQuote,
+             r#"  ~~  "# => Token::StringLiteral("\\".into()),
+             r#"    ~ "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
+        lex_ok! {
+            r#" "\"\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\"\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
+        lex_ok! {
+            r#" "\\\"" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("\\\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        }
+
         lex_ok! {
             r#" "\"\"""\"\"" "#,
-            " ~~~~~ " => Token::StringLiteral("\"\"".into()),
-            "       ~~~~~ " => Token::StringLiteral("\"\"".into()),
+            r#" ~            "# => Token::DQuote,
+            r#"  ~~~~        "# => Token::StringLiteral("\"\"".into()),
+            r#"      ~       "# => Token::DQuote,
+            r#"       ~      "# => Token::DQuote,
+            r#"        ~~~~  "# => Token::StringLiteral("\"\"".into()),
+            r#"            ~ "# => Token::DQuote,
         }
-        lex_ok! { r#" "\\\"" "#, " ~~~~ " => Token::StringLiteral("\\\"".into()), }
         //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
     }
 }

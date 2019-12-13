@@ -1,0 +1,53 @@
+onramp:
+  - id: in
+    type: file
+    codec: json
+    config:
+      source: {in}
+      close_on_done: true
+  - id: ws-in
+    type: ws
+    codec: json
+    config:
+      host: 127.0.0.1
+      port: 4242
+
+offramp:
+  - id: ws-out
+    type: ws
+    codec: json
+    config:
+      url: "ws://127.0.0.1:4242"
+  - id: out
+    type: file
+    codec: json
+    config:
+      file: {out}
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            event;
+    links:
+      in: [ r ]
+      r: [ out ]
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+  - id: server
+    links:
+      '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
+

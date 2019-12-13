@@ -1,0 +1,3 @@
+Error: 
+    2 | math::max("snot", a)
+      | ^^^^^^^^^^^^^^^^^^^^ Bad type passed to function math::max/2

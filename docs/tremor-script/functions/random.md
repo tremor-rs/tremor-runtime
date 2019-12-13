@@ -4,6 +4,9 @@ The `random` module contains functions for generating random values of various t
 
 The generated values are uniformly distributed over the specified type (and range, where applicable). Useful for doing [percentage drops](../recipes.md#percentage-drops-of-events) of events, for example.
 
+The random number generator under the hood is seeded based on tremor's event ingestion time and thus the output here is deterministic. Should we choose to replay a tremor data dump (something to be added in future tremor versions), we will always get the same value for an event.
+
+## Functions
 
 ### random::bool() -> bool
 
@@ -13,7 +16,6 @@ Generates a random boolean.
 random::bool() # either true or false
 ```
 
-
 ### random::string(length) -> string
 
 Generates a random string of given `length` with ASCII letters and numbers: a-z, A-Z and 0-9. The argument must be an integer greater than or equal to zero -- otherwise the function errors out.
@@ -22,7 +24,6 @@ Generates a random string of given `length` with ASCII letters and numbers: a-z,
 random::string(16) # 16 alphanumeric characters. eg: "QuSFjpW8PBNewRml"
 random::string(0)  # ""
 ```
-
 
 ### random::integer([a][, b]) -> int
 
@@ -55,7 +56,6 @@ Generates a random [integer](../index.md#integer-numerics).
 ```tremor
 random::integer() # an integer
 ```
-
 
 ### random::float([a][, b]) -> float
 

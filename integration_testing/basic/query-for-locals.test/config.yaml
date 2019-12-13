@@ -1,0 +1,19 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: {in}
+      close_on_done: true
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: {out}
+
+binding:
+  - id: test
+    links:
+      '/onramp/in/{instance}/out': [ '/pipeline/query/{instance}/in' ]
+      '/pipeline/query/{instance}/out': [ '/offramp/out/{instance}/in' ]
+

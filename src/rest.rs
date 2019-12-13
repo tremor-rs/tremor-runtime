@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,37 +32,37 @@ impl fmt::Debug for HttpC {
 
 impl HttpC {
     pub fn new(url: String) -> Self {
-        HttpC {
+        Self {
             client: reqwest::Client::new(),
             url,
         }
     }
 
-    pub fn get(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn get(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.get(endpoint))
     }
 
-    pub fn post(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn post(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.post(endpoint))
     }
 
-    pub fn put(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn put(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.put(endpoint))
     }
 
-    pub fn patch(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn patch(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.patch(endpoint))
     }
 
-    pub fn delete(&self, path: String) -> Result<reqwest::RequestBuilder> {
+    pub fn delete(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.delete(endpoint))
@@ -72,4 +72,54 @@ impl HttpC {
     //     let endpoint = format!("{}{}", self.url, path);
     //     self.client.head(endpoint.into())
     // }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    const ECHO: &'static str = "https://postman-echo.com";
+
+    // NOTE We use postman's echo service for convenience
+
+    #[test]
+    fn test_get_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = rest_cli.get("/get")?.send()?;
+        assert_eq!(200, res.status());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_post_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.post("/post")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_put_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.put("/put")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_patch_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.patch("/patch")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
+
+    #[test]
+    fn test_delete_method() -> Result<()> {
+        let rest_cli = HttpC::new(ECHO.to_string());
+        let res = dbg!(rest_cli.delete("/delete")?.send()?);
+        assert_eq!(200, res.status());
+        Ok(())
+    }
 }

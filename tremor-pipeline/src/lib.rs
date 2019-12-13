@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,74 +16,91 @@
 #![recursion_limit = "1024"]
 #![cfg_attr(
     feature = "cargo-clippy",
-    deny(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+    deny(
+        clippy::all,
+        clippy::result_unwrap_used,
+        clippy::option_unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
+    )
 )]
 
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate rental;
 
 use crate::errors::*;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
+use op::trickle::select::WindowImpl;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use simd_json::json;
-use simd_json::{BorrowedValue, OwnedValue};
+use serde::Serialize;
+use simd_json::{json, BorrowedValue, Value as ValueTrait, ValueBuilder};
+use std::borrow::Cow;
 use std::iter;
 use std::iter::Iterator;
+use std::sync::Arc;
 use std::sync::Mutex;
-use tremor_script::{LineValue, Registry, TremorFnWrapper};
+use tremor_script::prelude::*;
+use tremor_script::query::*;
 
 pub mod config;
 pub mod errors;
 #[macro_use]
 mod macros;
-mod op;
+pub mod op;
+pub mod query;
 
-pub use op::runtime::tremor::TremorContext;
-pub use op::{InitializableOperator, Operator};
-pub type MetaValue = simd_json::value::owned::Value;
-pub type MetaMap = simd_json::value::owned::Map;
-pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
-pub type ExecPortIndexMap = HashMap<(usize, String), Vec<(usize, String)>>;
-pub type NodeLookupFn = fn(node: &NodeConfig) -> Result<OperatorNode>;
-pub type NodeMap = HashMap<String, NodeIndex>;
+pub use op::{ConfigImpl, InitializableOperator, Operator};
+pub use tremor_script::prelude::EventOriginUri;
+pub type PortIndexMap =
+    HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
+pub type ExecPortIndexMap = HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+pub type NodeLookupFn = fn(
+    config: &NodeConfig,
+    defn: Option<StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
+    windows: Option<HashMap<String, WindowImpl>>,
+) -> Result<OperatorNode>;
+pub type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
 lazy_static! {
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
-    pub static ref FN_REGISTRY: Mutex<Registry<TremorContext>> = {
-        use tremor_script::registry::FResult;
-        let mut registry: Registry<TremorContext> = tremor_script::registry();
-        #[allow(unused_variables)]
-        fn ingest_ns<'event>(ctx: &TremorContext, _args: &[&BorrowedValue<'event>]) -> FResult<BorrowedValue<'event>> {
-            Ok(BorrowedValue::I64(ctx.ingest_ns as i64))
-        }
-        registry
-            .insert(TremorFnWrapper {
-                module: "system".to_owned(),
-                name: "ingest_ns".to_string(),
-                fun: ingest_ns,
-                argc: 0
-            });
+    pub static ref FN_REGISTRY: Mutex<Registry> = {
+        let registry: Registry = tremor_script::registry();
         Mutex::new(registry)
     };
+}
+
+pub fn common_cow(s: String) -> Cow<'static, str> {
+    macro_rules! cows {
+        ($target:expr, $($cow:expr),*) => {
+            match $target.as_str() {
+                $($cow => $cow.into()),*,
+                _ => Cow::Owned($target),
+            }
+        };
+    }
+    cows!(s, "in", "out", "err", "main")
 }
 
 #[derive(Clone, Debug)]
 pub struct Pipeline {
     pub id: config::ID,
-    inputs: HashMap<String, NodeIndex>,
-    port_indexes: PortIndexMap,
-    outputs: Vec<NodeIndex>,
+    pub inputs: HashMap<Cow<'static, str>, NodeIndex>,
+    pub port_indexes: PortIndexMap,
+    pub outputs: Vec<NodeIndex>,
     pub config: config::Pipeline,
-    nodes: NodeMap,
-    graph: ConfigGraph,
+    pub nodes: NodeMap,
+    pub graph: ConfigGraph,
 }
 
 pub type PipelineVec = Vec<Pipeline>;
@@ -98,78 +115,103 @@ pub enum NodeKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     pub id: u64,
-    pub meta: MetaMap,
-    pub value: tremor_script::LineValue,
+    pub data: tremor_script::LineValue,
     pub ingest_ns: u64,
+    pub origin_uri: Option<tremor_script::EventOriginUri>,
     pub kind: Option<SignalKind>,
     pub is_batch: bool,
 }
 
-pub struct EventIter {
-    current: Option<Box<EventIter>>,
-    data: Vec<Event>,
+impl Default for Event {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            data: Value::null().into(),
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+        }
+    }
 }
 
-impl Iterator for EventIter {
-    type Item = Event;
+impl Event {
+    pub fn value_meta_iter(&self) -> ValueMetaIter {
+        ValueMetaIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
+
+pub struct ValueMetaIter<'value> {
+    event: &'value Event,
+    idx: usize,
+}
+
+impl<'value> Iterator for ValueMetaIter<'value> {
+    type Item = (&'value Value<'value>, &'value Value<'value>);
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut iter) = &mut self.current {
-            if let Some(v) = iter.next() {
-                return Some(v);
-            } else {
-                self.current = None;
-            }
-        }
-        let s = self.data.pop()?;
-        if s.is_batch {
-            self.current = Some(Box::new(s.into_iter()));
-            return self.next();
-        }
-        Some(s)
-    }
-}
-
-impl IntoIterator for Event {
-    type Item = Event;
-    type IntoIter = EventIter;
-    fn into_iter(self) -> Self::IntoIter {
-        if self.is_batch {
-            self.value.rent(|j| {
-                use tremor_script::Value;
-                if let Value::Array(data) = j {
-                    let data = data
-                        .iter()
-                        .filter_map(|e| {
-                            // TODO: This is ugly
-                            if let Ok(r) = simd_json::serde::from_borrowed_value(e.clone()) {
-                                Some(r)
-                            } else {
-                                None
-                            }
-                        })
-                        .rev()
-                        .collect();
-                    EventIter {
-                        data,
-                        current: None,
-                    }
-                } else {
-                    EventIter {
-                        data: vec![],
-                        current: None,
-                    }
-                }
-            })
+        if self.event.is_batch {
+            let r = self
+                .event
+                .data
+                .suffix()
+                .value
+                .as_array()
+                .and_then(|arr| arr.get(self.idx))
+                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)));
+            self.idx += 1;
+            r
+        } else if self.idx == 0 {
+            let v = self.event.data.suffix();
+            self.idx += 1;
+            Some((&v.value, &v.meta))
         } else {
-            EventIter {
-                data: vec![self],
-                current: None,
-            }
+            None
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl Event {
+    pub fn value_iter(&self) -> ValueIter {
+        ValueIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
+
+pub struct ValueIter<'value> {
+    event: &'value Event,
+    idx: usize,
+}
+
+impl<'value> Iterator for ValueIter<'value> {
+    type Item = &'value BorrowedValue<'value>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.event.is_batch {
+            let r = self
+                .event
+                .data
+                .suffix()
+                .value
+                .as_array()
+                .and_then(|arr| arr.get(self.idx))
+                .and_then(|e| e.get("data")?.get("value"));
+            self.idx += 1;
+            r
+        } else if self.idx == 0 {
+            let v = &self.event.data.suffix().value;
+            self.idx += 1;
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum SignalKind {
     // Lifecycle
     Init,
@@ -180,31 +222,55 @@ pub enum SignalKind {
     Control,
 }
 
-#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, Eq)]
 pub struct NodeConfig {
-    id: String,
-    kind: NodeKind,
-    _type: String,
-    config: config::ConfigMap,
+    pub id: Cow<'static, str>,
+    pub kind: NodeKind,
+    pub op_type: String,
+    pub config: config::ConfigMap,
+    pub defn: Option<Arc<StmtRentalWrapper>>,
+    pub node: Option<Arc<StmtRentalWrapper>>,
+}
+
+// We ignore stmt on equality and hasing as they're only
+// carried through for implementation purposes not part
+// if the identiy of a node
+
+impl PartialEq for NodeConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.kind == other.kind
+            && self.op_type == other.op_type
+            && self.config == other.config
+    }
+}
+
+impl std::hash::Hash for NodeConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.kind.hash(state);
+        self.op_type.hash(state);
+        self.config.hash(state);
+    }
 }
 
 #[derive(Debug)]
 pub struct OperatorNode {
-    id: String,
-    kind: NodeKind,
-    _type: String,
-    op: Box<dyn Operator>,
+    pub id: Cow<'static, str>,
+    pub kind: NodeKind,
+    pub op_type: String,
+    pub op: Box<dyn Operator>,
 }
 
 impl Operator for OperatorNode {
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(String, Event)>> {
+    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, event)
     }
 
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(String, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_signal(signal)?;
         Ok(vec![])
     }
@@ -215,20 +281,35 @@ impl Operator for OperatorNode {
     fn on_contraflow(&mut self, contraevent: &mut Event) {
         self.op.on_contraflow(contraevent)
     }
-    fn metrics(&self, tags: HashMap<String, String>, timestamp: u64) -> Result<Vec<OwnedValue>> {
+    fn metrics(
+        &self,
+        tags: HashMap<Cow<'static, str>, Value<'static>>,
+        timestamp: u64,
+    ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 }
 
 // TODO We need an actual operator registry ...
-pub fn buildin_ops(node: &NodeConfig) -> Result<OperatorNode> {
+// because we really don't care here.
+// We allow needless pass by value since the function type
+// and it's other implementations use the values and require
+// them passed
+#[allow(clippy::implicit_hasher, clippy::needless_pass_by_value)]
+pub fn buildin_ops(
+    node: &NodeConfig,
+    _defn: Option<StmtRentalWrapper>,
+    _nobody_knows: Option<StmtRentalWrapper>,
+    _windows: Option<HashMap<String, WindowImpl>>,
+) -> Result<OperatorNode> {
     // Resolve from registry
+
     use op::debug::EventHistoryFactory;
     use op::generic::{BackpressureFactory, BatchFactory};
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     use op::runtime::TremorFactory;
-    let name_parts: Vec<&str> = node._type.split("::").collect();
+    let name_parts: Vec<&str> = node.op_type.split("::").collect();
     let factory = match name_parts.as_slice() {
         ["passthrough"] => PassthroughFactory::new_boxed(),
         ["debug", "history"] => EventHistoryFactory::new_boxed(),
@@ -239,19 +320,25 @@ pub fn buildin_ops(node: &NodeConfig) -> Result<OperatorNode> {
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
         }
-        _ => return Err(ErrorKind::UnknownNamespace(node._type.clone()).into()),
+        _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
     };
     Ok(OperatorNode {
         id: node.id.clone(),
         kind: node.kind,
-        _type: node._type.clone(),
+        op_type: node.op_type.clone(),
         op: factory.from_node(node)?,
     })
 }
 
 impl NodeConfig {
-    fn to_op(&self, resolver: NodeLookupFn) -> Result<OperatorNode> {
-        resolver(&self)
+    pub fn to_op(
+        &self,
+        resolver: NodeLookupFn,
+        defn: Option<StmtRentalWrapper>,
+        node: Option<StmtRentalWrapper>,
+        window: Option<HashMap<String, WindowImpl>>,
+    ) -> Result<OperatorNode> {
+        resolver(&self, defn, node, window)
     }
 }
 
@@ -269,51 +356,61 @@ pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
 
 pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let mut graph = ConfigGraph::new();
-    let mut nodes = HashMap::new(); // <String, NodeIndex>
-    let mut inputs = HashMap::new();
+    let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new(); // <String, NodeIndex>
+    let mut inputs: HashMap<Cow<'static, str>, _> = HashMap::new();
     let mut outputs = Vec::new();
     let mut port_indexes: PortIndexMap = HashMap::new();
     for stream in &config.interface.inputs {
+        let stream = common_cow(stream.clone());
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Input,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".to_string(),
             config: None, // passthrough has no config
+            defn: None,
+            node: None,
         });
         nodes.insert(stream.clone(), id);
-        inputs.insert(stream.clone(), id);
+        inputs.insert(stream, id);
     }
 
     for node in &config.nodes {
-        let node_id = node.id.clone();
+        let node_id = common_cow(node.id.clone());
         let id = graph.add_node(NodeConfig {
             id: node_id.clone(),
             kind: NodeKind::Operator,
-            _type: node.node_type.clone(),
+            op_type: node.node_type.clone(),
             config: node.config.clone(),
+            defn: None,
+            node: None,
         });
         nodes.insert(node_id, id);
     }
 
     for stream in &config.interface.outputs {
+        let stream = common_cow(stream.clone());
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Output,
-            _type: "passthrough".to_string(),
+            op_type: "passthrough".into(),
             config: None, // passthrough has no config
+            defn: None,
+            node: None,
         });
-        nodes.insert(stream.clone(), id);
+        nodes.insert(stream, id);
         outputs.push(id);
     }
 
     // Add metrics output port
     let id = graph.add_node(NodeConfig {
-        id: "metrics".to_string(),
+        id: "metrics".into(),
         kind: NodeKind::Output,
-        _type: "passthrough".to_string(),
+        op_type: "passthrough".to_string(),
         config: None, // passthrough has no config
+        defn: None,
+        node: None,
     });
-    nodes.insert("metrics".to_string(), id);
+    nodes.insert("metrics".into(), id);
     outputs.push(id);
 
     for (from, tos) in &config.links {
@@ -355,44 +452,50 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
 }
 
 #[derive(Debug, Default, Clone)]
-struct NodeMetrics {
-    inputs: HashMap<String, u64>,
-    outputs: HashMap<String, u64>,
+pub struct NodeMetrics {
+    inputs: HashMap<Cow<'static, str>, u64>,
+    outputs: HashMap<Cow<'static, str>, u64>,
 }
 
 impl NodeMetrics {
     fn to_value(
         &self,
         metric_name: &str,
-        tags: &mut HashMap<String, String>,
+        tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
-    ) -> Result<Vec<OwnedValue>> {
+    ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for (k, v) in &self.inputs {
-            tags.insert("direction".to_owned(), "input".to_owned());
-            tags.insert("port".to_owned(), k.to_owned());
+            tags.insert("direction".into(), "input".into());
+            tags.insert("port".into(), Value::from(k.clone()));
             //TODO: This is ugly
-            res.push(json!({
-                "measurement": metric_name,
-                "tags": tags,
-                "fields": {
-                    "count": v
-                },
-                "timestamp": timestamp
-            }))
+            res.push(
+                json!({
+                    "measurement": metric_name,
+                    "tags": tags,
+                    "fields": {
+                        "count": v
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            )
         }
         for (k, v) in &self.outputs {
-            tags.insert("direction".to_owned(), "output".to_owned());
-            tags.insert("port".to_owned(), k.to_owned());
+            tags.insert("direction".into(), "output".into());
+            tags.insert("port".into(), Value::from(k.clone()));
             //TODO: This is ugly
-            res.push(json!({
-                "measurement": metric_name,
-                "tags": tags,
-                "fields": {
-                    "count": v
-                },
-                "timestamp": timestamp
-            }))
+            res.push(
+                json!({
+                    "measurement": metric_name,
+                    "tags": tags,
+                    "fields": {
+                        "count": v
+                    },
+                    "timestamp": timestamp
+                })
+                .into(),
+            )
         }
         Ok(res)
     }
@@ -402,18 +505,18 @@ impl NodeMetrics {
 pub struct ExecutableGraph {
     pub id: String,
     pub graph: Vec<OperatorNode>,
-    pub inputs: HashMap<String, usize>,
-    stack: Vec<(usize, String, Event)>,
-    signalflow: Vec<usize>,
-    contraflow: Vec<usize>,
-    port_indexes: ExecPortIndexMap,
-    metrics: Vec<NodeMetrics>,
-    metrics_idx: usize,
-    last_metrics: u64,
-    metric_interval: Option<u64>,
+    pub inputs: HashMap<Cow<'static, str>, usize>,
+    pub stack: Vec<(usize, Cow<'static, str>, Event)>,
+    pub signalflow: Vec<usize>,
+    pub contraflow: Vec<usize>,
+    pub port_indexes: ExecPortIndexMap,
+    pub metrics: Vec<NodeMetrics>,
+    pub metrics_idx: usize,
+    pub last_metrics: u64,
+    pub metric_interval: Option<u64>,
 }
 
-type Returns = Vec<(String, Event)>;
+pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
     /// This is a performance critial function!
     pub fn enqueue(
@@ -426,13 +529,13 @@ impl ExecutableGraph {
         if let Some(ival) = self.metric_interval {
             if event.ingest_ns - self.last_metrics > ival {
                 let mut tags = HashMap::new();
-                tags.insert("pipeline".to_string(), self.id.clone());
-                self.enqueue_metrics("events".to_string(), tags, event.ingest_ns);
+                tags.insert("pipeline".into(), common_cow(self.id.clone()).into());
+                self.enqueue_metrics("events", tags, event.ingest_ns);
                 self.last_metrics = event.ingest_ns;
             }
         }
         self.stack
-            .push((self.inputs[stream_name], "in".to_string(), event));
+            .push((self.inputs[stream_name], "in".into(), event));
         self.run(returns)
     }
 
@@ -445,9 +548,15 @@ impl ExecutableGraph {
     #[inline]
     fn next(&mut self, returns: &mut Returns) -> Result<bool> {
         if let Some((idx, port, event)) = self.stack.pop() {
-            // count ingres
+            // If we have emitted a signal event we got to handle it as a signal flow
+            // the signal flow will
+            if event.kind.is_some() {
+                self.signalflow(event)?;
+                return Ok(!self.stack.is_empty());
+            }
 
-            let node = &mut self.graph[idx];
+            // count ingres
+            let node = unsafe { self.graph.get_unchecked_mut(idx) };
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
             } else {
@@ -455,38 +564,52 @@ impl ExecutableGraph {
                 // got to discuss this.
                 let res = node.on_event(&port, event)?;
                 for (out_port, _) in &res {
-                    if let Some(count) = self.metrics[idx].outputs.get_mut(out_port) {
+                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
+                        .outputs
+                        .get_mut(out_port)
+                    {
                         *count += 1;
                     } else {
-                        self.metrics[idx].outputs.insert(out_port.clone(), 1);
+                        unsafe { self.metrics.get_unchecked_mut(idx) }
+                            .outputs
+                            .insert(out_port.clone(), 1);
                     }
                 }
                 self.enqueue_events(idx, res);
             };
             Ok(!self.stack.is_empty())
         } else {
-            unreachable!()
+            error!("next was called on an empty graph stack, this should never happen");
+            Ok(false)
         }
     }
 
     fn enqueue_metrics(
         &mut self,
-        metric_name: String,
-        mut tags: HashMap<String, String>,
+        metric_name: &str,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
-            tags.insert("node".to_owned(), self.graph[i].id.clone());
-            if let Ok(metrics) = self.graph[i].metrics(tags.clone(), timestamp) {
-                for v in metrics {
+            tags.insert("node".into(), unsafe {
+                self.graph.get_unchecked(i).id.clone().into()
+            });
+            if let Ok(metrics) =
+                unsafe { self.graph.get_unchecked(i) }.metrics(tags.clone(), timestamp)
+            {
+                for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".to_owned(),
+                        "in".into(),
                         Event {
                             id: 0,
-                            meta: MetaMap::default(),
-                            value: LineValue::new(Box::new(vec![]), |_| v.into()),
+                            data: LineValue::new(vec![], |_| ValueAndMeta {
+                                value,
+                                meta: Value::from(Object::default()),
+                            }),
                             ingest_ns: timestamp,
+                            // TODO update this to point to tremor instance producing the metrics?
+                            origin_uri: None,
                             kind: None,
                             is_batch: false,
                         },
@@ -494,15 +617,19 @@ impl ExecutableGraph {
                 }
             }
             if let Ok(metrics) = m.to_value(&metric_name, &mut tags, timestamp) {
-                for v in metrics {
+                for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".to_owned(),
+                        "in".into(),
                         Event {
                             id: 0,
-                            meta: MetaMap::default(),
-                            value: LineValue::new(Box::new(vec![]), |_| v.into()),
+                            data: LineValue::new(vec![], |_| ValueAndMeta {
+                                value,
+                                meta: Value::from(Object::default()),
+                            }),
                             ingest_ns: timestamp,
+                            // TODO update this to point to tremor instance producing the metrics?
+                            origin_uri: None,
                             kind: None,
                             is_batch: false,
                         },
@@ -512,23 +639,33 @@ impl ExecutableGraph {
         }
     }
 
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(String, Event)>) {
+    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
                 let len = outgoing.len();
                 for (idx, in_port) in outgoing.iter().take(len - 1) {
-                    if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
+                        .inputs
+                        .get_mut(in_port)
+                    {
                         *count += 1;
                     } else {
-                        self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                        unsafe { self.metrics.get_unchecked_mut(*idx) }
+                            .inputs
+                            .insert(in_port.clone(), 1);
                     }
                     self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
-                let (idx, in_port) = &outgoing[len - 1];
-                if let Some(count) = self.metrics[*idx].inputs.get_mut(in_port) {
+                let (idx, in_port) = unsafe { outgoing.get_unchecked(len - 1) };
+                if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
+                    .inputs
+                    .get_mut(in_port)
+                {
                     *count += 1;
                 } else {
-                    self.metrics[*idx].inputs.insert(in_port.clone(), 1);
+                    unsafe { self.metrics.get_unchecked_mut(*idx) }
+                        .inputs
+                        .insert(in_port.clone(), 1);
                 }
                 self.stack.push((*idx, in_port.clone(), event))
             }
@@ -537,21 +674,28 @@ impl ExecutableGraph {
 
     pub fn contraflow(&mut self, mut insight: Event) -> Event {
         for idx in &self.contraflow {
-            let op = &mut self.graph[*idx]; // We know this exists
+            let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
             op.on_contraflow(&mut insight);
         }
         insight
     }
 
-    pub fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<()> {
-        for idx in 0..self.contraflow.len() {
-            let i = self.contraflow[idx];
+    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
+        self.signalflow(signal)?;
+        self.run(returns)?;
+        Ok(())
+    }
+
+    pub fn signalflow(&mut self, mut signal: Event) -> Result<()> {
+        for idx in 0..self.signalflow.len() {
+            let i = self.signalflow[idx];
             let res = {
-                let op = &mut self.graph[i]; // We know this exists
+                let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 op.on_signal(&mut signal)?
             };
             self.enqueue_events(i, res);
-            self.run(returns)?
+            // We shouldn't call run in signal flow it should just enqueue
+            // self.run(returns)?
         }
         Ok(())
     }
@@ -584,7 +728,7 @@ impl Pipeline {
         let mut signalflow = Vec::new();
         for (i, nx) in self.graph.node_indices().enumerate() {
             i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(resolver)?;
+            let op = self.graph[nx].to_op(resolver, None, None, None)?;
             if op.handles_contraflow() {
                 contraflow.push(i);
             }
@@ -651,7 +795,7 @@ mod test {
     fn distsys_exec() {
         // FIXME check/fix and move to integration tests - this is out of place as a unit test
         let c = slurp("tests/configs/distsys.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let mut e = p
             .to_executable_graph(buildin_ops)
             .expect("failed to build executable graph");
@@ -659,8 +803,8 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: json!({"snot": "badger"}).into(),
+            origin_uri: None,
+            data: Value::from(json!({"snot": "badger"})).into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -669,10 +813,7 @@ mod test {
         dbg!(&results);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
-        //if let simd_json::borrowed::Value::Object(value) = results[0].1.value.suffix() {
-        //    assert_eq!(value["class"], "default");
-        //}
-        assert_eq!(results[0].1.meta["class"], "default");
+        assert_eq!(results[0].1.data.suffix().meta["class"], "default");
         dbg!(&e.metrics);
         // We ignore the first, and the last three nodes because:
         // * The first one is the input, handled seperately
@@ -698,7 +839,7 @@ mod test {
     #[test]
     fn simple_graph_exec() {
         let c = slurp("tests/configs/simple_graph.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let mut e = p
             .to_executable_graph(buildin_ops)
             .expect("failed to build executable graph");
@@ -706,8 +847,8 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            origin_uri: None,
+            data: Value::null().into(),
             kind: None,
         };
         let mut results = Vec::new();
@@ -721,7 +862,7 @@ mod test {
     #[test]
     fn complex_graph_exec() {
         let c = slurp("tests/configs/two_input_complex_graph.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         println!("{}", p.to_dot());
         let mut e = p
             .to_executable_graph(buildin_ops)
@@ -730,98 +871,102 @@ mod test {
             is_batch: false,
             id: 1,
             ingest_ns: 1,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            origin_uri: None,
+            data: Value::null().into(),
             kind: None,
         };
         let event2 = Event {
             is_batch: false,
             id: 2,
             ingest_ns: 2,
-            meta: HashMap::new(),
-            value: OwnedValue::Null.into(),
+            origin_uri: None,
+            data: Value::null().into(),
             kind: None,
         };
         let mut results = Vec::new();
         e.enqueue("in1", event1, &mut results)
             .expect("failed to enqueue event");
         assert_eq!(results.len(), 6);
-        for i in 0..=5 {
-            assert_eq!(results[i].0, "out");
-            assert_eq!(results[i].1.id, 1);
+        for r in &results {
+            assert_eq!(r.0, "out");
+            assert_eq!(r.1.id, 1);
         }
         assert_eq!(
-            results[0].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"])
+            results[0].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[1].1.meta["debug::history"],
-            json!([
+            results[1].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
                 "evt: m2(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[2].1.meta["debug::history"],
-            json!([
+            results[2].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
                 "evt: m2(1)",
                 "evt: m3(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[3].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"])
+            results[3].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[4].1.meta["debug::history"],
-            json!([
+            results[4].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
                 "evt: branch(1)",
                 "evt: m2(1)",
                 "evt: m3(1)",
                 "evt: combine(1)"
-            ])
+            ]))
         );
         assert_eq!(
-            results[5].1.meta["debug::history"],
-            json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"])
+            results[5].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"]))
         );
 
         let mut results = Vec::new();
         e.enqueue("in2", event2, &mut results)
             .expect("failed to enqueue event");
         assert_eq!(results.len(), 3);
-        for i in 0..=2 {
-            assert_eq!(results[i].0, "out");
-            assert_eq!(results[i].1.id, 2);
+        for r in &results {
+            assert_eq!(r.0, "out");
+            assert_eq!(r.1.id, 2);
         }
         assert_eq!(
-            results[0].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: combine(2)"])
+            results[0].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: m1(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[1].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"])
+            results[1].1.data.suffix().meta["debug::history"],
+            Value::from(json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[2].1.meta["debug::history"],
-            json!(["evt: m1(2)", "evt: m2(2)", "evt: m3(2)", "evt: combine(2)"])
+            results[2].1.data.suffix().meta["debug::history"],
+            Value::from(json!([
+                "evt: m1(2)",
+                "evt: m2(2)",
+                "evt: m3(2)",
+                "evt: combine(2)"
+            ]))
         );
     }
 
     #[test]
     fn load_simple() {
         let c = slurp("tests/configs/pipe.simple.yaml");
-        let p = build_pipeline(c).expect("failed to build pipeline");
+        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let l = p.config.links.iter().next().expect("no links");
         assert_eq!(
-            (&"in".to_string(), vec!["out".to_string()]),
+            (&"in".into(), vec!["out".into()]),
             (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())
         );
     }
-
 }

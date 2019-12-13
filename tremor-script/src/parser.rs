@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[cfg_attr(
         feature = "cargo-clippy",
-        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
+        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap, clippy::pedantic, clippy::option_unwrap_used)
     )]
 
     pub grammar

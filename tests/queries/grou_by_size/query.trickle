@@ -1,0 +1,6 @@
+define tumbling window by_10
+with
+  size = 10
+end;
+
+select {"g": group, "c": stats::sum(event.c)} from in[by_10] group by set(event.g) into out;

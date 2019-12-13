@@ -1,0 +1,3 @@
+Error: 
+    2 | event[key]
+      |       ^^^ Trying to access a non existing event key `badger`

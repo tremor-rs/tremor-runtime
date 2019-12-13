@@ -1,0 +1,23 @@
+define grouper::bucket operator kfc;
+
+define script categorize
+script
+  let $rate = 1;
+  let $class = event.`group`;
+  { "event": event, "rate": $rate, "class": $class };
+end;
+
+create operator kfc from kfc;
+
+# where script definition and instance name are the same, we can
+# omit the from clause in operator and script 'create' statements
+create script categorize;
+
+# Stream ingested data into categorize script
+select event from in into categorize;
+
+# Stream scripted events into kfc bucket operator
+select event from categorize into kfc;
+
+# Stream bucketed events into out stream
+select event from kfc into out;

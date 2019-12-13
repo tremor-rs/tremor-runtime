@@ -1,0 +1,22 @@
+define script test
+with
+  beep = "beep"
+script
+  { "beep": "{args.beep}" }
+end;
+
+create script beep from test;
+create script boop from test
+with
+  beep = "boop" # override
+end;
+
+# Stream ingested data into script with default params
+select event from in into beep;
+
+# Stream ingested data into script with overridden params
+select event from in into boop;
+
+# Stream script operator synthetic events into out stream
+select event from beep into out;
+select event from boop into out;

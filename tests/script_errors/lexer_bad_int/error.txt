@@ -1,0 +1,3 @@
+Error: 
+    1 | let f = 0snot
+      |          ^ An unexpected character 's' was found

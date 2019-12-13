@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,9 +27,9 @@ use base64;
 use halfbrown::{hashmap, HashMap};
 
 use crate::datetime;
-use crate::grok::*;
+use crate::grok::Pattern as GrokPattern;
 use crate::influx;
-use crate::registry::Context;
+use crate::EventContext;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
     utils::IpCidrCombiner,
@@ -38,8 +38,8 @@ use dissect::Pattern;
 use glob;
 use kv;
 use regex::Regex;
-use simd_json::borrowed::Value;
-use simd_json::OwnedValue;
+use simd_json::borrowed::{Object, Value};
+use simd_json::{Value as ValueTrait, ValueBuilder};
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
@@ -178,7 +178,6 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
     IpCidr::from_str(s).ok()
 }
 
-// {"Re":{"rule":"(snot)?foo(?P<snot>.*)"}}
 #[derive(Debug, Clone, Serialize)]
 pub enum Extractor {
     Glob {
@@ -213,16 +212,19 @@ pub enum Extractor {
     Influx,
     Datetime {
         format: String,
+        #[serde(skip)]
         has_timezone: bool,
     },
 }
 
 #[derive(Debug, Serialize)]
 pub struct SnotCombiner {
+    rules: Vec<String>,
     #[serde(skip)]
     combiner: IpCidrCombiner,
-    rules: Vec<String>,
 }
+
+// FIXME add deser for SnotCombiner
 
 impl SnotCombiner {
     fn from_rules(rules: Vec<String>) -> Result<Self, ExtractorError> {
@@ -249,10 +251,10 @@ impl PartialEq for SnotCombiner {
 
 impl Clone for SnotCombiner {
     fn clone(&self) -> Self {
-        if let Ok(clone) = SnotCombiner::from_rules(self.rules.clone()) {
+        if let Ok(clone) = Self::from_rules(self.rules.clone()) {
             clone
         } else {
-            SnotCombiner {
+            Self {
                 combiner: IpCidrCombiner::new(),
                 rules: vec![],
             }
@@ -260,11 +262,12 @@ impl Clone for SnotCombiner {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)] // , Deserialize)]
 pub struct ExtractorError {
     pub msg: String,
 }
 
+#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for ExtractorError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.msg)
@@ -272,37 +275,37 @@ impl fmt::Display for ExtractorError {
 }
 
 impl Extractor {
-    pub fn new(id: &str, rule_text: &str) -> Result<Extractor, ExtractorError> {
+    pub fn new(id: &str, rule_text: &str) -> Result<Self, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
-            "glob" => Extractor::Glob {
+            "glob" => Self::Glob {
                 compiled: glob::Pattern::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "re" => Extractor::Re {
+            "re" => Self::Re {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "base64" => Extractor::Base64,
-            "kv" => Extractor::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
-            "json" => Extractor::Json,
-            "dissect" => Extractor::Dissect {
+            "base64" => Self::Base64,
+            "kv" => Self::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
+            "json" => Self::Json,
+            "dissect" => Self::Dissect {
                 rule: rule_text.to_string(),
-                compiled: Pattern::try_from(rule_text)
+                compiled: Pattern::compile(rule_text)
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
-            "grok" => match GrokPattern::from_file(
-                crate::grok::PATTERNS_FILE_DEFAULT_PATH.to_owned(),
-                rule_text.to_string(),
-            ) {
-                Ok(pat) => Extractor::Grok {
-                    rule: rule_text.to_string(),
-                    compiled: pat,
-                },
-                Err(_) => {
+            "grok" => {
+                if let Ok(pat) =
+                    GrokPattern::from_file(crate::grok::PATTERNS_FILE_DEFAULT_PATH, rule_text)
+                {
+                    Self::Grok {
+                        rule: rule_text.to_string(),
+                        compiled: pat,
+                    }
+                } else {
                     let mut grok = grok::Grok::default();
                     let pat = grok.compile(&rule_text, true)?;
-                    Extractor::Grok {
+                    Self::Grok {
                         rule: rule_text.to_string(),
                         compiled: GrokPattern {
                             definition: rule_text.to_string(),
@@ -310,10 +313,10 @@ impl Extractor {
                         },
                     }
                 }
-            },
+            }
             "cidr" => {
                 if rule_text.is_empty() {
-                    Extractor::Cidr {
+                    Self::Cidr {
                         range: None,
                         rules: vec![],
                     }
@@ -322,15 +325,15 @@ impl Extractor {
                         .split(',')
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
-                    Extractor::Cidr {
+                    Self::Cidr {
                         range: Some(SnotCombiner::from_rules(rules.clone())?),
                         rules,
                     }
                 }
             }
 
-            "influx" => Extractor::Influx,
-            "datetime" => Extractor::Datetime {
+            "influx" => Self::Influx,
+            "datetime" => Self::Datetime {
                 format: rule_text.to_string(),
                 has_timezone: datetime::has_tz(rule_text),
             },
@@ -343,23 +346,23 @@ impl Extractor {
         Ok(e)
     }
 
-    pub fn extract<'event, 'run, 'script, Ctx>(
+    #[allow(clippy::too_many_lines)]
+    pub fn extract<'event, 'run, 'script>(
         &'script self,
         result_needed: bool,
         v: &'run Value<'event>,
-        ctx: &'run Ctx,
+        ctx: &'run EventContext,
     ) -> Result<Value<'event>, ExtractorError>
     where
         'script: 'event,
         'event: 'run,
-        Ctx: Context,
     {
-        match v {
-            Value::String(ref s) => match self {
-                Extractor::Re { compiled: re, .. } => {
+        if let Some(s) = v.as_str() {
+            match self {
+                Self::Re { compiled: re, .. } => {
                     if let Some(caps) = re.captures(s) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
                         let matches: HashMap<std::borrow::Cow<str>, Value> = re
                             .capture_names()
@@ -371,41 +374,39 @@ impl Extractor {
                                 ))
                             })
                             .collect();
-                        Ok(Value::Object(matches.clone()))
+                        Ok(Value::from(matches.clone()))
                     } else {
                         Err(ExtractorError {
                             msg: "regular expression didn't match'".into(),
                         })
                     }
                 }
-                Extractor::Glob { compiled: glob, .. } => {
+                Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
-                        Ok(Value::Bool(true))
+                        Ok(Value::from(true))
                     } else {
                         Err(ExtractorError {
                             msg: "glob expression didn't match".into(),
                         })
                     }
                 }
-                Extractor::Kv(kv) => {
+                Self::Kv(kv) => {
                     if let Some(r) = kv.run(s) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
-                        //FIXME: This is needed for removing the lifetimne from the result
-                        let r: OwnedValue = Value::Object(r.clone()).into();
-                        Ok(r.into())
+                        Ok(Value::from(r).into_static())
                     } else {
                         Err(ExtractorError {
                             msg: "Failed to split kv list".into(),
                         })
                     }
                 }
-                Extractor::Base64 => {
+                Self::Base64 => {
                     let encoded = s.to_string().clone();
                     let decoded = base64::decode(&encoded)?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     }
 
                     Ok(Value::String(
@@ -416,7 +417,7 @@ impl Extractor {
                             .into(),
                     ))
                 }
-                Extractor::Json => {
+                Self::Json => {
                     let mut s = s.to_string();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded: &mut [u8] = unsafe { s.as_bytes_mut() };
@@ -425,11 +426,11 @@ impl Extractor {
                             msg: "Error in decoding to a json object".to_string(),
                         })?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     }
                     Ok(decoded.into())
                 }
-                Extractor::Cidr {
+                Self::Cidr {
                     range: Some(combiner),
                     ..
                 } => {
@@ -438,50 +439,52 @@ impl Extractor {
                     })?;
                     if combiner.combiner.contains(input) {
                         if !result_needed {
-                            return Ok(Value::Null);
+                            return Ok(Value::null());
                         }
 
-                        Ok(Value::Object(Cidr::from_str(s)?.into()))
+                        Ok(Value::from(Object::from(Cidr::from_str(s)?)))
                     } else {
                         Err(ExtractorError {
                             msg: "IP does not belong to any CIDR specified".into(),
                         })
                     }
                 }
-                Extractor::Cidr { range: None, .. } => {
+                Self::Cidr { range: None, .. } => {
                     let c = Cidr::from_str(s)?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
-                    Ok(Value::Object(c.into()))
+                    Ok(Value::from(Object::from(c)))
                 }
-                Extractor::Dissect {
+                Self::Dissect {
                     compiled: pattern, ..
-                } => Ok(Value::Object(pattern.extract(s)?.0)),
-                Extractor::Grok {
+                } => {
+                    if let Some(o) = pattern.run(s) {
+                        Ok(Value::from(o))
+                    } else {
+                        Err(ExtractorError {
+                            msg: "No match".into(),
+                        })
+                    }
+                }
+                Self::Grok {
                     compiled: ref pattern,
                     ..
                 } => {
-                    let o = pattern.matches(s.as_bytes().to_vec())?;
+                    let o = pattern.matches(s.as_bytes())?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
                     Ok(o.into())
                 }
-                Extractor::Influx => match influx::parse(s, ctx.ingest_ns()) {
-                    Ok(ref _x) if !result_needed => Ok(Value::Null),
-                    Ok(None) => Err(ExtractorError {
-                        msg: "The input is invalid".into(),
-                    }),
-                    Ok(Some(x)) => {
-                        let r: OwnedValue = x.into();
-                        Ok(r.into())
-                    }
-                    Err(_) => Err(ExtractorError {
+                Self::Influx => match influx::parse(s, ctx.ingest_ns()) {
+                    Ok(ref _x) if !result_needed => Ok(Value::null()),
+                    Ok(Some(r)) => Ok(r.into_static()),
+                    Ok(None) | Err(_) => Err(ExtractorError {
                         msg: "The input is invalid".into(),
                     }),
                 },
-                Extractor::Datetime {
+                Self::Datetime {
                     ref format,
                     has_timezone,
                 } => {
@@ -490,54 +493,45 @@ impl Extractor {
                             msg: format!("Invalid datetime specified: {}", e.to_string()),
                         })?;
                     if !result_needed {
-                        return Ok(Value::Null);
+                        return Ok(Value::null());
                     };
                     Ok(Value::from(d))
                 }
-            },
-            _ => Err(ExtractorError {
+            }
+        } else {
+            Err(ExtractorError {
                 msg: "Extractors are currently only supported against Strings".into(),
-            }),
+            })
         }
     }
 }
 
 impl<T: std::error::Error> From<T> for ExtractorError {
-    fn from(x: T) -> ExtractorError {
-        ExtractorError { msg: x.to_string() }
+    fn from(x: T) -> Self {
+        Self { msg: x.to_string() }
     }
 }
 
 impl PartialEq<Extractor> for Extractor {
-    fn eq(&self, other: &Extractor) -> bool {
+    #[allow(clippy::match_same_arms)]
+    fn eq(&self, other: &Self) -> bool {
         match (&self, other) {
-            (Extractor::Base64, Extractor::Base64) => true,
-            (Extractor::Kv(l), Extractor::Kv(r)) => l == r,
-            (Extractor::Json, Extractor::Json) => true,
-            (Extractor::Re { rule: rule_l, .. }, Extractor::Re { rule: rule_r, .. }) => {
+            (Self::Base64, Self::Base64)
+            | (Self::Json, Self::Json)
+            | (Self::Influx, Self::Influx) => true,
+            (Self::Kv(rule_l), Self::Kv(rule_r)) => rule_l == rule_r,
+            (Self::Re { rule: rule_l, .. }, Self::Re { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Glob { rule: rule_l, .. }, Self::Glob { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Dissect { rule: rule_l, .. }, Self::Dissect { rule: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Glob { rule: rule_l, .. }, Extractor::Glob { rule: rule_r, .. }) => {
+            (Self::Grok { rule: rule_l, .. }, Self::Grok { rule: rule_r, .. }) => rule_l == rule_r,
+            (Self::Cidr { range: rule_l, .. }, Self::Cidr { range: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Dissect { rule: rule_l, .. }, Extractor::Dissect { rule: rule_r, .. }) => {
+            (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. }) => {
                 rule_l == rule_r
             }
-            (Extractor::Grok { rule: rule_l, .. }, Extractor::Grok { rule: rule_r, .. }) => {
-                rule_l == rule_r
-            }
-            (Extractor::Cidr { range: range_l, .. }, Extractor::Cidr { range: range_r, .. }) => {
-                range_l == range_r
-            }
-            (Extractor::Influx, Extractor::Influx) => true,
-            (
-                Extractor::Datetime {
-                    format: format_l, ..
-                },
-                Extractor::Datetime {
-                    format: format_r, ..
-                },
-            ) => format_l == format_r,
             _ => false,
         }
     }
@@ -547,9 +541,9 @@ impl PartialEq<Extractor> for Extractor {
 pub struct Cidr(pub IpCidr);
 
 impl Cidr {
-    pub fn from_str(s: &str) -> Result<Cidr, ExtractorError> {
+    pub fn from_str(s: &str) -> Result<Self, ExtractorError> {
         if let Some(cidr) = parse_ipv4_fast(s) {
-            Ok(Cidr(cidr))
+            Ok(Self(cidr))
         } else {
             Err(ExtractorError {
                 msg: format!("Invalid CIDR: '{}'", s),
@@ -566,10 +560,10 @@ impl std::ops::Deref for Cidr {
     }
 }
 
-#[allow(clippy::implicit_hasher)]
+#[allow(clippy::implicit_hasher, clippy::use_self)]
 // ^ we will not be using this with custom hashers, so we do not need to generalise the function over all hashers
 impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
-    fn from(x: Cidr) -> HashMap<Cow<'cidr, str>, Value<'cidr>> {
+    fn from(x: Cidr) -> Self {
         match x.0 {
             IpCidr::V4(y) => hashmap!(
                        "prefix".into() => Value::from(y.get_prefix_as_u8_array().to_vec()),
@@ -584,7 +578,7 @@ impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use halfbrown::hashmap;
     use simd_json::borrowed::Value;
@@ -594,8 +588,15 @@ mod tests {
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("foobar".to_string().into()), &()),
-                    Ok(Value::Object(
+                    ex.extract(
+                        true,
+                        &Value::String("foobar".to_string().into()),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
                     ))
                 );
@@ -609,8 +610,15 @@ mod tests {
         match ex {
             Extractor::Kv { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("a:b c:d".to_string().into()), &()),
-                    Ok(Value::Object(hashmap! {
+                    ex.extract(
+                        true,
+                        &Value::String("a:b c:d".to_string().into()),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
                     }))
@@ -629,9 +637,12 @@ mod tests {
                     ex.extract(
                         true,
                         &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into()),
-                        &()
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
-                    Ok(Value::Object(hashmap! {
+                    Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
                         "c".into() => "d".into()
                     }))
@@ -647,8 +658,15 @@ mod tests {
         match ex {
             Extractor::Glob { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("INFO".to_string().into()), &()),
-                    Ok(Value::Bool(true))
+                    ex.extract(
+                        true,
+                        &Value::String("INFO".to_string().into()),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(true))
                 );
             }
             _ => unreachable!(),
@@ -661,7 +679,14 @@ mod tests {
         match ex {
             Extractor::Base64 => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()), &()),
+                    ex.extract(
+                        true,
+                        &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Ok("🚀sneaky rocket!".into())
                 );
             }
@@ -675,8 +700,15 @@ mod tests {
         match ex {
             Extractor::Dissect { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::String("John".to_string().into()), &()),
-                    Ok(Value::Object(hashmap! {
+                    ex.extract(
+                        true,
+                        &Value::String("John".to_string().into()),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap! {
                         "name".into() => Value::from("John")
                     }))
                 );
@@ -694,11 +726,11 @@ mod tests {
             Extractor::Grok { .. } => {
                 let output = ex.extract(true, &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                ), &());
+                ), &EventContext{at: 0, origin_uri: None});
 
                 assert_eq!(
                     output,
-                    Ok(Value::Object(hashmap!(
+                    Ok(Value::from(hashmap!(
                     "syslog_timestamp1".into() =>  "".into(),
                               "syslog_ingest_timestamp".into() => "2019-04-01T09:59:19+0010".into(),
                               "wf_datacenter".into() => "dc".into(),
@@ -722,29 +754,50 @@ mod tests {
         match ex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &()),
-                    Ok(Value::Object(hashmap! (
-                        "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                        "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap! (
+                        "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
 
 
                     )))
                 );
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0/24"), &()),
-                    Ok(Value::Object(hashmap! (
-                                        "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                                        "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 0.into()])
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0/24"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap! (
+                                        "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
 
 
                     )))
                 );
 
                 assert_eq!(
-                    ex.extract(true, &Value::from("192.168.1.0"), &()),
-                    Ok(Value::Object(hashmap!(
-                                "prefix".into() => Value::from(vec![Value::I64(192), 168.into(), 1.into(), 0.into()]),
-                                "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()])
+                    ex.extract(
+                        true,
+                        &Value::from("192.168.1.0"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap!(
+                                "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                                "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
                     )))
                 );
 
@@ -752,11 +805,14 @@ mod tests {
                     ex.extract(
                         true,
                         &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
-                        &()
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
                     ),
-                    Ok(Value::Object(hashmap!(
-                                "prefix".into() => Value::from(vec![Value::I64(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
-                                "mask".into() => Value::from(vec![Value::I64(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
+                    Ok(Value::from(hashmap!(
+                                "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
+                                "mask".into() => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
                     )))
                 );
             }
@@ -767,15 +823,29 @@ mod tests {
         match rex {
             Extractor::Cidr { .. } => {
                 assert_eq!(
-                    rex.extract(true, &Value::from("10.22.0.254"), &()),
-                    Ok(Value::Object(hashmap! (
-                            "prefix".into() => Value::from(vec![Value::I64(10), 22.into(), 0.into(), 254.into()]),
-                            "mask".into() => Value::from(vec![Value::I64(255), 255.into(), 255.into(), 255.into()]),
+                    rex.extract(
+                        true,
+                        &Value::from("10.22.0.254"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
+                    Ok(Value::from(hashmap! (
+                            "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
+                            "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
                     )))
                 );
 
                 assert_eq!(
-                    rex.extract(true, &Value::from("99.98.97.96"), &()),
+                    rex.extract(
+                        true,
+                        &Value::from("99.98.97.96"),
+                        &EventContext {
+                            at: 0,
+                            origin_uri: None
+                        }
+                    ),
                     Err(ExtractorError {
                         msg: "IP does not belong to any CIDR specified".into()
                     })
@@ -795,14 +865,16 @@ mod tests {
                     &Value::from(
                         "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
                     ),
-                    &()
+                    &EventContext {
+                        at: 0,
+                        origin_uri: None
+                    }
                 ),
-                Ok(Value::Object(hashmap! (
+                Ok(Value::from(hashmap! (
                        "measurement".into() => "wea ther".into(),
-                       "tags".into() => Value::Object(hashmap!( "location".into() => "us-midwest".into())),
-                    "fields".into() => Value::Object(hashmap!("temperature".into() => 82.0f64.into
-                                                              ())),
-                       "timestamp".into() => Value::I64(1465839830100400200)
+                       "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
+                       "fields".into() => Value::from(hashmap!("temperature".into() => 82.0f64.into())),
+                       "timestamp".into() => Value::from(1_465_839_830_100_400_200_u64)
                 )))
             ),
             _ => unreachable!(),
@@ -814,8 +886,15 @@ mod tests {
         let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
         match ex {
             Extractor::Datetime { .. } => assert_eq!(
-                ex.extract(true, &Value::from("2019-06-20 00:00:00"), &()),
-                Ok(Value::I64(1560988800000_000_000))
+                ex.extract(
+                    true,
+                    &Value::from("2019-06-20 00:00:00"),
+                    &EventContext {
+                        at: 0,
+                        origin_uri: None
+                    }
+                ),
+                Ok(Value::from(1_560_988_800_000_000_000_u64))
             ),
             _ => unreachable!(),
         }

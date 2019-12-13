@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,15 +30,7 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use super::{Offramp, OfframpImpl};
-use crate::async_sink::{AsyncSink, SinkDequeueError};
-use crate::codec::Codec;
-use crate::dflt;
-use crate::errors::*;
-use crate::system::{PipelineAddr, PipelineMsg};
-use crate::url::TremorURL;
-use crate::utils::{duration_to_millis, nanotime};
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use elastic::client::prelude::BulkErrorsResponse;
 use elastic::client::requests::BulkRequest;
 use elastic::client::{Client, SyncSender};
@@ -47,15 +39,12 @@ use halfbrown::HashMap;
 // use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
-use serde_yaml;
-use simd_json::{json, OwnedValue};
-use std::convert::From;
+use crossbeam_channel::bounded;
+use simd_json::json;
 use std::str;
-use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
-use tremor_pipeline::MetaMap;
-use tremor_script::{LineValue, Value};
+use tremor_script::prelude::*;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -65,6 +54,8 @@ pub struct Config {
     #[serde(default = "dflt::d_4")]
     pub concurrency: usize,
 }
+
+impl ConfigImpl for Config {}
 
 #[derive(Clone)]
 struct Destination {
@@ -83,10 +74,10 @@ pub struct Elastic {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Elastic {
+impl offramp::Impl for Elastic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let clients: Result<Vec<Destination>> = config
                 .endpoints
                 .iter()
@@ -106,7 +97,7 @@ impl OfframpImpl for Elastic {
             //    None => "tremor-host.local".to_string(),
             //};
 
-            Ok(Box::new(Elastic {
+            Ok(Box::new(Self {
                 client_idx: 0,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
@@ -123,11 +114,11 @@ impl OfframpImpl for Elastic {
 }
 
 impl Elastic {
-    fn flush(client: &Client<SyncSender>, payload: &str) -> Result<u64> {
+    fn flush(client: &Client<SyncSender>, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
-        let req = BulkRequest::new(payload.to_owned());
-        let res = client.request(req).send()?;
+        let res = client.request(BulkRequest::new(payload)).send()?;
         for item in res.into_response::<BulkErrorsResponse>()? {
+            // TODO update error metric here?
             error!("Elastic Search item error: {:?}", item);
         }
         let d = start.elapsed();
@@ -135,30 +126,31 @@ impl Elastic {
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: String) -> Result<()> {
+    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
-        let (tx, rx) = channel();
+        let (tx, rx) = bounded(1);
         let pipelines: Vec<(TremorURL, PipelineAddr)> = self
             .pipelines
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
         self.pool.execute(move || {
-            let r = Self::flush(&destination.client, payload.as_str());
-            let mut m = MetaMap::new();
+            let r = Self::flush(&destination.client, payload);
+            let mut m = Object::new();
             if let Ok(t) = r {
-                m.insert("time".into(), json!(t));
+                m.insert("time".into(), t.into());
             } else {
+                // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
-                m.insert("error".into(), json!("Failed to send to ES"));
+                m.insert("error".into(), "Failed to send to ES".into());
             };
             let insight = Event {
                 is_batch: false,
                 id: 0,
-                meta: m,
-                value: LineValue::new(Box::new(vec![]), |_| Value::Null),
+                data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
+                origin_uri: None,
                 kind: None,
             };
 
@@ -167,17 +159,40 @@ impl Elastic {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
-
             // TODO: Handle contraflow for notification
-            let _ = tx.send(r);
+            if let Err(e) = tx.send(r) {
+                error!("Failed to send reply: {}", e)
+            }
         });
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: String) -> Result<()> {
+    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                //TODO: how do we handle this?
+                let mut m = Object::new();
+                m.insert("error".into(), "Dropped data due to es overload".into());
+
+                let insight = Event {
+                    is_batch: false,
+                    id: 0,
+                    data: (Value::null(), m).into(),
+                    ingest_ns: nanotime(),
+                    origin_uri: None,
+                    kind: None,
+                };
+
+                let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+                    .pipelines
+                    .iter()
+                    .map(|(i, p)| (i.clone(), p.clone()))
+                    .collect();
+                for (pid, p) in pipelines {
+                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
+
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
             }
@@ -196,60 +211,43 @@ impl Elastic {
 
 impl Offramp for Elastic {
     // We enforce json here!
-    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
-        let mut payload = String::from("");
+    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        // We estimate a single message is 512 byte on everage, might be off but it's
+        // a guess
+        let mut payload = Vec::with_capacity(4096);
 
-        for event in event.into_iter() {
-            let index = if let Some(OwnedValue::String(index)) = event.meta.get("index") {
-                index
-            } else {
-                error!("'index' not set for elastic offramp!");
-                return;
+        for (value, meta) in event.value_meta_iter() {
+            let index = meta
+                .get("index")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::from("'index' not set for elastic offramp!"))?;
+            let doc_type = meta
+                .get("doc_type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::from("'doc-type' not set for elastic offramp!"))?;
+            match meta.get("pipeline").and_then(Value::as_str) {
+                None => json!({
+                "index":
+                {
+                    "_index": index,
+                    "_type": doc_type
+                }})
+                .write(&mut payload)?,
+
+                Some(pipeline) => json!({
+                "index":
+                {
+                    "_index": index,
+                    "_type": doc_type,
+                    "pipeline": pipeline
+                }})
+                .write(&mut payload)?,
             };
-            let doc_type = if let Some(OwnedValue::String(doc_type)) = event.meta.get("doc_type") {
-                doc_type
-            } else {
-                error!("'doc-type' not set for elastic offramp!");
-                return;
-            };
-            let pipeline = if let Some(OwnedValue::String(pipeline)) = event.meta.get("pipeline") {
-                Some(pipeline)
-            } else {
-                None
-            };
-            match pipeline {
-                None => {
-                    if let Ok(s) = serde_json::to_string(&json!({
-                    "index":
-                    {
-                        "_index": index,
-                        "_type": doc_type
-                    }})) {
-                        payload.push_str(s.as_str())
-                    }
-                }
-                Some(ref pipeline) => payload.push_str(
-                    json!({
-                    "index":
-                    {
-                        "_index": index,
-                        "_type": doc_type,
-                        "pipeline": pipeline
-                    }})
-                    .to_string()
-                    .as_str(),
-                ),
-            };
-            payload.push('\n');
-            match serde_json::to_string(&event.value) {
-                Ok(s) => {
-                    payload.push_str(s.as_str());
-                    payload.push('\n');
-                }
-                Err(e) => error!("Failed to encode json {}", e),
-            }
+            payload.push(b'\n');
+            value.write(&mut payload)?;
+            payload.push(b'\n');
         }
-        let _ = self.maybe_enque(payload);
+        self.maybe_enque(payload)
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -261,8 +259,8 @@ impl Offramp for Elastic {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

@@ -8,7 +8,7 @@ onramp:
     config:
       #source: ./demo/data/data.influx.xz
       source: ../pocs/data.influx
-      interval: 500 # 1_000_000 / s
+      #interval: 500 # 1_000_000 / s
 
 offramp:
   - id: blackhole
@@ -17,18 +17,10 @@ offramp:
     config:
       concurrency: 8
       endpoints:
-        - http://localhost:8080/
-#        - http://localhost:8086/write?db=metrics
+#        - http://localhost:8080/
+        - http://localhost:8086/write?db=metrics
       headers:
         'Client': 'Tremor'
-
-#    type: rest
-#    codec: influx
-#    config:
-#      warmup_secs: 10
-#      stop_after_secs: 40
-#      significant_figures: 2
-
 
 binding:
   - id: bench

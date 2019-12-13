@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ use crate::lifecycle::ActivatorLifecycleFsm;
 use crate::repository::{BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact};
 use crate::url::TremorURL;
 
-pub type ServantId = TremorURL;
-pub type PipelineServant = ActivatorLifecycleFsm<PipelineArtefact>;
-pub type OnrampServant = ActivatorLifecycleFsm<OnrampArtefact>;
-pub type OfframpServant = ActivatorLifecycleFsm<OfframpArtefact>;
-pub type BindingServant = ActivatorLifecycleFsm<BindingArtefact>;
+pub type Id = TremorURL;
+pub type Pipeline = ActivatorLifecycleFsm<PipelineArtefact>;
+pub type Onramp = ActivatorLifecycleFsm<OnrampArtefact>;
+pub type Offramp = ActivatorLifecycleFsm<OfframpArtefact>;
+pub type Binding = ActivatorLifecycleFsm<BindingArtefact>;

@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,6 +54,8 @@ pub struct OnRamp {
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
     pub preprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics_interval_s: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: dynaconfig::ConfigMap,
 }
 
@@ -69,6 +71,8 @@ pub struct OffRamp {
     pub codec: Option<String>,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
     pub postprocessors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics_interval_s: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: dynaconfig::ConfigMap,
 }

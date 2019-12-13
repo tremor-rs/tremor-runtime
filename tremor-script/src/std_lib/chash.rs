@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,78 +11,39 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
-use jumphash;
-use simd_json::BorrowedValue as Value;
-use std::io;
-use std::io::Write;
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
+use crate::registry::Registry;
+use crate::{tremor_const_fn, utils::sorsorted_serialize};
+use jumphash;
+use simd_json::Value as ValueTrait;
+
+pub fn load(registry: &mut Registry) {
     registry.insert(
-        tremor_fn! (chash::jump(_context, _key: String, _slot_count: I64) {
-            // This is 'tremor\0\0'  and '\0\0tremor' as integers
-            let jh = jumphash::JumpHasher::new_with_keys(8_390_880_576_440_238_080, 128_034_676_764_530);
-            Ok(jh.slot(&_key, *_slot_count as u32).into())
+        tremor_const_fn! (chash::jump(_context, _key, _slot_count) {
+            if let (Some(key), Some(slot_count)) =  (_key.as_str(), _slot_count.as_u32()) {
+                // This is 'tremor\0\0'  and '\0\0tremor' as integers
+                let jh = jumphash::JumpHasher::new_with_keys(8_390_880_576_440_238_080, 128_034_676_764_530);
+                Ok(jh.slot(&key, slot_count).into())
+            } else {
+                 Err(FunctionError::BadType{mfa: this_mfa()})
+            }
         }),
     ).insert(
-        tremor_fn!(chash::jump_with_keys(_context, _k1: I64, _k2: I64, _key: String, _slot_count: I64) {
-            let jh = jumphash::JumpHasher::new_with_keys(*_k1 as u64, *_k2 as u64);
-            Ok(jh.slot(&_key, *_slot_count as u32).into())
+        tremor_const_fn!(chash::jump_with_keys(_context, _k1, _k2, _key, _slot_count) {
+            if let (Some(k1), Some(k2), Some(key), Some(slot_count)) =  (_k1.as_u64(), _k2.as_u64(), _key.as_str(), _slot_count.as_u32()) {
+                let jh = jumphash::JumpHasher::new_with_keys(k1, k2);
+                Ok(jh.slot(&key, slot_count).into())
+            } else {
+                 Err(FunctionError::BadType{mfa: this_mfa()})
+            }
         }),
     ).insert(
-        tremor_fn!(chash::sorted_serialize(_context, _data) {
-            let mut d: Vec<u8> = Vec::new();
-            sorted_serialize_(_data, &mut d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
-            Ok(Value::String(String::from_utf8(d).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Encountered invalid UTF8 in serialisation".to_string()})?.into()
-            ))
+        tremor_const_fn!(chash::sorted_serialize(_context, _data) {
+            let ser = sorsorted_serialize(_data).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
+            Ok(Value::from(ser))
         }),
     );
-}
-
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> io::Result<()> {
-    match j {
-        Value::Null | Value::Bool(_) | Value::I64(_) | Value::F64(_) | Value::String(_) => {
-            write!(w, "{}", j.to_string())
-        }
-        Value::Array(a) => {
-            let mut iter = a.iter();
-            write!(w, "[")?;
-
-            if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?
-            }
-
-            for e in iter {
-                write!(w, ",")?;
-                sorted_serialize_(e, w)?
-            }
-            write!(w, "]")
-        }
-        Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
-
-            v.sort_by_key(|(k, _)| k.to_string());
-            let mut iter = v.into_iter();
-
-            write!(w, "{{")?;
-
-            if let Some((k, v)) = iter.next() {
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-
-            for (k, v) in iter {
-                write!(w, ",")?;
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-            write!(w, "}}")
-        }
-    }
 }
 
 #[cfg(test)]
@@ -118,5 +79,4 @@ mod test {
         .into();
         assert_val!(f(&[&v1]), r#"{"0":{"3":4,"5":0},"1":[2,1]}"#)
     }
-
 }

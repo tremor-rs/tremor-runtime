@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ macro_rules! op {
         }
         impl $factory {
             fn new() -> Self {
-                $factory {}
+                Self {}
             }
             pub fn new_boxed() -> Box<dyn crate::op::InitializableOperator> {
                 Box::new(Self::new())
@@ -37,8 +37,15 @@ macro_rules! op {
 }
 
 #[macro_export]
-macro_rules! sjv {
-    ($e:expr) => {
-        tremor_script::LineValue::new(Box::new(vec![]), |_| $e)
-    };
+macro_rules! metamap {
+    { $($key:expr => $value:expr),+ } => {
+        {
+            // TODO figure out why `crate::` does not work here
+            let mut m = simd_json::value::borrowed::Object::new();
+            $(
+                m.insert($key.into(), simd_json::OwnedValue::from($value));
+            )+
+            m
+        }
+     };
 }

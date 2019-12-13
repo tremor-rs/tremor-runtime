@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,10 @@
 //!
 //! This operator takes no configuration
 
-use super::{Offramp, OfframpImpl};
-use crate::codec::Codec;
-use crate::errors::*;
-use crate::offramp::prelude::make_postprocessors;
-use crate::postprocessor::Postprocessors;
-use crate::system::PipelineAddr;
-use crate::url::TremorURL;
-use crate::{Event, OpConfig};
+use crate::offramp::prelude::*;
 use halfbrown::HashMap;
-use simd_json::OwnedValue;
 use std::time::{Duration, Instant};
+use tremor_script::prelude::*;
 
 #[derive(Debug, Clone)]
 struct DebugBucket {
@@ -47,9 +40,9 @@ pub struct Debug {
     postprocessors: Postprocessors,
 }
 
-impl OfframpImpl for Debug {
+impl offramp::Impl for Debug {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(Debug {
+        Ok(Box::new(Self {
             last: Instant::now(),
             update_time: Duration::from_secs(1),
             buckets: HashMap::new(),
@@ -60,8 +53,8 @@ impl OfframpImpl for Debug {
     }
 }
 impl Offramp for Debug {
-    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) {
-        for event in event.into_iter() {
+    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
                 println!();
@@ -74,19 +67,20 @@ impl Offramp for Debug {
                 println!();
                 self.buckets.clear();
             }
-            let c = if let Some(OwnedValue::String(s)) = event.meta.get("class") {
-                s.to_string()
+            let c = if let Some(s) = meta.get("class").and_then(Value::as_str) {
+                s
             } else {
-                "<unclassified>".into()
+                "<unclassified>"
             };
             //TODO: return to entry
-            if let Some(entry) = self.buckets.get_mut(&c) {
+            if let Some(entry) = self.buckets.get_mut(c) {
                 entry.cnt += 1;
             } else {
-                self.buckets.insert(c, DebugBucket { cnt: 1 });
+                self.buckets.insert(c.to_owned(), DebugBucket { cnt: 1 });
             }
             self.cnt += 1;
         }
+        Ok(())
     }
     fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
         self.pipelines.insert(id, addr);
@@ -98,8 +92,8 @@ impl Offramp for Debug {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) {
-        self.postprocessors = make_postprocessors(postprocessors)
-            .expect("failed to setup post processors for stdout");
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
 }

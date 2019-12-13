@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::dflt;
 use crate::onramp::prelude::*;
+use hostname::get_hostname;
 use serde_yaml::Value;
 use std::fs::File;
 use std::io::{BufRead, Read};
@@ -30,32 +32,32 @@ pub struct Config {
     pub interval: Option<u64>,
     /// Number of iterations to stop after
     pub iters: Option<u64>,
+    #[serde(default = "dflt::d_false")]
+    pub base64: bool,
 }
+
+impl ConfigImpl for Config {}
 
 pub struct Blaster {
     pub config: Config,
     data: Vec<u8>,
 }
 
-impl OnrampImpl for Blaster {
+impl onramp::Impl for Blaster {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             let mut source_data_file = File::open(&config.source)?;
             let mut data = vec![];
             let ext = Path::new(&config.source)
                 .extension()
                 .map(std::ffi::OsStr::to_str);
             if ext == Some(Some("xz")) {
-                XzDecoder::new(source_data_file)
-                    .read_to_end(&mut data)
-                    .expect("Neither a readable nor valid XZ compressed file error");
+                XzDecoder::new(source_data_file).read_to_end(&mut data)?;
             } else {
-                source_data_file
-                    .read_to_end(&mut data)
-                    .expect("Unable to read data source file error");
+                source_data_file.read_to_end(&mut data)?;
             };
-            Ok(Box::new(Blaster { config, data }))
+            Ok(Box::new(Self { config, data }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -69,54 +71,75 @@ struct Acc {
     count: u64,
 }
 
+// We got to allow this because of the way that the onramp works
+// with iterating over the data.
+#[allow(clippy::needless_pass_by_value)]
 fn onramp_loop(
-    rx: Receiver<OnrampMsg>,
+    rx: &Receiver<onramp::Msg>,
     data: Vec<u8>,
-    config: Config,
-    preprocessors: Vec<String>,
-    codec: String,
+    config: &Config,
+    mut preprocessors: Preprocessors,
+    mut codec: Box<dyn Codec>,
+    mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let mut codec = codec::lookup(&codec)?;
-    let mut preprocessors = make_preprocessors(&preprocessors)?;
-
     let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
         .lines()
-        .map(|e| -> Result<Vec<u8>> { Ok(e?.as_bytes().to_vec()) })
+        .map(|e| -> Result<Vec<u8>> {
+            if config.base64 {
+                Ok(base64::decode(&e?.as_bytes())?)
+            } else {
+                Ok(e?.as_bytes().to_vec())
+            }
+        })
         .collect();
     acc.elements = elements?;
     acc.consuming = acc.elements.clone();
 
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-blaster".to_string(),
+        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        port: None,
+        path: vec![config.source.clone()],
+    };
+
     let iters = config.iters;
-    let _interval = if let Some(i) = config.interval { i } else { 0 };
     let mut id = 0;
     loop {
         if pipelines.is_empty() {
             match rx.recv()? {
-                OnrampMsg::Connect(mut ps) => pipelines.append(&mut ps),
-                OnrampMsg::Disconnect { tx, .. } => {
-                    let _ = tx.send(true);
+                onramp::Msg::Connect(ps) => {
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            pipelines.push(p.clone());
+                        }
+                    }
+                }
+                onramp::Msg::Disconnect { tx, .. } => {
+                    tx.send(true)?;
                     return Ok(());
                 }
             };
             continue;
         } else {
-            // TODO better sleep perha
+            // TODO better sleep perhaps
             if let Some(ival) = config.interval {
                 thread::sleep(Duration::from_nanos(ival));
             }
             match rx.try_recv() {
                 Err(TryRecvError::Empty) => (),
                 Err(_e) => return Err("Crossbream receive error".into()),
-                Ok(OnrampMsg::Connect(mut ps)) => pipelines.append(&mut ps),
-                Ok(OnrampMsg::Disconnect { id, tx }) => {
+                Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
+                Ok(onramp::Msg::Disconnect { id, tx }) => {
                     pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if pipelines.is_empty() {
-                        let _ = tx.send(true);
+                        tx.send(true)?;
                         return Ok(());
                     } else {
-                        let _ = tx.send(false);
+                        tx.send(false)?;
                     }
                 }
             };
@@ -130,21 +153,39 @@ fn onramp_loop(
         }
 
         if let Some(data) = acc.consuming.pop() {
-            send_event(&pipelines, &mut preprocessors, &mut codec, id, data);
+            let mut ingest_ns = nanotime();
+            send_event(
+                &pipelines,
+                &mut preprocessors,
+                &mut codec,
+                &mut metrics_reporter,
+                &mut ingest_ns,
+                &origin_uri,
+                id,
+                data,
+            );
             id += 1;
         }
     }
 }
 
 impl Onramp for Blaster {
-    fn start(&mut self, codec: String, preprocessors: Vec<String>) -> Result<OnrampAddr> {
+    fn start(
+        &mut self,
+        codec: &str,
+        preprocessors: &[String],
+        metrics_reporter: RampReporter,
+    ) -> Result<onramp::Addr> {
         let (tx, rx) = bounded(0);
         let data2 = self.data.clone();
         let config2 = self.config.clone();
-
+        let codec = codec::lookup(&codec)?;
+        let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
             .name(format!("onramp-blaster-{}", "???"))
-            .spawn(|| onramp_loop(rx, data2, config2, preprocessors, codec))?;
+            .spawn(move || {
+                onramp_loop(&rx, data2, &config2, preprocessors, codec, metrics_reporter)
+            })?;
         Ok(tx)
     }
 

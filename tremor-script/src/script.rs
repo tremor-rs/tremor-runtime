@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{Helper, Warning};
+use crate::ast::Warning;
+use crate::ctx::EventContext;
 use crate::errors::*;
-use crate::highlighter::{DumbHighlighter, Highlighter};
-use crate::interpreter::{Cont, LocalStack};
+use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
+pub use crate::interpreter::AggrType;
+use crate::interpreter::Cont;
 use crate::lexer::{self, TokenFuns};
 use crate::parser::grammar;
 use crate::pos::Range;
-use crate::registry::{Context, Registry};
-use crate::stry;
-use halfbrown::HashMap;
+use crate::registry::{Aggr as AggrRegistry, Registry};
+use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;
 
@@ -56,47 +57,47 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct Script<Ctx>
-where
-    Ctx: Context + 'static,
-{
-    // TODO: This should probably be pulled out to allow people wrapping it themsefls
-    pub script: rentals::Script<Ctx>,
-    pub source: String, //tokens: Vec<std::result::Result<TokenSpan<'script>, LexerError>>
+#[derive(Debug)] // FIXME rename ScriptRentalWrapper
+pub struct Script {
+    // TODO: This should probably be pulled out to allow people wrapping it themselves
+    pub script: rentals::Script,
+    pub source: String,
     pub warnings: Vec<Warning>,
-    pub locals: HashMap<String, usize>,
 }
 
 rental! {
     pub mod rentals {
         use crate::ast;
-        use crate::Context;
         use std::borrow::Cow;
-
+        use serde::Serialize;
+        use std::sync::Arc;
+        use std::marker::Send;
 
         #[rental_mut(covariant,debug)]
-        pub struct Script<Ctx: Context + Clone + 'static> {
+        pub struct Script{
             script: Box<String>,
-            parsed: ast::Script<'script, Ctx>
+            parsed: ast::Script<'script>
         }
-
     }
 }
 
-impl<'run, 'event, 'script, Ctx> Script<Ctx>
+impl<'run, 'event, 'script> Script
 where
-    Ctx: Context + 'static,
     'script: 'event,
     'event: 'run,
 {
-    pub fn parse(script: &'script str, reg: &Registry<Ctx>) -> Result<Self> {
+    pub fn parse(
+        script: &'script str,
+        reg: &Registry,
+        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
+    ) -> Result<Self> {
         let mut source = script.to_string();
-        //FIXME: There is a bug in the lexer that requires a tailing ' ' otherwise
-        //       it will not recognize a singular 'keywkrd'
-        //       Also: darach is a snot badger!
+
+        let mut warnings = vec![];
+
+        // FIXME make lexer EOS tolerant to avoid this kludge
         source.push(' ');
-        let mut helper = Helper::new(reg);
+
         let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
             let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
             let mut filtered_tokens = Vec::new();
@@ -108,33 +109,23 @@ where
                 }
             }
 
-            let script = grammar::ScriptParser::new()
+            let fake_aggr_reg = AggrRegistry::default();
+            let (script, ws) = grammar::ScriptParser::new()
                 .parse(filtered_tokens)?
-                .up(&mut helper)?;
-
+                .up_script(reg, &fake_aggr_reg)?;
+            warnings = ws;
             Ok(script)
         })
         .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
 
-        Ok(Script {
+        Ok(Self {
             script,
             source,
-            locals: helper.locals.clone(),
-            warnings: helper.into_warnings(),
+            warnings,
         })
     }
 
-    /*
-    pub fn format_parser_error(script: &str, e: Error) -> String {
-        let mut h = DumbHighlighter::default();
-        if Self::format_error_from_script(script, &mut h, &e).is_ok() {
-            h.to_string()
-        } else {
-            format!("Failed to extract code for error: {}", e)
-        }
-    }
-     */
-
+    #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
         h.highlight(tokens)
@@ -146,28 +137,26 @@ where
         e: &Error,
     ) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::tokenizer(&script).collect();
-        match e.context() {
-            (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(tokens, start, end, Some(e.into()))
-            }
-
-            _other => {
-                let _ = write!(h.get_writer(), "Error: {}", e);
-                h.finalize()
-            }
+        if let (Some(Range(start, end)), _) = e.context() {
+            h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
+        } else {
+            write!(h.get_writer(), "Error: {}", e)?;
         }
+        h.finalize()
     }
 
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
-        for w in &self.warnings {
+        let mut warnings = self.warnings.clone();
+        warnings.sort();
+        warnings.dedup();
+        for w in &warnings {
             let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
             h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
-        Ok(())
+        h.finalize()
     }
 
-    #[allow(dead_code)] // NOTE: Dman dual main and lib crate ...
-    pub fn format_error(&self, e: Error) -> String {
+    pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
             h.to_string()
@@ -182,44 +171,11 @@ where
 
     pub fn run(
         &'script self,
-        context: &'run Ctx,
+        context: &'run EventContext,
+        aggr: AggrType,
         event: &'run mut Value<'event>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
-        // FIXME: find a way to pre-allocate this
-        let mut local = LocalStack::with_size(self.locals.len());
-
-        let script = self.script.suffix();
-        let mut exprs = script.exprs.iter().peekable();
-        while let Some(expr) = exprs.next() {
-            if exprs.peek().is_none() {
-                match stry!(expr.run(true, context, event, meta, &mut local, &script.consts,)) {
-                    Cont::Drop => return Ok(Return::Drop),
-                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                    Cont::EmitEvent(port) => {
-                        return Ok(Return::EmitEvent { port });
-                    }
-                    Cont::Cont(v) => {
-                        return Ok(Return::Emit {
-                            value: v.into_owned(),
-                            port: None,
-                        })
-                    }
-                }
-            } else {
-                match stry!(expr.run(false, context, event, meta, &mut local, &script.consts,)) {
-                    Cont::Drop => return Ok(Return::Drop),
-                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                    Cont::EmitEvent(port) => {
-                        return Ok(Return::EmitEvent { port });
-                    }
-                    Cont::Cont(_v) => (),
-                }
-            }
-        }
-        Ok(Return::Emit {
-            value: Value::Null,
-            port: None,
-        })
+        self.script.suffix().run(context, aggr, event, meta)
     }
 }

@@ -1,23 +1,24 @@
 [package]
 name = "tremor-runtime"
-version = "0.5.4"
+version = "0.6.0"
 description = "Tremor Runtime"
-authors = ["Heinz Gies <hgies@wayfair.com>", "Darach Ennis <dennis@wayfair.com>", "Dylan De Souza <dcaetanodesouza@wayfair.com>"]
+authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
 
 [workspace]
 
 members = [
+    "dissect",
+    "http-bench-server",
+    "kv",
+    "tremor-api",
+    "tremor-pipeline",
+    "tremor-query",
+    "tremor-script",
     "tremor-server",
     "tremor-tool",
-    "tremor-script",
     "window",
-    "tremor-pipeline",
-    "tremor-api",
-    "dissect",
-    "kv",
-    "http-bench-server"
 ]
 
 [profile.release]
@@ -27,27 +28,35 @@ opt-level = 3
 
 [dependencies]
 actix = "0.8"
+actix-codec = "0.1.2"
+actix-router = "0.1.5"
+actix-web = "1"
+actix-web-actors = "1.0.2"
+awc = "0.2"
+
 base64 = "0.10"
+bytes = "0.4"
+byteorder = "1"
 chrono = "0.4"
 elastic = "0.20"
 error-chain="0.12"
-futures = "0.1.28"
-hashbrown = { version = "0.6.0", features = ["serde"] }
+futures = "0.1"
+hashbrown = { version = "0.6", features = ["serde"] }
 hostname = "0.1"
-libc = "0.2"
 log4rs = "0.8"
+mio = "0.6"
 rand = "0.7"
+regex = "1.3"
 rental = "0.5"
 reqwest = "0.9"
 rmp-serde = "0.14.0"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-simd-json = "0.1"
+simd-json = {version = "0.2", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "1.7" # we can't update because of deps ...
-mio = "0.6"
 
 log = "0.4"
 serde_derive = "1"
@@ -55,15 +64,13 @@ lazy_static = "1"
 tokio-threadpool = "0.1"
 halfbrown = "0.1"
 libflate = "0.1"
-sysinfo = "0.9"
 snap = "0.2.5"
 lz4 = "1.23.1"
-actix-web = "1"
 openssl = "0.10"
-actix-router = "0.1.5"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
 http = "0.1.18"
+indexmap = { version = "1", features=["serde-1"] }
 
 crossbeam-channel = "0.3"
 
@@ -86,30 +93,26 @@ hdrhistogram = {version = "6", optional = true }
 rdkafka = {version = "0.21", optional = true}
 rdkafka-sys = {version = "1", optional = true}
 
+# crononome
+cron = "0.6.0"
+
 #Google cloud stuff
 google-storage1 = "1"
 google-pubsub1 = "1"
 hyper-rustls = "0.6" # chan't update this because of google
 yup-oauth2 = "1" # can't update this because of google
 
-hyper = "0.10"
+hyper = "0.10"  # chan't update this because of google
 
 # logstash grok patterns
 grok = "1"
 
-## Unused dependencies
-# uuid = { version = "0.7", features = ["serde", "v4"] }
-# window = { path = "window" }
-# rand = "0.5"
-# bytes = "0.4"
-# futures-channel = "0.2"
-# futures-timer = "0.1"
-# lru = "0.1"
-
 [dev-dependencies]
 matches = "0.1"
-criterion = "0.2"
+# criterion = "0.2"
 pretty_assertions = "0.6.1"
+regex = "1"
+env_logger = "0.6"
 
 [features]
 default = ["mssql", "kafka", "bench" ]
@@ -118,6 +121,14 @@ bench = ["xz2", "hdrhistogram" ]
 php-runtime = []
 mssql = []
 drop_copy = []
+# used for autobahn testing - all WS inputs will be echoed back to the server
+ws-echo = []
 #mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
 # php-runtime = ["php"]
 # drop_copy = ["notify"]
+
+[patch.crates-io]
+#simd-json = { git = 'https://github.com/simd-lite/simdjson-rs', branch = 'from-object' }
+rdkafka = { git = 'https://github.com/fede1024/rust-rdkafka', rev = '802cb82d5526afa5bb3e95c03955e3da5353d2ef' }
+rdkafka-sys = { git = 'https://github.com/fede1024/rust-rdkafka', rev = '802cb82d5526afa5bb3e95c03955e3da5353d2ef' }
+

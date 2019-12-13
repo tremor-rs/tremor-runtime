@@ -20,7 +20,7 @@ onramp:
       <key>: <value>
 ```
 
-The [`codec`](../codecs) field is optional and if not provided will use Onramps default codec.
+The [`codec`](codecs.md) field is optional and if not provided will use Onramps default codec.
 
 The `config` contains a map (key-value pairs) specific to the onramp type.
 
@@ -30,7 +30,12 @@ The `config` contains a map (key-value pairs) specific to the onramp type.
 
 The Kafka onramp connects to one or more Kafka topics. It uses librdkafka to handle connections and can use the full set of [librdkaka configuration options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-kafka://<config_first_broker_host>[:<config_first_broker_port>]/<topic>/<partition>/<offset>
+```
 
 Supported configuration options are:
 
@@ -57,12 +62,19 @@ onramp:
 
 ### udp
 
-The ump onramp allows receiving data via UDP datagrams.
+The udp onramp allows receiving data via UDP datagrams.
+
+The default [codec](codecs.md#string) is `string`.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-udp://<sender_ip>:<sender_port>/<config_receive_port>
+```
 
 Supported configuration options are:
 
-- `host` - The IP to listen on
-- `port` - The Port to listen on
+* `host` - The IP to listen on
+* `port` - The Port to listen on
 
 Example:
 
@@ -80,15 +92,16 @@ onramp:
       host: '127.0.0.1'
 ```
 
-
-
-
-
 ### file
 
 The file onramp reads the content of a file, line by line. And sends each line as an event. It has the ability to shut down the system upon completion. Files can be `xz` compressed.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-file://<tremor-host.local>/<config_source_file>
+```
 
 Supported configuration options are:
 
@@ -107,9 +120,14 @@ onramp:
 
 ### metronome
 
-This sends a periodic tick down the output. It is an excelent tool to generate some test traffic to validate pipelines.
+This sends a periodic tick downstream. It is an excellent tool to generate some test traffic to validate pipelines.
 
-The default [codec](../codecs) is `pass`. (since we already output decoded JSON)
+The default [codec](codecs.md#pass) is `pass`. (since we already output decoded JSON)
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-metronome://<tremor-host.local>/<config_interval>
+```
 
 Supported configuration options are:
 
@@ -125,13 +143,59 @@ onramp:
       interval: 10000
 ```
 
+### crononome
+
+This sends a scheduled tick down the offramp. Schedules can be one-off or repeating and use a cron-like format.
+
+Multiple cron entries can be configured, each with a symbolic name and an optional JSON payload in addition to the cron expression.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-crononome://<tremor-host.local>
+```
+
+Supported configuration options are:
+
+* `entries` - A sequence of entries
+
+Example
+
+```yaml
+onramp:
+  - id: crononome
+    type: crononome
+    codec: json
+    config:
+      entries:
+## every second
+        - name: 1s
+          expr: "* * * * * *"
+## every 5 seconds
+        - name: 5s
+          expr: "0/5 * * * * *"
+## every minute
+        - name: 1m
+          expr: "0 * * * * *"
+          payload:
+            snot: badger
+```
+
+Cron entries that are historic or in the past ( relative to the current UTC time ) will be ignored.
+Cron entries beyond 2038 will not work due to underlying libraries ( rust, chrono, cron.rs ) suffering
+from the [year 2038 problem](https://en.wikipedia.org/wiki/Year_2038_problem).
+
 ### blaster
 
 NOTE: This onramp is for benchmarking use, it should not be deployed in a live production system.
 
 The blaster onramp is built for performance testing, but it can be used for spaced out replays of events as well. Files to replay can be `xz` compressed. It will keep looping over the file.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-blaster://<tremor-host.local>/<config_source_file>
+```
 
 Supported configuration options are:
 
@@ -157,13 +221,17 @@ This listens on a specified port for inbound tcp data.
 The onramp can leverage preprocessors to segment data before codecs are applied and events are forwarded
 to pipelines.
 
-The default [codec](../codecs) is `json`.
+The default [codec](codecs.md#json) is `json`.
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-tcp://<client_ip>:<client_port>/<config_server_port>
+```
 
 Supported configuration options are:
-* `host` - The host to advertise as
-* `port` - The TCP port to listen on
-* `is_non_blocking` - Is the socket configured as non-blocking ( default: false )
-* `ttl` - Set the socket's time-to-live ( default: 64 )
+
+* `host` - The IP to listen on
+* `port` - The Port to listen on
 
 Example:
 
@@ -178,8 +246,6 @@ onramp:
     config:
       host: "localhost"
       port: 9000
-      is_non_blocking: true
-      ttl: 32
 ```
 
 ### rest ( alpha )
@@ -189,17 +255,22 @@ The rest onramp listens on a specified port for inbound RESTful ( http ) data.
 The onramp can leverage preprocessors to segment rest body content but does not currently
 support codecs. Body content is presumed to be UTF-8 encoded.
 
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-rest://<tremor-rest-client-host.remote>
+```
+
 Supported configuration options are:
 
 * `host` - The host to advertise as
 * `port` - The TCP port to listen on
 * `resources` - A set of HTTP method / relative paths to accept
-  - `path` - The ( possibly parameterized ) path for which a set of HTTP methods is acceptable
-    - `allow`
-      - `methods` - Array of acceptable HTTP methods for this path
-      - `method` - GET, PUT, POST, PATCH, or DELETE
-      - `params` - An optional set of required parameters
-      - `status_code` - An override for the HTTP status code to return to with the response
+  * `path` - The ( possibly parameterized ) path for which a set of HTTP methods is acceptable
+    * `allow`
+      * `methods` - Array of acceptable HTTP methods for this path
+      * `method` - GET, PUT, POST, PATCH, or DELETE
+      * `params` - An optional set of required parameters
+      * `status_code` - An override for the HTTP status code to return to with the response
 
 Status codes:
 
@@ -233,3 +304,29 @@ Known limitations:
 Currently paths and path parameters are neither checked nor validated, nor are required parameters.
 Response status code configuration is also not currently respected. It is currently not possible to
 configure rest onramps via swagger, raml or openapi configuration files.
+
+### ws
+
+Websocket onramp. Receiving either binary or text packages from a websocket connection. the url is: `ws://<host>:<port>/`
+
+The event [origin URI](../tremor-script/functions/origin.md) set by the onramp is of the form:
+```
+tremor-ws://<tremor-ws-client-host.remote>
+```
+
+Supported configuration options are:
+
+* `host` - The IP to listen on
+* `port` - The Port to listen on
+
+Example:
+
+```yaml
+onramp:
+  - id: ws
+    type: ws
+    codec: json
+    config:
+      port: 12201
+      host: '127.0.0.1'
+```

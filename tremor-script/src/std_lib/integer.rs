@@ -1,4 +1,4 @@
-// Copyright 2018-2019, Wayfair GmbH
+// Copyright 2018-2020, Wayfair GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::{Context, Registry};
-use crate::tremor_fn;
+use crate::registry::Registry;
+use crate::tremor_const_fn;
 
-pub fn load<Ctx: 'static + Context>(registry: &mut Registry<Ctx>) {
-    registry.insert(tremor_fn! (integer::parse(_context, _input: String) {
+pub fn load(registry: &mut Registry) {
+    registry.insert(tremor_const_fn! (integer::parse(_context, _input: String) {
         _input.parse::<i64>().map_err(to_runtime_error).map(Value::from)
     }));
 }
