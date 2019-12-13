@@ -161,7 +161,7 @@ fn ws_index(
         host: req
             .connection_info()
             .remote()
-            .unwrap_or("tremor-ws-client.remote")
+            .unwrap_or("tremor-ws-client-host.remote")
             .to_string(),
         port: None,
         // TODO add server port here (like for tcp onramp) -- can be done via WsServerState

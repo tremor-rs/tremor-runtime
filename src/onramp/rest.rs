@@ -165,7 +165,7 @@ fn handler(
         host: req
             .connection_info()
             .remote()
-            .unwrap_or("tremor-rest-client.remote")
+            .unwrap_or("tremor-rest-client-host.remote")
             .to_string(),
         port: None,
         // TODO add server port here (like for tcp onramp) -- can be done via OnrampState

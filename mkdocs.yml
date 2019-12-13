@@ -39,6 +39,7 @@ nav:
       - float: tremor-script/functions/float.md
       - json: tremor-script/functions/json.md
       - math: tremor-script/functions/math.md
+      - origin: tremor-script/functions/origin.md
       - range: tremor-script/functions/range.md
       - random: tremor-script/functions/random.md
       - record: tremor-script/functions/record.md
