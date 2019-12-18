@@ -612,7 +612,7 @@ impl PartialEq for TremorAggrFnWrapper {
 
 #[derive(Debug, Clone)]
 pub struct Aggr {
-    functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
+    pub functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
 }
 
 impl Default for Aggr {
