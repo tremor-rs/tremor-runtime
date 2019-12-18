@@ -34,6 +34,10 @@ Returns if the `input` string is empty or not.
 
 Returns the length of the `input` string (counted as utf8 characters not bytes!).
 
+### string::bytes(input) -> int
+
+Returns the number of bytes composing the `input` string (may not be equivalent to the number of characters!).
+
 ### string::replace(input, from, to) -> string
 
 Replaces all occurrences of `from` in `Input` to `to`.

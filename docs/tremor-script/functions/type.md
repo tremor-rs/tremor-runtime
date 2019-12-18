@@ -4,7 +4,7 @@ The type module contains functions that help inspecting types of values.
 
 ## Functions
 
-### type::as_string(value)
+### type::as_string(value) -> string
 
 Returns a string representation for the value type:
 
@@ -16,34 +16,34 @@ Returns a string representation for the value type:
 * `"array"`
 * `"record"`
 
-### type::is_null(value)
+### type::is_null(value) -> bool
 
 Returns if the value is `null`.
 
-### type::is_bool(value)
+### type::is_bool(value) -> bool
 
 Returns if the value is a boolean.
 
-### type::is_integer(value)
+### type::is_integer(value) -> bool
 
 Returns if the value is an integer.
 
-### type::is_float(value)
+### type::is_float(value) -> bool
 
 Returns if the value is a float.
 
-### type::is_number(value)
+### type::is_number(value) -> bool
 
 Returns if the value is either a float or an integer.
 
-### type::is_string(value)
+### type::is_string(value) -> bool
 
 Returns if the value is a string.
 
-### type::is_array(value)
+### type::is_array(value) -> bool
 
 Returns if the value is an array.
 
-### type::is_record(value)
+### type::is_record(value) -> bool
 
 Returns if the value is a record.

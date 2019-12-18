@@ -8,7 +8,7 @@ The time namespace contains functions that provide easier retrieval, manipulatio
 
 ## Functions
 
-### datetime::parse(datetime, input_format)
+### datetime::parse(datetime_string, input_format) -> datetime
 
 Creates a new timestamp from the datetime string passed to the function and the format of the input string being passed. Fails if an incorrect string is passed to the function. The input formats supported are mentioned below.
 
@@ -24,7 +24,7 @@ datetime::parse("1983 Apr 13 12:09:14.274 +0000", "%Y %b %d %H:%M:%S%.3f %z")
 ## output: 419083754274000000
 ```
 
-### datetime::format(datetime, format_string)
+### datetime::format(datetime, format_string) -> string
 
 Converts a timestamp to the format specified in the format_string. Accepts format strings which contain the respective components of the format string (%Y, %m, %d, %H, %M, %S  )
 
@@ -33,7 +33,7 @@ datetime::format(event.syslog_timestamp, "%Y-%m-%d %H:%M:%S%.9f")
 ## output: 2019-04-20 9:41:22.123456789
 ```
 
-### datetime::iso8601(datetime)
+### datetime::iso8601(datetime) -> string
 
 Converts a timestamp to the format conforming to the iso8601 specification.
 
@@ -44,7 +44,7 @@ datetime::iso8601(event.syslog_timestamp)
 ## output: 2019-06-04T13:43:02.123456789+00:00
 ```
 
-### datetime::year(datetime)
+### datetime::year(datetime) -> int
 
 Returns the year from a given timestamp.
 
@@ -53,7 +53,7 @@ datetime::year(1559655782000000000)
 ## output: 2019
 ```
 
-### datetime::month(datetime)
+### datetime::month(datetime) -> int
 
 Returns the month from a given timestamp in a numerical format
 
@@ -62,7 +62,7 @@ datetime::month(1559655782000000000)
 ## output: 6
 ```
 
-### datetime::day(datetime)
+### datetime::day(datetime) -> int
 
 Returns the day of the month from a given timestamp.
 
@@ -71,7 +71,7 @@ datetime::day(1559655782000000000)
 ## output: 17
 ```
 
-### datetime::hour(datetime)
+### datetime::hour(datetime) -> int
 
 Returns the hour from a given timestamp.
 
@@ -80,7 +80,7 @@ datetime::hour(1559655782000000000)
 ## output: 13
 ```
 
-### datetime::minute(datetime)
+### datetime::minute(datetime) -> int
 
 Returns the minute from a given timestamp.
 
@@ -89,7 +89,7 @@ datetime::minute(1559655782000000000)
 ## output: 43
 ```
 
-### datetime::second(datetime)
+### datetime::second(datetime) -> int
 
 Returns the second from a given timestamp.
 
@@ -98,33 +98,70 @@ datetime::second(1559655782000000000)
 ## output: 2
 ```
 
-### datetime::millisecond(datetime) / datetime::microsecond(datetime) / datetime::nanosecond(datetime)
+### datetime::subsecond(datetime) -> int
 
-Returns the corresponding millisecond, microsecond or nanosecond component of the timestamp.
+Returns the subsecond from a given timestamp.
+
+```tremor
+datetime::subsecond(1559655782000000042)
+## output: 42
+```
+
+### datetime::millisecond(datetime) -> int
+
+Returns the corresponding millisecond component of the timestamp.
 
 ```tremor
 datetime::millisecond(1559655782123456789)
 ## output: 123
+```
+
+### datetime::microsecond(datetime) -> int
+
+Returns the corresponding microsecond component of the timestamp.
+
+```tremor
 datetime::microsecond(1559655782123456789)
 ## output: 456
+```
+
+### datetime::nanosecond(datetime) -> int
+
+Returns the corresponding nanosecond component of the timestamp.
+
+```tremor
 datetime::nanosecond(1559655782123456789)
 ## output: 789
 ```
 
-### datetime::to_nearest_millisecond(datetime) / datetime::to_nearest_microsecond(datetime) / datetime::to_nearest_second()
+### datetime::to_nearest_millisecond(datetime) -> datetime
 
-Rounds the given time to the nearest micro, milli or second. If the fractional part is above half of the nearest component (e.g. millisecond for nearest_millisecond), it will be rounded to the value of the component, else it will be truncated.
+Rounds the given time to the nearest millisecond. If the fractional part is above half of the nearest component (millisecond), it will be rounded to the value of the component, else it will be truncated.
 
 ```tremor
 datetime::to_nearest_millisecond(1559655782123456789)
 ## output: 1559655782123000000
+```
+
+### datetime::to_nearest_microsecond(datetime) -> datetime
+
+Rounds the given time to the nearest microsecond. If the fractional part is above half of the nearest component (microsecond), it will be rounded to the value of the component, else it will be truncated.
+
+```tremor
 datetime::to_nearest_microsecond(1559655782123456789)
 ## output: 1559655782123457000
+```
+
+### datetime::to_nearest_second(datetime) -> datetime
+
+Rounds the given time to the nearest second. If the fractional part is above half of the nearest component (second), it will be rounded to the value of the component, else it will be truncated.
+
+```tremor
 datetime::to_nearest_nsecond(1559655782123456789)
 ## output: 1558655782000000000
 ```
 
-### datetime::from_human_format(human_format_string)
+### datetime::from_human_format(human_format_string) -> int
 
 Returns a timestamp representing the interval specified in human format (e.g. "5 minutes", "10 hours"). Fails if an incorrect format is given.
 
@@ -139,7 +176,7 @@ datetime::from_human_format("17 years 2 weeks 1 day")
 ## output: 5377536000000000000
 ```
 
-### datetime::today()
+### datetime::today() -> datetime
 
 Returns the timestamp for the beginning of the current day.
 
@@ -148,41 +185,49 @@ datetime::today()
 ## output: 156072960000000000
 ````
 
-### datetime::with_nanoseconds(n)
+### datetime::with_nanoseconds(n) -> int
 
 Returns a timestamp representing an interval of `n` nanoseconds
 
-### datetime::with_milliseconds(n)
+### datetime::with_microseconds(n) -> int
+
+Returns a timestamp representing an interval of `n` microseconds
+
+### datetime::with_milliseconds(n) -> int
 
 Returns a timestamp representing an interval of `n` milliseconds
 
-### datetime::with_hours(n)
+### datetime::with_hours(n) -> int
 
 Returns a timestamp representing an interval of `n` hours.
 
-### datetime::with_days(n)
+### datetime::with_days(n) -> int
 
 Returns a timestamp representing an interval of `n` days.
 
-### datetime::with_minutes(n)
+### datetime::with_minutes(n) -> int
 
 Returns a timestamp representing interval of `n` minutes.
 
-### datetime::with_seconds(n)
+### datetime::with_seconds(n) -> int
 
 Returns a timestamp representing an interval of `n` seconds
 
-### datetime::with_weeks(n)
+### datetime::with_weeks(n) -> int
 
 Returns a timestamp representing an interval of `n` weeks
 
+### datetime::with_years(n) -> int
+
+Returns a timestamp representing an interval of `n` years
+
 ```tremor
-datetime::with_naoseconds(134)
-### output: 134
+datetime::with_nanoseconds(134)
+## output: 134
 datetime::with_microseconds(269)
-### output: 269000
+## output: 269000
 datetime::with_milliseconds(169)
-### output: 169000000
+## output: 169000000
 datetime::with_seconds(13)
 ## output: 130000000000
 datetime::with_minutes(1)
@@ -192,15 +237,16 @@ datetime::with_days(12)
 datetime::with_weeks(2)
 ## output: 1123200000000000
 datetime::with_years(10)
-315532800000000000
+## output: 315532800000000000
 ```
 
-### datetime::without_subseconds()
+### datetime::without_subseconds(datetime) -> int
 
-Returns the timestamp subseconds component.
+Returns the timestamp without subseconds component.
 
 ```tremor
-datetime::without_subseconds()
+datetime::without_subseconds(1559655782000000042)
+## output: 1559655782
 ```
 
 ## Input Formats
