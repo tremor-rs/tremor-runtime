@@ -1,6 +1,6 @@
 [licenses]
 unlicensed= "deny"
-unknown= "deny"
+#unknown= "deny"
 
 #
 # License types that we explicitly allow
@@ -24,36 +24,39 @@ allow = [
 #
 # Crates with no detectable license files that we explicitly allow
 #
-skip = [
-    # ring has multiple licenses but is ASL 2 compatible
-    { name = "ring", licenses = [] },
-    # webpki uses an ISC license but it only has a 0.83 confidence level
-    { name = "webpki", licenses = [] },
-]
+#skip = [
+#    # ring has multiple licenses but is ASL 2 compatible
+#    { name = "ring", licenses = [] },
+#    # webpki uses an ISC license but it only has a 0.83 confidence level
+#    { name = "webpki", licenses = [] },
+#]
 
 #
 # Crates with licenses this tool fails to auto-detect with high confidence we explicitly allow
 #
 
 # This is MIT Apache dual licensed
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "criterion-plot"
-license_files = [
+expression = "MIT AND Apache-2.0"
+license-files = [
   { path = "LICENSE-APACHE", hash = 0xa577772b },
   { path = "LICENSE-MIT", hash = 0x343f7050 }
 ]
 
 # This is MIT, Apache, CC, BSD-2 and BSD-3
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "crossbeam-channel"
-license_files = [
+expression = "MIT AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause"
+license-files = [
   { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
 ]
 
 # This is MIT, Apache, ISC tripple licensed
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "hyper-rustls"
-license_files = [
+expression = "MIT AND Apache-2.0 AND ISC"
+license-files = [
   { path = "LICENSE", hash = 0x3154a1c7 },
 ]
 
@@ -74,36 +77,46 @@ license-files = [
 ]
 
 # This is MIT, Apache, ISC tripple licensed
-[[licenses.ignore]]
+[[licenses.clarify]]
+expression = "MIT AND Apache-2.0 AND ISC"
 name = "rustls"
-license_files = [
+license-files = [
   { path = "LICENSE", hash = 0xe567c411 },
 ]
 
 # This is MIT, Apache, ISC tripple licensed
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "sct"
-license_files = [
+expression = "MIT AND Apache-2.0 AND ISC"
+license-files = [
   { path = "LICENSE", hash = 0xb7619ae7 },
 ]
 
 # ISC style
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "webpki"
-license_files = [
+expression = "ISC"
+license-files = [
   { path = "LICENSE", hash = 0x1c7e6c },
 ]
 
 # MPL-2.0
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "webpki-roots"
-license_files = [
+expression = "MPL-2.0"
+license-files = [
   { path = "LICENSE", hash = 0x6c919c48 },
 ]
 
 # This is Zlib
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "adler32"
-license_files = [
+expression = "Zlib"
+license-files = [
   { path = "LICENSE", hash = 0x1e225da6 },
 ]
+
+
+[advisories]
+# We allow RUSTSEC-2018-0006 as this is only called from clap
+ignore = ["RUSTSEC-2018-0006"]
