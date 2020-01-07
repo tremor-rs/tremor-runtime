@@ -41,16 +41,16 @@ use op::runtime::TremorFactory;
 
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
-        id: common_cow(port.0.id.to_string()),
-        port: common_cow(port.1.id.to_string()),
+        id: common_cow(&port.0.id),
+        port: common_cow(&port.1.id),
         had_port: true,
     }
 }
 
 fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
-        id: common_cow(port.0.id.to_string()),
-        port: common_cow(port.1.id.to_string()),
+        id: common_cow(&port.0.id),
+        port: common_cow(&port.1.id),
         had_port: true,
     }
 }
@@ -257,7 +257,7 @@ impl Query {
                     outputs.push(id);
                 }
                 Stmt::Stream(s) => {
-                    let name = common_cow(s.id.clone());
+                    let name = common_cow(&s.id);
                     let id = name.clone();
                     if !nodes.contains_key(&id) {
                         let node = NodeConfig {
@@ -290,11 +290,10 @@ impl Query {
                     operators.insert(name, Stmt::OperatorDecl(o.clone()));
                 }
                 Stmt::Operator(o) => {
-                    let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
 
                     let node = NodeConfig {
-                        id: common_cow(name),
+                        id: common_cow(&o.id),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         config: None,
@@ -316,7 +315,7 @@ impl Query {
                     };
                     let op = node.to_op(supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(o.id.clone()), id);
+                    nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(s) => {
@@ -324,7 +323,6 @@ impl Query {
                     scripts.insert(name, Stmt::ScriptDecl(s.clone()));
                 }
                 Stmt::Script(o) => {
-                    let name = o.id.clone().to_string();
                     let target = o.target.clone().to_string();
                     let inner_stmt: tremor_script::ast::Stmt = scripts
                         .get(&target)
@@ -340,7 +338,7 @@ impl Query {
                     };
 
                     let node = NodeConfig {
-                        id: common_cow(name),
+                        id: common_cow(&o.id),
                         kind: NodeKind::Operator,
                         op_type: "trickle::script".to_string(),
                         config: None,
@@ -352,7 +350,7 @@ impl Query {
 
                     let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(o.id.clone()), id);
+                    nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
                 }
             };
@@ -567,7 +565,7 @@ pub fn supported_operators(
         ["generic", "batch"] => BatchFactory::new_boxed().from_node(config)?,
         ["generic", "backpressure"] => BackpressureFactory::new_boxed().from_node(config)?,
         [namespace, name] => {
-            return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
+            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }
         _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
     };

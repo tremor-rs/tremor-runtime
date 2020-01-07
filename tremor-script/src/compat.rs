@@ -51,7 +51,6 @@ pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len:
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr.to_str().map_err(Error::from).and_then(|s| eval(s)) {
         Ok(result) => {
-            let result = result.clone();
             if result.len() < len {
                 unsafe {
                     let src = result.as_ptr() as *const u8;
