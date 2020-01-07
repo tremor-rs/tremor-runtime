@@ -25,7 +25,7 @@ random::string(16) # 16 alphanumeric characters. eg: "QuSFjpW8PBNewRml"
 random::string(0)  # ""
 ```
 
-### random::integer([a][, b]) -> int
+### random::integer(a?, b?) -> int
 
 Generates a random integer, with the functionality changing based on the number of arguments passed.
 
@@ -57,7 +57,7 @@ Generates a random [integer](../index.md#integer-numerics).
 random::integer() # an integer
 ```
 
-### random::float([a][, b]) -> float
+### random::float(a?, b?) -> float
 
 Generates a random float, with the functionality changing based on the number of arguments passed.
 

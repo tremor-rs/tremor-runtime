@@ -17,10 +17,37 @@
 // bundled here for common use). These can be eventually utilized from tremor-script,
 // as part of structured documentation and automatic doc generation.
 
+use std::fmt;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FunctionSignatureDoc {
+    pub full_name: String,
+    pub args: Vec<String>,
+    pub result: String,
+}
+
+impl fmt::Display for FunctionSignatureDoc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}({}) -> {}",
+            self.full_name,
+            self.args.join(", "),
+            self.result
+        )
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionDoc {
-    pub signature: String,
+    pub signature: FunctionSignatureDoc,
     pub description: String,
     pub summary: Option<String>,
     pub examples: Option<String>,
+}
+
+impl fmt::Display for FunctionDoc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}\n\n{}", self.signature, self.description)
+    }
 }
