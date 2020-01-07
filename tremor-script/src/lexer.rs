@@ -1057,7 +1057,7 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::UnterminatedHereDoc(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!(r#""""{}\n"#, strings.join("\n")).to_string(),
+                        format!(r#""""{}\n"#, strings.join("\n")),
                     )
                     .into())
                 }

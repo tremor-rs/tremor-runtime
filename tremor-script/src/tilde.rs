@@ -403,7 +403,7 @@ impl Extractor {
                     }
                 }
                 Self::Base64 => {
-                    let encoded = s.to_string().clone();
+                    let encoded = s.to_string();
                     let decoded = base64::decode(&encoded)?;
                     if !result_needed {
                         return Ok(Value::null());

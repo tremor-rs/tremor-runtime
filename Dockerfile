@@ -1,6 +1,6 @@
 FROM centos:7 as builder
 
-ARG rust_version=1.36.0
+ARG rust_version=1.40.0
 RUN yum install centos-release-scl -y && \
     yum install devtoolset-8-gcc devtoolset-8-gcc-c++ jq git2u make gcc clang openssl-static libstdc++-static bison autoconf -y && \
     yum clean all
@@ -25,6 +25,8 @@ COPY tremor-api ./tremor-api
 COPY dissect ./dissect
 COPY kv ./kv
 # Binaries
+COPY tremor-query ./tremor-query
+COPY http-bench-server ./http-bench-server
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
 

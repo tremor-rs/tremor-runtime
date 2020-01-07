@@ -199,7 +199,7 @@ fn path_params(patterns: Vec<EndpointConfig>, path: &str) -> (String, HashMap<St
         let mut path = actix_web::dev::Path::new(path);
         if ResourceDef::new(&pattern.path).match_path(&mut path) {
             return (
-                pattern.path.clone(),
+                pattern.path,
                 path.iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),

@@ -14,16 +14,14 @@
 
 #![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(
-    feature = "cargo-clippy",
-    deny(
-        clippy::all,
-        clippy::result_unwrap_used,
-        clippy::option_unwrap_used,
-        clippy::unnecessary_unwrap,
-        clippy::pedantic
-    )
+#![deny(
+    clippy::all,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
 )]
+#![allow(clippy::must_use_candidate)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -80,12 +78,12 @@ lazy_static! {
     };
 }
 
-pub fn common_cow(s: String) -> Cow<'static, str> {
+pub fn common_cow(s: &str) -> Cow<'static, str> {
     macro_rules! cows {
         ($target:expr, $($cow:expr),*) => {
-            match $target.as_str() {
+            match $target {
                 $($cow => $cow.into()),*,
-                _ => Cow::Owned($target),
+                _ => Cow::Owned($target.to_string()),
             }
         };
     }
@@ -318,7 +316,7 @@ pub fn buildin_ops(
         ["generic", "batch"] => BatchFactory::new_boxed(),
         ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
         [namespace, name] => {
-            return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
+            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }
         _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
     };
@@ -361,7 +359,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let mut outputs = Vec::new();
     let mut port_indexes: PortIndexMap = HashMap::new();
     for stream in &config.interface.inputs {
-        let stream = common_cow(stream.clone());
+        let stream = common_cow(&stream);
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Input,
@@ -375,7 +373,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     }
 
     for node in &config.nodes {
-        let node_id = common_cow(node.id.clone());
+        let node_id = common_cow(&node.id);
         let id = graph.add_node(NodeConfig {
             id: node_id.clone(),
             kind: NodeKind::Operator,
@@ -388,7 +386,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     }
 
     for stream in &config.interface.outputs {
-        let stream = common_cow(stream.clone());
+        let stream = common_cow(&stream);
         let id = graph.add_node(NodeConfig {
             id: stream.clone(),
             kind: NodeKind::Output,
@@ -529,7 +527,7 @@ impl ExecutableGraph {
         if let Some(ival) = self.metric_interval {
             if event.ingest_ns - self.last_metrics > ival {
                 let mut tags = HashMap::new();
-                tags.insert("pipeline".into(), common_cow(self.id.clone()).into());
+                tags.insert("pipeline".into(), common_cow(&self.id).into());
                 self.enqueue_metrics("events", tags, event.ingest_ns);
                 self.last_metrics = event.ingest_ns;
             }

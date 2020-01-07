@@ -215,10 +215,10 @@ struct WsOfframpWorker(
 );
 
 impl WsOfframpWorker {
-    fn hb(&self, ctx: &mut Context<Self>) {
+    fn hb(ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(1, 0), |act, ctx| {
             eat_error!(act.2.write(Message::Ping(String::from("Yay tremor!"))));
-            act.hb(ctx);
+            Self::hb(ctx);
         });
     }
 }
@@ -228,7 +228,7 @@ impl Actor for WsOfframpWorker {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.hb(ctx)
+        Self::hb(ctx)
     }
 
     fn stopped(&mut self, _: &mut Context<Self>) {

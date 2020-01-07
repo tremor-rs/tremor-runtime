@@ -41,12 +41,12 @@ impl<'de> Deserialize<'de> for InputPort {
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
             [id, port] => Ok(Self {
-                id: common_cow(id.to_string()),
-                port: common_cow(port.to_string()),
+                id: common_cow(id),
+                port: common_cow(port),
                 had_port: true,
             }),
             [id] => Ok(Self {
-                id: common_cow(id.to_string()),
+                id: common_cow(id),
                 port: "in".into(),
                 had_port: false,
             }),
@@ -87,12 +87,12 @@ impl<'de> Deserialize<'de> for OutputPort {
         let v: Vec<&str> = s.split('/').collect();
         match v.as_slice() {
             [id, port] => Ok(Self {
-                id: common_cow(id.to_string()),
-                port: common_cow(port.to_string()),
+                id: common_cow(id),
+                port: common_cow(port),
                 had_port: true,
             }),
             [id] => Ok(Self {
-                id: common_cow(id.to_string()),
+                id: common_cow(id),
                 port: "out".into(),
                 had_port: false,
             }),

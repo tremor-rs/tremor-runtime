@@ -134,12 +134,12 @@ impl TrickleOperator {
                             data: op::generic::batch::empty(),
                             max_delay_ns,
                             first_ns: 0,
-                            id: common_cow(op.id.clone()),
+                            id: common_cow(&op.id),
                         })
                     }
                     ("grouper", "bucket") => Box::new(op::grouper::bucket::Grouper {
                         buckets: HashMap::new(),
-                        _id: common_cow(op.id.clone()),
+                        _id: common_cow(&op.id),
                     }),
                     (s, o) => return Err(ErrorKind::UnknownOp(s.into(), o.into()).into()),
                 }
