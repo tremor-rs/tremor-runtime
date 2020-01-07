@@ -25,6 +25,8 @@ COPY tremor-api ./tremor-api
 COPY dissect ./dissect
 COPY kv ./kv
 # Binaries
+COPY tremor-query ./tremor-query
+COPY http-bench-server ./http-bench-server
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
 
