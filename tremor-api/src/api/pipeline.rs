@@ -39,7 +39,7 @@ pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
 pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
     let decoded_data: tremor_pipeline::config::Pipeline = decode(&req, &data_raw)?;
     let url = build_url(&["pipeline", &decoded_data.id])?;
-    let pipeline = tremor_pipeline::build_pipeline(decoded_data.clone())
+    let pipeline = tremor_pipeline::build_pipeline(decoded_data)
         .map_err(|e| error::ErrorBadRequest(format!("Bad pipeline: {}", e)))?;
     let result = data
         .world

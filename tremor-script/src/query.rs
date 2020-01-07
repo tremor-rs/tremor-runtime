@@ -50,7 +50,7 @@ rental! {
 
 #[cfg_attr(tarpaulin, skip)]
 impl PartialEq for rentals::Stmt {
-    fn eq(&self, other: &rentals::Stmt) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.suffix() == other.suffix()
     }
 }
@@ -59,7 +59,7 @@ impl Eq for rentals::Stmt {}
 
 #[cfg_attr(tarpaulin, skip)]
 impl PartialOrd for rentals::Stmt {
-    fn partial_cmp(&self, _other: &rentals::Stmt) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
     }
 }
@@ -107,7 +107,7 @@ where
         })
         .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
 
-        Ok(Query {
+        Ok(Self {
             query: Arc::new(query),
             source,
             locals,
@@ -157,7 +157,7 @@ where
         h.finalize()
     }
 
-    pub fn format_error(&self, e: Error) -> String {
+    pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
             h.to_string()

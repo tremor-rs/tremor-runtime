@@ -111,7 +111,7 @@ impl<A: Artefact> Registry<A> {
     pub fn unpublish(&mut self, mut id: ServantId) -> Result<ActivatorLifecycleFsm<A>> {
         id.trim_to_instance();
         match self.map.remove(&id) {
-            Some(removed) => Ok(removed.to_owned()),
+            Some(removed) => Ok(removed),
             None => Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into()),
         }
     }

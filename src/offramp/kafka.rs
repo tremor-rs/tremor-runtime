@@ -105,7 +105,7 @@ impl offramp::Impl for Kafka {
             Ok(Box::new(Self {
                 pool,
                 producer,
-                topic: config.topic.clone(),
+                topic: config.topic,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
                 key,

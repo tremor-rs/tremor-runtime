@@ -179,29 +179,25 @@ where
         self.shadowed_vars.pop();
     }
 
-    fn shadow_name(&self, id: usize) -> String {
-        format!(" __SHADOW {}__ ", id)
-    }
-
     fn find_shadow_var(&self, id: &str) -> Option<String> {
         let mut r = None;
         for (i, s) in self.shadowed_vars.iter().enumerate() {
             if s == id {
                 //FIXME: make sure we never overwrite this,
-                r = Some(self.shadow_name(i))
+                r = Some(shadow_name(i))
             }
         }
         r
     }
 
     fn reserve_shadow(&mut self) -> usize {
-        self.var_id(&self.shadow_name(self.shadowed_vars.len()))
+        self.var_id(&shadow_name(self.shadowed_vars.len()))
     }
 
     fn reserve_2_shadow(&mut self) -> (usize, usize) {
         let l = self.shadowed_vars.len();
-        let n1 = self.shadow_name(l);
-        let n2 = self.shadow_name(l + 1);
+        let n1 = shadow_name(l);
+        let n2 = shadow_name(l + 1);
         (self.var_id(&n1), self.var_id(&n2))
     }
 
@@ -883,4 +879,8 @@ fn replace_last_shadow_use<'script>(replace_idx: usize, expr: Expr<'script>) -> 
         }
         other => other,
     }
+}
+
+fn shadow_name(id: usize) -> String {
+    format!(" __SHADOW {}__ ", id)
 }

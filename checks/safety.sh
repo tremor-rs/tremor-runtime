@@ -57,7 +57,7 @@ while getopts hauiprebldxc opt; do
         l)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d'  "$file" | grep 'let _' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'let _' > /dev/null
                 then
                     echo "##[error] 'let _' found in $file please use error handling."
                     grep -nH 'let _' "$file"

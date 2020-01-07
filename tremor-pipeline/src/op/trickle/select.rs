@@ -460,7 +460,7 @@ impl Operator for TrickleSelect {
             #[allow(clippy::transmute_ptr_to_ptr)]
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             consts[GROUP_CONST_ID] = group_value.clone_static();
-            consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+            consts[GROUP_CONST_ID].push(group_str).ok();
 
             let env = Env {
                 context: &ctx,
