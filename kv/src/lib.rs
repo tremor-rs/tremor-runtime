@@ -49,16 +49,14 @@
 // | whitespace             | we always run in 'lenient mode' as is the default of LS | No        |
 #![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(
-    feature = "cargo-clippy",
-    deny(
-        clippy::all,
-        clippy::result_unwrap_used,
-        clippy::option_unwrap_used,
-        clippy::unnecessary_unwrap,
-        clippy::pedantic
-    )
+#![deny(
+    clippy::all,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
 )]
+#![allow(clippy::must_use_candidate)]
 
 use serde::{Deserialize, Serialize};
 use simd_json::value::borrowed::{Object, Value};
@@ -195,9 +193,7 @@ impl Pattern {
     }
     /// Splits a string that represents KV pairs.
     ///
-    /// * input - The input string
-    /// * field_seperator - An array of characters that seperate fields
-    /// * key_seperator - An array of characters that seperats the key from a value
+    /// * `input` - The input string
     ///
     /// Note: Fields that have on value are dropped.
     pub fn run<'input>(&self, input: &'input str) -> Option<Object<'input>> {

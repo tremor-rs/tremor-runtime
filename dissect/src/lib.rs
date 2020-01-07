@@ -179,16 +179,15 @@
 
 #![forbid(warnings)]
 #![recursion_limit = "1024"]
-#![cfg_attr(
-    feature = "cargo-clippy",
-    deny(
-        clippy::all,
-        clippy::result_unwrap_used,
-        clippy::option_unwrap_used,
-        clippy::unnecessary_unwrap,
-        clippy::pedantic
-    )
+#![deny(
+    clippy::all,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
 )]
+#![allow(clippy::must_use_candidate)]
+
 use halfbrown::HashMap;
 use simd_json::value::borrowed::{Object, Value};
 use std::fmt;
