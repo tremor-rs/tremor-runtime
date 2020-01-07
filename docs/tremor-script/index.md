@@ -113,7 +113,7 @@ The language does not support literal character or Unicode code-points at this t
 
 ##### String Interpolation
 
-For strings tremor allows string polation, this means embedding code directly into strings to create strings out of them. This is a convinience as an alternative of using the string::format function.
+For strings tremor allows string interpolation, this means embedding code directly into strings to create strings out of them. This is a convenience as an alternative of using the string::format function.
 
 ```tremor
 "I am a { "string with {1} interpolation." }"
