@@ -1,6 +1,5 @@
 [licenses]
 unlicensed= "deny"
-#unknown= "deny"
 
 #
 # License types that we explicitly allow
@@ -20,16 +19,6 @@ allow = [
     "CC0-1.0",
     "OpenSSL",
 ]
-
-#
-# Crates with no detectable license files that we explicitly allow
-#
-#skip = [
-#    # ring has multiple licenses but is ASL 2 compatible
-#    { name = "ring", licenses = [] },
-#    # webpki uses an ISC license but it only has a 0.83 confidence level
-#    { name = "webpki", licenses = [] },
-#]
 
 #
 # Crates with licenses this tool fails to auto-detect with high confidence we explicitly allow
