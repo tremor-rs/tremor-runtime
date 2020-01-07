@@ -67,6 +67,7 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
     }
 
     fn on_activate(&self) {
+        // ALLOW
         let _clippy = self;
         debug!(
             "Lifecycle on_activate not implemented state is now: {:?}",
@@ -75,11 +76,13 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
     }
 
     fn on_passivate(&self) {
+        // ALLOW
         let _clippy = self;
         debug!("Lifecycle on_passivate not implemented");
     }
 
     fn on_destroy(&self) {
+        // ALLOW
         let _clippy = self;
         debug!(
             "Lifecycle on_destroy not implemented state is now:: {:?}",
