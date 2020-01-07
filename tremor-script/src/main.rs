@@ -24,6 +24,7 @@
     clippy::pedantic
 )]
 #![allow(clippy::must_use_candidate)]
+
 mod ast;
 mod ctx;
 mod datetime;
