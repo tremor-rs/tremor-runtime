@@ -84,8 +84,8 @@ jobs:
           RUSTC_WRAPPER: sccache
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
-        run: ./checks/api.sh -c
+        run: ./.github/checks/api.sh -c
       - name: Run tremor-tool tests
-        run: ./checks/api.sh -t
+        run: ./.github/checks/api.sh -t
       - name: Run eqc tests
-        run: ./checks/api.sh -e
+        run: ./.github/checks/api.sh -e
