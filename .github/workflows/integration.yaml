@@ -34,20 +34,26 @@ jobs:
       - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
-      - name: Build
+      - name: Run Integration Tests
         env:
           RUSTC_WRAPPER: sccache
-        run: cargo build --all
-      - name: Run tests
-        env:
-          RUSTC_WRAPPER: sccache
-        run: cargo test --all
-  code-coverage:
+        run: make it
+  api-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
       - name: Install deps
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - name: Install coyote
+        run: go get github.com/landoop/coyote
+      - name: Install yaml2json
+        run: go get github.com/bronze1man/yaml2json
+      - name: install EQC
+        run: curl -O http://quviq-licencer.com/downloads/eqcR21.zip && unzip eqcR21.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+      - name: Activate EQC
+        run:  erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
+      - name: generate yaml
+        run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -56,7 +62,7 @@ jobs:
         id: cache-build
         with:
           path: ~/.cache/sccache
-          key: sccache-cache-tarpaulin-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             sccache-cache-${{ runner.os }}-
       - uses: actions/cache@v1
@@ -73,13 +79,13 @@ jobs:
       - name: Prepare sccache command bin for cache
         if: steps.cache-sccache.outputs.cache-hit != 'true'
         run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
-      - name: install tarpaulin
-        run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
-      - name: run tarpaulin
+      - name: Build
         env:
           RUSTC_WRAPPER: sccache
-        run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/* --all
-      - uses: codecov/codecov-action@v1.0.2
-        with:
-          token: ${{secrets.CODECOV_TOKEN}} #required
-          file: ./cobertura.xml
+        run: cargo build -p tremor-server -p tremor-tool
+      - name: Run curl tests
+        run: ./checks/api.sh -c
+      - name: Run tremor-tool tests
+        run: ./checks/api.sh -t
+      - name: Run eqc tests
+        run: ./checks/api.sh -e
