@@ -1,4 +1,4 @@
-name: Rust - Latest
+name: Checks
 
 on: [push]
 
