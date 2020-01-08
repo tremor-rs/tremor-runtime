@@ -1,4 +1,15 @@
-# Tremor ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Rust%20-%20Latest/badge.svg) ![](https://github.com/wayfair-incubator/tremor-runtime/workflows/Security%20audit/badge.svg)
+# Tremor &emsp; ![Build Status] ![Quality Checks] ![License Checks] ![Security Checks] [![Code Coverage]][codecov.io]
+
+[Build Status]: https://github.com/wayfair-incubator/tremor-runtime/workflows/Tests/badge.svg
+[Quality Checks]: https://github.com/wayfair-incubator/tremor-runtime/workflows/Tests/badge.svg
+[License Checks]: https://github.com/wayfair-incubator/repo-template/workflows/License%20audit/badge.svg
+[Security Checks]: https://github.com/wayfair-incubator/repo-template/workflows/Security%20audit/badge.svg
+[Code Coverage]: https://codecov.io/gh/wayfair-incubator/tremor-runtime/branch/master/graph/badge.svg
+[codecov.io]: https://codecov.io/gh/wayfair-incubator/tremor-runtime
+
+**Template repository with git files, License and so on**
+---
+
 
 In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language and a query language. 
 
