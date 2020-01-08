@@ -1037,6 +1037,7 @@ dependencies = [
 [[package]]
 name = "dissect"
 version = "0.1.0"
+source = "git+https://github.com/wayfair-incubator/dissect.git#0c5195c4aa51adfdf15609a69692eda22c0d77dc"
 dependencies = [
  "halfbrown 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1525,15 +1526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-bench-server"
-version = "0.1.0"
-dependencies = [
- "actix-web 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "http-body"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,6 +1750,7 @@ dependencies = [
 [[package]]
 name = "kv"
 version = "0.1.0"
+source = "git+https://github.com/wayfair-incubator/kv.git#a4fd67eda8624bfa5e4a116ec24a9e0a274113e7"
 dependencies = [
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3879,7 +3872,7 @@ dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "codespan 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "criterion 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "dissect 0.1.0",
+ "dissect 0.1.0 (git+https://github.com/wayfair-incubator/dissect.git)",
  "distance 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "downcast-rs 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3890,7 +3883,7 @@ dependencies = [
  "hdrhistogram 6.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "hostname 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "jumphash 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "kv 0.1.0",
+ "kv 0.1.0 (git+https://github.com/wayfair-incubator/kv.git)",
  "lalrpop 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lalrpop-util 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libmath 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4297,7 +4290,7 @@ dependencies = [
 [[package]]
 name = "window"
 version = "0.1.0"
-source = "git+https://github.com/wayfair-incubator/window.git#c56fe2e0526c882eedcfe8db1ffab44e23b04ece"
+source = "git+https://github.com/wayfair-incubator/window.git#713eee085909358585c470ade7b6fdddd7509191"
 dependencies = [
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -4467,6 +4460,7 @@ dependencies = [
 "checksum dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "3fd78930633bd1c6e35c4b42b1df7b0cbc6bc191146e512bb3bedf243fcc3901"
 "checksum dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
 "checksum dirs-sys 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "afa0b23de8fd801745c471deffa6e12d248f962c9fd4b4c33787b055599bde7b"
+"checksum dissect 0.1.0 (git+https://github.com/wayfair-incubator/dissect.git)" = "<none>"
 "checksum distance 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6d9d8664cf849d7d0f3114a3a387d2f5e4303176d746d5a951aaddc66dfe9240"
 "checksum docopt 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7f525a586d310c87df72ebcd98009e57f1cc030c8c268305287a476beb653969"
 "checksum downcast-rs 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "52ba6eb47c2131e784a38b726eb54c1e1484904f013e576a25354d0124161af6"
@@ -4539,6 +4533,7 @@ dependencies = [
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
 "checksum jumphash 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "11be33dab24333149ccdac60a8774d7268f9c28595788247b16eb15d65e551b2"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
+"checksum kv 0.1.0 (git+https://github.com/wayfair-incubator/kv.git)" = "<none>"
 "checksum lalrpop 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)" = "64dc3698e75d452867d9bd86f4a723f452ce9d01fe1d55990b79f0c790aa67db"
 "checksum lalrpop-util 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c277d18683b36349ab5cd030158b54856fca6bb2d5dc5263b06288f486958b7c"
 "checksum language-tags 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a91d884b6667cd606bb5a69aa0c99ba811a115fc68915e7056ec08a46e93199a"
