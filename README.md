@@ -194,3 +194,10 @@ To execute a benchmark, build tremor in **release** mode and run the examples fr
 ```bash
 ./bench/bench0.sh
 ```
+
+
+### Ubuntu
+
+```bash
+sudo apt install git libssl-dev llvm-9-dev libclang-dev cmake
+```

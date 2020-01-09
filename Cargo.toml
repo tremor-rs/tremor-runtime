@@ -34,7 +34,7 @@ base64 = "0.10"
 bytes = "0.4"
 byteorder = "1"
 chrono = "0.4"
-elastic = "0.20"
+elastic = "0.21.0-pre.5"
 error-chain="0.12"
 futures = "0.1"
 hashbrown = { version = "0.6", features = ["serde"] }
