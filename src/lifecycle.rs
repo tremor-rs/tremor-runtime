@@ -110,7 +110,6 @@ impl<A: Artefact> Transition<ActivationState> for ActivatorLifecycleFsm<A> {
                     self.on_passivate();
                     continue; // NOTE by composition Active -> Deactive, Deactive -> Zombie
                 }
-
                 (ActivationState::Zombie, _) => break,
                 _ => {
                     // NOTE Default transition is 'do nothing'
