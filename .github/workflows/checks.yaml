@@ -1,0 +1,74 @@
+name: Checks
+
+on: [push]
+
+jobs:
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Check license headers
+        run: ./.github/checks/copyright.sh
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Safety cheks
+        run: ./.github/checks/safety.sh -a
+  unused-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install deps
+        run: sudo snap install remarshal rg
+      - uses: actions/checkout@v1
+      - name: Check for unused dependencies
+        run: ./.github/checks/deps.sh .
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Check Formating
+        run: cargo fmt --all -- --check
+  clippy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install deps
+        run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions/cache@v1
+        id: cache-build
+        with:
+          path: ~/.cache/sccache
+          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            sccache-cache-${{ runner.os }}-
+      - uses: actions/cache@v1
+        id: cache-sccache
+        with:
+          path: ~/sccache
+          key: sccache-${{ runner.os }}
+      - name: restore sccache
+        if: steps.cache-sccache.outputs.cache-hit == 'true'
+        run: cp ~/sccache/* ~/.cargo/bin
+      - name: install sccache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: cargo install sccache
+      - name: Prepare sccache command bin for cache
+        if: steps.cache-sccache.outputs.cache-hit != 'true'
+        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
+      - name: Install clippy
+        run: rustup component add clippy
+      - uses: actions-rs/clippy-check@v1
+        env:
+          RUSTC_WRAPPER: sccache
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all
