@@ -31,10 +31,12 @@
 //! enqueued due to overload
 
 use crate::offramp::prelude::*;
-use elastic::client::prelude::BulkErrorsResponse;
-use elastic::client::requests::BulkRequest;
-use elastic::client::{Client, SyncSender};
-use elastic::prelude::SyncClientBuilder;
+// use elastic::client::prelude::BulkErrorsResponse;
+// use elastic::client::requests::BulkRequest;
+// use elastic::client::{Client, SyncSender};
+// use elastic::prelude::SyncClientBuilder;
+use elastic::prelude::*;
+
 use halfbrown::HashMap;
 // use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
@@ -59,7 +61,7 @@ impl ConfigImpl for Config {}
 
 #[derive(Clone)]
 struct Destination {
-    client: Client<SyncSender>,
+    client: SyncClient,
     url: String,
 }
 
@@ -83,7 +85,7 @@ impl offramp::Impl for Elastic {
                 .iter()
                 .map(|s| {
                     Ok(Destination {
-                        client: SyncClientBuilder::new().base_url(s.clone()).build()?,
+                        client: SyncClientBuilder::new().static_node(s.clone()).build()?,
                         url: s.clone(),
                     })
                 })
@@ -114,7 +116,7 @@ impl offramp::Impl for Elastic {
 }
 
 impl Elastic {
-    fn flush(client: &Client<SyncSender>, payload: Vec<u8>) -> Result<u64> {
+    fn flush(client: &SyncClient, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
         let res = client.request(BulkRequest::new(payload)).send()?;
         for item in res.into_response::<BulkErrorsResponse>()? {
