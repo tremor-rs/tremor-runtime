@@ -1,0 +1,12 @@
+# A binding associates onramps and offramps with pipeline inputs and outputs
+# through their unique identifiers to create a deployment graph template. These
+# typically use variables that are incarnated using runtime mappings so that
+# bindings can be reused where appropriate.
+#
+binding:
+  - id: passthrough                                 # The unique name of this binding template
+    links:
+      '/onramp/ws-input/{instance}/out':
+       - '/pipeline/example/{instance}/in'
+      '/pipeline/example/{instance}/out':
+       - '/offramp/stdout-output/{instance}/in'
