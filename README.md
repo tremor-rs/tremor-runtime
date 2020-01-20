@@ -49,6 +49,8 @@ Note: Some of those restrictions are subject to change as tremor is a growing pr
 
 Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
 
+Note that sice the image is building tremor in release mode it requires some serious resources, we recommand allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. depending on the system building the image can take up to an hour.
+
 ### Local builds
 
 If you are not comfortable with managing library packages on your system or don't have experience with , please use the Docker image provided above. Local builds are not supported and purely at your own risk.

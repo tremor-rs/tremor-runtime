@@ -18,15 +18,11 @@ COPY .cargo ./.cargo
 # Main library
 COPY src ./src
 # supporting libraries
-COPY window ./window
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
 COPY tremor-api ./tremor-api
-COPY dissect ./dissect
-COPY kv ./kv
 # Binaries
 COPY tremor-query ./tremor-query
-COPY http-bench-server ./http-bench-server
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
 
@@ -42,7 +38,7 @@ RUN yum install lldb git make gcc clang openssl-static libstdc++-static bison au
 RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain $rust_version -y
 
 COPY --from=builder target/release/tremor-server /tremor-server
-COPY --from=builder target/release/tremor-tool /tremor-tall
+COPY --from=builder target/release/tremor-tool /tremor-tool
 # COPY --from=builder target/release/native/php-src/libs/libphp7.la /lib64
 # COPY --from=builder target/release/native/php-src/libs/libphp7.so /lib64
 # Entrypoint
