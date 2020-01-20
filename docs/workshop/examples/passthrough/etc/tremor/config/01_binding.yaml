@@ -4,7 +4,7 @@
 # bindings can be reused where appropriate.
 #
 binding:
-  - id: passthrough                                 # The unique name of this binding template
+  - id: example                                     # The unique name of this binding template
     links:
       '/onramp/ws-input/{instance}/out':            # Connect the inpunt to the pipeline
        - '/pipeline/example/{instance}/in'

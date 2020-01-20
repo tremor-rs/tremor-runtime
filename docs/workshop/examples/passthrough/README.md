@@ -71,3 +71,9 @@ Inject test messages via [websocat](https://github.com/vi/websocat)
 
 > Note: Can be installed via `cargo install websocat` for the lazy/impatient amongst us
 
+```bash
+$ websocat ws://localhost:4242
+{"hello":"world"}
+{"snot":"badger"}
+...
+```
