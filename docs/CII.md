@@ -334,6 +334,6 @@ __It is SUGGESTED that the software produced by the project include many run-tim
 
 Met.
 
-__All medium and higher severity exploitable vulnerabilities discovered with dynamic code analysis MUST be fixed in a timely way after they are confirmed.
+__All medium and higher severity exploitable vulnerabilities discovered with dynamic code analysis MUST be fixed in a timely way after they are confirmed.__
 
 Met.
