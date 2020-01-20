@@ -62,9 +62,8 @@ Deploy the solution into a docker environment
 
 ```bash
 $ docker-compose up
->> {"hello": "world"}
-...
->> {"snot": "badger"}
+>> {"hello": "world", "selected": false}
+>> {"hello": "again", "selected": true}
 ```
 
 Inject test messages via [websocat](https://github.com/vi/websocat)
@@ -72,8 +71,6 @@ Inject test messages via [websocat](https://github.com/vi/websocat)
 > Note: Can be installed via `cargo install websocat` for the lazy/impatient amongst us
 
 ```bash
-$ websocat ws://localhost:4242
-{"hello":"world"}
-{"snot":"badger"}
+$ cat inputs.txt | websocat ws://localhost:4242
 ...
 ```
