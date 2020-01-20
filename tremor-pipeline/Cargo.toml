@@ -15,7 +15,7 @@ petgraph = "0.4"
 error-chain="0.12"
 tremor-script = { path = "../tremor-script" }
 lazy_static = "1"
-window = { git = "https://github.com/wayfair-incubator/window.git" }
+window = { git = "https://github.com/wayfair-tremor/window.git" }
 indexmap = { version = "1", features=["serde-1"] }
 lru = "0.3"
 serde_json = "1"

@@ -32,8 +32,8 @@ termcolor = "1.0"
 unicode-xid = "0.2"
 halfbrown = "0.1"
 base64 = "0.10.1"
-kv = { git = "https://github.com/wayfair-incubator/kv.git" }
-dissect = { git = "https://github.com/wayfair-incubator/dissect.git" }
+kv = { git = "https://github.com/wayfair-tremor/kv.git" }
+dissect = { git = "https://github.com/wayfair-tremor/dissect.git" }
 distance = "0.4"
 chrono = "0.4"
 clap = "2.33.0"
