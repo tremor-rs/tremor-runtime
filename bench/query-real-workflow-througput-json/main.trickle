@@ -36,4 +36,3 @@ select event from in into runtime;
 select event from runtime into grouper;
 select event from grouper into out;
 select event from grouper/overflow into out;
-
