@@ -13,6 +13,7 @@ echo "  - [1. Passthrough](examples/00_passthrough/README.md)]" >> src/SUMMARY.m
 echo "  - [2. Filter](examples/01_filter/README.md)]" >> src/SUMMARY.md
 echo "  - [3. Transform](examples/02_transform/README.md)]" >> src/SUMMARY.md
 echo "  - [4. Validate](examples/03_validate/README.md)]" >> src/SUMMARY.md
+echo "  - [10. Logstash](examples/10_logstash/README.md)]" >> src/SUMMARY.md
 
 for f in $(ls text/* | sort)
 do

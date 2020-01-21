@@ -1,0 +1,51 @@
+define script extract                                                          # define the script that parses our apache logs
+script
+  match {"raw": event} of                                                      # we user the dissect extractor to parse the apache log
+    case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{cost:int}\\n| }
+            => r.raw                                                           # this first case is hit of the log includes an execution time (cost) for the request
+    case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{}\\n| }
+            => r.raw         
+    default => emit => "bad"
+  end
+end;
+
+define script categorize                                                       # defome the script that classifies the logs
+with
+  user_error_index = "errors",                                                 # we use with here to default some configuration for
+  server_error_index = "errors",                                               # the script, we could then re-use this script in multiple
+  ok_index = "requests",                                                       # places with different indexes
+  other_index = "requests"
+script
+  let $doc_type = "log";                                                      # doc_type is used by the offramp, the $ denots this is stored in event metadat
+  let $index = match event of
+    case e = %{present code} when e.code >= 200 and e.code < 400              # for http codes between 200 and 400 (exclusive) - those are success codes
+      => args.ok_index
+    case e = %{present code} when e.code >= 400 and e.code < 500              # 400 to 500 (exclusive) are client side errors
+      => args.user_error_index
+    case e = %{present code} when e.code >= 500 and e.code < 600
+      => args.server_error_index                                              # 500 to 500 (exclusive) are server side errors
+    default => args.other_index                                               # if we get any other code we just use a default index
+  end;
+  event                                                                       # emit the event with it's new metadata
+end;
+
+create script extract;                                                         # instantiate the script
+create script categorize;     
+
+define generic::batch operator batch
+with
+  count = 500,
+  timeout = 5
+end;
+
+create operator batch;     
+
+
+select event from in into extract;
+select event from extract into categorize;
+select event from categorize into batch;
+select event from batch into out;
+
+select event from extract/bad into err;
+select event from extract/err into err;
+select event from categorize/err into err;
