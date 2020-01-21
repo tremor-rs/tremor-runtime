@@ -51,7 +51,7 @@ pub fn load(registry: &mut Registry) {
         }))
         .insert(tremor_const_fn! (type::is_number(_context, _input) {
             Ok(match _input.value_type() {
-                ValueType::I64 | ValueType::F64 => Value::from(true),
+                ValueType::I64 | ValueType::F64 | ValueType::U64 => Value::from(true),
                 _ => Value::from(false),
             })
         }));
