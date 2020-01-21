@@ -1,0 +1,25 @@
+# The onramp and offramp sections of configuration specify external sources and sinks
+# to an instance of tremor-server.
+#
+onramp:
+  - id: udp-input         # A unique id for binding/mapping
+    type: udp             # The unique type descriptor for the onramp ( websocket server here)
+    codec: influx         # The underlying data format expected for application payload data
+    preprocessors:        # telegraf udp sends multiple influx line messages in one package seperated by new lines
+      - lines
+    config:
+      port: 4242          # The TCP port to listen on
+      host: '0.0.0.0'     # The IP address to bind on ( all interfaces in this case )
+      
+offramp:
+  - id: influx-output
+    type: rest          # an elastic search offramp
+    codec: influx
+    config:
+      endpoints:
+        - http://influxdb:8086/write?db=tremor
+      headers:
+        'Client': 'Tremor'
+  - id: debug
+    type: stdout
+    codec: influx
