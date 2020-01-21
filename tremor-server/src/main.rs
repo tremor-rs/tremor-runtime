@@ -88,7 +88,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     }
     for pipeline in config.pipes {
         let id = TremorURL::parse(&format!("/pipeline/{}", pipeline.id))?;
-        warn!("The pipeline {} is defined in the YAML file {}, this functionality is depricated please migrate to trickle pipelines.", id, file_name);
+        warn!("The pipeline {} is defined in the YAML file {}, this functionality is deprecated please migrate to trickle pipelines.", id, file_name);
         world
             .repo
             .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
