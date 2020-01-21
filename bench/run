@@ -17,5 +17,10 @@ then
 fi
 
 echo "######## $1"
-target/release/tremor-server --no-api -c $file bench/link.yaml
 
+if [ -d ./bench/$1 ]
+then
+  target/release/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+else
+  target/release/tremor-server --no-api -c $file bench/link.yaml
+fi

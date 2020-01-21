@@ -36,3 +36,4 @@ grcov
 cobertura.xml
 coverage.html
 temp/
+perf.data*
