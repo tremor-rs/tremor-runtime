@@ -327,6 +327,17 @@ mod tests {
         .into();
         assert_eq!(Ok(Some(r)), parse(s, 0))
     }
+
+    #[test]
+    fn parse_example() {
+        let mut s = String::from(
+            r#"{"measurement":"swap","tags":{"host":"56a6f1b85709","window":"10secs"},"fields":{"count_free":2,"min_free":2139095040,"max_free":2147483647,"mean_free":2143289344.0,"stdev_free":0.0,"var_free":0.0,"p50_free":2147483647,"p90_free":2147483647,"p99_free":2147483647,"p99.9_free":2147483647},"timestamp":1.57962891e18}"#,
+        );
+
+        let v = simd_json::borrowed::to_value(unsafe { s.as_bytes_mut() }).unwrap();
+        try_to_bytes(&v).unwrap();
+    }
+
     #[test]
     fn parse_simple3() {
         let s =

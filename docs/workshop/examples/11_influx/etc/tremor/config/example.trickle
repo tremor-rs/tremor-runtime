@@ -16,27 +16,30 @@ create stream aggregate;
 define generic::batch operator batch
 with
   count = 3000,
-  timeout = 60
+  timeout = 5
 end;
 
 create operator batch; 
 
 select {
     "measurement": event.measurement,
-    "tags": patch event.tags of insert "window" => window end,
+    "tags": event.tags,
     "field": group[2],
     "value": event.fields[group[2]],
+    "timestamp": event.timestamp,
 }
 from in
 group by set(event.measurement, event.tags, each(record::keys(event.fields)))
 into aggregate;
 
 
-select {
+select 
+{
     "measurement": event.measurement,
     "tags": patch event.tags of insert "window" => window end,
     "stats": stats::hdr(event.value, [ "0.5", "0.9", "0.99", "0.999" ]),
-    "field": event.field
+    "field": event.field,
+    "timestamp": win::first(event.timestamp), # we can't use min since it's a float
 }
 from aggregate[`10secs`, `1min`, ]
 where type::is_number(event.value)
@@ -47,20 +50,21 @@ select {
   "measurement":  event.measurement,
   "tags":  event.tags,
   "fields":  {
-    "count_{event.class}":  event.stats.count,
-    "min_{event.class}":  event.stats.min,
-    "max_{event.class}":  event.stats.max,
-    "mean_{event.class}":  event.stats.mean,
-    "stdev_{event.class}":  event.stats.stdev,
-    "var_{event.class}":  event.stats.var,
-    "p50_{event.class}":  event.stats.percentiles["0.5"],
-    "p90_{event.class}":  event.stats.percentiles["0.9"],
-    "p99_{event.class}":  event.stats.percentiles["0.99"],
-    "p99.9_{event.class}":  event.stats.percentiles["0.999"]
-  }
+    "count_{event.field}":  event.stats.count,
+    "min_{event.field}":  event.stats.min,
+    "max_{event.field}":  event.stats.max,
+    "mean_{event.field}":  event.stats.mean,
+    "stdev_{event.field}":  event.stats.stdev,
+    "var_{event.field}":  event.stats.var,
+    "p50_{event.field}":  event.stats.percentiles["0.5"],
+    "p90_{event.field}":  event.stats.percentiles["0.9"],
+    "p99_{event.field}":  event.stats.percentiles["0.99"],
+    "p99.9_{event.field}":  event.stats.percentiles["0.999"]
+  },
+  "timestamp": event.timestamp,
 }
 from normalize
 into batch;
 
-# select event from in into batch;
+select event from in into batch;
 select event from batch into out;

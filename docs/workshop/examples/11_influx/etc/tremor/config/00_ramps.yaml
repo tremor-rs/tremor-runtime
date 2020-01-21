@@ -23,3 +23,5 @@ offramp:
   - id: debug
     type: stdout
     codec: influx
+  - id: debug2
+    type: stdout

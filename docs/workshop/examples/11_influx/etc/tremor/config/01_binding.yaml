@@ -13,4 +13,6 @@ binding:
        - '/offramp/debug/{instance}/in'
       '/pipeline/example/{instance}/err':           # Connect the pipeline to the output
        - '/offramp/system::stdout/{instance}/in'
-      
+      '/pipeline/example/{instance}/raw':           # Connect the pipeline to the output
+       - '/offramp/debug/{instance}/in'
+       - '/offramp/debug2/{instance}/in'
