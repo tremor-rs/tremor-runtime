@@ -1,0 +1,7 @@
+  match event of
+    case %{ present hello, present selected }                                   # Record pattern, validating field presence
+        when type::is_string(event.hello) and type::is_bool(event.selected)     # guards
+            => emit event
+    default => drop                                                             # discard or reroute 
+  end
+

@@ -1,0 +1,22 @@
+#select {
+#    "is_valid": match event of
+#      case %{ present hello, present selected } when type::is_string(event.hello) and type::is_bool(event.selected) => "valid",
+#      default => "invalid"
+#    end, 
+#    "target": event,
+#} from in where event.is_valid into out 
+
+define script validate                                                          # define the script
+script
+  match event of
+    case %{ present hello, present selected }                                   # Record pattern, validating field presence
+        when type::is_string(event.hello) and type::is_bool(event.selected)     # guards
+            => emit event                                                       # propagate if valid
+    default => drop                                                             # discard or reroute 
+  end
+end;
+
+create script validate;                                                         # instantiate the script
+
+select event from in into validate;                                             # connect the pipeline input to our script instane
+select event from validate into out;                                            # connect the script output to the pipeline output
