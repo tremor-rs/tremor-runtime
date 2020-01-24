@@ -4,7 +4,7 @@
 #      default => "invalid"
 #    end, 
 #    "target": event,
-#} from in where event.is_valid into out 
+#} from in into out having event.is_valid
 
 define script validate                                                          # define the script
 script
@@ -20,3 +20,5 @@ create script validate;                                                         
 
 select event from in into validate;                                             # connect the pipeline input to our script instane
 select event from validate into out;                                            # connect the script output to the pipeline output
+
+# in -(select)-> validate -(select)-> out

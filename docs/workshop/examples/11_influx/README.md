@@ -1,58 +1,99 @@
 # Transform
 
-This example shows how handling apache logs with a tremor and elastic search could work. The example is a lot more complex than the simple showcases and combines three components.
+This example demonstrates using Tremor as a proxy and aggregator for InfluxDB data. As such it coveres three topics. Ingesting and decoding influx data as the simple part. Then grouping this data and aggregating over it.
 
-Kibana, which once started with docker-compose can be reached [locally](http://localhost:5601). It allows browsing through the logs. If you have never used Kibana before you can get started by clicking on **Management** then in the **Elasticsearch** section on **Index Management**.
+The demo starts up a [local Capacitor instance](http://localhost:8888). This allows browsing the data stored in influxdb. When first connecting you'll be asked to specify the database to use, please change the *8Connection URL** to `ihttp://influxdb:8086`. For all other questions just select `Skip` as we do not need to configure those.
 
-Elastic Search, which stores the logs submitted.
+Once in capacitor look at the `tremor` database to see the metrics and rollups. Since rollups do roll up over time you might have to wait a few minutes untill aggregated data propagates.
 
-Tremor, which takes the apache logs, parses and classifies them then submits them to indexes in elastic search.
-
-In addition the file `demo/data/apache_access_logs.xz` is used as example payload.
+Depending on the performance of the system the demo is run on metrics may be shed due to tremors over load protection.
 
 ## Environment
 
-In the [`example.trickle`](etc/tremor/config/example.trickle) we define a script that validates the schema that the field `hello` is a string and the field `selected` is a boolean. If both conditions are true we pass it on, otherwise, it'll drop.
+In the [`example.trickle`](etc/tremor/config/example.trickle) we process the data in multiple steps, since this is somewhat more complex then the prior examples we'll discuss each step in the Business Logic section.
 
-All other configuration is the same as per the previous example and is elided here for brevity.
 
 ## Business Logic
 
-```trickle
-define script extract                                                          # define the script that parses our apache logs
-script
-  match {"raw": event} of                                                      # we user the dissect extractor to parse the apache log
-    case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{cost:int}\\n| }
-            => r.raw                                                           # this first case is hit of the log includes an execution time (cost) for the request
-    case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{}\\n| }
-            => r.raw         
-    default => emit => "bad"
-  end
-end;
-
-```
+### Grouping
 
 ```trickle
-define script categorize                                                       # defome the script that classifies the logs
-with
-  user_error_index = "errors",                                                 # we use with here to default some configuration for
-  server_error_index = "errors",                                               # the script, we could then re-use this script in multiple
-  ok_index = "requests",                                                       # places with different indexes
-  other_index = "requests"
-script
-  let $doc_type = "log";                                                      # doc_type is used by the offramp, the $ denots this is stored in event metadat
-  let $index = match event of
-    case e = %{present code} when e.code >= 200 and e.code < 400              # for http codes between 200 and 400 (exclusive) - those are success codes
-      => args.ok_index
-    case e = %{present code} when e.code >= 400 and e.code < 500              # 400 to 500 (exclusive) are client side errors
-      => args.user_error_index
-    case e = %{present code} when e.code >= 500 and e.code < 600
-      => args.server_error_index                                              # 500 to 500 (exclusive) are server side errors
-    default => args.other_index                                               # if we get any other code we just use a default index
-  end;
-  event                                                                       # emit the event with it's new metadata
-end;
+select {
+    "measurement": event.measurement,
+    "tags": event.tags,
+    "field": group[2],
+    "value": event.fields[group[2]],
+    "timestamp": event.timestamp,
+}
+from in
+group by set(event.measurement, event.tags, each(record::keys(event.fields)))
+into aggregate
+having type::is_number(event.value);
 ```
+
+This step groups the data for aggregation. This is required since the [Influx Line protocol](https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/) allows for multiple values within one message. The grouping step ensures that we do not aggregate `cpu_idle` and `cpu_user` into the same value despite them being in the same result.
+
+In other words we normalise an event like this
+
+```influx
+measurement tag1=value1,tag2=value2 field1=42,field2="snot",field3=0.2 123587512345513
+```
+
+into the three distinct series it represents, namely:
+
+```influx
+measurement tag1=value1,tag2=value2 field1=42 123587512345513
+measurement tag1=value1,tag2=value2 field2="snot" 123587512345513
+measurement tag1=value1,tag2=value2 field3=0.2 123587512345513
+```
+
+The second part that happens in this query is removing non numeric values from our aggregated series since they are not able to be aggregated.
+
+### Aggregation
+
+```trickle
+select 
+{
+    "measurement": event.measurement,
+    "tags": patch event.tags of insert "window" => window end,
+    "stats": stats::hdr(event.value, [ "0.5", "0.9", "0.99", "0.999" ]),
+    "field": event.field,
+    "timestamp": win::first(event.timestamp), # we can't use min since it's a float
+}
+from aggregate[`10secs`, `1min`, ]
+group by set(event.measurement, event.tags, event.field)
+into normalize;
+```
+
+In this section we aggregate the different serieses we created in the previous section.
+
+Most notably are the `stats::hdr` and `win::first` functions which do the aggregation. `stats::hdr` uses a optimized [HDR Histogram](http://hdrhistogram.org/) algorithm to generate the values requested of it. `win::first` gives the timestamp of the first event in the window.
+
+### Normalisation to Influx Line Protocol
+
+```tremor
+select {
+  "measurement":  event.measurement,
+  "tags":  event.tags,
+  "fields":  {
+    "count_{event.field}":  event.stats.count,
+    "min_{event.field}":  event.stats.min,
+    "max_{event.field}":  event.stats.max,
+    "mean_{event.field}":  event.stats.mean,
+    "stdev_{event.field}":  event.stats.stdev,
+    "var_{event.field}":  event.stats.var,
+    "p50_{event.field}":  event.stats.percentiles["0.5"],
+    "p90_{event.field}":  event.stats.percentiles["0.9"],
+    "p99_{event.field}":  event.stats.percentiles["0.99"],
+    "p99.9_{event.field}":  event.stats.percentiles["0.999"]
+  },
+  "timestamp": event.timestamp,
+}
+from normalize
+into batch;
+```
+
+The last part normalises the data to a format that can be encoded into influx line protocol. And name the fields accordingly. This uses string interpolation for the recortd fields and simle value access for their values.
 
 ## Command line testing during logic development
 
@@ -61,21 +102,15 @@ $ docker-compose up
   ... lots of logs ...
 ```
 
-Inject test messages via [websocat](https://github.com/vi/websocat)
-
-> Note: Can be installed via `cargo install websocat` for the lazy/impatient amongst us
-
-```bash
-$ cat demo/data/apache_access_logs.xz | websocat ws://localhost:4242
-...
-```
-
-Open the [Kibana index management](http://localhost:5601/app/kibana#/management/kibana/indices/) and create indexes to view the data.
+Open the [Chronograf](http://localhost:8888) and connect the database.
 
 ### Discussion
 
-This is a fairly complex example that combines everything we've seen in the prior examples and a bit more. It should serve as a starting point of how to use tremor to ingest, process, filter and classify data with tremor into an upstream system.
+It is noteworthy that in the aggregation context only `stats::hdr` and `win::first` are being evaluated for events, resulting record and the associated logic is only ever evaluated on emit.
+
+We are using `having` in the goruping step, however this could also be done with a `where` clause on the aggregation step. In this example we choose `having` over were as it is worth discarding events as early as possible. If the requirement were to handle non numeric fields in a different manner routing the output of the grouping step to two different select statements we would have used `where` instead.
 
 ### Attention
 
-When using this as a baseline be aware that around things like batching tuning will be involved to make the numbers fit with the infrastructure it is pointed at. Also since it is not an ongoing data stream we omitted backpressure or classification based rate limiting from the example.
+Using `win::first` over `stats::min` is a debatable choice as we use the timestamp of the first event not the minimal timestamp. Inside of tremor we do not re-order events so those two would result in the same result with `win::first` being cheaper to execute. In addition stats functions are currently implemented to return floating point numbers so `stats::min` could
+lead incorrect timestamps we'd rather avoid.

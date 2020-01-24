@@ -19,7 +19,7 @@ with
   timeout = 5
 end;
 
-create operator batch; 
+create operator batch;
 
 select {
     "measurement": event.measurement,
@@ -30,7 +30,8 @@ select {
 }
 from in
 group by set(event.measurement, event.tags, each(record::keys(event.fields)))
-into aggregate;
+into aggregate
+having type::is_number(event.value); 
 
 
 select 
@@ -42,7 +43,6 @@ select
     "timestamp": win::first(event.timestamp), # we can't use min since it's a float
 }
 from aggregate[`10secs`, `1min`, ]
-where type::is_number(event.value)
 group by set(event.measurement, event.tags, event.field)
 into normalize;
 

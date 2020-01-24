@@ -1,6 +1,7 @@
 define script extract                                                          # define the script that parses our apache logs
 script
   match {"raw": event} of                                                      # we user the dissect extractor to parse the apache log
+    # 127.0.0.1 - - [19/Jun/1998:22:00:01 +0000] "GET /english/competition/matchprog8902.htm HTTP/1.0" 200 47408
     case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{cost:int}\\n| }
             => r.raw                                                           # this first case is hit of the log includes an execution time (cost) for the request
     case r = %{ raw ~= dissect|%{ip} %{} %{} [%{timestamp}] "%{method} %{path} %{proto}" %{code:int} %{}\\n| }
