@@ -43,6 +43,10 @@ Note: Some of those restrictions are subject to change as tremor is a growing pr
 * Your events structure can not be represented by JSONesque data structures. (If unsure feel free to reach out and create a ticket and explain your use case - [codecs](docs/artefacts/codecs.md) are easy to write!)
 * Your onramps or offramps are not supported. (If you sitll wish to use tremor please reach out and create a ticket - [onramps](docs/artefacts/onramps.md) and [offramps](docs/artefacts/offramps.md) too are easy to write!)
 
+### Example use cases
+
+We provide some usage examples of this in the `docs/workshop` folder. Those examples include a `docker-compose.yaml` for running them and can serve as a starting point for deploying tremor.
+
 ## Building
 
 ### Docker

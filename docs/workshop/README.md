@@ -34,4 +34,3 @@ $ export PATH=/Path/to/tremor-src-repo/target/debug/:$PATH
 $ tremor-query --version
 tremor-query 0.6.0
 ```
-
