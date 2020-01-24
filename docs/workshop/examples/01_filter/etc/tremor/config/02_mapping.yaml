@@ -1,0 +1,3 @@
+mapping:
+  /binding/example/filter:
+    instance: "filter"

@@ -1,0 +1,31 @@
+version: '3.3'
+services:
+  elastic:
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:6.6.1'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      discovery.type: single-node
+  kibana:
+    image: 'docker.elastic.co/kibana/kibana:6.6.1'
+    ports:
+      - '5601:5601'
+    depends_on:
+      - elastic
+    environment:
+      ELASTICSEARCH_URL: 'http://elastic:9200'
+    links:
+      - elastic
+  tremor:
+    image: tremor-runtime
+    depends_on:
+      - kibana
+    ports:
+      - 4242:4242
+    environment:
+      - RUST_BACKTRACE=1
+      - RUST_LOG=info
+    volumes:
+      - ./etc/tremor:/etc/tremor:ro
+      - ./var/log:/var/log:rw

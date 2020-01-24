@@ -1,0 +1,12 @@
+version: '3.3'
+services:
+  tremor:
+    image: tremor-runtime
+    ports:
+      - 4242:4242
+    environment:
+      - RUST_BACKTRACE=1
+      - RUST_LOG=info
+    volumes:
+      - ./etc/tremor:/etc/tremor:ro
+      - ./var/log:/var/log:rw
