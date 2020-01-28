@@ -20,14 +20,20 @@ use crate::OperatorNode;
 use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
+use op::identity::PassthroughFactory;
+use op::trickle::{
+    operator::TrickleOperator,
+    script::TrickleScript,
+    select::{SelectDims, TrickleSelect},
+    simple_select::TrickleSimpleSelect,
+};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use simd_json::Value as ValueTrait;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::Stmt;
-use tremor_script::ast::{Ident, WindowDecl, WindowKind};
+use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::StmtRentalWrapper;
@@ -469,21 +475,13 @@ impl Query {
     }
 }
 
-#[allow(clippy::implicit_hasher)]
+#[allow(clippy::implicit_hasher, clippy::too_many_lines)]
 pub fn supported_operators(
     config: &NodeConfig,
     defn: Option<tremor_script::query::StmtRentalWrapper>,
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
-    use op::identity::PassthroughFactory;
-    //    use op::runtime::TremorFactory;
-    use op::trickle::operator::TrickleOperator;
-    use op::trickle::script::TrickleScript;
-    use op::trickle::select::{SelectDims, TrickleSelect};
-    use op::trickle::simple_select::TrickleSimpleSelect;
-    use tremor_script::ast;
-
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
@@ -496,30 +494,8 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            enum Type {
-                Passthrough,
-                Simple,
-                Normal,
-            }
             let select_type = match node.stmt.suffix() {
-                tremor_script::ast::Stmt::Select(ref select) => {
-                    if select.stmt.target
-                        == ast::ImutExpr::Path(ast::Path::Event(ast::EventPath {
-                            mid: 0,
-                            segments: vec![],
-                        }))
-                        && select.stmt.maybe_group_by.is_none()
-                        && select.stmt.windows.is_empty()
-                    {
-                        if select.stmt.maybe_having.is_none() && select.stmt.maybe_where.is_none() {
-                            Type::Passthrough
-                        } else {
-                            Type::Simple
-                        }
-                    } else {
-                        Type::Normal
-                    }
-                }
+                tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
                 _ => {
                     return Err(ErrorKind::PipelineError(
                         "Trying to turn a non select into a select operator".into(),
@@ -528,15 +504,15 @@ pub fn supported_operators(
                 }
             };
             match select_type {
-                Type::Passthrough => {
+                SelectType::Passthrough => {
                     let op = PassthroughFactory::new_boxed();
                     op.from_node(config)?
                 }
-                Type::Simple => Box::new(TrickleSimpleSelect::with_stmt(
+                SelectType::Simple => Box::new(TrickleSimpleSelect::with_stmt(
                     config.id.clone().to_string(),
                     &node,
                 )?),
-                Type::Normal => {
+                SelectType::Normal => {
                     let groups = SelectDims::from_query(node.stmt.clone());
                     let windows = if let Some(windows) = windows {
                         windows
