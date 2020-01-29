@@ -15,7 +15,7 @@ the tremor runtime.
 
 The simplest possible query in trickle is
 
-```sql
+```trickle
 select event from in into out; # A simple passthrough query pipeline
 ```
 
@@ -67,7 +67,7 @@ The logical inverse of branching is to unify or union streams together, this ope
 is also supported via the select operation and is demonstrated below. We combine
 the `evens` and `odds` streams into the standard output stream
 
-```sql
+```trickle
 # create private intermediate internal streams
 create stream evens;
 create stream odds;
@@ -122,7 +122,7 @@ flexible and powerful, however.
 For example, here's the logic for an entire backpressure algorithm that could be introduced as
 a proxy between two systems:
 
-```sql
+```trickle
 define generic::backpressure operator bp
 with
     timeout = 10000,
@@ -137,7 +137,7 @@ select event from bp into out;
 A slightly more complex example that uses both operators and the tremor scripting langauge
 with the query langauge all together:
 
-```sql
+```trickle
 define grouper::bucket operator kfc;
 
 define script categorize
@@ -189,7 +189,7 @@ Branching data streams to multiple streams is performed via select operations
 
 Branch data into 3 different output stream ports
 
-```sql
+```trickle
 select event from in into out/a;
 select event from in into out/b;
 select event from in inout out/c;
@@ -197,7 +197,7 @@ select event from in inout out/c;
 
 Branch data into 3 different intermediate streams
 
-```sql
+```trickle
 create stream a;
 create stream b;
 create stream c;
@@ -213,7 +213,7 @@ Multiple data streams can also be combined via select operations.
 
 Combine 3 data streams into a single output stream
 
-```sql
+```trickle
 ...
 
 select event from a into out;
@@ -223,7 +223,7 @@ select event from c inout out;
 
 Combine 3 data stream ports from 1 or many streams into a single output stream
 
-```sql
+```trickle
 ...
 
 select event from a/1 into out;
@@ -274,7 +274,7 @@ data-drive or fully programmatic.
 
 A more complete example:
 
-```sql
+```trickle
 select {
     "measurement": event.measurement,
     "tags": patch event.tags of insert "window" => window end,
@@ -361,7 +361,7 @@ are applied. Groups can be set-based,  each-based or composites thereof.
 
 Grouping by set partitions streams by a concatenation of expressions.
 
-```sql
+```trickle
 select event from in
 group by set(event.country, event.region)
 into out;
@@ -391,7 +391,7 @@ Given that our data can be nested, however, our data could be structured differe
 }
 ```
 
-```sql
+```trickle
 select event from in
 group by each(record::keys(event.regions))
 into out;
@@ -418,7 +418,7 @@ How would we structure such a query?
 }
 ```
 
-```sql
+```trickle
 create stream by_country_region;
 
 select { "country": event.country, "region": group[0], "azs": event.regions[group[0]] }
@@ -434,7 +434,7 @@ top level of a synthetic intermediate outbound stream `by_country_region`.
 We can postprocess the intermediate stream `by_country_region` into a
 single outbound stream that further extracts and hoists the 'az' dimension
 
-```sql
+```trickle
 select { "country": event.country, "region": event.region, "az": group[0], }
 from by_country_region
 group by each(event.azs)
