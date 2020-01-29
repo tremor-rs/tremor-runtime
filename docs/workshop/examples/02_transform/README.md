@@ -1,6 +1,6 @@
 # Transform
 
-The `transform` exmaple builds on the [filter example](../filter/README.md) and extends the [`example.trickle`](etc/tremor/config/example.trickle) by adding a transformation that modifies the incoming event. The produced event from this query statement has a different structure than the incoming event.
+The `transform` exmaple builds on the [filter example](../01_filter/README.md) and extends the [`example.trickle`](etc/tremor/config/example.trickle) by adding a transformation that modifies the incoming event. The produced event from this query statement has a different structure than the incoming event.
 
 ## Environment
 

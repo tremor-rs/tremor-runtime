@@ -84,3 +84,13 @@ nav:
   - API: api.md
   - History: history.md
   - 'Glossary': Glossary.md
+  - Workshop: 
+    - Overview: workshop/README.md
+    - Highlevel Examples:
+      - 00 - Passthrough: workshop/examples/00_passthrough/README.md
+      - 01 - Filter: workshop/examples/01_filter/README.md
+      - 02 - Transform: workshop/examples/02_transform/README.md
+      - 03 - Validate: workshop/examples/03_validate/README.md
+    - Usecase Examples:
+      - 10 - Passthrough: workshop/examples/10_logstash/README.md
+      - 11 - Passthrough: workshop/examples/11_influx/README.md 
