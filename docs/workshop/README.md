@@ -5,6 +5,7 @@ This workshop serves as a getting started laboratory for downloading,
 compiling and running tremor on development machines and developing
 tremor-based solutions.
 
+All example, their corresponding code and a `docker-compose.yaml` can be found under in `docs/workshop/examples/...`.
 
 ## Table of Contents
 [Table of Contents]: #table-of-contents

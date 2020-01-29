@@ -1,6 +1,6 @@
 # Filter
 
-The `filter` builds on the [passthrough example](../passthrough/README.md) and extends the [`example.trickle`](etc/tremor/config/example.trickle) by adding a filter
+The `filter` builds on the [passthrough example](../00_passthrough/README.md) and extends the [`example.trickle`](etc/tremor/config/example.trickle) by adding a filter
 on the field `selected`. Only if this field is set to true the event will pass.
 
 ## Environment
