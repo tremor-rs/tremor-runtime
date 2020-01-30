@@ -544,12 +544,14 @@ impl ExecutableGraph {
             .cloned()
             .collect();
 
+        let mut input_ids: Vec<usize> = Vec::new();
+
         // first we check the inputs, if an input points to a skippable
         // node and does not connect to more then one other node with the same
         // input name it can be removed.
         for (input_name, target) in &mut self.inputs.iter_mut() {
             let target_node = self.graph.get(*target)?;
-
+            input_ids.push(*target);
             // the target of the input is skippable
             if target_node.skippable() {
                 let mut next_nodes = self
@@ -567,6 +569,20 @@ impl ExecutableGraph {
                     }
                 }
             }
+        }
+
+        for skippable_id in self
+            .graph
+            .iter()
+            .enumerate()
+            .filter(|(id, e)| e.skippable() && !input_ids.contains(id))
+            .map(|(id, _)| id)
+        {
+            /*let outputs = self
+            .port_indexes
+            .iter()
+            .filter(|((from_id, _), _)| from_id == target);*/
+            panic!("skippable: {}", skippable_id);
         }
         Some(())
     }
