@@ -454,7 +454,7 @@ impl Query {
             }
 
             let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
-            let exec = ExecutableGraph {
+            let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
                     .collect(),
@@ -469,6 +469,7 @@ impl Query {
                 signalflow,
                 metric_interval,
             };
+            exec.optimize();
 
             Ok(exec)
         }

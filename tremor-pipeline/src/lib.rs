@@ -601,7 +601,8 @@ impl ExecutableGraph {
             for o in &outputs {
                 let mut dsts1: Vec<_> = self
                     .port_indexes
-                    .remove(o)?
+                    .remove(o)
+                    .unwrap()
                     .into_iter()
                     .map(|(id, _)| id)
                     .collect();
@@ -622,12 +623,23 @@ impl ExecutableGraph {
                 })
                 .cloned()
                 .collect();
-            panic!(
-                "skippable: {} => {:?} {:?} {:?}",
-                skippable_id, destinations, outputs, inputs
-            );
+            for i in inputs {
+                let srcs: Vec<_> = self.port_indexes.remove(&i).unwrap();
+                let mut srcs1 = Vec::new();
+                for (src_id, src_port) in srcs {
+                    if src_id == *skippable_id {
+                        for d in &destinations {
+                            srcs1.push((*d, src_port.clone()))
+                        }
+                    } else {
+                        srcs1.push((src_id, src_port))
+                    }
+                }
+                self.port_indexes.insert(i, srcs1);
+            }
         }
-        Some(())
+        Some(());
+        panic!("{:?}", self.port_indexes)
     }
     /// This is a performance critial function!
     pub fn enqueue(
