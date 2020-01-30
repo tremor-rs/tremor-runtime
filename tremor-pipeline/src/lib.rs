@@ -286,6 +286,10 @@ impl Operator for OperatorNode {
     ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
+
+    fn skippable(&self) -> bool {
+        false
+    }
 }
 
 // TODO We need an actual operator registry ...
@@ -516,6 +520,58 @@ pub struct ExecutableGraph {
 
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
+    pub fn optimize(&mut self) -> Option<()> {
+        // remove skippable nodes from contraflow and signalflow
+        self.contraflow = (*self.contraflow)
+            .into_iter()
+            .filter(|id| {
+                self.graph
+                    .get(**id)
+                    .map(|n| n.skippable())
+                    .unwrap_or_default()
+            })
+            .cloned()
+            .collect();
+
+        self.signalflow = (*self.signalflow)
+            .into_iter()
+            .filter(|id| {
+                self.graph
+                    .get(**id)
+                    .map(|n| n.skippable())
+                    .unwrap_or_default()
+            })
+            .cloned()
+            .collect();
+
+        // first we check the inputs, if an input points to a skippable
+        // node and does not connect to more then one other node with the same
+        // input name it can be removed.
+        for (input_name, target) in &mut self.inputs.iter_mut() {
+            let target_node = self.graph.get(*target)?;
+
+            // the target of the input is skippable
+            if target_node.skippable() {
+                let mut next_nodes = self
+                    .port_indexes
+                    .iter()
+                    .filter(|((from_id, _), _)| from_id == target);
+
+                if let Some((_, dsts)) = next_nodes.next() {
+                    // we only connect from one output
+                    if next_nodes.next().is_none() && dsts.len() == 1 {
+                        let (next_id, next_input) = dsts.get(0)?;
+                        if next_input == input_name {
+                            *target = *next_id;
+                        }
+                    }
+                }
+            }
+
+            ();
+        }
+        Some(())
+    }
     /// This is a performance critial function!
     pub fn enqueue(
         &mut self,
