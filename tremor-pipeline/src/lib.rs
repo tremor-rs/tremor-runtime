@@ -570,19 +570,62 @@ impl ExecutableGraph {
                 }
             }
         }
-
-        for skippable_id in self
+        let skippables: Vec<_> = self
             .graph
             .iter()
             .enumerate()
-            .filter(|(id, e)| e.skippable() && !input_ids.contains(id))
-            .map(|(id, _)| id)
-        {
-            /*let outputs = self
-            .port_indexes
-            .iter()
-            .filter(|((from_id, _), _)| from_id == target);*/
-            panic!("skippable: {}", skippable_id);
+            .filter_map(|(id, e)| {
+                if e.skippable() && e.kind == NodeKind::Operator {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for skippable_id in &skippables {
+            let mut destinations = Vec::new();
+            let outputs: Vec<_> = self
+                .port_indexes
+                .iter()
+                .filter_map(|((from_id, _), outputs)| {
+                    if from_id == skippable_id {
+                        Some(outputs)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .cloned()
+                .collect();
+            // collect all the destionations we're connecting to
+            for o in &outputs {
+                let mut dsts1: Vec<_> = self
+                    .port_indexes
+                    .remove(o)?
+                    .into_iter()
+                    .map(|(id, _)| id)
+                    .collect();
+                destinations.append(&mut dsts1);
+            }
+            let inputs: Vec<_> = self
+                .port_indexes
+                .iter()
+                .filter_map(|(from, connections)| {
+                    if connections
+                        .iter()
+                        .any(|(target_id, _)| target_id == skippable_id)
+                    {
+                        Some(from)
+                    } else {
+                        None
+                    }
+                })
+                .cloned()
+                .collect();
+            panic!(
+                "skippable: {} => {:?} {:?} {:?}",
+                skippable_id, destinations, outputs, inputs
+            );
         }
         Some(())
     }
