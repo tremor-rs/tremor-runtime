@@ -288,7 +288,7 @@ impl Operator for OperatorNode {
     }
 
     fn skippable(&self) -> bool {
-        false
+        self.op.skippable()
     }
 }
 
@@ -567,8 +567,6 @@ impl ExecutableGraph {
                     }
                 }
             }
-
-            ();
         }
         Some(())
     }
