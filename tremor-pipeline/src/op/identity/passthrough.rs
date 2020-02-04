@@ -27,6 +27,7 @@ impl Operator for Passthrough {
         Ok(vec![("out".into(), event)])
     }
     fn skippable(&self) -> bool {
+        // ALLOW: This is Ok
         let _ = self;
         true
     }
