@@ -94,25 +94,32 @@ fn onramp_loop(
                 }
             };
         }
-        match rx.try_recv() {
-            Err(TryRecvError::Empty) => (),
-            Err(_e) => error!("Crossbream receive error"),
-            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(onramp::Msg::Disconnect { id, tx }) => {
-                pipelines.retain(|(pipeline, _)| pipeline != &id);
-                if pipelines.is_empty() {
-                    tx.send(true)?;
-                    return Ok(());
-                } else {
-                    tx.send(false)?
-                }
-            }
-        };
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
-        let mut ingest_ns = nanotime();
         for _event in events.iter() {
             loop {
+                // WARNING:
+                // Since we are using an **edge** tiggered poll we need to loop
+                // here since we might have more data in the socket and only
+                // get a new poll event if we run out of buffers and it would block.
+                // This has one important side effect, this loop might NEVER finish
+                // if the buffer stays full enough to never block.
+                match rx.try_recv() {
+                    Err(TryRecvError::Empty) => (),
+                    Err(_e) => error!("Crossbream receive error"),
+                    Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
+                    Ok(onramp::Msg::Disconnect { id, tx }) => {
+                        pipelines.retain(|(pipeline, _)| pipeline != &id);
+                        if pipelines.is_empty() {
+                            tx.send(true)?;
+                            return Ok(());
+                        } else {
+                            tx.send(false)?
+                        }
+                    }
+                };
+                let mut ingest_ns = nanotime();
+
                 use std::io::ErrorKind;
                 match socket.recv_from(&mut buf) {
                     Ok((n, sender_addr)) => {

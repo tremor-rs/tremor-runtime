@@ -138,7 +138,6 @@ fn onramp_loop(
 
         // wait for events and then process them
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
-        let mut ingest_ns = nanotime();
         for event in events.iter() {
             match event.token() {
                 ONRAMP => loop {
@@ -191,6 +190,7 @@ fn onramp_loop(
                     }) = connections[token.0]
                     {
                         loop {
+                            let mut ingest_ns = nanotime();
                             match stream.read(&mut buffer) {
                                 Ok(0) => {
                                     // TODO test re-connections
@@ -228,7 +228,27 @@ fn onramp_loop(
                                     id += 1;
                                 }
                                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful read
-                                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue, // will continue read
+                                Err(ref e) if e.kind() == ErrorKind::Interrupted => {
+                                    // To be sure we can accept pipeline events in a hot stream
+                                    // we try to check on the pipeline rx during interupts
+                                    match rx.try_recv() {
+                                        Err(TryRecvError::Empty) => (),
+                                        Err(_e) => error!("Crossbream receive error"),
+                                        Ok(onramp::Msg::Connect(mut ps)) => {
+                                            pipelines.append(&mut ps)
+                                        }
+                                        Ok(onramp::Msg::Disconnect { id, tx }) => {
+                                            pipelines.retain(|(pipeline, _)| pipeline != &id);
+                                            if pipelines.is_empty() {
+                                                tx.send(true)?;
+                                                return Ok(());
+                                            } else {
+                                                tx.send(false)?;
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                } // will continue read
                                 Err(e) => {
                                     error!("Failed to read data from tcp client connection: {}", e);
                                     break;
