@@ -8,11 +8,8 @@ help:
 	@echo "This makefile wraps the tasks:"
 	@echo "  image - builds the image"
 	@echo "  demo - runs a simple demo"
-	@echo "  clippy-install - install nightly and clippy"
-	@echo "  clippy - runs clippy"
 	@echo "  bench - runs benchmarks"
 	@echo "  it - runs integration tests"
-	@echo "  doc - creates and opens documentation"
 
 image:
 	docker-compose build
@@ -24,11 +21,6 @@ demo: image
 
 it:
 	integration_testing/runner
-
-doc: force
-	cargo doc --open --no-deps
-	rm -r doc
-	cp -r target/doc .
 
 bench: force
 	cargo build --release --features bench
@@ -54,9 +46,6 @@ chk_panic:
 
 chk_panic_ci:
 	@./checks/safety.sh -p
-
-docserve:
-	mkdocs serve
 
 tarpaulin:
 	@docker build . -f Dockerfile.tarpaulin -t tremor-tarpaulin
