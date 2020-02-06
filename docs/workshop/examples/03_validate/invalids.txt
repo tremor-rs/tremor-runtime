@@ -1,2 +1,0 @@
-{"hello": 42, "selected": true}
-{"hello": "cherry", "selected": "cake"}

@@ -1,3 +1,0 @@
-mapping:
-  /binding/example/validate:
-    instance: "validate"

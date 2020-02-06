@@ -1,2 +1,0 @@
-{ "hello": "world", "selected": false }
-{ "hello": "again", "selected": true }

@@ -1,1 +1,0 @@
-select event from in where event.selected into out 

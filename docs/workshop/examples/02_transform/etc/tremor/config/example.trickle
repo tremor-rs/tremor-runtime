@@ -1,6 +1,0 @@
-select {
-    "hello": "hi there {event.hello}",
-    "world": event.hello
-} from in
-where event.selected
-into out 
