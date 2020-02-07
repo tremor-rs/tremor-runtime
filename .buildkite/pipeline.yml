@@ -1,7 +1,0 @@
-steps:
-  - label: "mkdocs"
-    plugins:
-      - ssh://git@github.csnzoo.com/shared/mkdocs-buildkite-plugin.git#v0.5.0:
-          project_name: "tremor"
-    agents:
-      queue: mkdocs
