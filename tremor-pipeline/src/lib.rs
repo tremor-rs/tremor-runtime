@@ -645,7 +645,6 @@ impl ExecutableGraph {
             }
         }
         Some(());
-        panic!("{:?}", self.port_indexes)
     }
     /// This is a performance critial function!
     pub fn enqueue(

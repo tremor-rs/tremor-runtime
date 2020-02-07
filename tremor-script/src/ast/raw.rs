@@ -497,7 +497,9 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ImutExprRaw::Binary(b) => match b.up(helper)? {
-                b1 @ BinExpr {
+                b1
+                @
+                BinExpr {
                     lhs: ImutExpr::Literal(_),
                     rhs: ImutExpr::Literal(_),
                     ..
@@ -513,7 +515,9 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 b1 => ImutExpr::Binary(Box::new(b1)),
             },
             ImutExprRaw::Unary(u) => match u.up(helper)? {
-                u1 @ UnaryExpr {
+                u1
+                @
+                UnaryExpr {
                     expr: ImutExpr::Literal(_),
                     ..
                 } => {
