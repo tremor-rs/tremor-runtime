@@ -23,7 +23,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate)]
+#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 mod ast;
 mod ctx;

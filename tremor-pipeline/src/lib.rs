@@ -21,7 +21,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate)]
+#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -522,6 +522,8 @@ pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
     #[cfg(not(feature = "graph-rewrite"))]
     pub fn optimize(&mut self) -> Option<()> {
+        // ALLOW: this is OK
+        let _ = self;
         // Disabled by default
         Some(())
     }
@@ -607,8 +609,7 @@ impl ExecutableGraph {
             for o in &outputs {
                 let mut dsts1: Vec<_> = self
                     .port_indexes
-                    .remove(o)
-                    .unwrap()
+                    .remove(o)?
                     .into_iter()
                     .map(|(id, _)| id)
                     .collect();
@@ -630,7 +631,7 @@ impl ExecutableGraph {
                 .cloned()
                 .collect();
             for i in inputs {
-                let srcs: Vec<_> = self.port_indexes.remove(&i).unwrap();
+                let srcs: Vec<_> = self.port_indexes.remove(&i)?;
                 let mut srcs1 = Vec::new();
                 for (src_id, src_port) in srcs {
                     if src_id == *skippable_id {
