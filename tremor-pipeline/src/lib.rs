@@ -520,6 +520,12 @@ pub struct ExecutableGraph {
 
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
+    #[cfg(not(feature = "graph-rewrite"))]
+    pub fn optimize(&mut self) -> Option<()> {
+        // Disabled by default
+        Some(())
+    }
+    #[cfg(feature = "graph-rewrite")]
     pub fn optimize(&mut self) -> Option<()> {
         // remove skippable nodes from contraflow and signalflow
         self.contraflow = (*self.contraflow)
