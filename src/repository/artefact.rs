@@ -45,10 +45,12 @@ impl Pipeline {
         &self,
         resolver: tremor_pipeline::NodeLookupFn,
     ) -> Result<tremor_pipeline::ExecutableGraph> {
-        match self {
-            Self::Pipeline(p) => Ok(p.to_executable_graph(resolver)?),
-            Self::Query(q) => Ok(q.to_pipe()?),
-        }
+        let mut g = match self {
+            Self::Pipeline(p) => p.to_executable_graph(resolver)?,
+            Self::Query(q) => q.to_pipe()?,
+        };
+        g.optimize();
+        Ok(g)
     }
 }
 

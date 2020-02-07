@@ -48,6 +48,33 @@ pub struct SelectStmt<'script> {
     pub node_meta: NodeMetas<'script>,
 }
 
+pub enum SelectType {
+    Passthrough,
+    Simple,
+    Normal,
+}
+
+impl SelectStmt<'_> {
+    pub fn complexity(&self) -> SelectType {
+        if self.stmt.target
+            == ImutExpr::Path(Path::Event(EventPath {
+                mid: 0,
+                segments: vec![],
+            }))
+            && self.stmt.maybe_group_by.is_none()
+            && self.stmt.windows.is_empty()
+        {
+            if self.stmt.maybe_having.is_none() && self.stmt.maybe_where.is_none() {
+                SelectType::Passthrough
+            } else {
+                SelectType::Simple
+            }
+        } else {
+            SelectType::Normal
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKind {
     pub mid: usize,

@@ -16,6 +16,7 @@ use crate::onramp::prelude::*;
 use mio::net::UdpSocket;
 use mio::{Events, Poll, PollOpt, Ready, Token};
 use serde_yaml::Value;
+use std::io::ErrorKind;
 use std::thread;
 use std::time::Duration;
 
@@ -120,7 +121,6 @@ fn onramp_loop(
                 };
                 let mut ingest_ns = nanotime();
 
-                use std::io::ErrorKind;
                 match socket.recv_from(&mut buf) {
                     Ok((n, sender_addr)) => {
                         // TODO add a method in origin_uri for changes like this?

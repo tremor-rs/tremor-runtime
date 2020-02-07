@@ -92,5 +92,5 @@ nav:
       - 02 - Transform: workshop/examples/02_transform/README.md
       - 03 - Validate: workshop/examples/03_validate/README.md
     - Usecase Examples:
-      - 10 - Passthrough: workshop/examples/10_logstash/README.md
-      - 11 - Passthrough: workshop/examples/11_influx/README.md 
+      - 10 - Apache Logs: workshop/examples/10_logstash/README.md
+      - 11 - Influx Metrics: workshop/examples/11_influx/README.md 

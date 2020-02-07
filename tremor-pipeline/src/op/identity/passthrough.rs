@@ -26,4 +26,9 @@ impl Operator for Passthrough {
     fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         Ok(vec![("out".into(), event)])
     }
+    fn skippable(&self) -> bool {
+        // ALLOW: This is Ok
+        let _ = self;
+        true
+    }
 }

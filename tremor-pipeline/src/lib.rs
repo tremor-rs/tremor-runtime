@@ -21,7 +21,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate)]
+#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -286,6 +286,10 @@ impl Operator for OperatorNode {
     ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
+
+    fn skippable(&self) -> bool {
+        self.op.skippable()
+    }
 }
 
 // TODO We need an actual operator registry ...
@@ -516,6 +520,133 @@ pub struct ExecutableGraph {
 
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
+    #[cfg(not(feature = "graph-rewrite"))]
+    pub fn optimize(&mut self) -> Option<()> {
+        // ALLOW: this is OK
+        let _ = self;
+        // Disabled by default
+        Some(())
+    }
+    #[cfg(feature = "graph-rewrite")]
+    pub fn optimize(&mut self) -> Option<()> {
+        // remove skippable nodes from contraflow and signalflow
+        self.contraflow = (*self.contraflow)
+            .into_iter()
+            .filter(|id| {
+                self.graph
+                    .get(**id)
+                    .map(|n| n.skippable())
+                    .unwrap_or_default()
+            })
+            .cloned()
+            .collect();
+
+        self.signalflow = (*self.signalflow)
+            .into_iter()
+            .filter(|id| {
+                self.graph
+                    .get(**id)
+                    .map(|n| n.skippable())
+                    .unwrap_or_default()
+            })
+            .cloned()
+            .collect();
+
+        let mut input_ids: Vec<usize> = Vec::new();
+
+        // first we check the inputs, if an input points to a skippable
+        // node and does not connect to more then one other node with the same
+        // input name it can be removed.
+        for (input_name, target) in &mut self.inputs.iter_mut() {
+            let target_node = self.graph.get(*target)?;
+            input_ids.push(*target);
+            // the target of the input is skippable
+            if target_node.skippable() {
+                let mut next_nodes = self
+                    .port_indexes
+                    .iter()
+                    .filter(|((from_id, _), _)| from_id == target);
+
+                if let Some((_, dsts)) = next_nodes.next() {
+                    // we only connect from one output
+                    if next_nodes.next().is_none() && dsts.len() == 1 {
+                        let (next_id, next_input) = dsts.get(0)?;
+                        if next_input == input_name {
+                            *target = *next_id;
+                        }
+                    }
+                }
+            }
+        }
+        let skippables: Vec<_> = self
+            .graph
+            .iter()
+            .enumerate()
+            .filter_map(|(id, e)| {
+                if e.skippable() && e.kind == NodeKind::Operator {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for skippable_id in &skippables {
+            let mut destinations = Vec::new();
+            let outputs: Vec<_> = self
+                .port_indexes
+                .iter()
+                .filter_map(|((from_id, _), outputs)| {
+                    if from_id == skippable_id {
+                        Some(outputs)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .cloned()
+                .collect();
+            // collect all the destionations we're connecting to
+            for o in &outputs {
+                let mut dsts1: Vec<_> = self
+                    .port_indexes
+                    .remove(o)?
+                    .into_iter()
+                    .map(|(id, _)| id)
+                    .collect();
+                destinations.append(&mut dsts1);
+            }
+            let inputs: Vec<_> = self
+                .port_indexes
+                .iter()
+                .filter_map(|(from, connections)| {
+                    if connections
+                        .iter()
+                        .any(|(target_id, _)| target_id == skippable_id)
+                    {
+                        Some(from)
+                    } else {
+                        None
+                    }
+                })
+                .cloned()
+                .collect();
+            for i in inputs {
+                let srcs: Vec<_> = self.port_indexes.remove(&i)?;
+                let mut srcs1 = Vec::new();
+                for (src_id, src_port) in srcs {
+                    if src_id == *skippable_id {
+                        for d in &destinations {
+                            srcs1.push((*d, src_port.clone()))
+                        }
+                    } else {
+                        srcs1.push((src_id, src_port))
+                    }
+                }
+                self.port_indexes.insert(i, srcs1);
+            }
+        }
+        Some(());
+    }
     /// This is a performance critial function!
     pub fn enqueue(
         &mut self,

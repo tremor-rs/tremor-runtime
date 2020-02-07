@@ -20,14 +20,20 @@ use crate::OperatorNode;
 use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
+use op::identity::PassthroughFactory;
+use op::trickle::{
+    operator::TrickleOperator,
+    script::TrickleScript,
+    select::{SelectDims, TrickleSelect},
+    simple_select::TrickleSimpleSelect,
+};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use simd_json::Value as ValueTrait;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::Stmt;
-use tremor_script::ast::{Ident, WindowDecl, WindowKind};
+use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::StmtRentalWrapper;
@@ -170,6 +176,7 @@ impl Query {
             match stmt {
                 Stmt::Select(ref select) => {
                     let s = &select.stmt;
+
                     if !nodes.contains_key(&s.from.0.id) {
                         let from = s.from.0.id.clone().to_string();
                         let mut h = DumbHighlighter::default();
@@ -447,7 +454,7 @@ impl Query {
             }
 
             let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
-            let exec = ExecutableGraph {
+            let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
                     .collect(),
@@ -462,25 +469,20 @@ impl Query {
                 signalflow,
                 metric_interval,
             };
+            exec.optimize();
 
             Ok(exec)
         }
     }
 }
 
-#[allow(clippy::implicit_hasher)]
+#[allow(clippy::implicit_hasher, clippy::too_many_lines)]
 pub fn supported_operators(
     config: &NodeConfig,
     defn: Option<tremor_script::query::StmtRentalWrapper>,
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
-    use op::identity::PassthroughFactory;
-    //    use op::runtime::TremorFactory;
-    use op::trickle::operator::TrickleOperator;
-    use op::trickle::script::TrickleScript;
-    use op::trickle::select::{SelectDims, TrickleSelect};
-
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
@@ -493,38 +495,63 @@ pub fn supported_operators(
                 )
                 .into());
             };
-            let groups = SelectDims::from_query(node.stmt.clone());
-            let windows = if let Some(windows) = windows {
-                windows
-            } else {
-                return Err(ErrorKind::MissingOpConfig(
-                    "select operators require a window mapping".into(),
-                )
-                .into());
+            let select_type = match node.stmt.suffix() {
+                tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
+                _ => {
+                    return Err(ErrorKind::PipelineError(
+                        "Trying to turn a non select into a select operator".into(),
+                    )
+                    .into())
+                }
             };
-            let windows: Result<Vec<(String, WindowImpl)>> =
-                if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
-                    s.stmt
-                        .windows
-                        .iter()
-                        .map(|w| {
-                            Ok(windows
-                                .get(&w.id)
-                                .map(|imp| (w.id.to_string(), imp.clone()))
-                                .ok_or_else(|| {
-                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &w.id))
-                                })?)
-                        })
-                        .collect()
-                } else {
-                    Err("Declared as select but isn't a select".into())
-                };
-            Box::new(TrickleSelect::with_stmt(
-                config.id.clone().to_string(),
-                &groups,
-                windows?,
-                &node,
-            )?)
+            match select_type {
+                SelectType::Passthrough => {
+                    let op = PassthroughFactory::new_boxed();
+                    op.from_node(config)?
+                }
+                SelectType::Simple => Box::new(TrickleSimpleSelect::with_stmt(
+                    config.id.clone().to_string(),
+                    &node,
+                )?),
+                SelectType::Normal => {
+                    let groups = SelectDims::from_query(node.stmt.clone());
+                    let windows = if let Some(windows) = windows {
+                        windows
+                    } else {
+                        return Err(ErrorKind::MissingOpConfig(
+                            "select operators require a window mapping".into(),
+                        )
+                        .into());
+                    };
+                    let windows: Result<Vec<(String, WindowImpl)>> =
+                        if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
+                            s.stmt
+                                .windows
+                                .iter()
+                                .map(|w| {
+                                    Ok(windows
+                                        .get(&w.id)
+                                        .map(|imp| (w.id.to_string(), imp.clone()))
+                                        .ok_or_else(|| {
+                                            ErrorKind::BadOpConfig(format!(
+                                                "Unknown window: {}",
+                                                &w.id
+                                            ))
+                                        })?)
+                                })
+                                .collect()
+                        } else {
+                            Err("Declared as select but isn't a select".into())
+                        };
+
+                    Box::new(TrickleSelect::with_stmt(
+                        config.id.clone().to_string(),
+                        &groups,
+                        windows?,
+                        &node,
+                    )?)
+                }
+            }
         }
         ["trickle", "operator"] => {
             let node = if let Some(node) = node {

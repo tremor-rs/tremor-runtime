@@ -59,6 +59,11 @@ pub trait Operator: std::fmt::Debug + Send {
         // Make the trait signature nicer
         Ok(Vec::new())
     }
+
+    // An operator is skippable and doesn't need to be executed
+    fn skippable(&self) -> bool {
+        false
+    }
 }
 
 pub trait InitializableOperator {

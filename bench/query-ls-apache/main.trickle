@@ -1,0 +1,16 @@
+define script extract
+script
+  match {"message": event} of
+    case r = %{ message ~= grok|%{IPORHOST:clientip}·%{USER:ident}·%{USER:auth}·[%{HTTPDATE:timestamp}]·"%{WORD:verb}·%{DATA:request}·HTTP/%{NUMBER:httpversion}"·%{NUMBER:response:int}·(?:-\|%{NUMBER:bytes:int})·%{QS:referrer}·%{QS:agent}| } => #r= {"message": {...}}
+      let event = r.message
+    default => emit event => "discard" # if we don't match we can just return an empty literal that has no effect
+  end;
+  event
+end;
+
+create script extract;
+
+select event from in into extract;
+select event from extract into out;
+select event from extract/discard into out;
+select event from extract/error into out/error;

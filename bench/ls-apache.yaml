@@ -18,13 +18,13 @@ offramp:
       stop_after_secs: 100
       significant_figures: 2
 
-
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/{instance}/in' ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}/error":
+        ["/offramp/system::stderr/{instance}/in"]
 
 pipeline:
   - id: main
@@ -47,19 +47,9 @@ pipeline:
                 let event = r.message
               default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
             end;
-
-            # with guard
-            #match event of
-            #  case %{request_unix_time ~= re|^[0-9]{10}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "%s"))
-            #  case %{request_unix_time ~= re|^[0-9]{10}[.][0-9]{3}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "%s%.3f"))
-            #  case %{request_unix_time ~= re|^[0-9]{13}$|} => let event.start_timestamp = datetime::to_nearest_millisecond(datetime::parse(event.request_unix_time, "UNIX"))
-            #  default => null # Does nil and null differ? (nil as in no value null as in null value?, is that our option?)
-            #end;
-
-            event            
-
+            event
     links:
-      in: [ runtime ]
-      runtime: [ out ]
-      runtime/drop: [ out ]
-      runtime/error: [ error ]
+      in: [runtime]
+      runtime: [out]
+      runtime/drop: [out]
+      runtime/error: [error]

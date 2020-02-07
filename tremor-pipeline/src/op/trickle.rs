@@ -15,3 +15,4 @@
 pub mod operator;
 pub mod script;
 pub mod select;
+pub mod simple_select;

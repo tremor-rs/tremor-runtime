@@ -73,7 +73,11 @@ impl TremorTcpConnection {
 
 // We got to allow this because of the way that the onramp works
 // by creating new instances during runtime.
-#[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::cognitive_complexity
+)]
 fn onramp_loop(
     rx: &Receiver<onramp::Msg>,
     config: &Config,
