@@ -1,10 +1,10 @@
 # The Tremor Code of Conduct
 
-A version of this document [can be found online](https://www.tremo.rs/conduct.html).
+A version of this document [can be found online](https://docs.tremor.rs/CodeOfConduct).
 
 ## Conduct
 
-**Contact**: [tremor-mods@tremo.rs](mailto:tremor-mods@tremo.rs)
+**Contact**: [opensource@wayfair.com](mailto:opensource@wayfair.com?subject=Tremor+Moderator+Team)
 
 * We are committed to providing a friendly, safe and welcoming environment for all, regardless of level of experience, gender identity and expression, sexual orientation, disability, personal appearance, body size, race, ethnicity, age, religion, nationality, or other similar characteristic.
 * On tremor-chat, please avoid using overtly sexual nicknames or other nicknames that might detract from a friendly, safe and welcoming environment for all.
@@ -37,7 +37,7 @@ The enforcement policies listed above apply to all official Tremor venues; inclu
 
 *Adapted from the [Node.js Policy on Trolling](http://blog.izs.me/post/30036893703/policy-on-trolling) as well as the [Contributor Covenant v1.3.0](https://www.contributor-covenant.org/version/1/3/0/).*
 
-[mod_team]: https://www.tremor.rs/team.html#Moderation-team
+[mod_team]: https://www.tremor.rs/community/teams/#moderation-mod
 
 ## Origins
 
