@@ -37,3 +37,4 @@ cobertura.xml
 coverage.html
 temp/
 perf.data*
+**/*.docx
