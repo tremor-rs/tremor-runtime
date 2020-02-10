@@ -19,7 +19,6 @@ pub mod lines;
 use crate::errors::*;
 use base64;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use bytes::BufMut;
 use bytes::BytesMut;
 
 pub type Lines = lines::Lines;
@@ -241,7 +240,7 @@ pub struct LengthPrefix {
 impl Preprocessor for LengthPrefix {
     #[allow(clippy::cast_possible_truncation)]
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.buffer.put(data);
+        self.buffer.extend(data);
 
         let mut res = Vec::new();
         loop {
