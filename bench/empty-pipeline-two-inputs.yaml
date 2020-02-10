@@ -1,19 +1,19 @@
 onramp:
   - id: blaster1
     type: blaster
-    codec: pass
+    codec: json
     config:
       source: ./demo/data/data.json.xz
   - id: blaster2
     type: blaster
-    codec: pass
+    codec: json
     config:
       source: ./demo/data/data.json.xz
 
 offramp:
   - id: blackhole
     type: blackhole
-    codec: pass
+    codec: json
     config:
       warmup_secs: 10
       stop_after_secs: 40
