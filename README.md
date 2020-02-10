@@ -163,27 +163,11 @@ The demo mode logically follows the flow outlined below. It reads the data from 
 
 #### Config file
 
-The demo can be configured in (for example) the `demo/demo.yaml` file. An abbreviated version (with the critical elements) can be seen below. In the following sections, we'll quickly discuss each of the configuration options available to customize the demo.
-
-```yaml
-version: '3.3'
-services:
-# ...
- loadgen:
-# ...
-    environment:
-      - CONFIG_FILE=/configs/loadgen-250.yaml
-# ...
-  tremor:
-# ...
-    environment:
-      - CONFIG_FILE=/configs/tremor-demo.yaml
-# ...
-```
+The demo can be configured in (for example) the `demo/configs/tremor/config/config.yaml` file.
 
 #### Tremor
 
-Configuration lives in `demo/config`.
+Configuration lives in `demo/configs`.
 
 #### Test data
 
@@ -198,9 +182,8 @@ standard output that is compatible with HDR Histogram's plot files [service](htt
 To execute a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
 
 ```bash
-./bench/bench0.sh
+./bench/run <name>
 ```
-
 
 ### Ubuntu
 
