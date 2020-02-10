@@ -10,17 +10,6 @@ onramp:
       #host: 'localhost'
       host: 127.0.0.1
       port: 12202
-  #- id: gelf-udp
-  #  metrics_interval_s: 10
-  #  type: udp
-  #  preprocessors:
-  #    - decompress
-  #    - gelf-chunking
-  #    - decompress
-  #  codec: json
-  #  config:
-  #    host: 127.0.0.1
-  #    port: 12201
 
 offramp:
   - id: console
@@ -28,7 +17,7 @@ offramp:
     type: stdout
     codec: json
     config:
-      prefix: 'GELF (TCP): '
+      prefix: "GELF (TCP): "
   - id: elastic
     metrics_interval_s: 10
     type: elastic
@@ -40,26 +29,27 @@ offramp:
     type: stdout
     codec: yaml
     config:
-      prefix: 'TREMOR METRICS: '
+      prefix: "TREMOR METRICS: "
 
 binding:
   - id: gelf
     links:
-      '/onramp/gelf-tcp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      #'/onramp/gelf-udp/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      #
-      #'/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/elastic/{instance}/in' ]
-      #
-      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/{instance}/in' ]
+      "/onramp/gelf-tcp/{instance}/out":
+        - "/pipeline/main/{instance}/in"
+      "/pipeline/main/{instance}/out":
+        - "/offramp/elastic/{instance}/in"
+      "/pipeline/main/{instance}/error":
+        - "/offramp/system::stderr/{instance}/in"
   - id: metrics
     links:
-      '/pipeline/system::metrics/system/out': [ '/pipeline/metrics-enrich/system/in' ]
-      '/pipeline/metrics-enrich/system/out': [ '/offramp/metrics-console/system/in' ]
+      "/pipeline/system::metrics/system/out":
+        - "/pipeline/metrics-enrich/system/in"
+      "/pipeline/metrics-enrich/system/out":
+        - "/offramp/metrics-console/system/in"
 
 mapping:
   /binding/gelf/01:
-    instance: '01'
+    instance: "01"
   /binding/metrics/01: {}
 
 pipeline:
@@ -99,9 +89,9 @@ pipeline:
 
             event;
     links:
-      in: [ runtime ]
-      runtime: [ out ]
-      runtime/error: [ error ]
+      in: [runtime]
+      runtime: [out]
+      runtime/error: [error]
 
   - id: metrics-enrich
     interface:
@@ -119,6 +109,6 @@ pipeline:
 
             event;
     links:
-      in: [ runtime ]
-      runtime: [ out ]
-      runtime/error: [ error ]
+      in: [runtime]
+      runtime: [out]
+      runtime/error: [error]
