@@ -97,11 +97,15 @@ macro_rules! ignored_cases {
 }
 
 test_cases!(
+    arith_bad_shift_1,
+    arith_bad_shift_2,
     double_const,
     function_error_1,
     function_error_2,
     function_error_3,
     function_error_n,
+    imut_bad_drop,
+    imut_bad_emit,
     invalid_const_binary,
     invalid_const_unary,
     invalid_extractor,

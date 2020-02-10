@@ -1,6 +1,0 @@
-##
-## Emit
-##
-
-emit 20; # we return here
-emit 30;  # never gets executed

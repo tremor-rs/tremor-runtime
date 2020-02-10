@@ -1,7 +1,0 @@
-let $arma = "arma";
-let dillo = "dillo";
-emit [
-    string::format("hello {} {}", $arma, dillo ),
-    "hello {$arma} {dillo}",
-    system::hostname()
-] => "snot";

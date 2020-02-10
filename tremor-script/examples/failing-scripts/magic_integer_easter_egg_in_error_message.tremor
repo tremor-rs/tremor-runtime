@@ -1,4 +1,0 @@
-let foo = { "meta": 82 };
-let bar = { "meta" : 82.0 };
-??? ## something that intentionally fails
-foo == bar

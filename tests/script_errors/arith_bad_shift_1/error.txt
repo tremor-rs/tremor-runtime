@@ -1,0 +1,3 @@
+Error: 
+    1 | 42 >> 64
+      | ^^^^^^^^ RHS value is larger than or equal to the number of bits in LHS value

@@ -1,4 +1,0 @@
-match "dont-care" of
-  case "maybe" => "ko", [ "ko" ], "ko"
-  default => [ "ko", [ "ko" ], { "ok": "why not?" } ] # re-use '{' and '}'?
-end

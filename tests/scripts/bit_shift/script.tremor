@@ -1,7 +1,4 @@
-# to bypass constant folding
-let a = 42;
-
-emit [
+[
   "right bit shift (signed)",
   42 >> 0,
   42 >> 2,
@@ -43,4 +40,4 @@ emit [
   #a << "2"
   #42 << true
   #42 <<< 2
-];
+]

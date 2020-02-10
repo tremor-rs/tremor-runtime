@@ -1,0 +1,3 @@
+Error: 
+    1 | 42 >> 2.0
+      | ^^^^^^^^^ The binary operation `>>` is not defined for the type `integer` and `float`
