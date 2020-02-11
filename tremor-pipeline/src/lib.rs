@@ -520,18 +520,22 @@ pub struct ExecutableGraph {
 
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
-    #[cfg(not(feature = "graph-rewrite"))]
     pub fn optimize(&mut self) -> Option<()> {
-        // ALLOW: this is OK
-        let _ = self;
-        // Disabled by default
+        let mut i = 0;
+        while self.optimize_()? {
+            i += 1;
+            if i > 1000 {
+                error!("Failed to optimise loop after 1000 iterations");
+                return None;
+            }
+        }
         Some(())
     }
-    #[cfg(feature = "graph-rewrite")]
-    pub fn optimize(&mut self) -> Option<()> {
+    fn optimize_(&mut self) -> Option<bool> {
+        let mut did_chage = false;
         // remove skippable nodes from contraflow and signalflow
         self.contraflow = (*self.contraflow)
-            .into_iter()
+            .iter()
             .filter(|id| {
                 self.graph
                     .get(**id)
@@ -542,7 +546,7 @@ impl ExecutableGraph {
             .collect();
 
         self.signalflow = (*self.signalflow)
-            .into_iter()
+            .iter()
             .filter(|id| {
                 self.graph
                     .get(**id)
@@ -578,20 +582,27 @@ impl ExecutableGraph {
                 }
             }
         }
+        // The id's of all nodes that are skippable
         let skippables: Vec<_> = self
             .graph
             .iter()
             .enumerate()
             .filter_map(|(id, e)| {
                 if e.skippable() && e.kind == NodeKind::Operator {
-                    Some(id.clone())
+                    Some(id)
                 } else {
                     None
                 }
             })
             .collect();
+
         for skippable_id in &skippables {
-            let mut destinations = Vec::new();
+            // We iterate over all the skippable ID's
+
+            // We collect all the outputs that the skippable node
+            // sends data to.
+            // So of a passthrough sends data to node 4 and 5
+            // 4 and 5 becomes the output
             let outputs: Vec<_> = self
                 .port_indexes
                 .iter()
@@ -605,16 +616,10 @@ impl ExecutableGraph {
                 .flatten()
                 .cloned()
                 .collect();
-            // collect all the destionations we're connecting to
-            for o in &outputs {
-                let mut dsts1: Vec<_> = self
-                    .port_indexes
-                    .remove(o)?
-                    .into_iter()
-                    .map(|(id, _)| id)
-                    .collect();
-                destinations.append(&mut dsts1);
-            }
+
+            // Find all nodes that connect to the skippable
+            // so if node 1 and 7 connect to the passthrough
+            // then this is going to be 1 and 7
             let inputs: Vec<_> = self
                 .port_indexes
                 .iter()
@@ -630,22 +635,35 @@ impl ExecutableGraph {
                 })
                 .cloned()
                 .collect();
+
+            // We iterate over all nodes that connect to the skippable
+            // we're handling.
+
             for i in inputs {
+                // Take the nodes connections for the indexes
                 let srcs: Vec<_> = self.port_indexes.remove(&i)?;
                 let mut srcs1 = Vec::new();
+
+                // We then iterate over all the destinations that input
+                // node connects to
                 for (src_id, src_port) in srcs {
                     if src_id == *skippable_id {
-                        for d in &destinations {
-                            srcs1.push((*d, src_port.clone()))
+                        did_chage = true;
+                        // If it is the skippable node replace this entry
+                        // with all the outputs the skippable had
+                        for o in &outputs {
+                            srcs1.push(o.clone())
                         }
                     } else {
+                        // Otherwise keep the connection untoucehd.
                         srcs1.push((src_id, src_port))
                     }
                 }
+                // Add the node back in
                 self.port_indexes.insert(i, srcs1);
             }
         }
-        Some(());
+        Some(did_chage)
     }
     /// This is a performance critial function!
     pub fn enqueue(

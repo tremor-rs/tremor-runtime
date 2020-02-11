@@ -102,7 +102,7 @@ test_cases!(
     rewrite_root,
     script_params_overwrite,
     script_params,
-    //streams,
+    streams,
     tremor_map,
     where_filter,
     window_by_two_scripted,

@@ -490,14 +490,12 @@ mod tests {
 
     #[test]
     fn test_assign_local() {
-        dbg!();
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
             Value::from(hashmap! {
                 "out".into() => Value::from(vec![2u64, 4, 6, 8]),
             })
         );
-        dbg!();
         eval_global!(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
             Value::from(hashmap! {
