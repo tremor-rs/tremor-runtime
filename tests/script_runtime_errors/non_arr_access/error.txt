@@ -1,0 +1,3 @@
+Error: 
+    1 | event.snot[42]
+      |            ^^ Conflicting types, got integer but expected array

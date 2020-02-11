@@ -1,0 +1,7 @@
+Warning: 
+    1 | merge event of match true of
+    2 |   case true => true
+    3 |   default => true
+    4 |   default => false
+    5 | end end
+      |                ^ A match statement with more then one default clause will enver reach any but the first default clause.

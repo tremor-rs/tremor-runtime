@@ -1,0 +1,15 @@
+define grouper::bucket operator bucket;
+
+define script badger
+with
+  value = "snot"
+script
+  let event.badger = args.value;
+  event
+end;
+
+create script badger;
+
+select event from in into badger;
+
+select event from badger into out;

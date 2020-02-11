@@ -1,0 +1,2 @@
+let k = "a";
+event[1:k]

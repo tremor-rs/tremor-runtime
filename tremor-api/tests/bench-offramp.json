@@ -1,0 +1,9 @@
+{
+  "config": {
+    "significant_figures": 2,
+    "stop_after_secs": 4,
+    "warmup_secs": 1
+  },
+  "id": "blackhole",
+  "type": "blackhole"
+}

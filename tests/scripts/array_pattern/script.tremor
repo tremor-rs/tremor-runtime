@@ -1,0 +1,4 @@
+match event of
+  case foo = %[ 2, 4 ] => foo[2][0]
+  default => "ko"
+end

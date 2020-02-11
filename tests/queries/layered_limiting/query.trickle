@@ -1,0 +1,33 @@
+define grouper::bucket operator bucket;
+
+define script layer1
+script
+  let $class = "default";
+  let $dimensions = match record::contains(event, "application") of
+    case true => event.application
+    default =>  null
+  end;
+  let $rate = 5;
+  event;
+end;
+
+define script layer2
+script
+  match record::contains(event, "host") of
+    case true => let $dimensions = event.host
+    default => null
+  end;
+  let $rate = 1;
+  event;
+end;
+
+create script layer1;
+create operator bucket_layer1 from bucket;
+create script layer2;
+create operator bucket_layer2 from bucket;
+
+select event from in into layer1;
+select event from layer1 into bucket_layer1;
+select event from bucket_layer1 into layer2;
+select event from layer2 into bucket_layer2;
+select event from bucket_layer2 into out;

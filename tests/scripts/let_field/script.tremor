@@ -1,0 +1,4 @@
+let key = "key";
+
+let event[key] = "value";
+emit event

@@ -1,0 +1,1 @@
+select for event of case (a, b) => b end from in into out;

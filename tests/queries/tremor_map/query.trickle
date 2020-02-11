@@ -1,0 +1,12 @@
+define script s
+script
+  let event.tremor.index_key = string::format("{}-{}", event.application, event.type);
+  let event.tremor.instance = system::instance();
+  event
+end;
+
+create script s;
+
+select event from in into s;
+
+select event from s into out;

@@ -1,0 +1,17 @@
+{application, tremor_api,
+ [{description, "Erlang client for the tremor API"},
+  {vsn, "0.1.0"},
+  {registered, [tremor_api]},
+  {applications,
+   [
+    lager,
+    gun,
+    jsx,
+    kernel,
+    stdlib
+   ]},
+  {env,[]},
+  {modules, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.

@@ -1,0 +1,3 @@
+Error: 
+    2 | event.snot[key]
+      |            ^^^ Conflicting types, got integer but expected record

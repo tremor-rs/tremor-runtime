@@ -1,0 +1,26 @@
+onramp:
+  - id: metronome
+    type: metronome
+    config:
+      interval: 10000
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - outliers
+    nodes: []
+    links:
+      in: [ out ]
+
+binding:
+  - id: default
+    links:
+      '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/system::stdout/system/in' ]
+      '/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
+mapping:
+  /binding/default/01:
+    instance: '01'

@@ -1,0 +1,7 @@
+Error: 
+    1 | select
+    2 | event
+    3 | from in
+    4 | where a + b > 3
+      |       ^^^^^^^^^ Local variables are not allowed here
+    5 | into out;

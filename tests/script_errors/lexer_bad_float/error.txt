@@ -1,0 +1,3 @@
+Error: 
+    1 | 1.0e
+      | ^ An invalid float literal

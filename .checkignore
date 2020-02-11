@@ -1,0 +1,6 @@
+target
+property_testing
+depricated
+tests
+build.rs
+benches.old

@@ -1,0 +1,8 @@
+Error: 
+    1 | match ecent of
+    2 |   case %{ key ~= re|(| } => true
+      |                  ^^^^^ Invalid tilde predicate pattern: regex parse error:
+    (
+    ^
+error: unclosed group
+    3 | end

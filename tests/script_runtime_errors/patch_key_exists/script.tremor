@@ -1,0 +1,3 @@
+patch {"a": 1} of
+  insert "a" => 2
+end

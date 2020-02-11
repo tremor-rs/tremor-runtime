@@ -1,0 +1,16 @@
+id: main
+interface:
+  inputs:
+    - in
+  outputs:
+    - out
+nodes:
+  - id: r
+    op: runtime::tremor
+    config:
+      script: |
+        let event.nested = patch event.nested of insert "new key" => "value", erase "nested_key" end;
+        event;
+links:
+  in: [ r ]
+  r: [ out ]

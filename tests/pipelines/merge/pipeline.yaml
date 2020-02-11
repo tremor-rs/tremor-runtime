@@ -1,0 +1,16 @@
+id: main
+interface:
+  inputs:
+    - in
+  outputs:
+    - out
+nodes:
+  - id: r
+    op: runtime::tremor
+    config:
+      script: |
+        let event.nested = merge event.nested of {"new key": "value", "nested_key": null} end;
+        event;
+links:
+  in: [ r ]
+  r: [ out ]

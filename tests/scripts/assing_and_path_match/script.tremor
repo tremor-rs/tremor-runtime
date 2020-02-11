@@ -1,0 +1,11 @@
+let a = patch event of
+  insert "test" => 1
+end;
+
+let b = merge a of
+  {"strawberry": "cake"}
+end;
+
+let event = b;
+
+emit

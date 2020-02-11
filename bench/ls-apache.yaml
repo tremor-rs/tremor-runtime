@@ -1,0 +1,52 @@
+# Test a realistic workflow including json encoding and decoding
+# and connect both the pass and the overflow output to the
+# blackhole to acount for the data
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: string
+    config:
+      source: ./demo/data/apache_access_logs.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    codec: json
+    config:
+      warmup_secs: 10
+      stop_after_secs: 100
+      significant_figures: 2
+
+binding:
+  - id: bench
+    links:
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}/error":
+        ["/offramp/system::stderr/{instance}/in"]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - error
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            match {"message": event} of
+              case r = %{ message ~= grok|%{IPORHOST:clientip}·%{USER:ident}·%{USER:auth}·[%{HTTPDATE:timestamp}]·"%{WORD:verb}·%{DATA:request}·HTTP/%{NUMBER:httpversion}"·%{NUMBER:response:int}·(?:-\|%{NUMBER:bytes:int})·%{QS:referrer}·%{QS:agent}| } => 
+                let event = r.message
+              default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
+            end;
+            event
+    links:
+      in: [runtime]
+      runtime: [out]
+      runtime/drop: [out]
+      runtime/error: [error]

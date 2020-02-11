@@ -1,0 +1,13 @@
+# validate that cidr target in field 'meta' is a valid IPv4 or IPv6 network address and extract the CIDR prefix and mask
+
+let bare_cidr = match event of
+  case rp = %{ bare ~= cidr|| } => rp
+  default => "no match"
+end;
+
+let pinned_cidr = match event of
+  case rp = %{ pinned ~= cidr|10.22.0.0/24| } => rp
+  default => "no match"
+end;
+
+merge bare_cidr of pinned_cidr end

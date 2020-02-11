@@ -1,0 +1,26 @@
+[package]
+name = "tremor-server"
+version = "0.1.0"
+authors = ["The Tremor Team"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+tremor-runtime = { path = "../" }
+tremor-api = { path = "../tremor-api" }
+tremor-pipeline = { path = "../tremor-pipeline" }
+tremor-script = { path = "../tremor-script" }
+serde_yaml = "0.8"
+clap = { version = "2", features = ["yaml"] }
+env_logger = "0.6"
+log = "0.4"
+log4rs = "0.8"
+actix-web = "1"
+actix-files = "0.1"
+actix-cors = "0.1"
+#mimalloc = { version = "0.1.6", default-features = false }
+#jemallocator = "0.3.2"
+mimalloc = { git = "https://github.com/purpleprotocol/mimalloc_rust", tag = "v0.1.6", default-features = false }
+
+[features]
+default = []

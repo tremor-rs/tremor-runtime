@@ -1,0 +1,5 @@
+# Simple onramp used for benchmarking
+id: blaster
+type: blaster
+config:
+  source: demo/data/data.json.xz

@@ -1,0 +1,4 @@
+Error: 
+    1 | patch {"a": 1} of
+    2 |   insert "a" => 2 
+      |           ^ The key that is supposed to be written to already exists: a

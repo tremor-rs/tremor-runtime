@@ -1,0 +1,3 @@
+Error: 
+    1 | event[42]
+      |       ^^ Trying to access an index that is out of range 42

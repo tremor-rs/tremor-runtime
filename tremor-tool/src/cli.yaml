@@ -1,0 +1,249 @@
+name: tremor-cli
+version: "1.0"
+author: The Tremor Team
+about: Tremor command line interface tool
+settings:
+    - ArgRequiredElseHelp
+args:
+    - config:
+          short: c
+          long: config
+          value_name: FILE
+          help: Sets a custom config file
+          takes_value: true
+    - verbose:
+          short: v
+          multiple: true
+          help: Sets the level of verbosity
+    - format:
+          short: f
+          multiple: false
+          help: Sets the output format ( json | yaml )
+          takes_value: true
+subcommands:
+    - script:
+          about: Tremor scripting language tool
+          subcommands:
+              - run:
+                    about: Run tremor script against stdin or a json data archive
+                    args:
+                        - SCRIPT:
+                              help: tremor script filename
+                              required: true
+                        - DATA:
+                              required: false
+                              help: JSON-per-line data log to replay
+    - grok:
+          about: Tremor support for logstash grok patterns
+          subcommands:
+              - run:
+                    about: Run tremor grok matcher against stdin or a json data archive
+                    args:
+                        - patterns:
+                              short: p
+                              long: patterns
+                              help: Extra patterns ( or alternative builtins if ignoring builtin patterns )
+                              required: false
+                              multiple: false
+                              takes_value: true
+                        - TEST_PATTERN:
+                              help: The grok pattern under test for this run
+                              required: true
+                        - DATA:
+                              required: false
+                              help: line by line data log to replay, or stdin otherwise
+    - pipe:
+          about: Tremor pipeline tool
+          subcommands:
+              - run:
+                    about: Run pipeline against stdin or a json data archive
+                    args:
+                        - CONFIG:
+                              help: tremor pipeline configuration
+                              required: true
+                        - DATA:
+                              required: false
+                              help: JSON-per-line data log to replay
+              - dot:
+                    about: Generate a dot ( graphviz ) graph from the pipeline
+                    args:
+                        - CONFIG:
+                              help: tremor pipeline configuration
+                              required: true
+    - api:
+          about: Tremor API client
+          subcommands:
+              - version:
+                    about: Get tremor version
+              - target:
+                    about: Target one or many tremor server instances
+                    subcommands:
+                        - list:
+                              about: List registered targets
+                        - create:
+                              about: Create a new API target
+                              args:
+                                  - TARGET_ID:
+                                        help: The unique target id for the targetted tremor servers
+                                        required: true
+                                  - SOURCE:
+                                        help: JSON or YAML file request body
+                                        required: true
+                        - delete:
+                              about: Delete an existing API target
+                              args:
+                                  - TARGET_ID:
+                                        help: The unique target id for the targetted tremor servers
+                                        required: true
+              - binding:
+                    about: Query/update binding specification repository
+                    subcommands:
+                        - list:
+                              about: List registered binding specifications
+                        - fetch:
+                              about: Fetch a binding by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the binding specification
+                                        required: true
+                        - delete:
+                              about: Delete a binding by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the binding specification
+                                        required: true
+                        - create:
+                              about: Create and register a binding specification
+                              args:
+                                  - SOURCE:
+                                        help: JSON or YAML file request body
+                                        required: true
+                        - instance:
+                              about: Fetch an binding instance by artefact id and instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the binding specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the binding specification
+                                        required: true
+                        - activate:
+                              about: Activate a binding by artefact id and servant instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the binding specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the binding specification
+                                        required: true
+                                  - SOURCE:
+                                        help: JSON -r YAML file request body
+                                        required: true
+                        - deactivate:
+                              about: Activate a binding by artefact id and servant instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the binding specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the binding specification
+                                        required: true
+
+              - pipeline:
+                    about: Query/update pipeline specification repository
+                    subcommands:
+                        - list:
+                              about: List registered pipeline specifications
+                        - fetch:
+                              about: Fetch a pipeline by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the pipeline specification
+                                        required: true
+                        - delete:
+                              about: Delete a pipeline by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the pipeline specification
+                                        required: true
+                        - create:
+                              about: Create and register a pipeline specification
+                              args:
+                                  - SOURCE:
+                                        help: JSON or YAML file request body
+                                        required: false
+                        - instance:
+                              about: Fetch an pipeline instance by artefact id and instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the pipeline specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the pipeline specification
+                                        required: true
+
+              - onramp:
+                    about: Query/update onramp specification repository
+                    subcommands:
+                        - list:
+                              about: List registered onramp specifications
+                        - fetch:
+                              about: Fetch an onramp by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the onramp specification
+                                        required: true
+                        - delete:
+                              about: Delete an onramp by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the onramp specification
+                                        required: true
+                        - create:
+                              about: Create and register an onramp specification
+                              args:
+                                  - SOURCE:
+                                        help: JSON or YAML file request body
+                                        required: false
+                        - instance:
+                              about: Fetch an onramp instance by artefact id and instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the onramp specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the onramp specification
+                                        required: true
+
+              - offramp:
+                    about: Query/update offramp specification repository
+                    subcommands:
+                        - list:
+                              about: List registered offramp specifications
+                        - fetch:
+                              about: Fetch an offramp by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the offramp specification
+                                        required: true
+                        - delete:
+                              about: Delete an offramp by artefact id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the offramp specification
+                                        required: true
+                        - create:
+                              about: Create and register an offramp specification
+                              args:
+                                  - SOURCE:
+                                        help: JSON or YAML file request body
+                                        required: false
+                        - instance:
+                              about: Fetch an offramp instance by artefact id and instance id
+                              args:
+                                  - ARTEFACT_ID:
+                                        help: The unique artefact id for the offramp specification
+                                        required: true
+                                  - INSTANCE_ID:
+                                        help: The unique instance id for the offramp specification
+                                        required: true

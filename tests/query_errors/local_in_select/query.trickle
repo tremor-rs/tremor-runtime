@@ -1,0 +1,3 @@
+select
+a + b
+from in into out;

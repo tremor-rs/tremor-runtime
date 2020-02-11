@@ -1,0 +1,5 @@
+Warning: 
+    1 | match true of
+    2 |   case true => true
+    3 | end
+      | ^^^ This match expression has no default clause, if the other clauses do not cover all posiblities this will lead to events being discarded with runtime errors.
