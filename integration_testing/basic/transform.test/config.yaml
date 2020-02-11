@@ -2,15 +2,14 @@ onramp:
   - id: in
     type: file
     config:
-      source: {in}
+      source: { in }
       close_on_done: true
 
 offramp:
   - id: out
     type: file
     config:
-      file: {out}
-
+      file: { out }
 pipeline:
   - id: main
     interface:
@@ -18,28 +17,20 @@ pipeline:
         - in
       outputs:
         - out
+        - error
     nodes:
-      - id: r
+      - id: runtime
         op: runtime::tremor
         config:
           script: |
-            #mutate {
-            #  rename => { "full_message" => "message" }
-            #}
-            
+
             let event = patch event of
               upsert "message" => event.full_message,
               upsert "tremor" => system::hostname()
             end;
-            
+
             # require '/etc/logstash/utils/field_formatter'
-            # FieldFormatter.load_gelf_field_lists()
-            
-            # alternative
-            
-            # once: execute the following expression during compile time?
-            # system::evel(<code_path>, <metadata>, <event_data>);
-            # let normalized_fields_mapping = once system::eval("/path/to/normalized_fields_mapping.json", {}, {}); TODO
+
             const normalized_fields_mapping = {
               "_action": "action",
               "AjaxRequest": "ajax_request",
@@ -51,7 +42,7 @@ pipeline:
               "AvailableForDeliveryScheduling": "available_for_delivery_scheduling",
               "BclgID": "bclg_id",
               "BiPEDRank": "bi_ped_rank",
-              "BotFlag": "bot_flag",
+              "dcatFlag": "dcat_flag",
               "CallerApplication": "caller_application",
               "CallerIPaddress": "caller_ip_address",
               "CallerOperation": "caller_operation",
@@ -135,7 +126,7 @@ pipeline:
               "RgID": "rg_id",
               "ScriptFilename": "script_filename",
               "ScriptName": "script_name",
-              "service": "service",
+              "dcbrvice": "dcbrvice",
               "ShipSpeed": "ship_speed",
               "ShortQuery": "short_query",
               "SkipCache": "skip_cache",
@@ -164,235 +155,58 @@ pipeline:
               "WFSID": "wf_sid",
               "wh_id": "warehouse_id"
             };
-            
+
             #... there are more of those
-            
-            # # set gelf log level
-            # FieldFormatter.set_gelf_log_level(event)
-            
-            # 105   def self.set_gelf_log_level(event)
-            # 106     if (!event.get('log_level').nil? && !(/(DEBUG|INFO|WARN|ERROR|FATAL)/ =~ event.get('log_level')).nil?)
-            # 107       # log_level is already set, nothing needs to be done
-            # 108     elsif (!event.get('short_message').nil? && !(match_data = event.get('short_message').scan(/(\d+\s)*(DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*/)).empty?)
-            # 109       # attempt to copy log_level from short_message (most cases)
-            # 110       event.set('log_level', match_data[0][1])
-            # 111     else
-            # 112       # if all fails, default log_level to INFO
-            # 113       event.set('log_level', 'INFO')
-            # 114     end
-            # 115   end
-            
-            # Idea: contained tester that parses it's argument as a  if a value
-            #       is contained in the parameters
-            # contained|["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]|
-            
-            
+
+            # set gelf log level
+
             let event = merge event of match event of
                 # If we have log level set and log level is one of the known log levels we are good
                 case r = %{ present log_level } when array::contains(["DEBUG", "INFO", "WARN", "ERROR", "FATAL"], r.log_level) => {}
-                ## with contains bar
-                # case r = %{ log_level = log_level ~= contained|["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]| } => r.log_level
-                # If short message is set and contains a known log level use that
-                # case _ when re::is_match("(\\d+\\s)*(DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message) => re::replace("(\\d+\\s)*(?P<loglevel>DEBUG|INFO|WARN|ERROR|FATAL)(_LOG_MESSAGE)*", event.short_message, "$loglevel");
                 case r = %{ short_message ~= re|(\\d+\\s)*(?P<log_level>DEBUG\|INFO\|WARN\|ERROR\|FATAL)(_LOG_MESSAGE)| } => r.short_message
                 # default to INFO
                 default => {"log_level": "INFO"}
               end
             end;
-            
-            
-            # # normalize field names
-            # FieldFormatter.normalize_gelf_field_names(event)
-            
-            # 117   def self.normalize_gelf_field_names(event)
-            # 118     for key in @@normalized_fields_mapping.keys
-            # 119       if (!event.get(key).nil? && event.get(@@normalized_fields_mapping[key]).nil?) then
-            # 120         event.set(@@normalized_fields_mapping[key], event.get(key))
-            # 121         remove_event_field(event, key)
-            # 122       end
-            # 123     end
-            # 124   end
-            
-            # Only keep keys we know about
-            # let event = record::select(event, record::keys(normalized_fields_mapping));
-            
-            # or as a comprehension combining the two above.
-            # assumption <array>[<key>] returns nil if key isn't present
-            # TODO: nil vs null: now do we describe 'exists' ?
+
 
             let event = record::rename(event, normalized_fields_mapping);
-            #for normalized_fields_mapping of 
-            #  case (from, to) => let event = patch event of move from => to end
-            #end;
-
-            # # create wf_* fields
-            # FieldFormatter.update_wf_host_details(event)
-            
-            # 33     # Keep the following list in sync with modules/wayfair/lib/facter/pod.rb
-            # 34     locations = {
-            # 35       '10.22.0.0/17'    => {pod: 'web01', datacenter: 'bo3'},
-            # 36       '10.21.0.0/17'    => {pod: 'sec01', datacenter: 'bo3'},
-            # 37       '10.224.0.0/16'   => {pod: 'bo1', datacenter: 'bo1'},
-            # 38       '10.225.0.0/17'   => {pod: 'bo1', datacenter: 'bo1'},
-            # 39       '10.225.128.0/17' => {pod: 'secbo1', datacenter: 'bo1'},
-            # 40       '10.60.0.0/17'    => {pod: 'web03', datacenter: 'se2'},
-            # 41       '10.61.0.0/17'    => {pod: 'sec03', datacenter: 'se2'},
-            # 42       '10.236.0.0/17'   => {pod: 'ie2', datacenter: 'ie2'},
-            # 43       '10.236.128.0/17' => {pod: 'ie2', datacenter: 'ie2'},
-            # 44       '10.237.0.0/17'   => {pod: 'ie2', datacenter: 'ie2'},
-            # 45       '10.238.0.0/16'   => {pod: 'ie2', datacenter: 'ie2'},
-            # 46       '10.237.128.0/17' => {pod: 'sec04', datacenter: 'ie2'},
-            # 47       '10.22.128.0/18'  => {pod: 'cit01', datacenter: 'bo3'},
-            # 48       '10.22.192.0/19'  => {pod: 'cit01', datacenter: 'bo3'},
-            # 49       '10.22.240.0/20'  => {pod: 'san01', datacenter: 'bo3'},
-            # 50       '10.24.0.0/16'    => {pod: 'dev01', datacenter: 'dev'},
-            # 51       '10.228.0.0/15'   => {pod: 'devbo1', datacenter: 'devbo1'},
-            # 52       '10.230.196.0/24' => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 53       '10.230.200.0/24' => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 54       '10.230.206.0/24' => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 55       '10.230.208.0/24' => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 56       '10.230.210.0/24' => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 57       '10.231.6.0/24'   => {pod: 'stgbo1', datacenter: 'stbo1'},
-            # 58       '10.230.134.0/24' => {pod: 'secstgbo1', datacenter: 'stbo1'},
-            # 59       '10.230.136.0/24' => {pod: 'secstgbo1', datacenter: 'stbo1'},
-            # 60       '10.230.138.0/24' => {pod: 'secstgbo1', datacenter: 'stbo1'},
-            # 61       '10.231.128.0/24' => {pod: 'secstgbo1', datacenter: 'stbo1'},
-            # 62       '10.60.128.0/18'  => {pod: 'cit03', datacenter: 'se2'},
-            # 63       '10.60.192.0/19'  => {pod: 'cit03', datacenter: 'se2'},
-            # 64       '10.60.240.0/20'  => {pod: 'san03', datacenter: 'se2'},
-            # 65       '10.23.0.0/17'    => {pod: 'web02', datacenter: 'ep'},
-            # 66       '10.20.0.0/17'    => {pod: 'sec02', datacenter: 'ep'},
-            # 67       '10.11.0.0/16'    => {pod: 'ma2', datacenter: 'ma2'},
-            # 68       '10.28.0.0/16'    => {pod: 'ny1', datacenter: 'ny1'},
-            # 69       '10.248.0.0/16'   => {pod: 'se1', datacenter: 'se1'},
-            # 70       '10.249.0.0/17'   => {pod: 'se1', datacenter: 'se1'},
-            # 71       '10.249.128.0/18' => {pod: 'secse1', datacenter: 'se1'},
-            # 72       '10.249.192.0/19' => {pod: 'se1', datacenter: 'se1'}
-            # 73     }
-            # 74 
-            # 75     if /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/.match(event.get('wf_host_ip'))
-            # 76       ip_addr, port = event.get('wf_host_ip').split(':')
-            # 77       event.set('wf_host_ip', ip_addr)
-            # 78       if (event.get('wf_host_port').nil?)
-            # 79         event.set('wf_host_port', port)
-            # 80       end
-            # 81       source_ip = IPAddr.new(event.get('wf_host_ip'), Socket::AF_INET)
-            # 82       locations.each do |ip_addr, location|
-            # 83         if (IPAddr.new(ip_addr).include?(source_ip))
-            # 84           if (event.get('wf_pod').nil?)
-            # 85             event.set('wf_pod', location[:pod])
-            # 86           end
-            # 87           if (event.get('wf_datacenter').nil?)
-            # 88             event.set('wf_datacenter', location[:datacenter])
-            # 89           end
-            # 90           break
-            # 91         end
-            # 92       end
-            # 93     end
-            # 94 
-            # 95     # if coudn't determine use logstash's datacenter and pod
-            # 96     if (event.get('wf_pod').nil?)
-            # 97       event.set('wf_pod', 'bo1')
-            # 98     end
-            # 99     if (event.get('wf_datacenter').nil?)
-            # 100       event.set('wf_datacenter', 'bo1')
-            # 101     end
-            # 102 
-            # 103   end
-            
 
             match event of
               case r = %{wf_host_ip ~= dissect|%{wf_host_ip}:%{wf_host_port}|} => let event.wf_host_ip = r.wf_host_ip.wf_host_ip
               default => null # wf_host_port was already been set no need to update it
             end;
-            
+
             # set defaults;
             # re-set pod and datacenter even if they existed
             # Assumption: cidr/.../ => cidr match
             let event = merge event of match event of
                 case %{present wf_datacenter, present wf_pod}                                                                             => {} # don't overwrite existing settings
-                case %{wf_host_ip ~= cidr|10.225.128.0/17|}                                                                               => {"wf_pod": "secbo1",    "wf_datacenter": "bo1"}
-                case %{wf_host_ip ~= cidr|10.22.0.0/17|}                                                                                  => {"wf_pod": "web01",     "wf_datacenter": "bo3"}
-                case %{wf_host_ip ~= cidr|10.21.0.0/17|}                                                                                  => {"wf_pod": "sec01",     "wf_datacenter": "bo3"}
-                case %{wf_host_ip ~= cidr|10.22.128.0/18,10.22.192.0/19|}                                                                 => {"wf_pod": "cit01",     "wf_datacenter": "bo3"}
-                case %{wf_host_ip ~= cidr|10.22.240.0/20|}                                                                                => {"wf_pod": "san01",     "wf_datacenter": "bo3"}
-                case %{wf_host_ip ~= cidr|10.60.0.0/17|}                                                                                  => {"wf_pod": "web03",     "wf_datacenter": "se2"}
-                case %{wf_host_ip ~= cidr|10.61.0.0/17|}                                                                                  => {"wf_pod": "sec03",     "wf_datacenter": "se2"}
-                case %{wf_host_ip ~= cidr|10.60.128.0/18,10.60.192.0/19|}                                                                 => {"wf_pod": "cit03",     "wf_datacenter": "se2"}
-                case %{wf_host_ip ~= cidr|10.60.240.0/20|}                                                                                => {"wf_pod": "san03",     "wf_datacenter": "se2"}
-                case %{wf_host_ip ~= cidr|10.236.0.0/17,10.236.128.0/17,10.237.0.0/17,10.238.0.0/16|}                                     => {"wf_pod": "ie2",       "wf_datacenter": "ie2"}
-                case %{wf_host_ip ~= cidr|10.237.128.0/17|}                                                                               => {"wf_pod": "sec04",     "wf_datacenter": "ie2"}
-                case %{wf_host_ip ~= cidr|10.24.0.0/16|}                                                                                  => {"wf_pod": "dev01",     "wf_datacenter": "dev"}
-                case %{wf_host_ip ~= cidr|10.228.0.0/15|}                                                                                 => {"wf_pod": "devbo1",    "wf_datacenter": "devbo1"}
-                case %{wf_host_ip ~= cidr|10.230.196.0/24,10.230.200.0/24,10.230.206.0/24,10.230.208.0/24,10.230.210.0/24,10.231.6.0/24|} => {"wf_pod": "stgbo1",    "wf_datacenter": "stbo1"}
-                case %{wf_host_ip ~= cidr|10.230.134.0/24,10.230.136.0/24,10.230.138.0/24,10.231.128.0/24|}                               => {"wf_pod": "secstgbo1", "wf_datacenter": "stbo1"}
-                case %{wf_host_ip ~= cidr|10.23.0.0/17|}                                                                                  => {"wf_pod": "web02",     "wf_datacenter": "ep"}
-                case %{wf_host_ip ~= cidr|10.20.0.0/17|}                                                                                  => {"wf_pod": "sec02",     "wf_datacenter": "ep"}
-                case %{wf_host_ip ~= cidr|10.11.0.0/16|}                                                                                  => {"wf_pod": "ma2",       "wf_datacenter": "ma2"}
-                case %{wf_host_ip ~= cidr|10.28.0.0/16|}                                                                                  => {"wf_pod": "ny1",       "wf_datacenter": "ny1"}
-                case %{wf_host_ip ~= cidr|10.248.0.0/16,10.249.192.0/19,10.249.0.0/17|}                                                   => {"wf_pod": "se1",       "wf_datacenter": "se1"}
-                case %{wf_host_ip ~= cidr|10.249.128.0/18|}                                                                               => {"wf_pod": "secse1",    "wf_datacenter": "se1"}
-                #case %{wf_host_ip ~= cidr|10.224.0.0/16|}                                                                                => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
-                #case %{wf_host_ip ~= cidr|10.225.0.0/17|}                                                                                => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
-                default                                                                                                                   => {"wf_pod": "bo1",       "wf_datacenter": "bo1"}
+                case %{wf_host_ip ~= cidr|10.225.128.0/17|}                                                                               => {"wf_pod": "dcbcdca1",    "wf_datacenter": "dca1"}
+                case %{wf_host_ip ~= cidr|10.22.0.0/17|}                                                                                  => {"wf_pod": "web01",      "wf_datacenter": "dca3"}
+                case %{wf_host_ip ~= cidr|10.21.0.0/17|}                                                                                  => {"wf_pod": "dcbc01",     "wf_datacenter": "dca3"}
+                case %{wf_host_ip ~= cidr|10.22.128.0/18,10.22.192.0/19|}                                                                 => {"wf_pod": "cit01",      "wf_datacenter": "dca3"}
+                case %{wf_host_ip ~= cidr|10.22.240.0/20|}                                                                                => {"wf_pod": "san01",      "wf_datacenter": "dca3"}
+                case %{wf_host_ip ~= cidr|10.60.0.0/17|}                                                                                  => {"wf_pod": "web03",      "wf_datacenter": "dcb2"}
+                case %{wf_host_ip ~= cidr|10.61.0.0/17|}                                                                                  => {"wf_pod": "dcbc03",     "wf_datacenter": "dcb2"}
+                case %{wf_host_ip ~= cidr|10.60.128.0/18,10.60.192.0/19|}                                                                 => {"wf_pod": "cit03",      "wf_datacenter": "dcb2"}
+                case %{wf_host_ip ~= cidr|10.60.240.0/20|}                                                                                => {"wf_pod": "san03",      "wf_datacenter": "dcb2"}
+                case %{wf_host_ip ~= cidr|10.236.0.0/17,10.236.128.0/17,10.237.0.0/17,10.238.0.0/16|}                                     => {"wf_pod": "dcc2",       "wf_datacenter": "dcc2"}
+                case %{wf_host_ip ~= cidr|10.237.128.0/17|}                                                                               => {"wf_pod": "dcbc04",     "wf_datacenter": "dcc2"}
+                case %{wf_host_ip ~= cidr|10.24.0.0/16|}                                                                                  => {"wf_pod": "dev01",      "wf_datacenter": "dev"}
+                case %{wf_host_ip ~= cidr|10.228.0.0/15|}                                                                                 => {"wf_pod": "devdca1",    "wf_datacenter": "dev1"}
+                case %{wf_host_ip ~= cidr|10.230.196.0/24,10.230.200.0/24,10.230.206.0/24,10.230.208.0/24,10.230.210.0/24,10.231.6.0/24|} => {"wf_pod": "stgdca1",    "wf_datacenter": "stdc11"}
+                case %{wf_host_ip ~= cidr|10.230.134.0/24,10.230.136.0/24,10.230.138.0/24,10.231.128.0/24|}                               => {"wf_pod": "dcbcstgdca1", "wf_datacenter": "stdca1"}
+                case %{wf_host_ip ~= cidr|10.23.0.0/17|}                                                                                  => {"wf_pod": "web02",      "wf_datacenter": "ep"}
+                case %{wf_host_ip ~= cidr|10.20.0.0/17|}                                                                                  => {"wf_pod": "dcbc02",     "wf_datacenter": "ep"}
+                case %{wf_host_ip ~= cidr|10.11.0.0/16|}                                                                                  => {"wf_pod": "dcd2",       "wf_datacenter": "dcd2"}
+                case %{wf_host_ip ~= cidr|10.28.0.0/16|}                                                                                  => {"wf_pod": "dce1",       "wf_datacenter": "dce"}
+                case %{wf_host_ip ~= cidr|10.248.0.0/16,10.249.192.0/19,10.249.0.0/17|}                                                   => {"wf_pod": "dcb1",       "wf_datacenter": "dcb1"}
+                case %{wf_host_ip ~= cidr|10.249.128.0/18|}                                                                               => {"wf_pod": "dcbcdcb1",   "wf_datacenter": "dcb1"}
+                default                                                                                                                   => {"wf_pod": "dca1",       "wf_datacenter": "dca1"}
               end
             end;
-            
-            # # create slush
-            # FieldFormatter.create_slush(event)
-            
-            # 126   def self.create_slush(event)
-            # 127     slush_fields = Hash.new
-            # 128     event_valid_fields = Hash.new
-            # 129     event_fields = event.to_hash.keys
-            # 130     # Checking for the application field/logger topic allows us to determine different valid fields to split off indices
-            # 131     if event_fields.include? 'logger_topic'
-            # 132       if event.get('logger_topic').to_s == 'WMS'
-            # 133         event_valid_fields = @@wms_fields
-            # 134       elsif event.get('logger_topic').to_s == 'TRNS'
-            # 135         event_valid_fields = @@trns_fields
-            # 136       else
-            # 137         event_valid_fields = @@valid_fields
-            # 138       end
-            # 139     elsif event_fields.include? 'application'
-            # 140       if event.get('application').to_s == 'stores'
-            # 141         event_valid_fields = @@stores_fields
-            # 142       elsif event.get('application').to_s == 'purest' || event.get('application').to_s == 'purestwebsvc'
-            # 143         event_valid_fields = @@purest_fields
-            # 144       elsif event.get('application').to_s == 'admin'
-            # 145         event_valid_fields = @@admin_fields
-            # 146       elsif event.get('application').to_s == 'inventory' || event.get('application').to_s == 'liteship'
-            # 147         event_valid_fields = @@supply_chain_services_fields
-            # 148       elsif event.get('application').to_s == 'solrcloud'
-            # 149         event_valid_fields = @@solr_fields
-            # 150       else
-            # 151         event_valid_fields = @@valid_fields
-            # 152       end
-            # 153     else
-            # 154       event_valid_fields = @@valid_fields
-            # 155     end
-            # 156     for field_name in event_fields
-            # 157       if event_valid_fields.include? (field_name)
-            # 158         field_type = event_valid_fields[field_name]
-            # 159         # if this is a valid field and the field type is correct, skip to the next iteration
-            # 160         if ((['string', 'date'].include? field_type) \
-            # 161           || (['short', 'long', 'integer'].include? field_type and (Integer(event.get(field_name).to_s) rescue nil)) \
-            # 162           || (['float', 'double'].include? field_type and (Float(event.get(field_name).to_s) rescue nil)) \
-            # 163           || (['ip',].include? field_type and (IPAddr.new(event.get(field_name)) rescue nil)))
-            # 164           next
-            # 165         end
-            # 166       end
-            # 167       # otherwise, insert into slush
-            # 168       slush_fields[field_name] = event.get(field_name)
-            # 169       remove_event_field(event, field_name)
-            # 170     end
-            # 171     event.set('slush', slush_fields.map { |e| e.join('=') }.join("\n"))
-            # 172     truncate_field(event, 'slush', 10000) # truncate slush field to 10,000 chars
-            # 173     truncate_field(event, 'error', 5000)  # truncate error field to 5k chars
-            # 174   end
-            
-            # let store_field_types = once system::eval("/path/to/store_field_types.json", {}, {}); TODO
-            
+
             const stores_fields = {
                 "@timestamp": "date",
                 "account_id": "string",
@@ -401,7 +215,7 @@ pipeline:
                 "akamai_bot": "string",
                 "akamai_reputation": "string",
                 "application": "string",
-                "bot_flag": "string",
+                "dcat_flag": "string",
                 "business_account_id": "integer",
                 "can_admin_logon": "string",
                 "class_name": "string",
@@ -479,7 +293,7 @@ pipeline:
                 "request_uri": "string",
                 "script_filename": "string",
                 "script_name": "string",
-                "service_query_count": "string",
+                "dcbrvice_query_count": "string",
                 "short_message": "string",
                 "short_query": "string",
                 "sitespect_variation": "string",
@@ -517,7 +331,7 @@ pipeline:
                 "X_distil_browsertype": "string",
                 "x_distil_secure": "string"
               };
-            
+
             const purest_fields = {
               "@timestamp": "date",
               "account_id": "string",
@@ -595,7 +409,7 @@ pipeline:
               "wf_index_type": "string",
               "worker_list": "string"
             };
-            
+
             const admin_fields = {
               "@timestamp": "date",
               "account_id": "string",
@@ -684,7 +498,7 @@ pipeline:
               "wf_index_type": "string",
               "worker_list": "string"
             };
-            
+
             const wms_fields = {
               "@timestamp": "date",
               "action": "string",
@@ -783,7 +597,7 @@ pipeline:
               "wf_sid": "string",
               "zone": "string"
             };
-            
+
             const trns_fields = {
               "@timestamp": "date",
               "action": "string",
@@ -866,7 +680,7 @@ pipeline:
               "wf_pod": "string",
               "wf_sid": "string"
             };
-            
+
             const supply_chain_services_fields = {
               "@timestamp": "date",
               "account_id": "string",
@@ -957,7 +771,7 @@ pipeline:
               "rg_id": "string",
               "script_filename": "string",
               "script_name": "string",
-              "service": "string",
+              "dcbrvice": "string",
               "ship_speed": "integer",
               "short_message": "string",
               "short_query": "string",
@@ -990,7 +804,7 @@ pipeline:
               "x_distil_browsertype": "string",
               "x_distil_secure": "string"
             };
-            
+
             const solr_fields = {
               "@timestamp": "date",
               "application": "string",
@@ -1021,7 +835,7 @@ pipeline:
               "wf_pod": "string",
               "wf_sid": "string"
             };
-            
+
             const valid_fields = {
               "@timestamp": "date",
               "account_id": "string",
@@ -1119,16 +933,16 @@ pipeline:
               "x_distil_secure": "string"
             };
             #... there are more of tose
-            
+
             # we could make a tester for that?
-            
+
             # we can't loop or map so we kind of have to do this as a function?
-            
+
             # remove datatypes like short, long and default them to integer
             # remove datatypes such as double and generalize to float
             # remove dataypte data as it is treated as striong
-            
-            
+
+
             let fields = match event of
               case %{logger_topic == "WMS"} => wms_fields
               case %{logger_topic == "TRANS"} => trans_fields
@@ -1161,28 +975,20 @@ pipeline:
             end;
                         
             let slush = json::encode(slush);
-            
+
             match string::len(slush) > 10000 of
               case true => let event.slush = string::substr(slush, 0, 10000)
-              default => let event.slush = slush
+              default => null
             end;
-            
+
             # We dont' have the time function yet as we need to collect examples and see what functions are needed
-            # event_time = event.get('@timestamp').to_s.gsub(/\.\d+Z$/, '+00:00')
-            # event_time = DateTime.strptime(event_time, '%Y-%m-%dT%H:%M:%S%z').to_time.utc.to_i
-            # event.set('start_timestamp', event_time)
-            
-            # let event.start_timestamp = datetime::parse(re::replace("\\.\\d+Z$", event["@timestamp"], "+00:00"), "%Y-%m-%dT%H:%M:%S%z");
+
             let event.start_timestamp = datetime::parse(event["@timestamp"], "%Y-%m-%dT%H:%M:%S%.3fZ") / 100;
              
-            event         
-    links:
-      in: [ r ]
-      r: [ out ]
+            event
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
-
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

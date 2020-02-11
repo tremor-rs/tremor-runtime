@@ -41,10 +41,6 @@ pipeline:
           script: |
             match {"message": event} of
               # Parsing and field names here are based on the weblog processing we already do when sending these logs to HDFS
-              # https:#git.csnzoo.com/wayfair/puppet/blob/master/modules/nginx_new/files/harmony.host.bo1/util/log_format.conf # https:#git.csnzoo.com/wayfair/regex_builder/blob/master/test.moawsl-camus.reg.txt
-              # https:#git.csnzoo.com/wayfair/hive_ddl/blob/master/tables/tblmoawsl_weblog_camus.hql
-
-              # 2019-08-09-14:30
               case r = %{ message ~= dissect|%{syslog_timestamp} %{syslog_hostname} %{?syslog_rogram}: %{syslog_program_aux}[%{syslog_pid:int}] %{request_unix_time} %{request_timestamp} %{+request_timestamp} %{request_elapsed_time} %{server_addr}:%{server_port:int} %{remote_addr}:%{remote_port:int} "%{response_content_type}" %{response_content_length} %{request_status} %{bytes_sent} %{request_length} "%{url_scheme}" "%{http_host}" "%{request_method} %{request_url} %{request_protocol}" "%{http_referer}" "%{http_user_agent}" "%{http_x_forwarded_for}" "%{http_true_client_ip}" "%{remote_user}" "%{is_bot}" "%{admin_user}" "%{http_via}" "%{response_location}" "%{set_cookie}" "%{http_cookie}" "%{moawsl_info}" "%{php_message}" "%{akamai_edgescape}" "%{uid_info}" "%{geoip_country}" "%{geoip_region}" "%{geoip_city}" "%{geoip_postal}" "%{geoip_dma}" "%{server_id}" "%{txid}" "%{hpcnt}" "%{client_accept}" "%{client_accept_charset}" "%{client_accept_encoding}" "%{client_accept_language}" "%{client_accept_datetime}" "%{client_pragma}" "%{client_transfer_encoding}" "%{client_attdeviceid}" "%{client_wap_profile}" %{weblog_end}| } => #r= {"message": {...}}
                 let event = r.message
               default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
@@ -53,26 +49,21 @@ pipeline:
             let event.tremor = "tremor"; # system::hostname(); # in production this is hard coded by the deployment
 
             ##############################################
-            
+
             match event of
               case %{syslog_hostname ~= glob|purest*|} => emit => "drop" # this was a drop but we want to account for it
               default => null
             end;
-            
-            # Deduce wf datacenter value from the server id (eg: se2.16.102, stbo1.210.14).
-            # Asp boxes don't match the id pattern checked here, and some messages do not
-            # have the field set, but these account for only 0.2% of the total logs.
-            # If needed, we can determine the datacenter there from the syslog hostname.
-            
+
             # We syould not need grok for this!
             match event of
               #case r = %{wf_datacenter = server_id ~= grok|(?<wf_datacenter>[^.]+)\./| } => r; # How would we addd this
               case r = %{ server_id ~= dissect|%{wf_datacenter}.%{}| } => let event.wf_datacenter = r.server_id
               default => let event.tags = ["_grokparsefailure_dc"] # How do we "append" to an existing array?
             end;
-            
+
             # useful for figuring out which logstash message came from
-            
+
             
             # remove unnecessary fields
             # We overwrite request_timestamp with a better value later (based on
