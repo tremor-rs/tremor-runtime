@@ -37,7 +37,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "snappy" => Ok(Box::new(Snappy::default())),
         "lz4" => Ok(Box::new(Lz4::default())),
         "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
-        "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
+        "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
