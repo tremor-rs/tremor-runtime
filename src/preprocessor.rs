@@ -47,7 +47,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "gelf-chunking" => Ok(Box::new(GELF::default())),
         "gelf-chunking-tcp" => Ok(Box::new(gelf::GELF::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
-        "length-prefixerd" => Ok(Box::new(LengthPrefix::default())),
+        "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -302,7 +302,7 @@ mod test {
         "gelf-chunking",
         "gelf-chunking-tcp",
         "ingest-ns",
-        "length-prefixerd",
+        "length-prefixed",
     ];
 
     #[test]
