@@ -47,7 +47,9 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 pub struct Lines {}
 impl Postprocessor for Lines {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let mut framed = data.to_vec(); // FIXME PERF TODO prefer to in-place extend
+        // padding capacity with 1 to account for the new line char we will be pushing
+        let mut framed: Vec<u8> = Vec::with_capacity(data.len() + 1);
+        framed.extend_from_slice(data);
         framed.push(b'\n');
         Ok(vec![framed])
     }

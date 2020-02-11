@@ -11,7 +11,7 @@ offramp:
     codec: json
     config:
       warmup_secs: 10
-      stop_after_secs: 40
+      stop_after_secs: 100
       significant_figures: 2
 
 

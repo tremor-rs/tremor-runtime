@@ -1,4 +1,3 @@
-# Blaster side of the WS benchmark
 ---
 onramp:
   - id: blaster
@@ -30,21 +29,28 @@ offramp:
     config:
       warmup_secs: 10
       stop_after_secs: 100
-      significant_figures: 3
-
+      significant_figures: 2
 
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
-  - id: blackhole
+      '/onramp/blaster/{instance}/out': [ '/pipeline/blaster/{instance}/in' ]
+      '/pipeline/blaster/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+  - id: bench2
     links:
-      '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+      '/onramp/ws-in/{instance}/out': [ '/pipeline/blackhole/{instance}/in' ]
+      '/pipeline/blackhole/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
 
 pipeline:
-  - id: main
+  - id: blaster
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+  - id: blackhole
     interface:
       inputs:
         - in
@@ -53,7 +59,7 @@ pipeline:
     links:
       in: [ out ]
 
-  
 mapping:
-  /binding/blackhole/01:
+  # mapping for binding "bench" comes via the common link.yaml
+  /binding/bench2/01:
     instance: "01"

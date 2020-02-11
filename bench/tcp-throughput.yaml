@@ -1,0 +1,65 @@
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: string
+    config:
+      source: ./demo/data/data.json.xz
+  - id: tcp-in
+    type: tcp
+    codec: string
+    preprocessors:
+      - lines
+    config:
+      host: 127.0.0.1
+      port: 4242
+
+offramp:
+  - id: tcp-out
+    type: tcp
+    codec: string
+    postprocessors:
+      - lines
+    config:
+      host: "127.0.0.1"
+      port: 4242
+  - id: blackhole
+    type: blackhole
+    codec: string
+    config:
+      warmup_secs: 10
+      stop_after_secs: 100
+      significant_figures: 2
+
+binding:
+  - id: bench
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/blaster/{instance}/in' ]
+      '/pipeline/blaster/{instance}/out': [ '/offramp/tcp-out/{instance}/in' ]
+  - id: bench2
+    links:
+      '/onramp/tcp-in/{instance}/out': [ '/pipeline/blackhole/{instance}/in' ]
+      '/pipeline/blackhole/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+
+pipeline:
+  - id: blaster
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+  - id: blackhole
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+
+mapping:
+  # mapping for binding "bench" comes via the common link.yaml
+  /binding/bench2/01:
+    instance: "01"

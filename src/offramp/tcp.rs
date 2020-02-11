@@ -36,8 +36,6 @@ pub struct Tcp {
 pub struct Config {
     pub host: String,
     pub port: u16,
-    #[serde(default = "dflt::d_false")]
-    pub is_non_blocking: bool,
     #[serde(default = "dflt::d_ttl")]
     pub ttl: u32,
     #[serde(default = "dflt::d_true")]
@@ -51,7 +49,6 @@ impl offramp::Impl for Tcp {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let stream = TcpStream::connect((config.host.as_str(), config.port))?;
-            stream.set_nonblocking(config.is_non_blocking)?;
             stream.set_ttl(config.ttl)?;
             stream.set_nodelay(config.is_no_delay)?;
             Ok(Box::new(Self {
@@ -73,7 +70,6 @@ impl Offramp for Tcp {
             for packet in packets {
                 self.stream.write_all(&packet)?;
             }
-            self.stream.flush()?;
         }
         Ok(())
     }

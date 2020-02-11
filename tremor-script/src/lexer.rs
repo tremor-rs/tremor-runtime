@@ -90,7 +90,7 @@ pub enum Token<'input> {
     Line(usize),
 
     // Path
-    Ident(Cow<'input, str>, bool),
+    Ident(Cow<'input, str>, bool), // bool marks whether the ident is surrounded by '`' (escape notation)
     Dollar,
     Dot,
 
