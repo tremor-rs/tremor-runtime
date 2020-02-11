@@ -73,7 +73,6 @@ impl Offramp for Tcp {
             for packet in packets {
                 self.stream.write_all(&packet)?;
             }
-            self.stream.flush()?;
         }
         Ok(())
     }
