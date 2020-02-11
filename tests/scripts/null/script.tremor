@@ -1,0 +1,5 @@
+{
+  "eq": null == null,
+  "neq": null != null,
+  # "otherwise": null + null, # error
+}

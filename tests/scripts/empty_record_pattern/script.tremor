@@ -1,0 +1,4 @@
+match event of
+  case %{} => "record"
+  default => "else"
+end

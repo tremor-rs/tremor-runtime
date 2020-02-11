@@ -1,0 +1,6 @@
+select
+  merge event of {"type2": event.type} end
+from in
+into out
+having
+  event.type == "sillylog";

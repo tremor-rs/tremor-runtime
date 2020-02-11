@@ -1,0 +1,4 @@
+Error: 
+    1 | patch {"a": 1} of
+    2 |   update "b" => 2
+      |           ^ The key that is supposed to be updated does not exists: b

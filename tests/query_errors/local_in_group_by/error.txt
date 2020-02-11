@@ -1,0 +1,7 @@
+Error: 
+    1 | select
+    2 | event
+    3 | from in
+    4 | group by set(a + b)
+      |          ^^^^^^^^^^ Local variables are not allowed here
+    5 | into out;

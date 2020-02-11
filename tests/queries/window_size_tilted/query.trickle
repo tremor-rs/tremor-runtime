@@ -1,0 +1,11 @@
+define tumbling window by_three
+with
+  size = 3
+end;
+
+define tumbling window by_two
+with
+  size = 2
+end;
+
+select win::collect_flattened(event) from in[by_two, by_three] into out;

@@ -1,0 +1,5 @@
+match event of
+  case %{ absent key, key ~= re|snot| } => true
+  case %{ key ~= re|snot|, absent key } => true
+  default => true
+end

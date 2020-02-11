@@ -1,0 +1,111 @@
+[licenses]
+unlicensed= "deny"
+
+#
+# License types that we explicitly allow
+#
+
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MIT",
+    "Unlicense",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "OpenSSL",
+]
+
+#
+# Crates with licenses this tool fails to auto-detect with high confidence we explicitly allow
+#
+
+# This is MIT Apache dual licensed
+[[licenses.clarify]]
+name = "criterion-plot"
+expression = "MIT AND Apache-2.0"
+license-files = [
+  { path = "LICENSE-APACHE", hash = 0xa577772b },
+  { path = "LICENSE-MIT", hash = 0x343f7050 }
+]
+
+# This is MIT, Apache, CC, BSD-2 and BSD-3
+[[licenses.clarify]]
+name = "crossbeam-channel"
+expression = "MIT AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause"
+license-files = [
+  { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.clarify]]
+name = "hyper-rustls"
+expression = "MIT AND Apache-2.0 AND ISC"
+license-files = [
+  { path = "LICENSE", hash = 0x3154a1c7 },
+]
+
+# ring has a rather complicated license file, and unfortunately does not
+# provide an SPDX expression in the `license` toml
+[[licenses.clarify]]
+name = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.clarify]]
+expression = "MIT AND Apache-2.0 AND ISC"
+name = "rustls"
+license-files = [
+  { path = "LICENSE", hash = 0xe567c411 },
+]
+
+# This is MIT, Apache, ISC tripple licensed
+[[licenses.clarify]]
+name = "sct"
+expression = "MIT AND Apache-2.0 AND ISC"
+license-files = [
+  { path = "LICENSE", hash = 0xb7619ae7 },
+]
+
+# ISC style
+[[licenses.clarify]]
+name = "webpki"
+expression = "ISC"
+license-files = [
+  { path = "LICENSE", hash = 0x1c7e6c },
+]
+
+# MPL-2.0
+[[licenses.clarify]]
+name = "webpki-roots"
+expression = "MPL-2.0"
+license-files = [
+  { path = "LICENSE", hash = 0x6c919c48 },
+]
+
+# This is Zlib
+[[licenses.clarify]]
+name = "adler32"
+expression = "Zlib"
+license-files = [
+  { path = "LICENSE", hash = 0x1e225da6 },
+]
+
+
+[advisories]
+# We allow RUSTSEC-2018-0006 as this is only called from clap
+ignore = ["RUSTSEC-2018-0006"]

@@ -1,0 +1,5 @@
+match event of
+  case %{ key == 7 } => false
+  case %{ key == 42 } => true
+  default => false
+end

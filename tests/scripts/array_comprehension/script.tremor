@@ -1,0 +1,5 @@
+emit for event of
+  case (k, v) when false => [k,v]
+  case (k, v) => [k, v, "other"]
+  case (k, v) => "should never get here"
+end;

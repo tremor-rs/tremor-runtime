@@ -1,0 +1,1 @@
+let event = merge event of {"snot": "badger"} end

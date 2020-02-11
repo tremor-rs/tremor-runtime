@@ -1,0 +1,2 @@
+let a = 7;
+string::format(a, "snot", "badger", "cake")

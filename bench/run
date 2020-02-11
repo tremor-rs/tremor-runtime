@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -x
+
+. $(dirname $0)/common.inc
+
+file=$1
+if [ ! -f $file ]
+then
+  file="./bench/$file.yaml"
+fi
+
+if [ ! -f $file ]
+then
+    echo "Benchmark file ./bench/$1.yaml not found!"
+    exit 1
+fi
+
+echo "######## $1"
+
+if [ -d ./bench/$1 ]
+then
+  target/release/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+else
+  target/release/tremor-server --no-api -c $file bench/link.yaml
+fi

@@ -1,0 +1,5 @@
+Error: 
+    1 | match ecent of
+    2 |   case %{ key ~= snot|| } => true
+      |                  ^^^^^^ Invalid tilde predicate pattern: Unsuupotred extractor snot
+    3 | end

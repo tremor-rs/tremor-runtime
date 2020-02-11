@@ -1,0 +1,6 @@
+define tumbling window by_two
+with
+  size = 2
+end;
+
+select win::collect_flattened(event) from in[by_two] into out;

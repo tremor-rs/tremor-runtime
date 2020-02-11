@@ -1,0 +1,5 @@
+select
+event
+from in
+where a + b > 3
+into out;

@@ -1,0 +1,3 @@
+Error: 
+    1 | """
+      | ^^^ It looks like you have characters tailing the here doc opening, it needs to be followed by a newline

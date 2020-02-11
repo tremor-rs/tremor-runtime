@@ -1,0 +1,16 @@
+define script badger
+with
+  value = "snot"
+script
+  let event.badger = args.value;
+  event
+end;
+
+create script badger
+with
+  value = "badger"
+end;
+
+select event from in into badger;
+
+select event from badger into out;

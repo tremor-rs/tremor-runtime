@@ -1,0 +1,12 @@
+onramp:
+  - id: blaster-001
+    type: onramp::blaster
+    config:
+      source: ./demo/data/data.json.xz
+offramp:
+  - id: blackhole-001
+    type: offramp::blackhole
+    config:
+      warmup_secs: 10
+      stop_after_secs: 40
+      significant_figures: 2

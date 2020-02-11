@@ -1,0 +1,4 @@
+match evont of
+   case %{snot ~= re|b|} => "badger"
+   default => "darn"
+end

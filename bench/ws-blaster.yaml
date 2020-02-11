@@ -1,0 +1,40 @@
+# Blaster side of the WS benchmark
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: json
+    config:
+      source: ./demo/data/data.json.xz
+
+offramp:
+  - id: ws-out
+    type: ws
+    codec: json
+    postprocessors:
+      - ingest-ns
+    config:
+      url: "ws://127.0.0.1:4242"
+      binary: true
+
+
+binding:
+  - id: ws-blaster
+    links:
+      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+
+  
+mapping:
+  /binding/ws-blaster/01:
+    instance: "01"

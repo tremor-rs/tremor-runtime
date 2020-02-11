@@ -1,0 +1,9 @@
+let hosts = ["host1", "host2", "host3", "host4", "host5"];
+
+{
+  "key1": hosts[chash::jump("key1", array::len(hosts))],
+  "key1_again": hosts[chash::jump("key1", array::len(hosts))],
+  "key2": hosts[chash::jump("key2", array::len(hosts))],
+  "key3": hosts[chash::jump("key3", array::len(hosts))],
+  "key4": hosts[chash::jump("key4", array::len(hosts))],
+}

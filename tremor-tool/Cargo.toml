@@ -1,0 +1,21 @@
+[package]
+name = "tremor-tool"
+version = "0.1.0"
+authors = ["The Tremor Team"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+tremor-runtime = { path = "../" }
+tremor-script = { path = "../tremor-script" }
+tremor-pipeline = { path = "../tremor-pipeline" }
+serde_derive = "1"
+serde_json = "1"
+simd-json = {version = "0.2", features = ["known-key"]}
+serde_yaml = "0.8"
+clap = { version = "2", features = ["yaml"] }
+reqwest = "0.9"
+http = "0.1"
+dirs = "2"
+serde = "1"
+halfbrown="0.1"

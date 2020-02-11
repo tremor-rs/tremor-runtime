@@ -1,0 +1,3 @@
+Error: 
+    1 | let event = merge event of 7 end
+      |                            ^ Conflicting types, got integer but expected record

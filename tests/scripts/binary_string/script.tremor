@@ -1,0 +1,22 @@
+{
+    "eq1": "snot" == "badger",
+    "eq2": "snot" == "snot",
+    "neq1": "snot" != "badger",
+    "neq2": "snot" != "snot",
+
+    "gt1": "snot" > "badger",
+    "gt2": "badger" > "snot",
+    "gt3": "snot" > "snot",
+    "gte1": "snot" >= "badger",
+    "gte2": "badger" >= "snot",
+    "gte3": "snot" >= "snot",
+
+    "lt1": "snot" < "badger",
+    "lt2": "badger" < "snot",
+    "lt3": "snot" < "snot",
+    "lte1": "snot"  <= "badger",
+    "lte2": "badger"  <= "snot",
+    "lte3": "snot"  <= "snot",
+
+    "add": "snot" + "badger"
+}

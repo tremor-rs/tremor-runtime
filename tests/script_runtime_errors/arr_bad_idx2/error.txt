@@ -1,0 +1,3 @@
+Error: 
+    2 | event[idx]
+      |       ^^^ Trying to access an index that is out of range 42

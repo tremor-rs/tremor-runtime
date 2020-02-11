@@ -1,0 +1,61 @@
+[package]
+name = "tremor-script"
+version = "0.1.0"
+authors = ["The Tremor Team"]
+edition = "2018"
+license = "Apache-2.0"
+build = "build.rs"
+
+[[bin]]
+name = "tremor-script"
+path = "src/main.rs"
+test = false
+
+[lib]
+name = "tremor_script"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+downcast-rs = "1.1"
+rental = "0.5"
+simd-json = {version = "0.2", features = ["known-key"]}
+error-chain="0.12"
+lalrpop-util = "0.17"
+regex = "1"
+serde_json = "1"
+serde_derive = "1.0"
+serde = "1.0"
+glob = "0.3"
+hostname = "0.1"
+codespan = "0.5"
+termcolor = "1.0"
+unicode-xid = "0.2"
+halfbrown = "0.1"
+base64 = "0.10.1"
+kv = { git = "https://github.com/wayfair-tremor/kv.git" }
+dissect = { git = "https://github.com/wayfair-tremor/dissect.git" }
+distance = "0.4"
+chrono = "0.4"
+clap = "2.33.0"
+grok = "1"
+cidr-utils = "0.3"
+jumphash = "0.1"
+rand = { version = "0.7", features = ["small_rng"] }
+hdrhistogram = "6.3.4"
+sketches-ddsketch = "0.1.1"
+xz2 = "0.1"
+url = "1.7"
+libmath = "0.1.4"
+
+[build-dependencies]
+lalrpop = "0.17"
+matches = "0.1.8"
+
+[dev-dependencies]
+criterion = "0.3.0"
+matches = "0.1"
+pretty_assertions = "0.6.1"
+float-cmp = "0.5"
+
+[features]
+fns = []

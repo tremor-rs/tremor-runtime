@@ -1,0 +1,5 @@
+create stream test1;
+create stream test2;
+select event from in into test1;
+select event from test1 into test2;
+select event from test2 into out;

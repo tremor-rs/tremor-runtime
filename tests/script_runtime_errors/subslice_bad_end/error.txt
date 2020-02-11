@@ -1,0 +1,3 @@
+Error: 
+    2 | event[1:k]
+      |         ^ Conflicting types, got string but expected integer
