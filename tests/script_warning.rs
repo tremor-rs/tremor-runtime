@@ -27,8 +27,8 @@ macro_rules! test_cases {
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
-                let script_file = concat!("tests/script_wanings/", stringify!($file), "/script.tremor");
-                let err_file = concat!("tests/script_wanings/", stringify!($file), "/warning.txt");
+                let script_file = concat!("tests/script_warnings/", stringify!($file), "/script.tremor");
+                let err_file = concat!("tests/script_warnings/", stringify!($file), "/warning.txt");
 
                 println!("Loading script: {}", script_file);
                 let mut file = File::open(script_file)?;
