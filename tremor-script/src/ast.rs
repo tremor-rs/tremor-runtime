@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod base_expr;
+pub(crate) mod base_expr;
+/// Query AST
 pub mod query;
-pub mod raw;
+pub(crate) mod raw;
 mod support;
-pub mod upable;
+pub(crate) mod upable;
 use crate::errors::*;
 use crate::impl_expr2;
 use crate::interpreter::*;
@@ -33,8 +34,9 @@ use simd_json::{BorrowedValue as Value, KnownKey, ValueBuilder};
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;
+
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
-pub struct NodeMeta<'script> {
+struct NodeMeta<'script> {
     start: Location,
     end: Location,
     name: Option<Cow<'script, str>>,
@@ -49,17 +51,17 @@ impl From<(Location, Location)> for NodeMeta<'static> {
         }
     }
 }
-
+/// Information about node metadata
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 pub struct NodeMetas<'script>(Vec<NodeMeta<'script>>);
 
 impl<'script> NodeMetas<'script> {
-    pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
+    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         let mid = self.0.len();
         self.0.push((start, end).into());
         mid
     }
-    pub fn add_meta_w_name(
+    pub(crate) fn add_meta_w_name(
         &mut self,
         start: Location,
         end: Location,
@@ -73,23 +75,16 @@ impl<'script> NodeMetas<'script> {
         });
         mid
     }
-    pub fn start(&self, idx: usize) -> Option<Location> {
+    pub(crate) fn start(&self, idx: usize) -> Option<Location> {
         self.0.get(idx).map(|v| v.start)
     }
-    pub fn end(&self, idx: usize) -> Option<Location> {
+    pub(crate) fn end(&self, idx: usize) -> Option<Location> {
         self.0.get(idx).map(|v| v.end)
     }
-    pub fn name(&self, idx: usize) -> Option<&Cow<'script, str>> {
+    pub(crate) fn name(&self, idx: usize) -> Option<&Cow<'script, str>> {
         self.0.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
     }
-
-    pub fn start_dflt(&self, idx: usize) -> Location {
-        self.start(idx).unwrap_or_default()
-    }
-    pub fn end_dflt(&self, idx: usize) -> Location {
-        self.end(idx).unwrap_or_default()
-    }
-    pub fn name_dflt(&self, idx: usize) -> Cow<'script, str> {
+    pub(crate) fn name_dflt(&self, idx: usize) -> Cow<'script, str> {
         self.name(idx)
             .cloned()
             .unwrap_or_else(|| String::from("<UNKNOWN>").into())
@@ -97,13 +92,17 @@ impl<'script> NodeMetas<'script> {
 }
 
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+/// A warning generated while lexing or parsing
 pub struct Warning {
+    /// Outer span of the warning
     pub outer: Range,
+    /// Inner span of thw warning
     pub inner: Range,
+    /// Warning message
     pub msg: String,
 }
 
-pub struct Helper<'script, 'registry>
+pub(crate) struct Helper<'script, 'registry>
 where
     'script: 'registry,
 {
@@ -220,13 +219,16 @@ where
     }
 }
 
+/// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
-    pub exprs: Exprs<'script>,
+    /// Expressions of the script
+    exprs: Exprs<'script>,
+    /// Constants defined in this script
     pub consts: Vec<Value<'script>>,
-    pub aggregates: Vec<InvokeAggrFn<'script>>,
-    pub locals: usize,
-    pub node_meta: NodeMetas<'script>,
+    aggregates: Vec<InvokeAggrFn<'script>>,
+    locals: usize,
+    node_meta: NodeMetas<'script>,
 }
 
 impl<'run, 'script, 'event> Script<'script>
@@ -234,6 +236,7 @@ where
     'script: 'event,
     'event: 'run,
 {
+    /// Runs the script and evaluates to a resulting event
     pub fn run(
         &'script self,
         context: &'run crate::EventContext,
@@ -291,44 +294,58 @@ where
     }
 }
 
+/// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Ident<'script> {
-    pub mid: usize,
+    pub(crate) mid: usize,
+    /// the text of the ident
     pub id: Cow<'script, str>,
 }
 impl_expr2!(Ident);
 
+impl<'script> From<&'script str> for Ident<'script> {
+    fn from(id: &'script str) -> Self {
+        Self {
+            mid: 0,
+            id: id.into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Field<'script> {
+pub(crate) struct Field<'script> {
     pub mid: usize,
-    pub name: ImutExpr<'script>,
-    pub value: ImutExpr<'script>,
+    pub name: ImutExprInt<'script>,
+    pub value: ImutExprInt<'script>,
 }
 impl_expr2!(Field);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Record<'script> {
+pub(crate) struct Record<'script> {
     pub mid: usize,
     pub fields: Fields<'script>,
 }
 impl_expr2!(Record);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct List<'script> {
+pub(crate) struct List<'script> {
     pub mid: usize,
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(List);
 
+/// A Literal
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
+    /// MetadataId of this node
     pub mid: usize,
+    /// Literal Value
     pub value: Value<'script>,
 }
 impl_expr2!(Literal);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct FnDecl<'script> {
+pub(crate) struct FnDecl<'script> {
     pub mid: usize,
     pub name: Ident<'script>,
     pub args: Vec<Ident<'script>>,
@@ -337,16 +354,16 @@ pub struct FnDecl<'script> {
 }
 impl_expr2!(FnDecl);
 
-fn path_eq<'script>(path: &Path<'script>, expr: &ImutExpr<'script>) -> bool {
-    let path_expr: ImutExpr = ImutExpr::Path(path.clone());
+fn path_eq<'script>(path: &Path<'script>, expr: &ImutExprInt<'script>) -> bool {
+    let path_expr: ImutExprInt = ImutExprInt::Path(path.clone());
 
     let target_expr = match expr.clone() {
-        ImutExpr::Local {
+        ImutExprInt::Local {
             //id,
             idx,
             mid,
             is_const,
-        } => ImutExpr::Path(Path::Local(LocalPath {
+        } => ImutExprInt::Path(Path::Local(LocalPath {
             //id,
             segments: vec![],
             idx,
@@ -358,7 +375,7 @@ fn path_eq<'script>(path: &Path<'script>, expr: &ImutExpr<'script>) -> bool {
     path_expr == target_expr
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Expr<'script> {
+pub(crate) enum Expr<'script> {
     Match(Box<Match<'script>>),
     PatchInPlace(Box<Patch<'script>>),
     MergeInPlace(Box<Merge<'script>>),
@@ -378,17 +395,45 @@ pub enum Expr<'script> {
         mid: usize,
     },
     Emit(Box<EmitExpr<'script>>),
-    Imut(ImutExpr<'script>),
+    Imut(ImutExprInt<'script>),
 }
 
-impl<'script> From<ImutExpr<'script>> for Expr<'script> {
-    fn from(imut: ImutExpr<'script>) -> Expr<'script> {
+impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
+    fn from(imut: ImutExprInt<'script>) -> Expr<'script> {
         Expr::Imut(imut)
     }
 }
 
+/// An imutable exression
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ImutExpr<'script> {
+pub struct ImutExpr<'script>(pub(crate) ImutExprInt<'script>);
+
+impl<'script> From<Literal<'script>> for ImutExpr<'script> {
+    fn from(lit: Literal<'script>) -> Self {
+        Self(ImutExprInt::Literal(lit))
+    }
+}
+
+impl<'script> BaseExpr for ImutExpr<'script> {
+    fn mid(&self) -> usize {
+        self.0.mid()
+    }
+
+    fn s(&self, meta: &NodeMetas) -> Location {
+        self.0.s(meta)
+    }
+
+    fn e(&self, meta: &NodeMetas) -> Location {
+        self.0.e(meta)
+    }
+
+    fn extent(&self, meta: &NodeMetas) -> Range {
+        self.0.extent(meta)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) enum ImutExprInt<'script> {
     Record(Record<'script>),
     List(List<'script>),
     Binary(Box<BinExpr<'script>>),
@@ -416,23 +461,23 @@ pub enum ImutExpr<'script> {
     InvokeAggr(InvokeAggr),
 }
 
-fn is_lit<'script>(e: &ImutExpr<'script>) -> bool {
+fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
     match e {
-        ImutExpr::Literal(_) => true,
+        ImutExprInt::Literal(_) => true,
         _ => false,
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct EmitExpr<'script> {
+pub(crate) struct EmitExpr<'script> {
     pub mid: usize,
-    pub expr: ImutExpr<'script>,
-    pub port: Option<ImutExpr<'script>>,
+    pub expr: ImutExprInt<'script>,
+    pub port: Option<ImutExprInt<'script>>,
 }
 impl_expr2!(EmitExpr);
 
 #[derive(Clone, Serialize)]
-pub struct Invoke<'script> {
+pub(crate) struct Invoke<'script> {
     pub mid: usize,
     pub module: String,
     pub fun: String,
@@ -443,26 +488,29 @@ pub struct Invoke<'script> {
 impl_expr2!(Invoke);
 
 #[derive(Clone, Serialize)]
-pub struct InvokeAggr {
+pub(crate) struct InvokeAggr {
     pub mid: usize,
     pub module: String,
     pub fun: String,
     pub aggr_id: usize,
 }
 
+/// A Invocable aggregate function
 #[derive(Clone, Serialize)]
 pub struct InvokeAggrFn<'script> {
-    pub mid: usize,
+    pub(crate) mid: usize,
+    /// The invocable function
     #[serde(skip)]
     pub invocable: TremorAggrFnWrapper,
-    pub module: String,
-    pub fun: String,
+    pub(crate) module: String,
+    pub(crate) fun: String,
+    /// Arguments passed to the function
     pub args: ImutExprs<'script>,
 }
 impl_expr2!(InvokeAggrFn);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct TestExpr {
+pub(crate) struct TestExpr {
     pub mid: usize,
     pub id: String,
     pub test: String,
@@ -470,135 +518,135 @@ pub struct TestExpr {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Match<'script> {
+pub(crate) struct Match<'script> {
     pub mid: usize,
-    pub target: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
     pub patterns: Predicates<'script>,
 }
 impl_expr2!(Match);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutMatch<'script> {
+pub(crate) struct ImutMatch<'script> {
     pub mid: usize,
-    pub target: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
     pub patterns: ImutPredicates<'script>,
 }
 impl_expr2!(ImutMatch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PredicateClause<'script> {
+pub(crate) struct PredicateClause<'script> {
     pub mid: usize,
     pub pattern: Pattern<'script>,
-    pub guard: Option<ImutExpr<'script>>,
+    pub guard: Option<ImutExprInt<'script>>,
     pub exprs: Exprs<'script>,
 }
 impl_expr2!(PredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutPredicateClause<'script> {
+pub(crate) struct ImutPredicateClause<'script> {
     pub mid: usize,
     pub pattern: Pattern<'script>,
-    pub guard: Option<ImutExpr<'script>>,
+    pub guard: Option<ImutExprInt<'script>>,
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(ImutPredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Patch<'script> {
+pub(crate) struct Patch<'script> {
     pub mid: usize,
-    pub target: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
     pub operations: PatchOperations<'script>,
 }
 impl_expr2!(Patch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum PatchOperation<'script> {
+pub(crate) enum PatchOperation<'script> {
     Insert {
-        ident: ImutExpr<'script>,
-        expr: ImutExpr<'script>,
+        ident: ImutExprInt<'script>,
+        expr: ImutExprInt<'script>,
     },
     Upsert {
-        ident: ImutExpr<'script>,
-        expr: ImutExpr<'script>,
+        ident: ImutExprInt<'script>,
+        expr: ImutExprInt<'script>,
     },
     Update {
-        ident: ImutExpr<'script>,
-        expr: ImutExpr<'script>,
+        ident: ImutExprInt<'script>,
+        expr: ImutExprInt<'script>,
     },
     Erase {
-        ident: ImutExpr<'script>,
+        ident: ImutExprInt<'script>,
     },
     Copy {
-        from: ImutExpr<'script>,
-        to: ImutExpr<'script>,
+        from: ImutExprInt<'script>,
+        to: ImutExprInt<'script>,
     },
     Move {
-        from: ImutExpr<'script>,
-        to: ImutExpr<'script>,
+        from: ImutExprInt<'script>,
+        to: ImutExprInt<'script>,
     },
     Merge {
-        ident: ImutExpr<'script>,
-        expr: ImutExpr<'script>,
+        ident: ImutExprInt<'script>,
+        expr: ImutExprInt<'script>,
     },
     TupleMerge {
-        expr: ImutExpr<'script>,
+        expr: ImutExprInt<'script>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Merge<'script> {
+pub(crate) struct Merge<'script> {
     pub mid: usize,
-    pub target: ImutExpr<'script>,
-    pub expr: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
+    pub expr: ImutExprInt<'script>,
 }
 impl_expr2!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Comprehension<'script> {
+pub(crate) struct Comprehension<'script> {
     pub mid: usize,
     pub key_id: usize,
     pub val_id: usize,
-    pub target: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
     pub cases: ComprehensionCases<'script>,
 }
 impl_expr2!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutComprehension<'script> {
+pub(crate) struct ImutComprehension<'script> {
     pub mid: usize,
     pub key_id: usize,
     pub val_id: usize,
-    pub target: ImutExpr<'script>,
+    pub target: ImutExprInt<'script>,
     pub cases: ImutComprehensionCases<'script>,
 }
 impl_expr2!(ImutComprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ComprehensionCase<'script> {
+pub(crate) struct ComprehensionCase<'script> {
     pub mid: usize,
     pub key_name: Cow<'script, str>,
     pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExpr<'script>>,
+    pub guard: Option<ImutExprInt<'script>>,
     pub exprs: Exprs<'script>,
 }
 impl_expr2!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutComprehensionCase<'script> {
+pub(crate) struct ImutComprehensionCase<'script> {
     pub mid: usize,
     pub key_name: Cow<'script, str>,
     pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExpr<'script>>,
+    pub guard: Option<ImutExprInt<'script>>,
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(ImutComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Pattern<'script> {
+pub(crate) enum Pattern<'script> {
     //Predicate(PredicatePattern<'script>),
     Record(RecordPattern<'script>),
     Array(ArrayPattern<'script>),
-    Expr(ImutExpr<'script>),
+    Expr(ImutExprInt<'script>),
     Assign(AssignPattern<'script>),
     Default,
 }
@@ -620,7 +668,7 @@ impl<'script> Pattern<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum PredicatePattern<'script> {
+pub(crate) enum PredicatePattern<'script> {
     TildeEq {
         assign: Cow<'script, str>,
         lhs: Cow<'script, str>,
@@ -632,7 +680,7 @@ pub enum PredicatePattern<'script> {
         lhs: Cow<'script, str>,
         #[serde(skip)]
         key: KnownKey<'script>,
-        rhs: ImutExpr<'script>,
+        rhs: ImutExprInt<'script>,
         not: bool,
     },
     RecordPatternEq {
@@ -686,22 +734,21 @@ impl<'script> PredicatePattern<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RecordPattern<'script> {
+pub(crate) struct RecordPattern<'script> {
     pub mid: usize,
     pub fields: PatternFields<'script>,
 }
 impl_expr2!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ArrayPredicatePattern<'script> {
-    Expr(ImutExpr<'script>),
+pub(crate) enum ArrayPredicatePattern<'script> {
+    Expr(ImutExprInt<'script>),
     Tilde(TestExpr),
     Record(RecordPattern<'script>),
-    Array(ArrayPattern<'script>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ArrayPattern<'script> {
+pub(crate) struct ArrayPattern<'script> {
     pub mid: usize,
     pub exprs: ArrayPredicatePatterns<'script>,
 }
@@ -709,14 +756,14 @@ pub struct ArrayPattern<'script> {
 impl_expr2!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct AssignPattern<'script> {
+pub(crate) struct AssignPattern<'script> {
     pub id: Cow<'script, str>,
     pub idx: usize,
     pub pattern: Box<Pattern<'script>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum Path<'script> {
+pub(crate) enum Path<'script> {
     Const(LocalPath<'script>),
     Local(LocalPath<'script>),
     Event(EventPath<'script>),
@@ -734,7 +781,7 @@ impl<'script> Path<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub enum Segment<'script> {
+pub(crate) enum Segment<'script> {
     Id {
         #[serde(skip)]
         key: KnownKey<'script>,
@@ -745,20 +792,20 @@ pub enum Segment<'script> {
         mid: usize,
     },
     Element {
-        expr: ImutExpr<'script>,
+        expr: ImutExprInt<'script>,
         mid: usize,
     },
     Range {
         lower_mid: usize,
         upper_mid: usize,
         mid: usize,
-        range_start: Box<ImutExpr<'script>>,
-        range_end: Box<ImutExpr<'script>>,
+        range_start: Box<ImutExprInt<'script>>,
+        range_end: Box<ImutExprInt<'script>>,
     },
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct LocalPath<'script> {
+pub(crate) struct LocalPath<'script> {
     //pub id: Cow<'script, str>,
     pub idx: usize,
     pub is_const: bool,
@@ -768,90 +815,118 @@ pub struct LocalPath<'script> {
 impl_expr2!(LocalPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MetadataPath<'script> {
+pub(crate) struct MetadataPath<'script> {
     pub mid: usize,
     pub segments: Segments<'script>,
 }
 impl_expr2!(MetadataPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EventPath<'script> {
+pub(crate) struct EventPath<'script> {
     pub mid: usize,
     pub segments: Segments<'script>,
 }
 impl_expr2!(EventPath);
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum BinOpKind {
+    /// we're forced to make this pub because of lalrpop
     Or,
+    /// we're forced to make this pub because of lalrpop
     Xor,
+    /// we're forced to make this pub because of lalrpop
     And,
 
+    /// we're forced to make this pub because of lalrpop
     BitOr,
+    /// we're forced to make this pub because of lalrpop
     BitXor,
+    /// we're forced to make this pub because of lalrpop
     BitAnd,
 
+    /// we're forced to make this pub because of lalrpop
     Eq,
+    /// we're forced to make this pub because of lalrpop
     NotEq,
 
+    /// we're forced to make this pub because of lalrpop
     Gte,
+    /// we're forced to make this pub because of lalrpop
     Gt,
+    /// we're forced to make this pub because of lalrpop
     Lte,
+    /// we're forced to make this pub because of lalrpop
     Lt,
 
+    /// we're forced to make this pub because of lalrpop
     RBitShiftSigned,
+    /// we're forced to make this pub because of lalrpop
     RBitShiftUnsigned,
+    /// we're forced to make this pub because of lalrpop
     LBitShift,
 
+    /// we're forced to make this pub because of lalrpop
     Add,
+    /// we're forced to make this pub because of lalrpop
     Sub,
+    /// we're forced to make this pub because of lalrpop
     Mul,
+    /// we're forced to make this pub because of lalrpop
     Div,
+    /// we're forced to make this pub because of lalrpop
     Mod,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct BinExpr<'script> {
+pub(crate) struct BinExpr<'script> {
     pub mid: usize,
     pub kind: BinOpKind,
-    pub lhs: ImutExpr<'script>,
-    pub rhs: ImutExpr<'script>,
+    pub lhs: ImutExprInt<'script>,
+    pub rhs: ImutExprInt<'script>,
 }
 impl_expr2!(BinExpr);
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum UnaryOpKind {
+    /// we're forced to make this pub because of lalrpop
     Plus,
+    /// we're forced to make this pub because of lalrpop
     Minus,
+    /// we're forced to make this pub because of lalrpop
     Not,
+    /// we're forced to make this pub because of lalrpop
     BitNot,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct UnaryExpr<'script> {
+pub(crate) struct UnaryExpr<'script> {
     pub mid: usize,
     pub kind: UnaryOpKind,
-    pub expr: ImutExpr<'script>,
+    pub expr: ImutExprInt<'script>,
 }
 impl_expr2!(UnaryExpr);
 
-pub type Exprs<'script> = Vec<Expr<'script>>;
+pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
+/// A list of imutable exressons
 pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
-pub type Fields<'script> = Vec<Field<'script>>;
-pub type Segments<'script> = Vec<Segment<'script>>;
-pub type PatternFields<'script> = Vec<PredicatePattern<'script>>;
-pub type Predicates<'script> = Vec<PredicateClause<'script>>;
-pub type ImutPredicates<'script> = Vec<ImutPredicateClause<'script>>;
-pub type PatchOperations<'script> = Vec<PatchOperation<'script>>;
-pub type ComprehensionCases<'script> = Vec<ComprehensionCase<'script>>;
-pub type ImutComprehensionCases<'script> = Vec<ImutComprehensionCase<'script>>;
-pub type ArrayPredicatePatterns<'script> = Vec<ArrayPredicatePattern<'script>>;
+pub(crate) type Fields<'script> = Vec<Field<'script>>;
+pub(crate) type Segments<'script> = Vec<Segment<'script>>;
+pub(crate) type PatternFields<'script> = Vec<PredicatePattern<'script>>;
+pub(crate) type Predicates<'script> = Vec<PredicateClause<'script>>;
+pub(crate) type ImutPredicates<'script> = Vec<ImutPredicateClause<'script>>;
+pub(crate) type PatchOperations<'script> = Vec<PatchOperation<'script>>;
+pub(crate) type ComprehensionCases<'script> = Vec<ComprehensionCase<'script>>;
+pub(crate) type ImutComprehensionCases<'script> = Vec<ImutComprehensionCase<'script>>;
+pub(crate) type ArrayPredicatePatterns<'script> = Vec<ArrayPredicatePattern<'script>>;
+/// A vector of statements
 pub type Stmts<'script> = Vec<Stmt<'script>>;
 
 fn replace_last_shadow_use<'script>(replace_idx: usize, expr: Expr<'script>) -> Expr<'script> {
     match expr {
         Expr::Assign { path, expr, mid } => match expr.borrow() {
-            Expr::Imut(ImutExpr::Local { idx, .. }) if idx == &replace_idx => {
+            Expr::Imut(ImutExprInt::Local { idx, .. }) if idx == &replace_idx => {
                 Expr::AssignMoveLocal {
                     mid,
                     idx: *idx,

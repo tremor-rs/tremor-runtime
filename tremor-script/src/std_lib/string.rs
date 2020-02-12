@@ -157,11 +157,11 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::Array(_input.split(sep).map(|v| Value::from(v.to_string())).collect()))
             }),
         )
-        .insert(TremorFnWrapper {
-            module: "string".to_string(),
-            name: "format".to_string(),
-            fun: Box::new(StringFormat::default()),
-        });
+        .insert(TremorFnWrapper::new(
+            "string".to_string(),
+            "format".to_string(),
+            Box::new(StringFormat::default()),
+        ));
 }
 
 #[cfg(test)]

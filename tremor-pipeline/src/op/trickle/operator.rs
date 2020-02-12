@@ -34,7 +34,7 @@ impl TrickleOperator {
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
         use crate::op;
-        let stmt = stmt_rentwrapped.stmt.suffix();
+        let stmt = stmt_rentwrapped.suffix();
         let op: Box<dyn Operator> = match stmt {
             tremor_script::ast::Stmt::OperatorDecl(ref op) => {
                 match (op.kind.module.as_str(), op.kind.operation.as_str()) {

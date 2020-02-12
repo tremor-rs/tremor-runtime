@@ -11,7 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//! Tremor script scripting language
+
 #![forbid(warnings)]
+#![deny(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -20,33 +24,41 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
+#![allow(clippy::must_use_candidate)]
 
+/// The Tremor Script AST
 pub mod ast;
 mod compat;
 mod ctx;
 mod datetime;
-pub mod docs;
+pub(crate) mod docs;
+/// Errors
 pub mod errors;
+/// GROK implementaiton
 pub mod grok;
+/// Tremor Script highlighter
 pub mod highlighter;
+/// Influx Line protocl parser
 pub mod influx;
+/// Tremor Script Interpreter
 pub mod interpreter;
+/// The Tremor Script Lexer
 pub mod lexer;
 // We need this because of lalrpop
 #[allow(unused)]
-pub mod parser;
-
-pub mod pos;
+pub(crate) mod parser;
+pub(crate) mod pos;
+/// Prelude module with important exports
+pub mod prelude;
+/// Tremor Querty
 pub mod query;
+/// Function registry
 pub mod registry;
-pub mod script;
+pub(crate) mod script;
 mod std_lib;
 mod tilde;
+/// Utility functions
 pub mod utils;
-pub use ctx::{EventContext, EventOriginUri};
-pub use interpreter::{AggrType, FALSE, NULL, TRUE};
-pub mod prelude;
 
 extern crate serde;
 #[macro_use]
@@ -56,19 +68,26 @@ extern crate rental;
 
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{self, Serialize};
-pub use simd_json::value::borrowed::Object;
-pub use simd_json::value::borrowed::Value;
 use simd_json::value::Value as ValueTrait;
 
+pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
+pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, Registry, TremorAggrFn,
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
+pub use interpreter::{AggrType, FALSE, NULL, TRUE};
+pub use simd_json::value::borrowed::Object;
+pub use simd_json::value::borrowed::Value;
 
+/// Combind struct for an event value and metadata
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ValueAndMeta<'event> {
+    /// Event value
     pub value: Value<'event>,
+    /// Event metadata
     pub meta: Value<'event>,
 }
 
@@ -91,12 +110,15 @@ impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
 }
 
 rental! {
-    pub mod rentals {
+    /// Tremor script rentals to work around lifetime
+    /// issues
+    pub(crate) mod rentals {
         use simd_json::value::borrowed;
         use super::*;
         use std::borrow::Cow;
 
-
+        /// Rental wrapped value with the data it was parsed
+        /// from from
         #[rental_mut(covariant,debug)]
         pub struct Value {
             raw: Vec<Vec<u8>>,
@@ -107,6 +129,9 @@ rental! {
 }
 
 impl rentals::Value {
+    /// Borrow the parts (event and metadata) from a rental.
+    /// This borrows the data as imutable and then transmutes it
+    /// to be mutable.
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub fn parts(&self) -> (&mut Value, &mut Value) {
         unsafe {
@@ -116,31 +141,32 @@ impl rentals::Value {
             (unwind_event, event_meta)
         }
     }
+    /// Consums an event into another
+    /// This function works around a rental limitation that is meant
+    /// to protect it's users: Rental does not allow you to get both
+    /// the owned and borrowed part at the same time.
+    ///
+    /// The reason for that is that once those are taken out of the
+    /// rental the link of lifetimes between them would be broken
+    /// and you'd risk invalid pointers or memory leaks.
+    /// We however do not really want to take them out, all we want
+    /// is combine two rentals. We can do this since:
+    /// 1) the owned values are inside a vector, while the vector
+    ///    itself may be relocated by adding to it, the values
+    ///    in it will stay in the same location.
+    /// 2) we are only ever adding / extending never deleting
+    ///    or modifying.
+    ///
+    /// So what this function does it is crowbars the content
+    /// from a rental into an accessible struct then uses this
+    /// to modify it's content by adding the owned parts of
+    /// `other` into the owned part `self` and the running
+    /// a merge function on the borrowed parts
     pub fn consume<E, F>(&mut self, other: Self, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
-        // This function works around a rental limitation that is meant
-        // to protect it's users: Rental does not allow you to get both
-        // the owned and borrowed part at the same time.
-        //
-        // The reason for that is that once those are taken out of the
-        // rental the link of lifetimes between them would be broken
-        // and you'd risk invalid pointers or memory leaks.
-        // We however do not really want to take them out, all we want
-        // is combine two rentals. We can do this since:
-        // 1) the owned values are inside a vector, while the vector
-        //    itself may be relocated by adding to it, the values
-        //    in it will stay in the same location.
-        // 2) we are only ever adding / extending never deleting
-        //    or modifying.
-        //
-        // So what this function does it is crowbars the content
-        // from a rental into an accessible struct then uses this
-        // to modify it's content by adding the owned parts of
-        // `other` into the owned part `self` and the running
-        // a merge function on the borrowed parts
         pub struct ScrewRental {
             pub parsed: ValueAndMeta<'static>,
             pub raw: Vec<Vec<u8>>,
@@ -232,8 +258,12 @@ impl Serialize for LineValue {
     }
 }
 
+/// An error ocured while deserializing
+/// a value into an Event.
 pub enum LineValueDeserError {
+    /// The value was missing the `value` key
     ValueMissing,
+    /// The value was missing the `metadata` key
     MetaMissing,
 }
 
@@ -280,7 +310,7 @@ mod tests {
     use super::*;
     use crate::errors::*;
     use crate::interpreter::AggrType;
-    use crate::lexer::{TokenFuns, TokenSpan};
+    use crate::lexer::TokenSpan;
     use halfbrown::hashmap;
     use simd_json::borrowed::{Object, Value};
     use simd_json::ValueBuilder;
@@ -289,7 +319,7 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             let src = format!("{} ", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer(&src).collect();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -304,10 +334,7 @@ mod tests {
             let mut event = Value::from(Object::new());
             let mut global_map = Value::from(Object::new());
             let value = runnable.run(
-                &EventContext {
-                    at: 0,
-                    origin_uri: None,
-                },
+                &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,
@@ -326,7 +353,7 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             //let src = format!("{}", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -341,10 +368,7 @@ mod tests {
             let mut event = Value::object();
             let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
-                &EventContext {
-                    at: 0,
-                    origin_uri: None,
-                },
+                &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,
@@ -357,7 +381,7 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             //let src = format!("{}", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::tokenizer($src).collect();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new($src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -372,10 +396,7 @@ mod tests {
             let mut event = Value::object();
             let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
-                &EventContext {
-                    at: 0,
-                    origin_uri: None,
-                },
+                &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,

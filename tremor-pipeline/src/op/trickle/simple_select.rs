@@ -22,7 +22,7 @@ use tremor_script::{
     self,
     ast::{InvokeAggrFn, SelectStmt},
     prelude::*,
-    query::rentals::Stmt as StmtRental,
+    query::StmtRental,
 };
 
 rental! {
@@ -53,7 +53,7 @@ impl TrickleSimpleSelect {
         id: String,
         stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
-        let select = match stmt_rentwrapped.stmt.suffix() {
+        let select = match stmt_rentwrapped.suffix() {
             tremor_script::ast::Stmt::Select(ref select) => select.clone(),
             _ => {
                 return Err(ErrorKind::PipelineError(

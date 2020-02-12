@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Warning;
+use crate::ast::{self, Warning};
 use crate::errors::*;
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
-use crate::lexer::{self, TokenFuns};
+use crate::lexer;
 use crate::pos::Range;
 use crate::prelude::*;
 use rental::rental;
@@ -23,23 +23,34 @@ use std::boxed::Box;
 use std::io::Write;
 use std::sync::Arc;
 
+/// Rental wrapper
 #[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
 pub struct StmtRentalWrapper {
+    /// Statement
     pub stmt: Arc<rentals::Stmt>,
 }
+impl StmtRentalWrapper {
+    /// Gets the wrapped statement
+    pub fn suffix(&self) -> &ast::Stmt {
+        self.stmt.suffix()
+    }
+}
+
 rental! {
-    pub mod rentals {
+    mod rentals {
         use crate::ast;
         use std::borrow::Cow;
         use serde::Serialize;
         use std::sync::Arc;
 
+        /// rental around Query
         #[rental_mut(covariant,debug)]
         pub struct Query {
             script: Box<String>,
             query: ast::Query<'script>,
         }
 
+        /// rental around Stmt
         #[rental(covariant,debug)]
         pub struct Stmt {
             query: Arc<super::Query>,
@@ -47,6 +58,9 @@ rental! {
         }
     }
 }
+
+pub use rentals::Query as QueryRental;
+pub use rentals::Stmt as StmtRental;
 
 #[cfg_attr(tarpaulin, skip)]
 impl PartialEq for rentals::Stmt {
@@ -64,11 +78,16 @@ impl PartialOrd for rentals::Stmt {
     }
 }
 
+/// A tremor query
 #[derive(Debug, Clone)]
 pub struct Query {
+    /// The query
     pub query: Arc<rentals::Query>,
+    /// Source of the query
     pub source: String,
+    /// Warnings emitted by the script
     pub warnings: Vec<Warning>,
+    /// Number of local variables (should be 0)
     pub locals: usize,
 }
 
@@ -77,6 +96,11 @@ where
     'script: 'event,
     'event: 'run,
 {
+    /// Borrows the query
+    pub fn suffix(&self) -> &ast::Query {
+        self.query.suffix()
+    }
+    /// Parses a string into a query
     pub fn parse(script: &'script str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut source = script.to_string();
 
@@ -87,7 +111,7 @@ where
         source.push('\n');
 
         let query = rentals::Query::try_new(Box::new(source.clone()), |src| {
-            let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
+            let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(src.as_str()).collect();
             let mut filtered_tokens = Vec::new();
 
             for t in lexemes? {
@@ -97,7 +121,7 @@ where
                 }
             }
 
-            let (script, local_count, ws) = crate::parser::grammar::QueryParser::new()
+            let (script, local_count, ws) = crate::parser::g::QueryParser::new()
                 .parse(filtered_tokens)?
                 .up_script(reg, aggr_reg)?;
 
@@ -115,15 +139,16 @@ where
         })
     }
 
-    // Simple highlighter nothing to see here.
+    /// Highlights a script with a given highlighter.
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
         script.push('\n');
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
         h.highlight(tokens)
     }
 
+    /// Format an error given a script source.
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
@@ -132,7 +157,7 @@ where
         let mut script = script.to_string();
         script.push('\n');
 
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
         match e.context() {
             (Some(Range(start, end)), _) => {
                 h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
@@ -146,16 +171,18 @@ where
         }
     }
 
+    /// Format an error given a script source.
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         let mut warnings = self.warnings.clone();
         warnings.sort();
         warnings.dedup();
         for w in &warnings {
-            let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
+            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source).collect();
             h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
         h.finalize()
     }
+    /// Formats an error within this script
 
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
@@ -166,6 +193,7 @@ where
         }
     }
 
+    /// Formats an error within this script using a given highlighter
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
     }

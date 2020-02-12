@@ -20,7 +20,7 @@ use crate::errors::*;
     feature = "cargo-clippy",
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
-use crate::parser::grammar::__ToTriple;
+use crate::parser::g::__ToTriple;
 pub use crate::pos::*;
 use lalrpop_util;
 use std::borrow::Cow;
@@ -30,8 +30,11 @@ use std::iter::Peekable;
 use std::str::Chars;
 use unicode_xid::UnicodeXID;
 
+/// Source for a parser
 pub trait ParserSource {
+    /// The source as a str
     fn src(&self) -> &str;
+    /// the initial index
     fn start_index(&self) -> BytePos;
 }
 
@@ -44,6 +47,7 @@ impl ParserSource for str {
     }
 }
 
+/// A token with a span to indicate its location
 pub type TokenSpan<'input> = Spanned<Token<'input>>;
 
 fn is_ws(ch: char) -> bool {
@@ -78,167 +82,239 @@ fn is_hex(ch: char) -> bool {
 /// to inject magic tokens ( bad token ) or support lexical streams
 /// ( different token streams drive by users, eg: emit ignorable tokens when
 /// syntax highlighting or error highlighting
-///
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'input> {
-    //  Ignorable when parsing, significant when highlighting
+    ///  Ignorable when parsing, significant when highlighting
     Whitespace(&'input str),
+    /// a new line
     NewLine,
+    /// a singe line comment
     SingleLineComment(&'input str),
+    /// a doc comment
     DocComment(&'input str),
+    /// a BAD TOKEN
     Bad(String), // Mark bad tokens in lexical stream
-    Line(usize),
 
-    // Path
+    /// an ident
     Ident(Cow<'input, str>, bool), // bool marks whether the ident is surrounded by '`' (escape notation)
+    /// the `$` sign
     Dollar,
+    /// a `.`
     Dot,
 
-    // Literals
+    /// null
     Nil,
+    /// a boolean
     BoolLiteral(bool),
+    /// an integer
     IntLiteral(i64),
+    /// an float
     FloatLiteral(f64, String),
+    /// a test literal
     TestLiteral(usize, Vec<String>),
+    /// an heredoc
     HereDoc(usize, Vec<String>),
 
-    // String
+    /// a double quote `"`
     DQuote,
+    /// a string literal
     StringLiteral(Cow<'input, str>),
 
     // Keywords
+    /// the `let` keywrod
     Let,
+    /// the `const` keyword
     Const,
+    /// the `match` keyword
     Match,
+    /// the `case` keyword
     Case,
+    /// the `of` keyword
     Of,
+    /// the `when` keyword
     When,
+    /// the `end` keyword
     End,
+    /// the `patch` keyword
     Patch,
+    /// the `insert` keyword
     Insert,
+    /// the `upsert` keyword
     Upsert,
+    /// the `update` keyword
     Update,
+    /// the `erase` keyword
     Erase,
+    /// the `move` keyword
     Move,
+    /// the `copy` keyword
     Copy,
+    /// the `merge` keyword
     Merge,
+    /// the `drop` keyword
     Drop,
+    /// the `default` keyword
     Default,
+    /// the `emit` keyword
     Emit,
+    /// the `for` keyword
     For,
+    /// the `event` keyword
     Event,
+    /// the `present` keyword
     Present,
+    /// the `absent` keyword
     Absent,
-    //    Return,
-    //   Todo,
+    /// the `fun` keyword
     Fun,
 
     // Symbols
+    /// the `\` backslash
     BSlash,
+    /// the `,` comma
     Comma,
-    //    Pipe,
-    //    Tilde,
-    //    DotDotDot, // ...
-    //    DotDot,    // ..
-    //    Question,
-
-    // Wildcards
-    // DontCare,
 
     // Op
+    /// the `not` keyword
     Not,
+    /// bitwise not `!`
     BitNot,
+    /// the `and` keyword
     And,
+    /// the `or` keyword
     Or,
+    /// the `xor` keyword
     Xor,
+    /// bitwise and `&`
     BitAnd,
+    /// bitwise or `|`
     BitOr,
+    /// bitwise xor `^`
     BitXor,
+    /// equal `=`
     Eq,
+    /// double equal `==`
     EqEq,
+    /// not equal `!=`
     NotEq,
+    /// tilde equal `~=`
     TildeEq,
+    /// tilde `~`
     Tilde,
+    /// greater than equal `>=`
     Gte,
+    /// grater than `>`
     Gt,
+    /// lower than equal `<=`
     Lte,
+    /// lower then `<`
     Lt,
+    /// Right bit shift signed `>>`
     RBitShiftSigned,
+    /// Right bit shift unsigned `>>>`
     RBitShiftUnsigned,
+    /// Left bit shift `<<`
     LBitShift,
+    /// Add `+`
     Add,
+    /// Substract `-`
     Sub,
+    /// Multiply `*`
     Mul,
+    /// Divide `/`
     Div,
+    /// Moduly `%~
     Mod,
 
     // Symbols
+    /// Colon `:`
     Colon,
+    /// Double coilon `::`
     ColonColon,
+    /// Effector array `=>`
     EqArrow,
+    /// Semicolon `;`
     Semi,
+    /// Left Paren `(`
     LParen,
+    /// Right Paren `)`
     RParen,
+    /// Left brace `{`
     LBrace,
+    /// Left pattern Bracket `%{`
     LPatBrace,
+    /// Right Brace `}`
     RBrace,
+    /// Left Bracket `[`
     LBracket,
+    /// Left pattern Bracket `%[`
     LPatBracket,
+    /// Right bracket `]`
     RBracket,
 
+    /// End of stream token
     EndOfStream,
 
     // Query
+    /// The `select` keyword
     Select,
+    /// The `from` keyword
     From,
+    /// The `where` keyword
     Where,
+    /// The `with` keyword
     With,
+    /// The `order` keyword
     Order,
+    /// the `group` keyword
     Group,
+    /// The `by` keyword
     By,
+    /// The `having` keyword
     Having,
+    /// The `into` keyword
     Into,
+    /// The `create` keyword
     Create,
+    /// The `tumbling` keyword
     Tumbling,
+    /// The `sliding` keyword
     Sliding,
+    /// The `window` keyword
     Window,
+    /// The `stream` keyword
     Stream,
+    /// The `operator` keyword
     Operator,
+    /// The `script` keyword
     Script,
+    /// The `set` keyword
     Set,
+    /// The `each` keyword
     Each,
+    /// The `define` keyword
     Define,
+    /// The `args` keyword
     Args,
 }
 
-pub trait TokenFuns {
-    fn is_ignorable(&self) -> bool;
-    fn is_keyword(&self) -> bool;
-    fn is_literal(&self) -> bool;
-    fn is_string_like(&self) -> bool;
-    fn is_symbol(&self) -> bool;
-    fn is_operator(&self) -> bool;
-}
-
-impl<'input> TokenFuns for Token<'input> {
+impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
-    ///
     #[cfg_attr(tarpaulin, skip)]
-    fn is_ignorable(&self) -> bool {
+    pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
             Token::DocComment(_)
             | Token::SingleLineComment(_)
             | Token::Whitespace(_)
-            | Token::NewLine
-            | Token::Line(_) => true,
+            | Token::NewLine => true,
             _ => false,
         }
     }
 
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
     #[cfg_attr(tarpaulin, skip)]
-    fn is_keyword(&self) -> bool {
+    pub(crate) fn is_keyword(&self) -> bool {
         match *self {
             Token::Match
             | Token::End
@@ -287,9 +363,9 @@ impl<'input> TokenFuns for Token<'input> {
         }
     }
 
-    // Is the token a literal, excluding list and record literals
+    /// Is the token a literal, excluding list and record literals
     #[cfg_attr(tarpaulin, skip)]
-    fn is_literal(&self) -> bool {
+    pub(crate) fn is_literal(&self) -> bool {
         match *self {
             // Token::DontCare => true,
             Token::Nil
@@ -302,7 +378,7 @@ impl<'input> TokenFuns for Token<'input> {
 
     // It's text-like or string-like notation such as String, char, regex ...
     #[cfg_attr(tarpaulin, skip)]
-    fn is_string_like(&self) -> bool {
+    pub(crate) fn is_string_like(&self) -> bool {
         match *self {
             Token::StringLiteral(_)
             | Token::DQuote
@@ -312,9 +388,9 @@ impl<'input> TokenFuns for Token<'input> {
         }
     }
 
-    // Is the token a builtin delimiter symbol
+    /// Is the token a builtin delimiter symbol
     #[cfg_attr(tarpaulin, skip)]
-    fn is_symbol(&self) -> bool {
+    pub(crate) fn is_symbol(&self) -> bool {
         match *self {
             Token::Colon
             | Token::ColonColon
@@ -330,18 +406,13 @@ impl<'input> TokenFuns for Token<'input> {
             | Token::RBracket
             | Token::BSlash
             | Token::Comma => true,
-            //            Token::Pipe => true,
-            //            Token::Tilde => true,
-            //            Token::DotDotDot => true,
-            //            Token::DotDot => true,
-            //            Token::Question => true,
             _ => false,
         }
     }
 
-    // Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
+    /// Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
     #[cfg_attr(tarpaulin, skip)]
-    fn is_operator(&self) -> bool {
+    pub(crate) fn is_operator(&self) -> bool {
         match *self {
             Token::Not
             | Token::BitNot
@@ -405,7 +476,6 @@ impl<'input> fmt::Display for Token<'input> {
         match self {
             Token::Whitespace(ref ws) => write!(f, "{}", ws),
             Token::NewLine => writeln!(f),
-            Token::Line(n) => write!(f, "{}: ", n),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
@@ -550,7 +620,7 @@ struct CharLocations<'input> {
 }
 
 impl<'input> CharLocations<'input> {
-    pub fn new<S>(input: &'input S) -> CharLocations<'input>
+    pub(crate) fn new<S>(input: &'input S) -> CharLocations<'input>
     where
         S: ?Sized + ParserSource,
     {
@@ -577,6 +647,7 @@ impl<'input> Iterator for CharLocations<'input> {
     }
 }
 
+/// A Tremor tokeniser
 pub struct Tokenizer<'input> {
     eos: bool,
     pos: Span,
@@ -585,7 +656,8 @@ pub struct Tokenizer<'input> {
 }
 
 impl<'input> Tokenizer<'input> {
-    fn new(input: &'input str) -> Self {
+    /// Creates a new tokeniser
+    pub fn new(input: &'input str) -> Self {
         let lexer = Lexer::new(input);
         let start = Location::default();
         let end = Location::default();
@@ -620,10 +692,6 @@ impl<'input> Iterator for Tokenizer<'input> {
     }
 }
 
-pub fn tokenizer(input: &str) -> Tokenizer {
-    Tokenizer::new(input)
-}
-
 /// An iterator over a source string that yeilds `Token`s for subsequent use by
 /// the parser
 pub struct Lexer<'input> {
@@ -637,7 +705,7 @@ type Lexeme = Option<(Location, char)>;
 
 impl<'input> Lexer<'input> {
     /// Create a new lexer from the source string
-    pub fn new<S>(input: &'input S) -> Self
+    pub(crate) fn new<S>(input: &'input S) -> Self
     where
         S: ?Sized + ParserSource,
     {
@@ -1494,7 +1562,7 @@ mod tests {
 
     macro_rules! lex_ok {
         ($src:expr, $($span:expr => $token:expr,)*) => {{
-            let lexed_tokens: Vec<_> = tokenizer($src).filter(|t| match t {
+            let lexed_tokens: Vec<_> = Tokenizer::new($src).filter(|t| match t {
                 Ok(Spanned { value: Token::EndOfStream, .. }) => false,
                 Ok(Spanned { value: t, .. }) => !t.is_ignorable(),
                 Err(_) => true

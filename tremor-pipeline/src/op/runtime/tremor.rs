@@ -16,7 +16,7 @@ use crate::FN_REGISTRY;
 use simd_json::borrowed::Value;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::prelude::*;
-use tremor_script::{self, interpreter::AggrType, EventContext, Return, Script};
+use tremor_script::{self, AggrType, EventContext, Return, Script};
 
 op!(TremorFactory(node) {
     if let Some(map) = &node.config {

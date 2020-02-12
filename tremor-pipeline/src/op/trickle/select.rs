@@ -28,7 +28,7 @@ use tremor_script::{
     self,
     ast::{InvokeAggrFn, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
     prelude::*,
-    query::rentals::Stmt as StmtRental,
+    query::StmtRental,
 };
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
@@ -348,7 +348,7 @@ impl TrickleSelect {
         windows: Vec<(String, WindowImpl)>,
         stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
-        let select = match stmt_rentwrapped.stmt.suffix() {
+        let select = match stmt_rentwrapped.suffix() {
             tremor_script::ast::Stmt::Select(ref select) => select.clone(),
             _ => {
                 return Err(ErrorKind::PipelineError(
@@ -435,21 +435,16 @@ impl Operator for TrickleSelect {
 
         let mut events = vec![];
 
-        let mut group_values = vec![];
-        {
+        let mut group_values = {
             let data = event.data.suffix();
             let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(
-                    &ctx,
-                    &unwind_event,
-                    &node_meta,
-                    &event_meta,
-                    &mut group_values,
-                )?
-            };
-        }
+                group_by.generate_groups(&ctx, &unwind_event, &node_meta, &event_meta)?
+            } else {
+                vec![]
+            }
+        };
         if self.windows.is_empty() && group_values.is_empty() {
             let group_value = Value::from(vec![()]);
             let group_str = sorsorted_serialize(&group_value)?;
@@ -818,10 +813,10 @@ mod test {
     use super::*;
     use simd_json::borrowed::Value;
     use simd_json::json;
-    use tremor_script::ast;
+    use tremor_script::ast::{self, Ident, ImutExpr, Literal};
 
     fn test_target<'test>() -> ast::ImutExpr<'test> {
-        let target: ast::ImutExpr<'test> = ast::ImutExpr::Literal(ast::Literal {
+        let target: ast::ImutExpr<'test> = ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(42),
         });
@@ -831,28 +826,10 @@ mod test {
     fn test_stmt(target: ast::ImutExpr) -> ast::Select {
         tremor_script::ast::Select {
             mid: 0,
-            from: (
-                ast::Ident {
-                    mid: 0,
-                    id: "in".into(),
-                },
-                ast::Ident {
-                    mid: 0,
-                    id: "out".into(),
-                },
-            ),
-            into: (
-                ast::Ident {
-                    mid: 0,
-                    id: "out".into(),
-                },
-                ast::Ident {
-                    mid: 0,
-                    id: "in".into(),
-                },
-            ),
+            from: (Ident::from("in"), Ident::from("out")),
+            into: (Ident::from("out"), Ident::from("in")),
             target,
-            maybe_where: Some(ast::ImutExpr::Literal(ast::Literal {
+            maybe_where: Some(ImutExpr::from(ast::Literal {
                 mid: 0,
                 value: Value::from(true),
             })),
@@ -946,8 +923,8 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
         let query = tremor_script::query::Query::parse(query, &reg, &aggr_reg)?;
 
-        let stmt_rental = tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |q| {
-            q.query.suffix().stmts[0].clone()
+        let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
+            q.suffix().stmts[0].clone()
         });
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1029,10 +1006,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1042,7 +1018,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1063,7 +1039,7 @@ mod test {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
 
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(true),
         }));
@@ -1071,10 +1047,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1084,7 +1059,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1108,16 +1083,15 @@ mod test {
 
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(false),
         }));
         let stmt_ast = test_select_stmt(stmt_ast);
 
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1127,7 +1101,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1143,7 +1117,7 @@ mod test {
     fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::String("snot".into()),
         }));
@@ -1151,10 +1125,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1164,7 +1137,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1181,11 +1154,11 @@ mod test {
     fn select_nowin_nogrp_whrt_havt() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_having = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(true),
         }));
@@ -1193,10 +1166,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1206,7 +1178,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1228,11 +1200,11 @@ mod test {
     fn select_nowin_nogrp_whrt_havf() -> Result<()> {
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_having = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(false),
         }));
@@ -1240,10 +1212,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1253,7 +1224,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -1282,11 +1253,11 @@ mod test {
         use halfbrown::hashmap;
         let target = test_target();
         let mut stmt_ast = test_stmt(target);
-        stmt_ast.maybe_where = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(true),
         }));
-        stmt_ast.maybe_having = Some(ast::ImutExpr::Literal(ast::Literal {
+        stmt_ast.maybe_having = Some(ImutExpr::from(Literal {
             mid: 0,
             value: Value::from(hashmap! {
                 "snot".into() => "badger".into(),
@@ -1296,10 +1267,9 @@ mod test {
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
         let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::rentals::Query::new(
-            script_box,
-            |_| test_query(stmt_ast.clone()),
-        ));
+        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
+            test_query(stmt_ast.clone())
+        }));
 
         let query = tremor_script::query::Query {
             query: query_rental,
@@ -1309,7 +1279,7 @@ mod test {
         };
 
         let stmt_rental =
-            tremor_script::query::rentals::Stmt::new(Arc::new(query.clone()), |_| stmt_ast);
+            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),

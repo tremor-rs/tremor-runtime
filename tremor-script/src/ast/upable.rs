@@ -15,7 +15,7 @@
 use super::Helper;
 use crate::errors::*;
 
-pub trait Upable<'script> {
+pub(crate) trait Upable<'script> {
     type Target;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
 }

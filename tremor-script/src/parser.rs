@@ -14,11 +14,20 @@
 
 use lalrpop_util::lalrpop_mod;
 
+pub(crate) mod g {
+    pub(crate) use super::grammar::*;
+}
+
 lalrpop_mod!(
     #[cfg_attr(
         feature = "cargo-clippy",
-        allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap, clippy::pedantic, clippy::option_unwrap_used)
+        allow(
+            clippy::all,
+            clippy::result_unwrap_used,
+            clippy::unnecessary_unwrap,
+            clippy::pedantic,
+            clippy::option_unwrap_used
+        )
     )]
-
-    pub grammar
+    grammar
 );

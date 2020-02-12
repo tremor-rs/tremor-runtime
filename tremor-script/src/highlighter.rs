@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::ast::Warning;
 use crate::errors::{Error as ScriptError, *};
-use crate::lexer::{Token, TokenFuns, TokenSpan};
+use crate::lexer::{Token, TokenSpan};
 use crate::pos::*;
 //use lalrpop_util::ParseError;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum ErrorLevel {
+pub(crate) enum ErrorLevel {
     Error,
     Warning,
     Hint,
@@ -37,14 +37,15 @@ impl ErrorLevel {
         }
     }
 }
+/// Error to be highlighted
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Error {
-    pub start: Location,
-    pub end: Location,
-    pub callout: String,
-    pub hint: Option<String>,
-    pub level: ErrorLevel,
-    pub token: Option<String>,
+    start: Location,
+    end: Location,
+    callout: String,
+    hint: Option<String>,
+    level: ErrorLevel,
+    token: Option<String>,
 }
 
 impl From<&ScriptError> for Error {
@@ -77,20 +78,27 @@ impl From<&Warning> for Error {
     }
 }
 
+/// Highlighter trait for generalising over different output types
 pub trait Highlighter {
+    /// Writer for the highligher to write to
     type W: Write;
 
+    /// sets the color
     fn set_color(&mut self, _spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
         Ok(())
     }
+    /// rfsets all formating
     fn reset(&mut self) -> std::result::Result<(), std::io::Error> {
         Ok(())
     }
+    /// finalises highlighting
     fn finalize(&mut self) -> std::result::Result<(), std::io::Error> {
         Ok(())
     }
+    /// get the raw writer
     fn get_writer(&mut self) -> &mut Self::W;
 
+    /// highlights a token stream
     fn highlight(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
@@ -99,6 +107,7 @@ pub trait Highlighter {
         self.finalize()
     }
 
+    /// highlights a runtime error
     fn highlight_runtime_error(
         &mut self,
         tokens: Vec<Result<TokenSpan>>,
@@ -110,6 +119,7 @@ pub trait Highlighter {
         self.highlight_errors(extracted, error)
     }
 
+    /// highlights compile time errors
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
@@ -328,6 +338,7 @@ pub struct Dumb {
     buff: Vec<u8>,
 }
 impl Dumb {
+    /// Creates a new highlighter
     pub fn new() -> Self {
         Self::default()
     }
@@ -357,6 +368,7 @@ pub struct Term {
 #[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::new_without_default)]
 impl Term {
+    /// Creates a new highlighter
     pub fn new() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
         let buff = bufwtr.buffer();

@@ -15,12 +15,12 @@
 use crate::op::prelude::*;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::ARGS_CONST_ID;
 use tremor_script::prelude::*;
+use tremor_script::ARGS_CONST_ID;
 
 rental! {
     pub mod rentals {
-        use tremor_script::query::rentals::Stmt;
+        use tremor_script::query::StmtRental;
         use std::sync::Arc;
         use halfbrown::HashMap;
         use serde::Serialize;
@@ -28,7 +28,7 @@ rental! {
 
         #[rental(covariant,debug)]
         pub struct Script {
-            stmt: Arc<Stmt>,
+            stmt: Arc<StmtRental>,
             script: tremor_script::ast::ScriptDecl<'stmt>,
         }
     }
@@ -38,8 +38,8 @@ rental! {
 #[allow(clippy::module_name_repetitions)]
 pub struct TrickleScript {
     pub id: String,
-    pub defn: Arc<tremor_script::query::rentals::Stmt>,
-    pub node: Arc<tremor_script::query::rentals::Stmt>,
+    pub defn: Arc<tremor_script::query::StmtRental>,
+    pub node: Arc<tremor_script::query::StmtRental>,
     script: rentals::Script,
 }
 
@@ -67,9 +67,7 @@ impl TrickleScript {
         let args: Value;
 
         let mut params = HashMap::new();
-        if let tremor_script::ast::query::Stmt::ScriptDecl(ref defn) =
-            defn_rentwrapped.stmt.suffix()
-        {
+        if let tremor_script::ast::query::Stmt::ScriptDecl(ref defn) = defn_rentwrapped.suffix() {
             if let Some(p) = &defn.params {
                 // Set params from decl as meta vars
                 for (name, value) in p {
@@ -77,8 +75,7 @@ impl TrickleScript {
                     params.insert(Cow::Owned(name.clone()), value.clone());
                 }
                 // Set params from instance as meta vars ( eg: upsert ~= override + add )
-                if let tremor_script::ast::query::Stmt::Script(instance) =
-                    node_rentwrapped.stmt.suffix()
+                if let tremor_script::ast::query::Stmt::Script(instance) = node_rentwrapped.suffix()
                 {
                     if let Some(map) = &instance.params {
                         for (name, value) in map {
@@ -101,7 +98,7 @@ impl TrickleScript {
             )
             .into());
         };
-        let script = match defn_rentwrapped.stmt.suffix() {
+        let script = match defn_rentwrapped.suffix() {
             tremor_script::ast::Stmt::ScriptDecl(ref script) => script.clone(),
             _other => {
                 return Err(ErrorKind::PipelineError(

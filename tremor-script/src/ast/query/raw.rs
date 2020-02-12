@@ -21,10 +21,10 @@ use crate::impl_expr;
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
-    pub stmts: StmtsRaw<'script>,
+    pub(crate) stmts: StmtsRaw<'script>,
 }
 impl<'script> QueryRaw<'script> {
-    pub fn up_script<'registry>(
+    pub(crate) fn up_script<'registry>(
         self,
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
@@ -41,14 +41,22 @@ impl<'script> QueryRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum StmtRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     WindowDecl(WindowDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     OperatorDecl(OperatorDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     ScriptDecl(ScriptDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Stream(StreamStmtRaw),
+    /// we're forced to make this pub because of lalrpop
     Operator(OperatorStmtRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Script(ScriptStmtRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Select(Box<SelectRaw<'script>>),
 }
 
@@ -90,13 +98,14 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDeclRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub kind: OperatorKindRaw,
-    pub id: String,
-    pub params: Option<WithExprsRaw<'script>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) kind: OperatorKindRaw,
+    pub(crate) id: String,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
@@ -122,13 +131,14 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorStmtRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub target: String,
-    pub params: Option<WithExprsRaw<'script>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
+    pub(crate) target: String,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
 }
 impl_expr!(OperatorStmtRaw);
 
@@ -153,13 +163,14 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDeclRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub params: Option<WithExprsRaw<'script>>,
-    pub script: ScriptRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
+    pub(crate) script: ScriptRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
@@ -190,13 +201,14 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptStmtRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub target: String,
-    pub params: Option<WithExprsRaw<'script>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
+    pub(crate) target: String,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
@@ -222,14 +234,15 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDeclRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub kind: WindowKind,
-    pub params: WithExprsRaw<'script>,
-    pub script: Option<ScriptRaw<'script>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
+    pub(crate) kind: WindowKind,
+    pub(crate) params: WithExprsRaw<'script>,
+    pub(crate) script: Option<ScriptRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for WindowDeclRaw<'script> {
@@ -260,24 +273,27 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDefnRaw {
-    pub start: Location,
-    pub end: Location,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    /// ID of the window
     pub id: String,
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub from: (IdentRaw<'script>, Option<IdentRaw<'script>>),
-    pub into: (IdentRaw<'script>, Option<IdentRaw<'script>>),
-    pub target: ImutExprRaw<'script>,
-    pub maybe_where: Option<ImutExprRaw<'script>>,
-    pub maybe_having: Option<ImutExprRaw<'script>>,
-    pub maybe_group_by: Option<GroupByRaw<'script>>,
-    pub windows: Option<Vec<WindowDefnRaw>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) from: (IdentRaw<'script>, Option<IdentRaw<'script>>),
+    pub(crate) into: (IdentRaw<'script>, Option<IdentRaw<'script>>),
+    pub(crate) target: ImutExprRaw<'script>,
+    pub(crate) maybe_where: Option<ImutExprRaw<'script>>,
+    pub(crate) maybe_having: Option<ImutExprRaw<'script>>,
+    pub(crate) maybe_group_by: Option<GroupByRaw<'script>>,
+    pub(crate) windows: Option<Vec<WindowDefnRaw>>,
 }
 impl_expr!(SelectRaw);
 
@@ -346,30 +362,43 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             from: (from.0.up(helper)?, from.1.up(helper)?),
             into: (into.0.up(helper)?, into.1.up(helper)?),
-            target,
-            maybe_where,
-            maybe_having,
+            target: ImutExpr(target),
+            maybe_where: maybe_where.map(ImutExpr),
+            maybe_having: maybe_having.map(ImutExpr),
             maybe_group_by,
             windows,
         })
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum GroupByRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Expr {
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Set {
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
+        /// we're forced to make this pub because of lalrpop
         items: Vec<GroupByRaw<'script>>,
     },
+    /// we're forced to make this pub because of lalrpop
     Each {
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
 }
@@ -378,28 +407,29 @@ impl<'script> Upable<'script> for GroupByRaw<'script> {
     type Target = GroupBy<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            GroupByRaw::Expr { start, end, expr } => GroupBy::Expr {
+            GroupByRaw::Expr { start, end, expr } => GroupBy(GroupByInt::Expr {
                 mid: helper.add_meta(start, end),
                 expr: expr.up(helper)?,
-            },
-            GroupByRaw::Each { start, end, expr } => GroupBy::Each {
+            }),
+            GroupByRaw::Each { start, end, expr } => GroupBy(GroupByInt::Each {
                 mid: helper.add_meta(start, end),
                 expr: expr.up(helper)?,
-            },
-            GroupByRaw::Set { start, end, items } => GroupBy::Set {
+            }),
+            GroupByRaw::Set { start, end, items } => GroupBy(GroupByInt::Set {
                 mid: helper.add_meta(start, end),
                 items: items.up(helper)?,
-            },
+            }),
         })
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKindRaw {
-    pub start: Location,
-    pub end: Location,
-    pub module: String,
-    pub operation: String,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) module: String,
+    pub(crate) operation: String,
 }
 impl BaseExpr for OperatorKindRaw {
     fn s(&self, _meta: &NodeMetas) -> Location {
@@ -424,11 +454,12 @@ impl<'script> Upable<'script> for OperatorKindRaw {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StreamStmtRaw {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
 }
 impl<'script> Upable<'script> for StreamStmtRaw {
     type Target = StreamStmt;

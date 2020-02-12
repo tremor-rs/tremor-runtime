@@ -205,26 +205,26 @@ impl TremorAggrFn for CollectNested {
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
     registry
-        .insert(TremorAggrFnWrapper {
-            module: "win".to_string(),
-            name: "first".to_string(),
-            fun: Box::new(First::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "win".to_string(),
-            name: "collect_flattened".to_string(),
-            fun: Box::new(CollectFlattened::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "win".to_string(),
-            name: "collect_nested".to_string(),
-            fun: Box::new(CollectNested::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "win".to_string(),
-            name: "last".to_string(),
-            fun: Box::new(Last::default()),
-        });
+        .insert(TremorAggrFnWrapper::new(
+            "win".to_string(),
+            "first".to_string(),
+            Box::new(First::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "win".to_string(),
+            "collect_flattened".to_string(),
+            Box::new(CollectFlattened::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "win".to_string(),
+            "collect_nested".to_string(),
+            Box::new(CollectNested::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "win".to_string(),
+            "last".to_string(),
+            Box::new(Last::default()),
+        ));
 }
 
 #[cfg(test)]

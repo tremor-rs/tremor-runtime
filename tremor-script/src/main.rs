@@ -29,10 +29,10 @@ mod ast;
 mod ctx;
 mod datetime;
 mod errors;
-pub mod grok;
+mod grok;
 mod highlighter;
 mod influx;
-pub mod interpreter;
+mod interpreter;
 mod lexer;
 mod parser;
 mod pos;
@@ -40,7 +40,7 @@ mod registry;
 mod script;
 mod std_lib;
 mod tilde;
-pub mod utils;
+mod utils;
 #[macro_use]
 extern crate rental;
 
@@ -48,7 +48,7 @@ use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::script::{AggrType, Return, Script};
 use clap::{App, Arg};
-pub use ctx::{EventContext, EventOriginUri};
+use ctx::{EventContext, EventOriginUri};
 use halfbrown::hashmap;
 use simd_json::borrowed::{Object, Value};
 use std::fs::File;
@@ -236,20 +236,14 @@ fn main() -> Result<()> {
                 .ok_or_else(|| Error::from("At least one event needs to be specified"))?;
             for event in &mut events {
                 runnable.run(
-                    &EventContext {
-                        at: 0, // TODO add a value here?
-                        origin_uri: Some(EventOriginUri::default()),
-                    },
+                    &EventContext::new(0, Some(EventOriginUri::default())),
                     AggrType::Tick,
                     event,
                     &mut global_map,
                 )?;
             }
             let expr = runnable.run(
-                &EventContext {
-                    at: 0, // TODO add a value here?
-                    origin_uri: Some(EventOriginUri::default()),
-                },
+                &EventContext::new(0, Some(EventOriginUri::default())),
                 AggrType::Emit,
                 &mut event,
                 &mut global_map,
@@ -271,7 +265,7 @@ fn main() -> Result<()> {
                             "{} ",
                             serde_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
-                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                        let lexed_tokens = Vec::from_iter(lexer::Tokenizer::new(&result));
                         let mut h = TermHighlighter::new();
                         h.highlight(lexed_tokens)?;
                     }
@@ -284,7 +278,7 @@ fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&result)?);
                     } else {
                         let result = format!("{} ", serde_json::to_string_pretty(&result)?);
-                        let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                        let lexed_tokens = Vec::from_iter(lexer::Tokenizer::new(&result));
                         let mut h = TermHighlighter::new();
                         h.highlight(lexed_tokens)?;
                     }

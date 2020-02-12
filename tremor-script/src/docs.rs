@@ -19,10 +19,14 @@
 
 use std::fmt;
 
+/// Function signature
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionSignatureDoc {
+    /// name of the function
     pub full_name: String,
+    /// arguments to the function
     pub args: Vec<String>,
+    /// result of the function
     pub result: String,
 }
 
@@ -38,11 +42,16 @@ impl fmt::Display for FunctionSignatureDoc {
     }
 }
 
+/// Function documentation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionDoc {
+    /// signature
     pub signature: FunctionSignatureDoc,
-    pub description: String,
+    /// short description
     pub summary: Option<String>,
+    /// full description for the function
+    pub description: String,
+    /// Example of usage
     pub examples: Option<String>,
 }
 

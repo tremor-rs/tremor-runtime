@@ -31,13 +31,17 @@ use simd_json::value::{borrowed, Value as ValueTrait};
 use simd_json::{BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 
+/// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
-    pub exprs: ExprsRaw<'script>,
+    exprs: ExprsRaw<'script>,
 }
 
 impl<'script> ScriptRaw<'script> {
-    pub fn up_script<'registry>(
+    pub(crate) fn new(exprs: ExprsRaw<'script>) -> Self {
+        Self { exprs }
+    }
+    pub(crate) fn up_script<'registry>(
         self,
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
@@ -69,7 +73,7 @@ impl<'script> ScriptRaw<'script> {
                     helper.consts.insert(name.to_string(), consts.len());
                     let expr = expr.up(&mut helper)?;
                     if i == len - 1 {
-                        exprs.push(Expr::Imut(ImutExpr::Local {
+                        exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
                             idx: consts.len(),
                             mid: helper.add_meta_w_name(start, end, name),
@@ -92,11 +96,11 @@ impl<'script> ScriptRaw<'script> {
         // take advantage of the `emit event` optiisation
         if let Some(e) = exprs.pop() {
             match e.borrow() {
-                Expr::Imut(ImutExpr::Path(Path::Event(p))) => {
+                Expr::Imut(ImutExprInt::Path(Path::Event(p))) => {
                     if p.segments.is_empty() {
                         let expr = EmitExpr {
                             mid: p.mid(),
-                            expr: ImutExpr::Path(Path::Event(p.clone())),
+                            expr: ImutExprInt::Path(Path::Event(p.clone())),
                             port: None,
                         };
                         exprs.push(Expr::Emit(Box::new(expr)))
@@ -126,7 +130,7 @@ impl<'script> ScriptRaw<'script> {
 
     #[cfg(feature = "fns")]
     #[cfg_attr(tarpaulin, skip)]
-    pub fn load_module<'registry>(
+    pub(crate) fn load_module<'registry>(
         self,
         name: &str,
         module: &mut HashMap<String, TremorFnWrapper>,
@@ -197,6 +201,7 @@ impl<'script> ScriptRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct IdentRaw<'script> {
     pub start: Location,
@@ -215,12 +220,13 @@ impl<'script> Upable<'script> for IdentRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FieldRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub name: StringLitRaw<'script>,
-    pub value: ImutExprRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) name: StringLitRaw<'script>,
+    pub(crate) value: ImutExprRaw<'script>,
 }
 
 impl<'script> Upable<'script> for FieldRaw<'script> {
@@ -234,11 +240,12 @@ impl<'script> Upable<'script> for FieldRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RecordRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub fields: FieldsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) fields: FieldsRaw<'script>,
 }
 impl_expr!(RecordRaw);
 
@@ -252,11 +259,12 @@ impl<'script> Upable<'script> for RecordRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ListRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub exprs: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) exprs: ImutExprsRaw<'script>,
 }
 impl_expr!(ListRaw);
 
@@ -265,16 +273,17 @@ impl<'script> Upable<'script> for ListRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(List {
             mid: helper.add_meta(self.start, self.end),
-            exprs: self.exprs.up(helper)?,
+            exprs: self.exprs.up(helper)?.into_iter().map(ImutExpr).collect(),
         })
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LiteralRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub value: Value<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) value: Value<'script>,
 }
 impl_expr!(LiteralRaw);
 impl<'script> Upable<'script> for LiteralRaw<'script> {
@@ -287,15 +296,20 @@ impl<'script> Upable<'script> for LiteralRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StringLitRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub string: Cow<'script, str>,
-    pub exprs: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) string: Cow<'script, str>,
+    pub(crate) exprs: ImutExprsRaw<'script>,
 }
 
-pub struct StrLitElements<'script>(pub Vec<Cow<'script, str>>, pub ImutExprsRaw<'script>);
+/// we're forced to make this pub because of lalrpop
+pub struct StrLitElements<'script>(
+    pub(crate) Vec<Cow<'script, str>>,
+    pub(crate) ImutExprsRaw<'script>,
+);
 
 impl<'script> From<StrLitElements<'script>> for StringLitRaw<'script> {
     fn from(mut es: StrLitElements<'script>) -> StringLitRaw<'script> {
@@ -320,9 +334,12 @@ impl<'script> From<StrLitElements<'script>> for StringLitRaw<'script> {
     }
 }
 
-pub fn reduce2<'script>(expr: ImutExpr<'script>, helper: &Helper) -> Result<Value<'script>> {
+pub(crate) fn reduce2<'script>(
+    expr: ImutExprInt<'script>,
+    helper: &Helper,
+) -> Result<Value<'script>> {
     match expr {
-        ImutExpr::Literal(Literal { value: v, .. }) => Ok(v),
+        ImutExprInt::Literal(Literal { value: v, .. }) => Ok(v),
         other => Err(ErrorKind::NotConstant(
             other.extent(&helper.meta),
             other.extent(&helper.meta).expand_lines(2),
@@ -331,26 +348,39 @@ pub fn reduce2<'script>(expr: ImutExpr<'script>, helper: &Helper) -> Result<Valu
     }
 }
 
-// This is compile time only we don't care
+/// we're forced to make this pub because of lalrpop
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Const {
+        /// we're forced to make this pub because of lalrpop
         name: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
     },
+    /// we're forced to make this pub because of lalrpop
     MatchExpr(Box<MatchRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Assign(Box<AssignRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Comprehension(Box<ComprehensionRaw<'script>>),
     Drop {
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
     },
+    /// we're forced to make this pub because of lalrpop
     Emit(Box<EmitExprRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     FnDecl(FnDeclRaw<'script>),
-    Imut(ImutExprRaw<'script>), //Test(TestExprRaw)
+    /// we're forced to make this pub because of lalrpop
+    Imut(ImutExprRaw<'script>),
 }
 
 impl<'script> Upable<'script> for ExprRaw<'script> {
@@ -373,25 +403,25 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 let path = a.path.up(helper)?;
                 let mid = helper.add_meta(a.start, a.end);
                 match a.expr.up(helper)? {
-                    Expr::Imut(ImutExpr::Merge(m)) => {
+                    Expr::Imut(ImutExprInt::Merge(m)) => {
                         if path_eq(&path, &m.target) {
                             Expr::MergeInPlace(Box::new(*m))
                         } else {
                             Expr::Assign {
                                 mid,
                                 path,
-                                expr: Box::new(ImutExpr::Merge(m).into()),
+                                expr: Box::new(ImutExprInt::Merge(m).into()),
                             }
                         }
                     }
-                    Expr::Imut(ImutExpr::Patch(m)) => {
+                    Expr::Imut(ImutExprInt::Patch(m)) => {
                         if path_eq(&path, &m.target) {
                             Expr::PatchInPlace(Box::new(*m))
                         } else {
                             Expr::Assign {
                                 mid,
                                 path,
-                                expr: Box::new(ImutExpr::Patch(m).into()),
+                                expr: Box::new(ImutExprInt::Patch(m).into()),
                             }
                         }
                     }
@@ -430,13 +460,14 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
         })
     }
 }
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FnDeclRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub name: IdentRaw<'script>,
-    pub args: Vec<IdentRaw<'script>>,
-    pub body: ExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) name: IdentRaw<'script>,
+    pub(crate) args: Vec<IdentRaw<'script>>,
+    pub(crate) body: ExprsRaw<'script>,
 }
 impl_expr!(FnDeclRaw);
 
@@ -469,30 +500,46 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ImutExprRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Record(Box<RecordRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     List(Box<ListRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Patch(Box<PatchRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Merge(Box<MergeRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Match(Box<ImutMatchRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Comprehension(Box<ImutComprehensionRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Path(PathRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Binary(Box<BinExprRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Unary(Box<UnaryExprRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Literal(LiteralRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Invoke(InvokeRaw<'script>),
-    InvokeAggr(InvokeAggrRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Present {
+        /// we're forced to make this pub because of lalrpop
         path: PathRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
     },
+    /// we're forced to make this pub because of lalrpop
     String(StringLitRaw<'script>),
 }
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
-    type Target = ImutExpr<'script>;
+    type Target = ImutExprInt<'script>;
     #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
@@ -500,8 +547,8 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 b1
                 @
                 BinExpr {
-                    lhs: ImutExpr::Literal(_),
-                    rhs: ImutExpr::Literal(_),
+                    lhs: ImutExprInt::Literal(_),
+                    rhs: ImutExprInt::Literal(_),
                     ..
                 } => {
                     let lhs = reduce2(b1.lhs.clone(), &helper)?;
@@ -510,15 +557,15 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     let value =
                         exec_binary(&b1, &b1, &helper.meta, b1.kind, &lhs, &rhs)?.into_owned();
                     let lit = Literal { mid: b1.mid, value };
-                    ImutExpr::Literal(lit)
+                    ImutExprInt::Literal(lit)
                 }
-                b1 => ImutExpr::Binary(Box::new(b1)),
+                b1 => ImutExprInt::Binary(Box::new(b1)),
             },
             ImutExprRaw::Unary(u) => match u.up(helper)? {
                 u1
                 @
                 UnaryExpr {
-                    expr: ImutExpr::Literal(_),
+                    expr: ImutExprInt::Literal(_),
                     ..
                 } => {
                     let expr = reduce2(u1.expr.clone(), &helper)?;
@@ -536,9 +583,9 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     };
 
                     let lit = Literal { mid: u1.mid, value };
-                    ImutExpr::Literal(lit)
+                    ImutExprInt::Literal(lit)
                 }
-                u1 => ImutExpr::Unary(Box::new(u1)),
+                u1 => ImutExprInt::Unary(Box::new(u1)),
             },
             ImutExprRaw::String(mut s) => {
                 let lit = ImutExprRaw::Literal(LiteralRaw {
@@ -575,30 +622,30 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                             })
                         })
                         .collect();
-                    ImutExpr::Literal(Literal {
+                    ImutExprInt::Literal(Literal {
                         mid: r.mid,
                         value: Value::from(obj?),
                     })
                 } else {
-                    ImutExpr::Record(r)
+                    ImutExprInt::Record(r)
                 }
             }
             ImutExprRaw::List(l) => {
                 let l = l.up(helper)?;
-                if l.exprs.iter().all(is_lit) {
+                if l.exprs.iter().map(|v| &v.0).all(is_lit) {
                     let elements: Result<Vec<Value>> =
-                        l.exprs.into_iter().map(|v| reduce2(v, &helper)).collect();
-                    ImutExpr::Literal(Literal {
+                        l.exprs.into_iter().map(|v| reduce2(v.0, &helper)).collect();
+                    ImutExprInt::Literal(Literal {
                         mid: l.mid,
                         value: Value::Array(elements?),
                     })
                 } else {
-                    ImutExpr::List(l)
+                    ImutExprInt::List(l)
                 }
             }
-            ImutExprRaw::Patch(p) => ImutExpr::Patch(Box::new(p.up(helper)?)),
-            ImutExprRaw::Merge(m) => ImutExpr::Merge(Box::new(m.up(helper)?)),
-            ImutExprRaw::Present { path, start, end } => ImutExpr::Present {
+            ImutExprRaw::Patch(p) => ImutExprInt::Patch(Box::new(p.up(helper)?)),
+            ImutExprRaw::Merge(m) => ImutExprInt::Merge(Box::new(m.up(helper)?)),
+            ImutExprRaw::Present { path, start, end } => ImutExprInt::Present {
                 path: path.up(helper)?,
                 mid: helper.add_meta(start, end),
             },
@@ -608,19 +655,19 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     mid,
                     idx,
                     ref segments,
-                }) if segments.is_empty() => ImutExpr::Local { mid, idx, is_const },
-                p => ImutExpr::Path(p),
+                }) if segments.is_empty() => ImutExprInt::Local { mid, idx, is_const },
+                p => ImutExprInt::Path(p),
             },
-            ImutExprRaw::Literal(l) => ImutExpr::Literal(l.up(helper)?),
+            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?),
             ImutExprRaw::Invoke(i) => {
                 if i.is_aggregate(helper) {
-                    ImutExpr::InvokeAggr(i.into_aggregate().up(helper)?)
+                    ImutExprInt::InvokeAggr(i.into_aggregate().up(helper)?)
                 } else {
                     let ex = i.extent(&helper.meta);
                     let i = i.up(helper)?;
-                    if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f)) {
+                    if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f.0)) {
                         let args: Result<Vec<Value<'script>>> =
-                            i.args.into_iter().map(|v| reduce2(v, &helper)).collect();
+                            i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
                         let args = args?;
                         let mut args2: Vec<&Value<'script>> = Vec::new();
                         unsafe {
@@ -632,26 +679,22 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                             .invocable
                             .invoke(&EventContext::default(), &args2)
                             .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?;
-                        ImutExpr::Literal(Literal {
+                        ImutExprInt::Literal(Literal {
                             value: v,
                             mid: i.mid,
                         })
                     } else {
                         match i.args.len() {
-                            1 => ImutExpr::Invoke1(i),
-                            2 => ImutExpr::Invoke2(i),
-                            3 => ImutExpr::Invoke3(i),
-                            _ => ImutExpr::Invoke(i),
+                            1 => ImutExprInt::Invoke1(i),
+                            2 => ImutExprInt::Invoke2(i),
+                            3 => ImutExprInt::Invoke3(i),
+                            _ => ImutExprInt::Invoke(i),
                         }
                     }
                 }
             }
-            ImutExprRaw::InvokeAggr(i) => {
-                let i = i.up(helper)?;
-                ImutExpr::InvokeAggr(i)
-            }
-            ImutExprRaw::Match(m) => ImutExpr::Match(Box::new(m.up(helper)?)),
-            ImutExprRaw::Comprehension(c) => ImutExpr::Comprehension(Box::new(c.up(helper)?)),
+            ImutExprRaw::Match(m) => ImutExprInt::Match(Box::new(m.up(helper)?)),
+            ImutExprRaw::Comprehension(c) => ImutExprInt::Comprehension(Box::new(c.up(helper)?)),
         })
     }
 }
@@ -682,21 +725,23 @@ impl<'script> Upable<'script> for EmitExprRaw<'script> {
         })
     }
 }
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AssignRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub path: PathRaw<'script>,
-    pub expr: ExprRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) path: PathRaw<'script>,
+    pub(crate) expr: ExprRaw<'script>,
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PredicateClauseRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub pattern: PatternRaw<'script>,
-    pub guard: Option<ImutExprRaw<'script>>,
-    pub exprs: ExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) pattern: PatternRaw<'script>,
+    pub(crate) guard: Option<ImutExprRaw<'script>>,
+    pub(crate) exprs: ExprsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
@@ -719,13 +764,14 @@ impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
         })
     }
 }
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutPredicateClauseRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub pattern: PatternRaw<'script>,
-    pub guard: Option<ImutExprRaw<'script>>,
-    pub exprs: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) pattern: PatternRaw<'script>,
+    pub(crate) guard: Option<ImutExprRaw<'script>>,
+    pub(crate) exprs: ImutExprsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
@@ -733,7 +779,7 @@ impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs = self.exprs.up(helper)?;
+        let exprs = self.exprs.up(helper)?.into_iter().map(ImutExpr).collect();
         let guard = self.guard.up(helper)?;
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
@@ -749,12 +795,13 @@ impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PatchRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub target: ImutExprRaw<'script>,
-    pub operations: PatchOperationsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) target: ImutExprRaw<'script>,
+    pub(crate) operations: PatchOperationsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for PatchRaw<'script> {
@@ -770,36 +817,59 @@ impl<'script> Upable<'script> for PatchRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PatchOperationRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Insert {
+        /// we're forced to make this pub because of lalrpop
         ident: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Upsert {
+        /// we're forced to make this pub because of lalrpop
         ident: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Update {
+        /// we're forced to make this pub because of lalrpop
         ident: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Erase {
+        /// we're forced to make this pub because of lalrpop
         ident: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Copy {
+        /// we're forced to make this pub because of lalrpop
         from: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         to: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Move {
+        /// we're forced to make this pub because of lalrpop
         from: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         to: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     Merge {
+        /// we're forced to make this pub because of lalrpop
         ident: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     TupleMerge {
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
 }
@@ -926,14 +996,15 @@ impl<'script> Upable<'script> for ImutComprehensionRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ComprehensionCaseRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub key_name: Cow<'script, str>,
-    pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExprRaw<'script>>,
-    pub exprs: ExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) key_name: Cow<'script, str>,
+    pub(crate) value_name: Cow<'script, str>,
+    pub(crate) guard: Option<ImutExprRaw<'script>>,
+    pub(crate) exprs: ExprsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ComprehensionCaseRaw<'script> {
@@ -968,12 +1039,12 @@ impl<'script> Upable<'script> for ComprehensionCaseRaw<'script> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutComprehensionCaseRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub key_name: Cow<'script, str>,
-    pub value_name: Cow<'script, str>,
-    pub guard: Option<ImutExprRaw<'script>>,
-    pub exprs: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) key_name: Cow<'script, str>,
+    pub(crate) value_name: Cow<'script, str>,
+    pub(crate) guard: Option<ImutExprRaw<'script>>,
+    pub(crate) exprs: ImutExprsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
@@ -984,7 +1055,7 @@ impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
         helper.register_shadow_var(&self.value_name);
 
         let guard = self.guard.up(helper)?;
-        let exprs = self.exprs.up(helper)?;
+        let exprs = self.exprs.up(helper)?.into_iter().map(ImutExpr).collect();
 
         // unregister them again
         helper.end_shadow_var();
@@ -999,13 +1070,18 @@ impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PatternRaw<'script> {
-    //Predicate(PredicatePatternRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Record(RecordPatternRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Array(ArrayPatternRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Expr(ImutExprRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Assign(AssignPatternRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Default,
 }
 
@@ -1024,30 +1100,49 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PredicatePatternRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     TildeEq {
+        /// we're forced to make this pub because of lalrpop
         assign: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         test: TestExprRaw,
     },
+    /// we're forced to make this pub because of lalrpop
     Eq {
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         rhs: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         not: bool,
     },
+    /// we're forced to make this pub because of lalrpop
     RecordPatternEq {
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         pattern: RecordPatternRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     ArrayPatternEq {
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
         pattern: ArrayPatternRaw<'script>,
     },
+    /// we're forced to make this pub because of lalrpop
     FieldPresent {
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
     },
+    /// we're forced to make this pub because of lalrpop
     FieldAbsent {
+        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
     },
 }
@@ -1090,11 +1185,12 @@ impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
         })
     }
 }
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RecordPatternRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub fields: PatternFieldsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) fields: PatternFieldsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for RecordPatternRaw<'script> {
@@ -1166,12 +1262,15 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ArrayPredicatePatternRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Expr(ImutExprRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Tilde(TestExprRaw),
+    /// we're forced to make this pub because of lalrpop
     Record(RecordPatternRaw<'script>),
-    //Array(ArrayPattern),
 }
 impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
     type Target = ArrayPredicatePattern<'script>;
@@ -1186,11 +1285,12 @@ impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ArrayPatternRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub exprs: ArrayPredicatePatternsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) exprs: ArrayPredicatePatternsRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ArrayPatternRaw<'script> {
@@ -1204,10 +1304,11 @@ impl<'script> Upable<'script> for ArrayPatternRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AssignPatternRaw<'script> {
-    pub id: Cow<'script, str>,
-    pub pattern: Box<PatternRaw<'script>>,
+    pub(crate) id: Cow<'script, str>,
+    pub(crate) pattern: Box<PatternRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for AssignPatternRaw<'script> {
@@ -1221,10 +1322,14 @@ impl<'script> Upable<'script> for AssignPatternRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PathRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Local(LocalPathRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Event(EventPathRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Meta(MetadataPathRaw<'script>),
 }
 
@@ -1247,19 +1352,31 @@ impl<'script> Upable<'script> for PathRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum SegmentRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
     Element {
+        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         start: Location,
+        /// we're forced to make this pub because of lalrpop
         end: Location,
     },
+    /// we're forced to make this pub because of lalrpop
     Range {
+        /// we're forced to make this pub because of lalrpop
         start_lower: Location,
+        /// we're forced to make this pub because of lalrpop
         range_start: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         end_lower: Location,
+        /// we're forced to make this pub because of lalrpop
         start_upper: Location,
+        /// we're forced to make this pub because of lalrpop
         range_end: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
         end_upper: Location,
     },
 }
@@ -1273,7 +1390,7 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
                 let expr = expr.up(helper)?;
                 let r = expr.extent(&helper.meta);
                 match expr {
-                    ImutExpr::Literal(l) => match reduce2(ImutExpr::Literal(l), &helper)? {
+                    ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), &helper)? {
                         Value::String(id) => {
                             let mid = helper.add_meta_w_name(start, end, id.clone());
                             Segment::Id {
@@ -1356,11 +1473,12 @@ impl<'script> From<ImutExprRaw<'script>> for ExprRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LocalPathRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub segments: SegmentsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) segments: SegmentsRaw<'script>,
 }
 impl_expr!(LocalPathRaw);
 
@@ -1396,11 +1514,12 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MetadataPathRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub segments: SegmentsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) segments: SegmentsRaw<'script>,
 }
 impl<'script> Upable<'script> for MetadataPathRaw<'script> {
     type Target = MetadataPath<'script>;
@@ -1413,11 +1532,12 @@ impl<'script> Upable<'script> for MetadataPathRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EventPathRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub segments: SegmentsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) segments: SegmentsRaw<'script>,
 }
 impl<'script> Upable<'script> for EventPathRaw<'script> {
     type Target = EventPath<'script>;
@@ -1430,13 +1550,14 @@ impl<'script> Upable<'script> for EventPathRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BinExprRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub kind: BinOpKind,
-    pub lhs: ImutExprRaw<'script>,
-    pub rhs: ImutExprRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) kind: BinOpKind,
+    pub(crate) lhs: ImutExprRaw<'script>,
+    pub(crate) rhs: ImutExprRaw<'script>,
     // query_stream_not_defined(stmt: &Box<S>, inner: &I, name: String)
 }
 
@@ -1452,12 +1573,13 @@ impl<'script> Upable<'script> for BinExprRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct UnaryExprRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub kind: UnaryOpKind,
-    pub expr: ImutExprRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) kind: UnaryOpKind,
+    pub(crate) expr: ImutExprRaw<'script>,
 }
 
 impl<'script> Upable<'script> for UnaryExprRaw<'script> {
@@ -1471,12 +1593,13 @@ impl<'script> Upable<'script> for UnaryExprRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MatchRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub target: ImutExprRaw<'script>,
-    pub patterns: PredicatesRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) target: ImutExprRaw<'script>,
+    pub(crate) patterns: PredicatesRaw<'script>,
 }
 
 impl<'script> Upable<'script> for MatchRaw<'script> {
@@ -1508,12 +1631,13 @@ impl<'script> Upable<'script> for MatchRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutMatchRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub target: ImutExprRaw<'script>,
-    pub patterns: ImutPredicatesRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) target: ImutExprRaw<'script>,
+    pub(crate) patterns: ImutPredicatesRaw<'script>,
 }
 
 impl<'script> Upable<'script> for ImutMatchRaw<'script> {
@@ -1544,13 +1668,14 @@ impl<'script> Upable<'script> for ImutMatchRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct InvokeRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub module: String,
-    pub fun: String,
-    pub args: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) module: String,
+    pub(crate) fun: String,
+    pub(crate) args: ImutExprsRaw<'script>,
 }
 impl_expr!(InvokeRaw);
 
@@ -1562,7 +1687,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             .find(&self.module, &self.fun)
             .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
 
-        let args = self.args.up(helper)?;
+        let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
 
         Ok(Invoke {
             mid: helper.add_meta(self.start, self.end),
@@ -1590,13 +1715,14 @@ impl<'script> InvokeRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct InvokeAggrRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub module: String,
-    pub fun: String,
-    pub args: ImutExprsRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) module: String,
+    pub(crate) fun: String,
+    pub(crate) args: ImutExprsRaw<'script>,
 }
 impl_expr!(InvokeAggrRaw);
 
@@ -1635,7 +1761,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             });
         }
         let aggr_id = helper.aggregates.len();
-        let args = self.args.up(helper)?;
+        let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
         let invoke_meta_id = helper.add_meta(self.start, self.end);
         helper.aggregates.push(InvokeAggrFn {
             mid: invoke_meta_id,
@@ -1655,12 +1781,13 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TestExprRaw {
-    pub start: Location,
-    pub end: Location,
-    pub id: String,
-    pub test: String,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) id: String,
+    pub(crate) test: String,
 }
 
 impl<'script> Upable<'script> for TestExprRaw {

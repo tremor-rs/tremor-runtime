@@ -163,16 +163,16 @@ pub fn load(registry: &mut Registry) {
                 Err(FunctionError::BadType{mfa: this_mfa()})
             }
         }))
-        .insert(TremorFnWrapper {
-            module: "random".to_string(),
-            name: "integer".to_string(),
-            fun: Box::new(RandomInteger::default()),
-        })
-        .insert(TremorFnWrapper {
-            module: "random".to_string(),
-            name: "float".to_string(),
-            fun: Box::new(RandomFloat::default()),
-        });
+        .insert(TremorFnWrapper::new(
+            "random".to_string(),
+            "integer".to_string(),
+            Box::new(RandomInteger::default()),
+        ))
+        .insert(TremorFnWrapper::new(
+            "random".to_string(),
+            "float".to_string(),
+            Box::new(RandomFloat::default()),
+        ));
 }
 
 #[cfg(test)]

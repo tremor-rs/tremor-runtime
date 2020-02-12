@@ -18,22 +18,31 @@ use crate::errors::*;
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
 use crate::interpreter::Cont;
-use crate::lexer::{self, TokenFuns};
-use crate::parser::grammar;
+use crate::lexer::{self};
+use crate::parser::g as grammar;
 use crate::pos::Range;
 use crate::registry::{Aggr as AggrRegistry, Registry};
 use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;
 
+/// Return of a secript execution
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Return<'event> {
+    /// This script should emit the returned
+    /// value
     Emit {
+        /// Value to emit
         value: Value<'event>,
+        /// Port to emit to
         port: Option<String>,
     },
+    /// This event should be dropped
     Drop,
+    /// This script should emit the event that
+    /// was passed in
     EmitEvent {
+        /// Port to emit to
         port: Option<String>,
     },
 }
@@ -57,16 +66,18 @@ where
     }
 }
 
+/// A tremor script
 #[derive(Debug)] // FIXME rename ScriptRentalWrapper
+
 pub struct Script {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
-    pub script: rentals::Script,
-    pub source: String,
-    pub warnings: Vec<Warning>,
+    pub(crate) script: rentals::Script,
+    source: String,
+    warnings: Vec<Warning>,
 }
 
 rental! {
-    pub mod rentals {
+    mod rentals {
         use crate::ast;
         use std::borrow::Cow;
         use serde::Serialize;
@@ -74,7 +85,7 @@ rental! {
         use std::marker::Send;
 
         #[rental_mut(covariant,debug)]
-        pub struct Script{
+        pub(crate) struct Script{
             script: Box<String>,
             parsed: ast::Script<'script>
         }
@@ -86,6 +97,7 @@ where
     'script: 'event,
     'event: 'run,
 {
+    /// Parses a string and turns it into a script
     pub fn parse(
         script: &'script str,
         reg: &Registry,
@@ -99,7 +111,7 @@ where
         source.push(' ');
 
         let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
-            let lexemes: Result<Vec<_>> = lexer::tokenizer(src.as_str()).collect();
+            let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(src.as_str()).collect();
             let mut filtered_tokens = Vec::new();
 
             for t in lexemes? {
@@ -125,18 +137,20 @@ where
         })
     }
 
+    /// Highlights a script with a given highlighter.
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
         h.highlight(tokens)
     }
 
+    /// Format an error given a script source.
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
         e: &Error,
     ) -> std::io::Result<()> {
-        let tokens: Vec<_> = lexer::tokenizer(&script).collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
         if let (Some(Range(start, end)), _) = e.context() {
             h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
         } else {
@@ -145,17 +159,19 @@ where
         h.finalize()
     }
 
+    /// Format an error given a script source.
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         let mut warnings = self.warnings.clone();
         warnings.sort();
         warnings.dedup();
         for w in &warnings {
-            let tokens: Vec<_> = lexer::tokenizer(&self.source).collect();
+            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source).collect();
             h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
         h.finalize()
     }
 
+    /// Formats an error within this script
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {
@@ -165,10 +181,12 @@ where
         }
     }
 
+    /// Formats an error within this script using a given highlighter
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
     }
 
+    /// Runs an event through this script
     pub fn run(
         &'script self,
         context: &'run EventContext,
