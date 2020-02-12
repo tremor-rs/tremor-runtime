@@ -179,7 +179,7 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub enum Extractor {
+pub(crate) enum Extractor {
     Glob {
         rule: String,
         #[serde(skip)]
@@ -278,18 +278,18 @@ impl Extractor {
     pub fn new(id: &str, rule_text: &str) -> Result<Self, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
-            "glob" => Self::Glob {
+            "glob" => Extractor::Glob {
                 compiled: glob::Pattern::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "re" => Self::Re {
+            "re" => Extractor::Re {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "base64" => Self::Base64,
-            "kv" => Self::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
-            "json" => Self::Json,
-            "dissect" => Self::Dissect {
+            "base64" => Extractor::Base64,
+            "kv" => Extractor::Kv(kv::Pattern::compile(rule_text)?), //FIXME: How to handle different seperators?
+            "json" => Extractor::Json,
+            "dissect" => Extractor::Dissect {
                 rule: rule_text.to_string(),
                 compiled: Pattern::compile(rule_text)
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
@@ -298,14 +298,14 @@ impl Extractor {
                 if let Ok(pat) =
                     GrokPattern::from_file(crate::grok::PATTERNS_FILE_DEFAULT_PATH, rule_text)
                 {
-                    Self::Grok {
+                    Extractor::Grok {
                         rule: rule_text.to_string(),
                         compiled: pat,
                     }
                 } else {
                     let mut grok = grok::Grok::default();
                     let pat = grok.compile(&rule_text, true)?;
-                    Self::Grok {
+                    Extractor::Grok {
                         rule: rule_text.to_string(),
                         compiled: GrokPattern {
                             definition: rule_text.to_string(),
@@ -316,7 +316,7 @@ impl Extractor {
             }
             "cidr" => {
                 if rule_text.is_empty() {
-                    Self::Cidr {
+                    Extractor::Cidr {
                         range: None,
                         rules: vec![],
                     }
@@ -325,15 +325,15 @@ impl Extractor {
                         .split(',')
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
-                    Self::Cidr {
+                    Extractor::Cidr {
                         range: Some(SnotCombiner::from_rules(rules.clone())?),
                         rules,
                     }
                 }
             }
 
-            "influx" => Self::Influx,
-            "datetime" => Self::Datetime {
+            "influx" => Extractor::Influx,
+            "datetime" => Extractor::Datetime {
                 format: rule_text.to_string(),
                 has_timezone: datetime::has_tz(rule_text),
             },
@@ -591,10 +591,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("foobar".to_string().into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(
                         hashmap! { "snot".into() => Value::String("bar".into()) }
@@ -613,10 +610,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("a:b c:d".to_string().into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
@@ -637,10 +631,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
@@ -661,10 +652,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("INFO".to_string().into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(true))
                 );
@@ -682,10 +670,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok("🚀sneaky rocket!".into())
                 );
@@ -703,10 +688,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::String("John".to_string().into()),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! {
                         "name".into() => Value::from("John")
@@ -726,7 +708,7 @@ mod test {
             Extractor::Grok { .. } => {
                 let output = ex.extract(true, &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                ), &EventContext{at: 0, origin_uri: None});
+                ), &EventContext::new(0, None));
 
                 assert_eq!(
                     output,
@@ -757,10 +739,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("192.168.1.0"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! (
                         "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
@@ -773,10 +752,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("192.168.1.0/24"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! (
                                         "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
@@ -790,10 +766,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("192.168.1.0"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
@@ -805,10 +778,7 @@ mod test {
                     ex.extract(
                         true,
                         &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
@@ -826,10 +796,7 @@ mod test {
                     rex.extract(
                         true,
                         &Value::from("10.22.0.254"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! (
                             "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
@@ -841,10 +808,7 @@ mod test {
                     rex.extract(
                         true,
                         &Value::from("99.98.97.96"),
-                        &EventContext {
-                            at: 0,
-                            origin_uri: None
-                        }
+                        &EventContext::new(0, None)
                     ),
                     Err(ExtractorError {
                         msg: "IP does not belong to any CIDR specified".into()
@@ -865,10 +829,7 @@ mod test {
                     &Value::from(
                         "wea\\ ther,location=us-midwest temperature=82 1465839830100400200"
                     ),
-                    &EventContext {
-                        at: 0,
-                        origin_uri: None
-                    }
+                    &EventContext::new(0, None)
                 ),
                 Ok(Value::from(hashmap! (
                        "measurement".into() => "wea ther".into(),
@@ -889,10 +850,7 @@ mod test {
                 ex.extract(
                     true,
                     &Value::from("2019-06-20 00:00:00"),
-                    &EventContext {
-                        at: 0,
-                        origin_uri: None
-                    }
+                    &EventContext::new(0, None)
                 ),
                 Ok(Value::from(1_560_988_800_000_000_000_u64))
             ),

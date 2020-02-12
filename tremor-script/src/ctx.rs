@@ -17,12 +17,16 @@ use std::default;
 use std::fmt;
 use url::Url;
 
-// TODO add Copy here?
+/// Event origin URI
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EventOriginUri {
+    /// schema part
     pub scheme: String,
+    /// host part
     pub host: String,
+    /// port part
     pub port: Option<u16>,
+    /// path part
     pub path: Vec<String>,
     // implement query params if we find a good usecase for it
     //pub query: Hashmap<String, String>
@@ -30,6 +34,7 @@ pub struct EventOriginUri {
 
 // TODO add tests for this struct
 impl EventOriginUri {
+    /// parses a string into a URI
     pub fn parse(url: &str) -> Result<Self> {
         match Url::parse(url) {
             Ok(r) => {
@@ -48,19 +53,27 @@ impl EventOriginUri {
         }
     }
 
+    /// return the schema
     pub fn scheme(&self) -> &str {
         &self.scheme
     }
+
+    /// return the host
     pub fn host(&self) -> &str {
         &self.host
     }
+
+    /// return the port
     pub fn port(&self) -> &Option<u16> {
         &self.port
     }
+
+    /// return the path
     pub fn path(&self) -> &Vec<String> {
         &self.path
     }
 
+    /// Format as host and port
     pub fn host_port(&self) -> String {
         if let Some(port) = self.port() {
             format!("{}:{}", self.host(), port)
@@ -93,14 +106,17 @@ impl default::Default for EventOriginUri {
 }
 
 // TODO check if we need all of these derives here still
+
+/// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize)]
 pub struct EventContext {
-    pub at: u64,
-    // TODO make this non-optional?
+    at: u64,
+    /// URI of the origin
     pub origin_uri: Option<EventOriginUri>,
 }
 
 impl EventContext {
+    /// Creates a new context
     pub fn new(ingest_ns: u64, origin_uri: Option<EventOriginUri>) -> Self {
         Self {
             at: ingest_ns,
@@ -108,10 +124,12 @@ impl EventContext {
         }
     }
 
+    /// returns the events ingest_ns
     pub fn ingest_ns(&self) -> u64 {
         self.at
     }
 
+    /// returns the events origin uri
     pub fn origin_uri(&self) -> &Option<EventOriginUri> {
         &self.origin_uri
     }

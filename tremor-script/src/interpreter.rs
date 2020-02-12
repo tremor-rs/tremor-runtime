@@ -33,7 +33,7 @@
 mod expr;
 mod imut_expr;
 
-pub use self::expr::Cont;
+pub(crate) use self::expr::Cont;
 use crate::ast::*;
 use crate::errors::*;
 use crate::stry;
@@ -46,8 +46,11 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::iter::Iterator;
 
+/// constant `true` value
 pub const TRUE: Value<'static> = Value::Static(StaticNode::Bool(true));
+/// constant `false` value
 pub const FALSE: Value<'static> = Value::Static(StaticNode::Bool(false));
+/// constant `null` value
 pub const NULL: Value<'static> = Value::Static(StaticNode::Null);
 
 macro_rules! static_bool {
@@ -63,23 +66,30 @@ macro_rules! static_bool {
     };
 }
 
+/// Interpreter environment
 pub struct Env<'run, 'event, 'script>
 where
     'script: 'event,
     'event: 'run,
 {
+    /// Context of the event
     pub context: &'run EventContext,
+    /// Constatns
     pub consts: &'run [Value<'event>],
+    /// Aggregates
     pub aggrs: &'run [InvokeAggrFn<'script>],
+    /// Node metadata
     pub meta: &'run NodeMetas<'script>,
 }
 
+/// Local variable stack
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {
-    pub values: Vec<Option<Value<'stack>>>,
+    values: Vec<Option<Value<'stack>>>,
 }
 
 impl<'stack> LocalStack<'stack> {
+    /// Creates a stack with a given size
     pub fn with_size(size: usize) -> Self {
         Self {
             values: vec![None; size],
@@ -87,23 +97,30 @@ impl<'stack> LocalStack<'stack> {
     }
 }
 
+/// The type of an aggregation
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AggrType {
+    /// This is a normal execution
     Tick,
+    /// This us an emit event
     Emit,
 }
+
+/// Execution options for a script.
 #[derive(Clone, Copy, Debug)]
 pub struct ExecOpts {
+    /// Is a result needed
     pub result_needed: bool,
+    /// If this is an aggregation or a normal execution
     pub aggr: AggrType,
 }
 
 impl ExecOpts {
-    pub fn without_result(mut self) -> Self {
+    pub(crate) fn without_result(mut self) -> Self {
         self.result_needed = false;
         self
     }
-    pub fn with_result(mut self) -> Self {
+    pub(crate) fn with_result(mut self) -> Self {
         self.result_needed = true;
         self
     }
@@ -155,7 +172,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     clippy::too_many_lines
 )]
 #[inline]
-pub fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
+pub(crate) fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
     outer: &'run OuterExpr,
     inner: &'run InnerExpr,
     node_meta: &'run NodeMetas,
@@ -294,7 +311,7 @@ where
 }
 
 #[inline]
-pub fn exec_unary<'run, 'event: 'run>(
+pub(crate) fn exec_unary<'run, 'event: 'run>(
     op: UnaryOpKind,
     val: &Value<'event>,
 ) -> Option<Cow<'run, Value<'event>>> {
@@ -343,7 +360,7 @@ pub fn exec_unary<'run, 'event: 'run>(
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-pub fn resolve<'run, 'event, 'script, Expr>(
+pub(crate) fn resolve<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
@@ -545,11 +562,11 @@ where
                                 continue;
                             }
                         } else {
-                            let re: &ImutExpr = range_end.borrow();
+                            let re: &ImutExprInt = range_end.borrow();
                             return error_need_int(outer, re, e.value_type(), &env.meta);
                         }
                     } else {
-                        let rs: &ImutExpr = range_start.borrow();
+                        let rs: &ImutExprInt = range_start.borrow();
                         return error_need_int(outer, rs.borrow(), s.value_type(), &env.meta);
                     }
                 } else {
@@ -731,7 +748,7 @@ fn test_guard<'run, 'event, 'script, Expr>(
     event: &'run Value<'event>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    guard: &'script Option<ImutExpr<'script>>,
+    guard: &'script Option<ImutExprInt<'script>>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -762,7 +779,7 @@ fn test_predicate_expr<'run, 'event, 'script, Expr>(
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
     pattern: &'script Pattern<'script>,
-    guard: &'run Option<ImutExpr<'script>>,
+    guard: &'run Option<ImutExprInt<'script>>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -1068,17 +1085,6 @@ where
                             continue 'inner;
                         }
                     }
-                    ArrayPredicatePattern::Array(ap) => {
-                        if let Some(r) = stry!(match_ap_expr(
-                            outer, opts, env, event, meta, local, candidate, ap,
-                        )) {
-                            if opts.result_needed {
-                                acc.push(Value::Array(vec![Value::from(idx), r]));
-                            }
-                        } else {
-                            continue 'inner; // return Ok(Cont::Drop(Value::from(true))),
-                        }
-                    }
                 }
             }
             idx += 1;
@@ -1091,7 +1097,7 @@ where
 
 #[inline]
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-pub fn set_local_shadow<'run, 'event, 'script, Expr>(
+fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     local: &'run LocalStack<'event>,
     node_meta: &'run NodeMetas,
@@ -1117,7 +1123,28 @@ where
 
 //FIXME Do we really want this here?
 impl<'script> GroupBy<'script> {
+    /// Creates groups based on an event.
     pub fn generate_groups<'run, 'event>(
+        &'script self,
+        ctx: &'run EventContext,
+        event: &'run Value<'event>,
+        node_meta: &'run NodeMetas<'script>,
+        meta: &'run Value<'event>,
+    ) -> Result<Vec<Vec<Value<'event>>>>
+    where
+        'script: 'event,
+        'event: 'run,
+    {
+        let mut groups = Vec::with_capacity(16);
+        self.0
+            .generate_groups(ctx, event, node_meta, meta, &mut groups)?;
+        Ok(groups)
+    }
+}
+
+//FIXME Do we really want this here?
+impl<'script> GroupByInt<'script> {
+    pub(crate) fn generate_groups<'run, 'event>(
         &'script self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
@@ -1144,7 +1171,7 @@ impl<'script> GroupBy<'script> {
             meta: node_meta,
         };
         match self {
-            GroupBy::Expr { expr, .. } => {
+            GroupByInt::Expr { expr, .. } => {
                 let v = expr
                     .run(opts, &env, event, meta, &local_stack)?
                     .into_owned();
@@ -1156,9 +1183,10 @@ impl<'script> GroupBy<'script> {
                 Ok(())
             }
 
-            GroupBy::Set { items, .. } => {
+            GroupByInt::Set { items, .. } => {
                 for item in items {
-                    item.generate_groups(ctx, event, node_meta, meta, groups)?
+                    item.0
+                        .generate_groups(ctx, event, node_meta, meta, groups)?
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1175,7 +1203,7 @@ impl<'script> GroupBy<'script> {
                 // [["a", 7], ["b", 7], ["a", 8], ["b", 8]]
                 Ok(())
             }
-            GroupBy::Each { expr, .. } => {
+            GroupByInt::Each { expr, .. } => {
                 let v = expr
                     .run(opts, &env, event, meta, &local_stack)?
                     .into_owned();

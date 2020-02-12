@@ -3,7 +3,7 @@ count=0
 
 help() {
     cat <<EOF
-Usage: ${0##*/} [-hd] [-t TARGET] [-c CMD] [TEST]...
+Usage: ${0##*/} [-hd] [TEST]...
 code sanity checker
   -h         show this help
   -a         run all chekcs
@@ -16,7 +16,7 @@ code sanity checker
   -d         check for dbg!
   -x         check for std::process::exit
   -b         check for bracket access
-  -c         check if pedantic mode for clippy is enabled
+  -c         check for pedantic and other checks
 EOF
 }
 
@@ -136,9 +136,41 @@ while getopts hauiprebldxc opt; do
             do
                 if  ! grep 'clippy::pedantic' "$file" > /dev/null
                 then
-                    echo "##[error] $file does not enforce clippy pedantic."
+                    echo "##[error] $file does not enforce clippy::pedantic."
                     count=$((count + 1))
                 fi
+                if  ! grep 'clippy::result_unwrap_used' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce clippy::result_unwrap_used."
+                    count=$((count + 1))
+                fi
+                if  ! grep 'clippy::option_unwrap_used' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce clippy::option_unwrap_used."
+                    count=$((count + 1))
+                fi
+                if  ! grep 'clippy::unnecessary_unwrap' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce clippy::unnecessary_unwrap."
+                    count=$((count + 1))
+                fi
+                if  ! grep 'clippy::all' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce clippy::all."
+                    count=$((count + 1))
+                fi
+                if  grep 'clippy::missing_errors_doc' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce clippy::missing_errors_doc is mentioend but shouldn't be allowed."
+                    count=$((count + 1))
+                fi
+                if  ! grep 'missing_docs' "$file" > /dev/null
+                then
+                    echo "##[error] $file does not enforce missing_docs."
+                    count=$((count + 1))
+                fi
+
+
             done
             ;;
         *)

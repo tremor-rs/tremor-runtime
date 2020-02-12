@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::errors::*;
-use simd_json::{to_borrowed_value, BorrowedValue as Value};
-use std::fs::File;
+use simd_json::BorrowedValue as Value;
 use std::io::prelude::*;
-use xz2::read::XzDecoder;
 
+/// Serialize a Value in a sorted fashion to allow equality compairison
+/// the result
 pub fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
     // ballpark size of a 'sensible' message
     let mut w = Vec::with_capacity(512);
@@ -71,7 +71,12 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
+/// Loats an event file
 pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
+    use simd_json::to_borrowed_value;
+    use std::fs::File;
+    use xz2::read::XzDecoder;
+
     let file = File::open(name)?;
     let mut in_data = Vec::new();
     XzDecoder::new(file).read_to_end(&mut in_data)?;

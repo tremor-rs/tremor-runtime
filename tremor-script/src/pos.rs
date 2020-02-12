@@ -20,49 +20,59 @@ pub use codespan::{
     ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
     LineOffset,
 };
-// A location in a source file
+/// A location in a source file
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
 pub struct Location {
+    /// The Line
     pub line: usize,
+    /// The Column
     pub column: usize,
+    /// Absolute location in bytes starting from 0
     pub absolute: usize,
 }
 
+/// A Span with start and end location
 #[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub struct Span {
+    /// The starting location
     pub start: Location,
+    /// The end location
     pub end: Location,
 }
 
 impl Span {
-    pub fn new(start: Location, end: Location) -> Self {
+    pub(crate) fn new(start: Location, end: Location) -> Self {
         Self { start, end }
     }
-    pub fn start(&self) -> Location {
+    pub(crate) fn start(&self) -> Location {
         self.start
     }
-    pub fn end(&self) -> Location {
+    pub(crate) fn end(&self) -> Location {
         self.end
     }
 }
 
-pub fn span(start: Location, end: Location) -> Span {
+pub(crate) fn span(start: Location, end: Location) -> Span {
     Span::new(start, end)
 }
 
+/// A Spanned element, position plus element
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub struct Spanned<T> {
+    /// The span
     pub span: Span,
+    /// The token
     pub value: T,
 }
+/// A rage in a file between two locations
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
-pub struct Range(pub Location, pub Location);
+pub struct Range(pub(crate) Location, pub(crate) Location);
 impl Range {
-    pub fn expand_lines(&self, lines: usize) -> Self {
+    pub(crate) fn expand_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.0 = new.0.move_up_lines(lines);
         new.1 = new.1.move_down_lines(lines);
@@ -70,20 +80,12 @@ impl Range {
     }
 }
 
-/*
-impl<'script> From<Expr<'script>> for Range {
-    fn from(expr: Expr<'script>) -> Self {
-        expr.extent(&FIXME)
-    }
-}
-*/
-
 impl From<(Location, Location)> for Range {
     fn from(locs: (Location, Location)) -> Self {
         Self(locs.0, locs.1)
     }
 }
-pub fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
+pub(crate) fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
     Spanned {
         span: span(start, end),
         value,
@@ -91,6 +93,7 @@ pub fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
 }
 
 impl Location {
+    /// Creates a new location
     pub fn new(line: usize, column: usize, absolute: usize) -> Self {
         Self {
             line,
@@ -99,19 +102,19 @@ impl Location {
         }
     }
 
-    pub fn move_down_lines(&self, lines: usize) -> Self {
+    pub(crate) fn move_down_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.line += lines;
         new
     }
 
-    pub fn move_up_lines(&self, lines: usize) -> Self {
+    pub(crate) fn move_up_lines(&self, lines: usize) -> Self {
         let mut new = *self;
         new.line = self.line.saturating_sub(lines);
         new
     }
 
-    pub fn shift(&mut self, ch: char) {
+    pub(crate) fn shift(&mut self, ch: char) {
         if ch == '\n' {
             self.line += 1;
             self.column = 1;

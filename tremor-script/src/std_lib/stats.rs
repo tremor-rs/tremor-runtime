@@ -876,51 +876,51 @@ impl TremorAggrFn for Hdr {
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
     registry
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "count".to_string(),
-            fun: Box::new(Count::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "min".to_string(),
-            fun: Box::new(Min::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "max".to_string(),
-            fun: Box::new(Max::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "sum".to_string(),
-            fun: Box::new(Sum::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "var".to_string(),
-            fun: Box::new(Var::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "stdev".to_string(),
-            fun: Box::new(Stdev::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "mean".to_string(),
-            fun: Box::new(Mean::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "hdr".to_string(),
-            fun: Box::new(Hdr::default()),
-        })
-        .insert(TremorAggrFnWrapper {
-            module: "stats".to_string(),
-            name: "dds".to_string(),
-            fun: Box::new(Dds::default()),
-        });
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "count".to_string(),
+            Box::new(Count::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "min".to_string(),
+            Box::new(Min::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "max".to_string(),
+            Box::new(Max::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "sum".to_string(),
+            Box::new(Sum::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "var".to_string(),
+            Box::new(Var::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "stdev".to_string(),
+            Box::new(Stdev::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "mean".to_string(),
+            Box::new(Mean::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "hdr".to_string(),
+            Box::new(Hdr::default()),
+        ))
+        .insert(TremorAggrFnWrapper::new(
+            "stats".to_string(),
+            "dds".to_string(),
+            Box::new(Dds::default()),
+        ));
 }
 
 #[cfg(test)]

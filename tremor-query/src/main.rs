@@ -148,13 +148,13 @@ fn main() -> Result<()> {
         Query::highlight_script_with(&raw, &mut h)?;
     }
     if matches.is_present("print-ast") {
-        let ast = serde_json::to_string_pretty(&runnable.0.query.suffix())?;
+        let ast = serde_json::to_string_pretty(&runnable.0.suffix())?;
         println!();
         let mut h = TermHighlighter::new();
         Query::highlight_script_with(&ast, &mut h)?;
     }
     if matches.is_present("print-ast-raw") {
-        let ast = serde_json::to_string_pretty(&runnable.0.query.suffix())?;
+        let ast = serde_json::to_string_pretty(&runnable.0.suffix())?;
         println!();
         println!("{}", ast);
     }
@@ -261,7 +261,7 @@ fn main() -> Result<()> {
                 } else if selected_output.is_none() || selected_output == Some(&output) {
                     println!("{}>>", output);
                     let result = format!("{} ", serde_json::to_string_pretty(event)?);
-                    let lexed_tokens = Vec::from_iter(lexer::tokenizer(&result));
+                    let lexed_tokens = Vec::from_iter(lexer::Tokenizer::new(&result));
                     let mut h = TermHighlighter::new();
                     h.highlight(lexed_tokens)?;
                 }

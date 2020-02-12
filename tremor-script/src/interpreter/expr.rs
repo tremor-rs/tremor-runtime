@@ -26,7 +26,7 @@ use simd_json::value::{
 use std::borrow::{Borrow, Cow};
 
 #[derive(Debug)]
-pub enum Cont<'run, 'event>
+pub(crate) enum Cont<'run, 'event>
 where
     'event: 'run,
 {
@@ -413,7 +413,7 @@ where
         match self {
             Expr::Emit(expr) => match expr.borrow() {
                 EmitExpr {
-                    expr: ImutExpr::Path(Path::Event(EventPath { segments, .. })),
+                    expr: ImutExprInt::Path(Path::Event(EventPath { segments, .. })),
                     port,
                     ..
                 } if segments.is_empty() => {

@@ -57,6 +57,7 @@ fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Option<()> {
     Some(())
 }
 
+/// Tries to compile a value to a influx line value
 pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(&mut output, v.get("measurement")?.as_str()?.as_bytes())?;
@@ -117,6 +118,7 @@ pub fn try_to_bytes<'input>(v: &Value<'input>) -> Option<Vec<u8>> {
     }
 }
 
+/// Tries to parse a striung as an influx line protocl message
 pub fn parse<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'input>>> {
     let data = data.trim();
 

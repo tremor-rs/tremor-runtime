@@ -26,7 +26,7 @@ grammar<'input>;
 // These statments for the root of the language.
 
 /// Root
-pub Query : QueryRaw<'input> = {
+pub(crate) Query : QueryRaw<'input> = {
     <stmts:Stmts> "<end-of-stream>"? => QueryRaw{stmts},
 }
 
@@ -122,7 +122,7 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
 }
 
 EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
-    ("script" <ExprImut>)? => Some(ScriptRaw{exprs: vec![ExprRaw::Imut(<>?)]}),
+    ("script" <ExprImut>)? => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>?)])),
 }
 
 WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
@@ -158,14 +158,14 @@ OperatorKind: OperatorKindRaw = {
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:Exprs> "end" => ScriptRaw{exprs},
+    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs),
 }
 
 
 ///////////////////////////////////////
 
-pub Script : ScriptRaw<'input> = {
-    <exprs:Exprs> "<end-of-stream>"? => ScriptRaw{exprs},
+pub(crate) Script : ScriptRaw<'input> = {
+    <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs),
 }
 
 /// List of expressions at the root of the script
@@ -323,8 +323,8 @@ PresenceSimplExprImut: ImutExprRaw<'input> = {
     SimpleExprImut => <>,
 }
 
-/// Immutable language constructs that can be used without having to worry aobut
-/// sideeffects
+/// Immutable language constructs that can be used without having to worry about
+/// sideefects
 
 ComplexExprImut: ImutExprRaw<'input> = {
     <pp:MatchImut> => ImutExprRaw::Match(Box::new(pp)),

@@ -19,6 +19,7 @@ use super::raw::*;
 use super::*;
 use crate::pos::{Location, Range};
 
+/// Implements the BaseExpr trate for a given exression
 #[macro_export]
 macro_rules! impl_expr {
     ($name:ident) => {
@@ -49,6 +50,7 @@ impl BaseExpr for Range {
     }
 }
 
+/// Implements the BaseExpr trate for a given exression
 #[macro_export]
 macro_rules! impl_expr2 {
     ($name:ident) => {
@@ -60,15 +62,20 @@ macro_rules! impl_expr2 {
     };
 }
 
+/// A Basic expression that can be turned into a location
 pub trait BaseExpr: Clone {
+    /// Obtain the metadata id of the expression
     fn mid(&self) -> usize;
+
+    /// The start location of the expression
     fn s(&self, meta: &NodeMetas) -> Location {
         meta.start(self.mid()).unwrap_or_default()
     }
+    /// The end location of the expression
     fn e(&self, meta: &NodeMetas) -> Location {
         meta.end(self.mid()).unwrap_or_default()
     }
-
+    /// The span (range) of the expression
     fn extent(&self, meta: &NodeMetas) -> Range {
         Range(self.s(meta), self.e(meta))
     }
@@ -86,69 +93,69 @@ impl BaseExpr for (Location, Location) {
     }
 }
 
-impl<'script> BaseExpr for ImutExpr<'script> {
+impl<'script> BaseExpr for ImutExprInt<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            ImutExpr::Binary(e) => e.s(meta),
-            ImutExpr::Comprehension(e) => e.s(meta),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.s(meta),
-            ImutExpr::InvokeAggr(e) => e.s(meta),
-            ImutExpr::List(e) => e.s(meta),
-            ImutExpr::Literal(e) => e.s(meta),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => {
+            ImutExprInt::Binary(e) => e.s(meta),
+            ImutExprInt::Comprehension(e) => e.s(meta),
+            ImutExprInt::Invoke(e)
+            | ImutExprInt::Invoke1(e)
+            | ImutExprInt::Invoke2(e)
+            | ImutExprInt::Invoke3(e) => e.s(meta),
+            ImutExprInt::InvokeAggr(e) => e.s(meta),
+            ImutExprInt::List(e) => e.s(meta),
+            ImutExprInt::Literal(e) => e.s(meta),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => {
                 meta.start(*mid).unwrap_or_default()
             }
-            ImutExpr::Match(e) => e.s(meta),
-            ImutExpr::Merge(e) => e.s(meta),
-            ImutExpr::Patch(e) => e.s(meta),
-            ImutExpr::Path(e) => e.s(meta),
-            ImutExpr::Record(e) => e.s(meta),
-            ImutExpr::Unary(e) => e.s(meta),
+            ImutExprInt::Match(e) => e.s(meta),
+            ImutExprInt::Merge(e) => e.s(meta),
+            ImutExprInt::Patch(e) => e.s(meta),
+            ImutExprInt::Path(e) => e.s(meta),
+            ImutExprInt::Record(e) => e.s(meta),
+            ImutExprInt::Unary(e) => e.s(meta),
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            ImutExpr::Binary(e) => e.e(meta),
-            ImutExpr::Comprehension(e) => e.e(meta),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.e(meta),
-            ImutExpr::InvokeAggr(e) => e.e(meta),
-            ImutExpr::List(e) => e.e(meta),
-            ImutExpr::Literal(e) => e.e(meta),
-            ImutExpr::Match(e) => e.e(meta),
-            ImutExpr::Merge(e) => e.e(meta),
-            ImutExpr::Patch(e) => e.e(meta),
-            ImutExpr::Path(e) => e.e(meta),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => {
+            ImutExprInt::Binary(e) => e.e(meta),
+            ImutExprInt::Comprehension(e) => e.e(meta),
+            ImutExprInt::Invoke(e)
+            | ImutExprInt::Invoke1(e)
+            | ImutExprInt::Invoke2(e)
+            | ImutExprInt::Invoke3(e) => e.e(meta),
+            ImutExprInt::InvokeAggr(e) => e.e(meta),
+            ImutExprInt::List(e) => e.e(meta),
+            ImutExprInt::Literal(e) => e.e(meta),
+            ImutExprInt::Match(e) => e.e(meta),
+            ImutExprInt::Merge(e) => e.e(meta),
+            ImutExprInt::Patch(e) => e.e(meta),
+            ImutExprInt::Path(e) => e.e(meta),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => {
                 meta.end(*mid).unwrap_or_default()
             }
-            ImutExpr::Record(e) => e.e(meta),
-            ImutExpr::Unary(e) => e.e(meta),
+            ImutExprInt::Record(e) => e.e(meta),
+            ImutExprInt::Unary(e) => e.e(meta),
         }
     }
     fn mid(&self) -> usize {
         match self {
-            ImutExpr::Binary(e) => e.mid(),
-            ImutExpr::Comprehension(e) => e.mid(),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.mid(),
-            ImutExpr::InvokeAggr(e) => e.mid(),
-            ImutExpr::List(e) => e.mid(),
-            ImutExpr::Literal(e) => e.mid(),
-            ImutExpr::Match(e) => e.mid(),
-            ImutExpr::Merge(e) => e.mid(),
-            ImutExpr::Patch(e) => e.mid(),
-            ImutExpr::Path(e) => e.mid(),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => *mid,
-            ImutExpr::Record(e) => e.mid(),
-            ImutExpr::Unary(e) => e.mid(),
+            ImutExprInt::Binary(e) => e.mid(),
+            ImutExprInt::Comprehension(e) => e.mid(),
+            ImutExprInt::Invoke(e)
+            | ImutExprInt::Invoke1(e)
+            | ImutExprInt::Invoke2(e)
+            | ImutExprInt::Invoke3(e) => e.mid(),
+            ImutExprInt::InvokeAggr(e) => e.mid(),
+            ImutExprInt::List(e) => e.mid(),
+            ImutExprInt::Literal(e) => e.mid(),
+            ImutExprInt::Match(e) => e.mid(),
+            ImutExprInt::Merge(e) => e.mid(),
+            ImutExprInt::Patch(e) => e.mid(),
+            ImutExprInt::Path(e) => e.mid(),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => *mid,
+            ImutExprInt::Record(e) => e.mid(),
+            ImutExprInt::Unary(e) => e.mid(),
         }
     }
 }
@@ -220,7 +227,6 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Binary(e) => e.start,
             ImutExprRaw::Comprehension(e) => e.start,
             ImutExprRaw::Invoke(e) => e.s(meta),
-            ImutExprRaw::InvokeAggr(e) => e.s(meta),
             ImutExprRaw::List(e) => e.s(meta),
             ImutExprRaw::Literal(e) => e.s(meta),
             ImutExprRaw::Match(e) => e.start,
@@ -238,7 +244,6 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Binary(e) => e.end,
             ImutExprRaw::Comprehension(e) => e.end,
             ImutExprRaw::Invoke(e) => e.e(meta),
-            ImutExprRaw::InvokeAggr(e) => e.e(meta),
             ImutExprRaw::List(e) => e.e(meta),
             ImutExprRaw::Literal(e) => e.e(meta),
             ImutExprRaw::Match(e) => e.end,
@@ -279,10 +284,16 @@ impl BaseExpr for InvokeAggr {
 
 impl<'script> BaseExpr for GroupBy<'script> {
     fn mid(&self) -> usize {
+        self.0.mid()
+    }
+}
+
+impl<'script> BaseExpr for GroupByInt<'script> {
+    fn mid(&self) -> usize {
         match self {
-            GroupBy::Expr { mid, .. } | GroupBy::Set { mid, .. } | GroupBy::Each { mid, .. } => {
-                *mid
-            }
+            GroupByInt::Expr { mid, .. }
+            | GroupByInt::Set { mid, .. }
+            | GroupByInt::Each { mid, .. } => *mid,
         }
     }
 }

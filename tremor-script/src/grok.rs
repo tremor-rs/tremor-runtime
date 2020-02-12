@@ -21,15 +21,17 @@ use std::io::{BufRead, BufReader};
 use std::str;
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
-pub const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
+pub(crate) const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
+/// A GROK pattern
 #[derive(Debug)]
 pub struct Pattern {
-    pub definition: String,
-    pub pattern: grok::Pattern,
+    pub(crate) definition: String,
+    pub(crate) pattern: grok::Pattern,
 }
 
 impl Pattern {
+    /// Reads a pattern from a file
     pub fn from_file(file_path: &str, definition: &str) -> Result<Self> {
         let file = File::open(file_path)?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
@@ -65,6 +67,7 @@ impl Pattern {
         })
     }
 
+    /// Creates a pattern from a string
     pub fn new(definition: String) -> Result<Self> {
         let mut grok = Grok::default();
         if let Ok(pattern) = grok.compile(&definition, true) {
@@ -77,6 +80,7 @@ impl Pattern {
         }
     }
 
+    /// Tests if a pattern matches
     pub fn matches(&self, data: &[u8]) -> Result<Value> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {

@@ -207,10 +207,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
         Some(data) => Box::new(BufReader::new(File::open(data)?)),
     };
 
-    let context = Context {
-        at: 666,
-        origin_uri: None,
-    };
+    let context = Context::new(666, None);
     let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
     for (num, line) in input.lines().enumerate() {
         let l = line?;
