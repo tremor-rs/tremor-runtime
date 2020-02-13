@@ -128,9 +128,10 @@ impl TrickleScript {
 
 impl Operator for TrickleScript {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn on_event(
+    fn on_event2(
         &mut self,
         _port: &str,
+        state: &mut StateObject,
         mut event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
@@ -145,6 +146,7 @@ impl Operator for TrickleScript {
             &context,
             AggrType::Emit,
             &mut unwind_event, // event
+            state,             // state
             &mut event_meta,   // $
         );
 

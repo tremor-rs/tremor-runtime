@@ -233,6 +233,7 @@ fn main() -> Result<()> {
             };
 
             let mut global_map = Value::from(Object::new());
+            let mut state = Value::from(Object::new());
             let mut event = events
                 .pop()
                 .ok_or_else(|| Error::from("At least one event needs to be specified"))?;
@@ -241,6 +242,7 @@ fn main() -> Result<()> {
                     &EventContext::new(0, Some(EventOriginUri::default())),
                     AggrType::Tick,
                     event,
+                    &mut state,
                     &mut global_map,
                 )?;
             }
@@ -248,6 +250,7 @@ fn main() -> Result<()> {
                 &EventContext::new(0, Some(EventOriginUri::default())),
                 AggrType::Emit,
                 &mut event,
+                &mut state,
                 &mut global_map,
             );
             match expr {

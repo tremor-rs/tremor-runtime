@@ -15,7 +15,7 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::*;
-use crate::{Event, Operator};
+use crate::{Event, Operator, StateObject};
 use std::borrow::Cow;
 use tremor_script::interpreter::Env;
 use tremor_script::{
@@ -84,7 +84,12 @@ impl Operator for TrickleSimpleSelect {
         clippy::transmute_ptr_to_ptr,
         clippy::too_many_lines
     )]
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event2(
+        &mut self,
+        _port: &str,
+        state: &mut StateObject,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -112,7 +117,7 @@ impl Operator for TrickleSimpleSelect {
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
             };
-            let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
+            let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
                     return Ok(vec![]);
@@ -132,7 +137,7 @@ impl Operator for TrickleSimpleSelect {
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
             };
-            let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
+            let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
                     return Ok(vec![]);

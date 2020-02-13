@@ -152,6 +152,7 @@ impl ErrorKind {
             | ArrayOutOfRange(outer, inner, _)
             | AssignIntoArray(outer, inner)
             | BadAccessInEvent(outer, inner, _, _)
+            | BadAccessInState(outer, inner, _, _)
             | BadAccessInGlobal(outer, inner, _, _)
             | BadAccessInLocal(outer, inner, _, _)
             | BadArity(outer, inner, _, _, _, _)
@@ -466,6 +467,10 @@ error_chain! {
         BadAccessInEvent(expr: Range, inner: Range, key: String, options: Vec<String>) {
             description("Trying to access a non existing event key")
                 display("Trying to access a non existing event key `{}`", key)
+        }
+        BadAccessInState(expr: Range, inner: Range, key: String, options: Vec<String>) {
+            description("Trying to access a non existing state key")
+                display("Trying to access a non existing state key `{}`", key)
         }
         ArrayOutOfRange(expr: Range, inner: Range, r: IRange<usize>) {
             description("Trying to access an index that is out of range")
@@ -829,6 +834,7 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
         }
         ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
         ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
+        ast::Path::State(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
     })
 }
 
@@ -850,6 +856,9 @@ pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
         }
         ast::Path::Event(_p) => {
             ErrorKind::BadAccessInEvent(expr, inner.extent(meta), key, options).into()
+        }
+        ast::Path::State(_p) => {
+            ErrorKind::BadAccessInState(expr, inner.extent(meta), key, options).into()
         }
     })
 }

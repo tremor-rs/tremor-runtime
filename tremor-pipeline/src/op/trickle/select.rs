@@ -15,7 +15,7 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::*;
-use crate::{Event, Operator};
+use crate::{Event, Operator, StateObject};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
 use std::borrow::{Borrow, Cow};
@@ -81,7 +81,7 @@ pub struct TrickleSelect {
 }
 
 pub trait WindowTrait: std::fmt::Debug {
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
+    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent>;
     fn eviction_ns(&self) -> Option<u64>;
 }
 
@@ -118,11 +118,11 @@ impl std::default::Default for WindowImpl {
 }
 
 impl WindowTrait for WindowImpl {
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_event(event),
-            Self::TumblingCountBased(w) => w.on_event(event),
-            Self::No(w) => w.on_event(event),
+            Self::TumblingTimeBased(w) => w.on_event(state, event),
+            Self::TumblingCountBased(w) => w.on_event(state, event),
+            Self::No(w) => w.on_event(state, event),
         }
     }
     fn eviction_ns(&self) -> Option<u64> {
@@ -168,7 +168,7 @@ impl WindowTrait for NoWindow {
     fn eviction_ns(&self) -> Option<u64> {
         None
     }
-    fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, _state: &mut StateObject, _event: &Event) -> Result<WindowEvent> {
         if self.open {
             Ok(WindowEvent {
                 open: false,
@@ -214,7 +214,7 @@ impl WindowTrait for TumblingWindowOnTime {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
         let time = self
             .script
             .as_ref()
@@ -227,6 +227,7 @@ impl WindowTrait for TumblingWindowOnTime {
                     &context,
                     AggrType::Emit,
                     &mut unwind_event, // event
+                    state,             // state
                     &mut event_meta,   // $
                 )?;
                 let data = match value {
@@ -290,7 +291,7 @@ impl WindowTrait for TumblingWindowOnNumber {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
         let count = self
             .script
             .as_ref()
@@ -303,6 +304,7 @@ impl WindowTrait for TumblingWindowOnNumber {
                     &context,
                     AggrType::Emit,
                     &mut unwind_event, // event
+                    state,             // state
                     &mut event_meta,   // $
                 )?;
                 let data = match value {
@@ -383,7 +385,12 @@ impl Operator for TrickleSelect {
         clippy::transmute_ptr_to_ptr,
         clippy::too_many_lines
     )]
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event2(
+        &mut self,
+        _port: &str,
+        state: &mut StateObject,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -414,7 +421,7 @@ impl Operator for TrickleSelect {
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
             };
-            let test = guard.run(opts, &env, unwind_event, event_meta, &local_stack)?;
+            let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
                     return Ok(vec![]);
@@ -433,11 +440,19 @@ impl Operator for TrickleSelect {
             let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(&ctx, &unwind_event, &node_meta, &event_meta)?
+                group_by.generate_groups(
+                    &ctx,
+                    &unwind_event,
+                    state,
+                    &node_meta,
+                    &event_meta,
+                    &mut group_values,
+                )?
             } else {
                 vec![]
             }
         };
+
         if self.windows.is_empty() && group_values.is_empty() {
             let group_value = Value::from(vec![()]);
             let group_str = sorsorted_serialize(&group_value)?;
@@ -456,13 +471,13 @@ impl Operator for TrickleSelect {
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
             };
-            let value = stmt
-                .target
-                .run(opts, &env, unwind_event, event_meta, &local_stack)?;
+            let value =
+                stmt.target
+                    .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
             let result = value.into_owned();
             if let Some(guard) = &stmt.maybe_having {
-                let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                 if let Some(test) = test.as_bool() {
                     if !test {
                         return Ok(vec![]);
@@ -523,7 +538,7 @@ impl Operator for TrickleSelect {
                             }),
                         )
                     });
-                let window_event = this_group.window.on_event(&event)?;
+                let window_event = this_group.window.on_event(state, &event)?;
                 // FIXME
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the inital frame
@@ -568,13 +583,18 @@ impl Operator for TrickleSelect {
                         aggrs: &this_group.aggrs,
                         meta: &node_meta,
                     };
-                    let value =
-                        stmt.target
-                            .run(opts, &env, unwind_event, event_meta, &local_stack)?;
+                    let value = stmt.target.run(
+                        opts,
+                        &env,
+                        unwind_event,
+                        state,
+                        event_meta,
+                        &local_stack,
+                    )?;
 
                     let result = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
-                        let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                        let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                         if let Some(test) = test.as_bool() {
                             if !test {
                                 continue;
@@ -732,7 +752,7 @@ impl Operator for TrickleSelect {
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
                     for arg in &aggr.args {
                         let result =
-                            arg.run(opts, &env, unwind_event, &event_meta, &local_stack)?;
+                            arg.run(opts, &env, unwind_event, state, &event_meta, &local_stack)?;
                         argv.push(result);
                     }
                     unsafe {
@@ -762,13 +782,13 @@ impl Operator for TrickleSelect {
                     aggrs: &NO_AGGRS,
                     meta: &node_meta,
                 };
-                let value = stmt
-                    .target
-                    .run(opts, &env, unwind_event, event_meta, &local_stack)?;
+                let value =
+                    stmt.target
+                        .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
                 let result = value.into_owned();
                 if let Some(guard) = &stmt.maybe_having {
-                    let test = guard.run(opts, &env, &result, &NULL, &local_stack)?;
+                    let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                     if let Some(test) = test.as_bool() {
                         if !test {
                             continue;

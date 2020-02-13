@@ -469,6 +469,7 @@ Field: FieldRaw<'input> = {
 Path: PathRaw<'input> = {
     MetaPath => <>,
     EventPath => <>,
+    StatePath => <>,
     LocalPath => <>,
     AggrPath => <>,
     ArgsPath => <>,
@@ -524,6 +525,12 @@ LocalPath: PathRaw<'input> = {
     <start:@L> <segment:PathSegment> <end:@L> => {
         PathRaw::Local(LocalPathRaw { segments:  vec![segment], start, end })
     },
+}
+
+/// State path
+StatePath: PathRaw<'input> = {
+    <start:@L> "state" <segments:PathSegments> <end:@L> => PathRaw::State(StatePathRaw { segments, start, end }),
+    <start:@L> "state" <end:@L> => PathRaw::State(StatePathRaw { segments: vec![], start, end }),
 }
 
 /// Event path
@@ -996,6 +1003,7 @@ extern {
         "copy" => Token::Copy,
         "merge" => Token::Merge,
         "event" => Token::Event,
+        "state" => Token::State,
         "present" => Token::Present,
         "absent" => Token::Absent,
         "fn" => Token::Fun,

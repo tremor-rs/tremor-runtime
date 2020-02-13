@@ -71,6 +71,12 @@ impl<'script> PartialEq for EventPath<'script> {
     }
 }
 
+impl<'script> PartialEq for StatePath<'script> {
+    fn eq(&self, other: &Self) -> bool {
+        self.segments == other.segments
+    }
+}
+
 impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
