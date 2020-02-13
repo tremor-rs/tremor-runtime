@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tremor event processing pipeline
+
 #![forbid(warnings)]
+#![deny(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -49,27 +52,33 @@ use std::sync::Mutex;
 use tremor_script::prelude::*;
 use tremor_script::query::*;
 
+/// Pipeline Configuration
 pub mod config;
+/// Pipeline Errors
 pub mod errors;
 #[macro_use]
 mod macros;
-pub mod op;
+pub(crate) mod op;
+/// Tools to turn tremor query into pipelines
 pub mod query;
 
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
-pub type PortIndexMap =
+pub(crate) type PortIndexMap =
     HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
-pub type ExecPortIndexMap = HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+pub(crate) type ExecPortIndexMap =
+    HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+/// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
     defn: Option<StmtRentalWrapper>,
     node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
-pub type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
+pub(crate) type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
 lazy_static! {
+    /// Function registory for the pipeline to look up functions
     // We wrap the registry in a mutex so that we can add functions from the outside
     // if required.
     pub static ref FN_REGISTRY: Mutex<Registry> = {
@@ -78,7 +87,7 @@ lazy_static! {
     };
 }
 
-pub fn common_cow(s: &str) -> Cow<'static, str> {
+pub(crate) fn common_cow(s: &str) -> Cow<'static, str> {
     macro_rules! cows {
         ($target:expr, $($cow:expr),*) => {
             match $target {
@@ -90,33 +99,45 @@ pub fn common_cow(s: &str) -> Cow<'static, str> {
     cows!(s, "in", "out", "err", "main")
 }
 
+/// A non yet compiled pipeline
 #[derive(Clone, Debug)]
 pub struct Pipeline {
+    /// ID of the Pipeline
     pub id: config::ID,
-    pub inputs: HashMap<Cow<'static, str>, NodeIndex>,
-    pub port_indexes: PortIndexMap,
-    pub outputs: Vec<NodeIndex>,
+    pub(crate) inputs: HashMap<Cow<'static, str>, NodeIndex>,
+    pub(crate) port_indexes: PortIndexMap,
+    pub(crate) outputs: Vec<NodeIndex>,
+    /// Configuration of the pipeline
     pub config: config::Pipeline,
-    pub nodes: NodeMap,
-    pub graph: ConfigGraph,
+    pub(crate) nodes: NodeMap,
+    pub(crate) graph: ConfigGraph,
 }
 
-pub type PipelineVec = Vec<Pipeline>;
-
+/// Thpe of nodes
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum NodeKind {
+    /// An input, this is the one end of the graph
     Input,
+    /// An output, this is the other end of the graph
     Output,
+    /// An operator
     Operator,
 }
 
+/// A tremor event
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
+    /// The event ID
     pub id: u64,
+    /// The event Data
     pub data: tremor_script::LineValue,
+    /// Nanoseconds at when the event was ingested
     pub ingest_ns: u64,
+    /// URI to identify the origin of th event
     pub origin_uri: Option<tremor_script::EventOriginUri>,
+    /// The kind of the event
     pub kind: Option<SignalKind>,
+    /// If this event is batched (containing multiple events itself)
     pub is_batch: bool,
 }
 
@@ -134,6 +155,9 @@ impl Default for Event {
 }
 
 impl Event {
+    /// allows to iterate over the values and metadatas
+    /// in an event, if it is batched this can be multiple
+    /// otherwise it's a singular event
     pub fn value_meta_iter(&self) -> ValueMetaIter {
         ValueMetaIter {
             event: self,
@@ -142,6 +166,9 @@ impl Event {
     }
 }
 
+/// Iterator over the event value and metadata
+/// if the evetn is a batch this will allow iterating
+/// over all the batched events
 pub struct ValueMetaIter<'value> {
     event: &'value Event,
     idx: usize,
@@ -172,6 +199,10 @@ impl<'value> Iterator for ValueMetaIter<'value> {
 }
 
 impl Event {
+    /// Iterate over the values in an event
+    /// this will result in multiple entires
+    /// if the event was batched otherwise
+    /// have only a single element
     pub fn value_iter(&self) -> ValueIter {
         ValueIter {
             event: self,
@@ -180,6 +211,7 @@ impl Event {
     }
 }
 
+/// Iterator over the values of an event
 pub struct ValueIter<'value> {
     event: &'value Event,
     idx: usize,
@@ -209,25 +241,30 @@ impl<'value> Iterator for ValueIter<'value> {
     }
 }
 
+/// The kind of signal this is
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum SignalKind {
     // Lifecycle
+    /// Init singnal    
     Init,
+    /// Shutdown Signal
     Shutdown,
     // Pause, TODO debug trace
     // Resume, TODO debug trace
     // Step, TODO ( into, over, to next breakpoint )
+    /// Control
     Control,
 }
 
+/// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq)]
 pub struct NodeConfig {
-    pub id: Cow<'static, str>,
-    pub kind: NodeKind,
-    pub op_type: String,
-    pub config: config::ConfigMap,
-    pub defn: Option<Arc<StmtRentalWrapper>>,
-    pub node: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) id: Cow<'static, str>,
+    pub(crate) kind: NodeKind,
+    pub(crate) op_type: String,
+    pub(crate) config: config::ConfigMap,
+    pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) node: Option<Arc<StmtRentalWrapper>>,
 }
 
 // We ignore stmt on equality and hasing as they're only
@@ -252,11 +289,16 @@ impl std::hash::Hash for NodeConfig {
     }
 }
 
+/// An executable operator
 #[derive(Debug)]
 pub struct OperatorNode {
+    /// ID of the operator
     pub id: Cow<'static, str>,
+    /// Typoe of the operator
     pub kind: NodeKind,
+    /// operator namepsace
     pub op_type: String,
+    /// The executable operator
     pub op: Box<dyn Operator>,
 }
 
@@ -297,6 +339,7 @@ impl Operator for OperatorNode {
 // We allow needless pass by value since the function type
 // and it's other implementations use the values and require
 // them passed
+/// A default 'registry' function for built in operators
 #[allow(clippy::implicit_hasher, clippy::needless_pass_by_value)]
 pub fn buildin_ops(
     node: &NodeConfig,
@@ -331,9 +374,8 @@ pub fn buildin_ops(
         op: factory.from_node(node)?,
     })
 }
-
 impl NodeConfig {
-    pub fn to_op(
+    pub(crate) fn to_op(
         &self,
         resolver: NodeLookupFn,
         defn: Option<StmtRentalWrapper>,
@@ -344,18 +386,10 @@ impl NodeConfig {
     }
 }
 
-#[derive(Debug)]
-pub enum Edge {
-    Link(config::OutputPort, config::InputPort),
-    InputStreamLink(config::PipelineInputPort, config::InputPort),
-    OutputStreamLink(config::OutputPort, config::PipelineOutputPort),
-    PassthroughStream(String, String),
-}
-
 type Weightless = ();
-pub type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
-pub type OperatorGraph = graph::DiGraph<OperatorNode, Weightless>;
+pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
 
+/// Builds an pipelinefrom a configuration
 pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
     let mut graph = ConfigGraph::new();
     let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new(); // <String, NodeIndex>
@@ -454,7 +488,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct NodeMetrics {
+pub(crate) struct NodeMetrics {
     inputs: HashMap<Cow<'static, str>, u64>,
     outputs: HashMap<Cow<'static, str>, u64>,
 }
@@ -503,23 +537,28 @@ impl NodeMetrics {
     }
 }
 
+/// An executable graph, this is the executable
+/// form of a pipeline
 #[derive(Debug)]
 pub struct ExecutableGraph {
+    /// ID of the graph
     pub id: String,
-    pub graph: Vec<OperatorNode>,
-    pub inputs: HashMap<Cow<'static, str>, usize>,
-    pub stack: Vec<(usize, Cow<'static, str>, Event)>,
-    pub signalflow: Vec<usize>,
-    pub contraflow: Vec<usize>,
-    pub port_indexes: ExecPortIndexMap,
-    pub metrics: Vec<NodeMetrics>,
-    pub metrics_idx: usize,
-    pub last_metrics: u64,
-    pub metric_interval: Option<u64>,
+    graph: Vec<OperatorNode>,
+    inputs: HashMap<Cow<'static, str>, usize>,
+    stack: Vec<(usize, Cow<'static, str>, Event)>,
+    signalflow: Vec<usize>,
+    contraflow: Vec<usize>,
+    port_indexes: ExecPortIndexMap,
+    metrics: Vec<NodeMetrics>,
+    metrics_idx: usize,
+    last_metrics: u64,
+    metric_interval: Option<u64>,
 }
 
+/// The return of a graph execution
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 impl ExecutableGraph {
+    /// Tries to optimise a pipeline
     pub fn optimize(&mut self) -> Option<()> {
         let mut i = 0;
         while self.optimize_()? {
@@ -686,6 +725,7 @@ impl ExecutableGraph {
         self.run(returns)
     }
 
+    #[inline]
     fn run(&mut self, returns: &mut Returns) -> Result<()> {
         while self.next(returns)? {}
         returns.reverse();
@@ -785,7 +825,7 @@ impl ExecutableGraph {
             }
         }
     }
-
+    #[inline]
     fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
@@ -818,7 +858,7 @@ impl ExecutableGraph {
             }
         }
     }
-
+    /// Enque a contraflow insight
     pub fn contraflow(&mut self, mut insight: Event) -> Event {
         for idx in &self.contraflow {
             let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
@@ -826,14 +866,14 @@ impl ExecutableGraph {
         }
         insight
     }
-
+    /// Enque a signal
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
         self.signalflow(signal)?;
         self.run(returns)?;
         Ok(())
     }
 
-    pub fn signalflow(&mut self, mut signal: Event) -> Result<()> {
+    fn signalflow(&mut self, mut signal: Event) -> Result<()> {
         for idx in 0..self.signalflow.len() {
             let i = self.signalflow[idx];
             let res = {
@@ -849,6 +889,7 @@ impl ExecutableGraph {
 }
 
 impl Pipeline {
+    /// Print the pipeline as a .dot file
     pub fn to_dot(&self) -> String {
         let mut res = "digraph{\n".to_string();
         let mut edges = String::new();
@@ -866,6 +907,7 @@ impl Pipeline {
         res
     }
 
+    /// Turns a pipeline into its executable form
     pub fn to_executable_graph(&self, resolver: NodeLookupFn) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();

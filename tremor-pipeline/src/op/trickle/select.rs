@@ -152,13 +152,6 @@ impl From<TumblingWindowOnTime> for WindowImpl {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Accumulate {
-    Not,
-    Before,
-    After,
-}
-
-#[derive(Debug, PartialEq)]
 pub struct WindowEvent {
     /// New window is opened,
     open: bool,

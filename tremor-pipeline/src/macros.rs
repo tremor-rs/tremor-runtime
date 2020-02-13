@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// A macro that makes it simple to create a operator and the
+/// required factory usage is:
+/// `op!(NodeFactory(Node) {<constructor>})`
 #[macro_export]
 macro_rules! op {
     ($factory:ident ($node:ident) $constructor:block) => {
@@ -34,18 +37,4 @@ macro_rules! op {
             }
         }
     };
-}
-
-#[macro_export]
-macro_rules! metamap {
-    { $($key:expr => $value:expr),+ } => {
-        {
-            // TODO figure out why `crate::` does not work here
-            let mut m = simd_json::value::borrowed::Object::new();
-            $(
-                m.insert($key.into(), simd_json::OwnedValue::from($value));
-            )+
-            m
-        }
-     };
 }

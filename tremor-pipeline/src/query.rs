@@ -83,6 +83,7 @@ fn window_decl_to_impl<'script>(
         }
     }
 }
+/// A Tremoe Query
 #[derive(Clone, Debug)]
 pub struct Query(pub tremor_script::query::Query);
 impl From<tremor_script::query::Query> for Query {
@@ -91,11 +92,14 @@ impl From<tremor_script::query::Query> for Query {
     }
 }
 impl Query {
+    /// Parse a query
     pub fn parse(script: &str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
         )?))
     }
+
+    /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self) -> Result<crate::ExecutableGraph> {
         use crate::op::Operator;
@@ -474,7 +478,7 @@ impl Query {
 }
 
 #[allow(clippy::implicit_hasher, clippy::too_many_lines)]
-pub fn supported_operators(
+pub(crate) fn supported_operators(
     config: &NodeConfig,
     defn: Option<tremor_script::query::StmtRentalWrapper>,
     node: Option<tremor_script::query::StmtRentalWrapper>,

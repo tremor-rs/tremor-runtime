@@ -21,7 +21,7 @@ use tremor_script::{self};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub struct TrickleOperator {
+pub(crate) struct TrickleOperator {
     pub id: String,
     pub stmt: tremor_script::query::StmtRentalWrapper,
     pub op: Box<dyn Operator>,
@@ -47,14 +47,14 @@ impl TrickleOperator {
                                     .as_ref()
                                     .and_then(|v| v.get("op"))
                                     .and_then(Value::as_str)
-                                    .ok_or_else(|| error_missing_config("op"))?
+                                    .ok_or_else(|| missing_config("op"))?
                                     .to_owned(),
                                 name: op
                                     .params
                                     .as_ref()
                                     .and_then(|v| v.get("name"))
                                     .and_then(Value::as_str)
-                                    .ok_or_else(|| error_missing_config("name"))?
+                                    .ok_or_else(|| missing_config("name"))?
                                     .to_owned(),
                             },
                             id: op.id.clone().into(),
@@ -81,7 +81,7 @@ impl TrickleOperator {
                             .and_then(|a| {
                                 a.iter().map(|x| x.as_u64()).collect::<Option<Vec<u64>>>()
                             })
-                            .ok_or_else(|| error_missing_config("timeout"))?;
+                            .ok_or_else(|| missing_config("timeout"))?;
                         Box::new(Backpressure {
                             outputs: outputs.iter().cloned().map(Output::from).collect(),
                             config: Config {
@@ -91,7 +91,7 @@ impl TrickleOperator {
                                     .as_ref()
                                     .and_then(|v| v.get("timeout"))
                                     .and_then(Value::cast_f64)
-                                    .ok_or_else(|| error_missing_config("timeout"))?,
+                                    .ok_or_else(|| missing_config("timeout"))?,
                                 steps: steps.clone(),
                                 outputs: op
                                     .params
@@ -116,7 +116,7 @@ impl TrickleOperator {
                             .as_ref()
                             .and_then(|v| v.get("count"))
                             .and_then(Value::as_usize)
-                            .ok_or_else(|| error_missing_config("count"))?;
+                            .ok_or_else(|| missing_config("count"))?;
                         let timeout = op
                             .params
                             .as_ref()

@@ -19,13 +19,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml;
 use std::borrow::Cow;
 
-pub type ID = String;
-pub type PipelineInputPort = String;
-pub type PipelineOutputPort = String;
-pub type PipelineVec = Vec<Pipeline>;
+pub(crate) type ID = String;
+pub(crate) type PipelineInputPort = String;
+pub(crate) type PipelineOutputPort = String;
+//pub(crate) type PipelineVec = Vec<Pipeline>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct InputPort {
+pub(crate) struct InputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
@@ -71,7 +71,7 @@ impl Serialize for InputPort {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct OutputPort {
+pub(crate) struct OutputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
@@ -116,17 +116,18 @@ impl Serialize for OutputPort {
     }
 }
 
-pub fn dflt<T: Default>() -> T {
+pub(crate) fn dflt<T: Default>() -> T {
     T::default()
 }
 
-pub type LinkMap = IndexMap<String, String>;
+// pub(crate) type LinkMap = IndexMap<String, String>;
 #[allow(clippy::module_name_repetitions)]
+/// A configuration map
 pub type ConfigMap = Option<serde_yaml::Value>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Interfaces {
+pub(crate) struct Interfaces {
     #[serde(default = "dflt")]
     pub inputs: Vec<PipelineInputPort>,
     #[serde(default = "dflt")]
@@ -135,7 +136,7 @@ pub struct Interfaces {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Node {
+pub(crate) struct Node {
     pub id: ID,
     #[serde(default = "dflt")]
     pub description: String,
@@ -144,19 +145,21 @@ pub struct Node {
     pub config: ConfigMap,
 }
 
+/// The configuration for a pipeline
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Pipeline {
+    /// ID of the pipeline
     pub id: ID,
-    pub interface: Interfaces,
+    pub(crate) interface: Interfaces,
     #[serde(default = "dflt")]
-    pub description: String,
+    pub(crate) description: String,
     #[serde(default = "dflt")]
-    pub nodes: Vec<Node>,
+    pub(crate) nodes: Vec<Node>,
     #[serde(default = "dflt")]
-    pub links: IndexMap<OutputPort, Vec<InputPort>>,
+    pub(crate) links: IndexMap<OutputPort, Vec<InputPort>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metrics_interval_s: Option<u64>,
+    pub(crate) metrics_interval_s: Option<u64>,
 }
 
 #[cfg(test)]

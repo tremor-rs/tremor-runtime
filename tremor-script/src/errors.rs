@@ -39,6 +39,7 @@ use std::num;
 use std::ops::{Range as IRange, RangeInclusive};
 use url;
 
+#[doc(hidden)]
 /// Optimised try
 #[macro_export]
 macro_rules! stry {

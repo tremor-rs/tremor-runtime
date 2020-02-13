@@ -15,6 +15,7 @@
 //NOTE: error_chain
 #![allow(deprecated)]
 #![allow(clippy::large_enum_variant)]
+#![allow(missing_docs)]
 
 use error_chain::*;
 use regex;
@@ -129,6 +130,7 @@ error_chain! {
     }
 }
 
-pub fn error_missing_config(f: &str) -> Error {
+/// Creates a missing config field error
+pub fn missing_config(f: &str) -> Error {
     ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
 }
