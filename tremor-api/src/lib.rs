@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #![forbid(warnings)]
+// This isn't a external crate so we don't worry about docs
+// #![deny(missing_docs)]
+#![allow(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
