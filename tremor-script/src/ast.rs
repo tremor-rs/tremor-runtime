@@ -17,7 +17,7 @@ pub(crate) mod base_expr;
 pub mod query;
 pub(crate) mod raw;
 mod support;
-pub(crate) mod upable;
+mod upable;
 use crate::errors::*;
 use crate::impl_expr2;
 use crate::interpreter::*;

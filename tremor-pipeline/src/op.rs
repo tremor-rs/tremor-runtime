@@ -27,30 +27,37 @@ use regex::Regex;
 use std::borrow::Cow;
 use tremor_script::Value;
 
+/// The operator trait, this reflects the functionality of an operator in the
+/// pipeline graph
 #[allow(unused_variables)]
 pub trait Operator: std::fmt::Debug + Send {
+    /// Called on every Event. The event and input port are passed in,
+    /// a vector of events is passed out.
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
 
+    /// Defines if the operatoir shold be called on the singalflow, defaults
+    /// to `false`. If set to `true`, `on_signal` should also be implemented.
     fn handles_signal(&self) -> bool {
         false
     }
-    // A lot of operators won't need to handle signals so we default to
-    // passing the signal through
+    /// Handle singal events, defaults to returning an empty vector.
     fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // Make the trait signature nicer
         Ok(vec![])
     }
 
+    /// Defines if the operatoir shold be called on the contraflow, defaults
+    /// to `false`. If set to `true`, `on_contraflow` should also be implemented.
     fn handles_contraflow(&self) -> bool {
         false
     }
-    // A lot of operators won't need to handle insights so we default to
-    // passing the isnight through
+
+    /// Handles contraflow evetns - defaults to a noop
     fn on_contraflow(&mut self, insight: &mut Event) {
         // Make the trait signature nicer
     }
 
-    // Returns metrics for this operator
+    /// Returns metrics for this operator, defaults to no extra metrics.
     fn metrics(
         &self,
         tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -60,17 +67,22 @@ pub trait Operator: std::fmt::Debug + Send {
         Ok(Vec::new())
     }
 
-    // An operator is skippable and doesn't need to be executed
+    /// An operator is skippable and doesn't need to be executed
     fn skippable(&self) -> bool {
         false
     }
 }
 
+/// Initialisable trait that can be turned from a `NodeConfig`
 pub trait InitializableOperator {
+    /// Takes a `NodeConfig` and intialises the operator.
     fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
+/// Trait for detecting errors in config and the key names are included in errors
 pub trait ConfigImpl {
+    /// deserialises the yaml into a struct and returns nice errors
+    /// this doesn't need to be overwritten in most cases.
     fn new(config: &serde_yaml::Value) -> Result<Self>
     where
         for<'de> Self: serde::de::Deserialize<'de>,

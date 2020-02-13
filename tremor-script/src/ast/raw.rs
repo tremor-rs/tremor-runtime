@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![doc(hidden)]
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 use super::upable::Upable;

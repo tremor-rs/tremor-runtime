@@ -318,13 +318,14 @@ impl PartialEq for TremorFnWrapper {
     }
 }
 
-/// Trmeor Functin registry
+/// Tremor Function registry
 #[derive(Debug, Clone)]
 pub struct Registry {
     functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
     modules: Vec<String>,
 }
 
+#[doc(hidden)]
 /// Creates a Tremor function from a given implementation
 #[macro_export]
 macro_rules! tremor_fn {
@@ -348,6 +349,7 @@ macro_rules! tremor_fn {
     };
 }
 
+#[doc(hidden)]
 /// Creates a constant Tremor function from a given implementation
 #[macro_export]
 macro_rules! tremor_const_fn {
@@ -371,6 +373,7 @@ macro_rules! tremor_const_fn {
     };
 }
 
+#[doc(hidden)]
 /// Internal tremor function creation macro - DO NOT USE
 #[macro_export]
 macro_rules! tremor_fn_ {
