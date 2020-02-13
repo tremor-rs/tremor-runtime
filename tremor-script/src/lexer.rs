@@ -161,6 +161,8 @@ pub enum Token<'input> {
     For,
     /// the `event` keyword
     Event,
+    /// the `state` keyword
+    State,
     /// the `present` keyword
     Present,
     /// the `absent` keyword
@@ -337,6 +339,7 @@ impl<'input> Token<'input> {
             | Token::Merge
             | Token::For
             | Token::Event
+            | Token::State
             | Token::Present
             | Token::Absent
             | Token::Stream
@@ -528,6 +531,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Merge => write!(f, "merge"),
             Token::For => write!(f, "for"),
             Token::Event => write!(f, "event"),
+            Token::State => write!(f, "state"),
             Token::Present => write!(f, "present"),
             Token::Absent => write!(f, "absent"),
             //            Token::Return => write!(f, "return"),
@@ -898,6 +902,7 @@ impl<'input> Lexer<'input> {
             "merge" => Token::Merge,
             "for" => Token::For,
             "event" => Token::Event,
+            "state" => Token::State,
             "present" => Token::Present,
             "absent" => Token::Absent,
             "true" => Token::BoolLiteral(true),
@@ -1675,6 +1680,7 @@ mod tests {
         lex_ok! { " drop ", " ~~~~~~ " => Token::Drop, };
         lex_ok! { " emit ", " ~~~~~~ " => Token::Emit, };
         lex_ok! { " event ", " ~~~~~~ " => Token::Event, };
+        lex_ok! { " state ", " ~~~~~~ " => Token::State, };
         lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
         lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
     }

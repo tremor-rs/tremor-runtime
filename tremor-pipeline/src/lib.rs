@@ -113,7 +113,19 @@ pub struct Pipeline {
     pub(crate) graph: ConfigGraph,
 }
 
-/// Thpe of nodes
+// TODO eliminate this alias
+pub type StateObject = Value<'static>;
+
+#[derive(Clone, Debug, Default)]
+pub struct State {
+    // ordered in the same way as nodes in the executable graph
+    pub ops: Vec<StateObject>,
+    pub exports: StateObject,
+}
+
+pub type PipelineVec = Vec<Pipeline>;
+
+/// Type of nodes
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     /// An input, this is the one end of the graph
@@ -291,6 +303,7 @@ impl std::hash::Hash for NodeConfig {
 
 /// An executable operator
 #[derive(Debug)]
+// TODO add operator specific state here?
 pub struct OperatorNode {
     /// ID of the operator
     pub id: Cow<'static, str>,
@@ -305,6 +318,15 @@ pub struct OperatorNode {
 impl Operator for OperatorNode {
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, event)
+    }
+    // TODO replace on_event with this
+    fn on_event2(
+        &mut self,
+        port: &str,
+        state: &mut StateObject,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+        self.op.on_event2(port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
@@ -350,7 +372,7 @@ pub fn buildin_ops(
     // Resolve from registry
 
     use op::debug::EventHistoryFactory;
-    use op::generic::{BackpressureFactory, BatchFactory};
+    use op::generic::{BackpressureFactory, BatchFactory, CounterFactory};
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
     use op::runtime::TremorFactory;
@@ -362,6 +384,7 @@ pub fn buildin_ops(
         ["grouper", "bucket"] => BucketGrouperFactory::new_boxed(),
         ["generic", "batch"] => BatchFactory::new_boxed(),
         ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
+        ["generic", "counter"] => CounterFactory::new_boxed(),
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }
@@ -420,7 +443,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             defn: None,
             node: None,
         });
-        nodes.insert(node_id, id);
+        nodes.insert(node_id.clone(), id);
     }
 
     for stream in &config.interface.outputs {
@@ -543,16 +566,17 @@ impl NodeMetrics {
 pub struct ExecutableGraph {
     /// ID of the graph
     pub id: String,
-    graph: Vec<OperatorNode>,
-    inputs: HashMap<Cow<'static, str>, usize>,
-    stack: Vec<(usize, Cow<'static, str>, Event)>,
-    signalflow: Vec<usize>,
-    contraflow: Vec<usize>,
-    port_indexes: ExecPortIndexMap,
-    metrics: Vec<NodeMetrics>,
-    metrics_idx: usize,
-    last_metrics: u64,
-    metric_interval: Option<u64>,
+    pub graph: Vec<OperatorNode>,
+    pub state: State,
+    pub inputs: HashMap<Cow<'static, str>, usize>,
+    pub stack: Vec<(usize, Cow<'static, str>, Event)>,
+    pub signalflow: Vec<usize>,
+    pub contraflow: Vec<usize>,
+    pub port_indexes: ExecPortIndexMap,
+    pub metrics: Vec<NodeMetrics>,
+    pub metrics_idx: usize,
+    pub last_metrics: u64,
+    pub metric_interval: Option<u64>,
 }
 
 /// The return of a graph execution
@@ -749,7 +773,15 @@ impl ExecutableGraph {
             } else {
                 // TODO: Do we want to fail on here or do something different?
                 // got to discuss this.
-                let res = node.on_event(&port, event)?;
+                let res = if node.op_type == "generic::counter" || node.op_type == "runtime::tremor"
+                {
+                    // TODO replace on_event with this and get rid of the conditional here
+                    //dbg!(&self.state);
+                    node.on_event2(&port, &mut self.state.ops[idx], event)?
+                } else {
+                    node.on_event(&port, event)?
+                };
+                //let res = node.on_event(&port, event)?;
                 for (out_port, _) in &res {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs
@@ -955,6 +987,16 @@ impl Pipeline {
             id: self.id.clone(),
             metrics_idx: i2pos[&self.nodes["metrics"]],
             last_metrics: 0,
+            state: State {
+                // TODO implement default for StateObject as following
+                // also fix null initialization
+                //ops: iter::repeat(StateObject::default())
+                //ops: iter::repeat(Value::null()).take(graph.len()).collect(),
+                ops: iter::repeat(Value::from(Object::new()))
+                    .take(graph.len())
+                    .collect(),
+                exports: StateObject::default(),
+            },
             graph,
             inputs,
             port_indexes,

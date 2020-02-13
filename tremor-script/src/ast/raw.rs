@@ -1331,6 +1331,8 @@ pub enum PathRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Event(EventPathRaw<'script>),
     /// we're forced to make this pub because of lalrpop
+    State(StatePathRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Meta(MetadataPathRaw<'script>),
 }
 
@@ -1348,6 +1350,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
                 }
             }
             Event(p) => Path::Event(p.up(helper)?),
+            State(p) => Path::State(p.up(helper)?),
             Meta(p) => Path::Meta(p.up(helper)?),
         })
     }
@@ -1552,6 +1555,23 @@ impl<'script> Upable<'script> for EventPathRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct StatePathRaw<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub segments: SegmentsRaw<'script>,
+}
+impl<'script> Upable<'script> for StatePathRaw<'script> {
+    type Target = StatePath<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let segments = self.segments.up(helper)?;
+        Ok(StatePath {
+            mid: helper.add_meta(self.start, self.end),
+            segments,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BinExprRaw<'script> {
     pub(crate) start: Location,

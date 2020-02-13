@@ -242,6 +242,7 @@ where
         context: &'run crate::EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
         let mut local = LocalStack::with_size(self.locals);
@@ -261,7 +262,7 @@ where
 
         while let Some(expr) = exprs.next() {
             if exprs.peek().is_none() {
-                match stry!(expr.run(opts.with_result(), &env, event, meta, &mut local)) {
+                match stry!(expr.run(opts.with_result(), &env, event, state, meta, &mut local)) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {
@@ -275,7 +276,7 @@ where
                     }
                 }
             } else {
-                match stry!(expr.run(opts.without_result(), &env, event, meta, &mut local)) {
+                match stry!(expr.run(opts.without_result(), &env, event, state, meta, &mut local)) {
                     Cont::Drop => return Ok(Return::Drop),
                     Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
                     Cont::EmitEvent(port) => {
@@ -767,6 +768,7 @@ pub(crate) enum Path<'script> {
     Const(LocalPath<'script>),
     Local(LocalPath<'script>),
     Event(EventPath<'script>),
+    State(StatePath<'script>),
     Meta(MetadataPath<'script>),
 }
 
@@ -776,6 +778,7 @@ impl<'script> Path<'script> {
             Path::Const(path) | Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
+            Path::State(path) => &path.segments,
         }
     }
 }
@@ -827,6 +830,13 @@ pub(crate) struct EventPath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr2!(EventPath);
+
+#[derive(Clone, Debug, Serialize)]
+pub struct StatePath<'script> {
+    pub mid: usize,
+    pub segments: Segments<'script>,
+}
+impl_expr2!(StatePath);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]

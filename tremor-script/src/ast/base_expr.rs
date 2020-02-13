@@ -184,6 +184,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
             PathRaw::Local(e) => e.s(meta),
             PathRaw::Meta(e) => e.start,
             PathRaw::Event(e) => e.start,
+            PathRaw::State(e) => e.start,
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
@@ -191,6 +192,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
             PathRaw::Local(e) => e.e(meta),
             PathRaw::Meta(e) => e.end,
             PathRaw::Event(e) => e.end,
+            PathRaw::State(e) => e.end,
         }
     }
     fn mid(&self) -> usize {
@@ -204,6 +206,7 @@ impl<'script> BaseExpr for Path<'script> {
             Path::Const(e) | Path::Local(e) => e.mid(),
             Path::Meta(e) => e.mid(),
             Path::Event(e) => e.mid(),
+            Path::State(e) => e.mid(),
         }
     }
 }

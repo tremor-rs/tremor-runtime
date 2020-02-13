@@ -365,6 +365,7 @@ pub(crate) fn resolve<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     path: &'script Path,
@@ -397,6 +398,7 @@ where
         },
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
+        Path::State(_path) => state,
     };
 
     for segment in path.segments() {
@@ -458,7 +460,7 @@ where
                 }
             }
             Segment::Element { expr, .. } => {
-                let key = stry!(expr.run(opts, env, event, meta, local));
+                let key = stry!(expr.run(opts, env, event, state, meta, local));
 
                 match (current, key.borrow()) {
                     (Value::Object(o), Value::String(id)) => {
@@ -542,10 +544,10 @@ where
                     } else {
                         (0, a.len())
                     };
-                    let s = stry!(range_start.run(opts, env, event, meta, local));
+                    let s = stry!(range_start.run(opts, env, event, state, meta, local));
                     if let Some(range_start) = s.as_usize() {
                         let range_start = range_start + start;
-                        let e = stry!(range_end.run(opts, env, event, meta, local));
+                        let e = stry!(range_end.run(opts, env, event, state, meta, local));
                         if let Some(range_end) = e.as_usize() {
                             let range_end = range_end;
                             if range_end > end {
@@ -626,6 +628,7 @@ fn patch_value<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     value: &'run mut Value<'event>,
@@ -644,8 +647,8 @@ where
         if let Some(ref mut obj) = value.as_object_mut() {
             match op {
                 PatchOperation::Insert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, meta, local));
+                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
+                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
                     if obj.contains_key(&new_key) {
                         return error_patch_key_exists(
                             patch_expr,
@@ -658,8 +661,8 @@ where
                     }
                 }
                 PatchOperation::Update { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, meta, local));
+                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
+                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
                     if obj.contains_key(&new_key) {
                         obj.insert(new_key, new_value.into_owned());
                     } else {
@@ -672,17 +675,17 @@ where
                     }
                 }
                 PatchOperation::Upsert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, meta, local));
+                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
+                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
                     obj.insert(new_key, new_value.into_owned());
                 }
                 PatchOperation::Erase { ident } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
+                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
                     obj.remove(&new_key);
                 }
                 PatchOperation::Move { from, to } => {
-                    let from = stry!(from.eval_to_string(opts, env, event, meta, local));
-                    let to = stry!(to.eval_to_string(opts, env, event, meta, local));
+                    let from = stry!(from.eval_to_string(opts, env, event, state, meta, local));
+                    let to = stry!(to.eval_to_string(opts, env, event, state, meta, local));
 
                     if obj.contains_key(&to) {
                         return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
@@ -692,8 +695,8 @@ where
                     }
                 }
                 PatchOperation::Copy { from, to } => {
-                    let from = stry!(from.eval_to_string(opts, env, event, meta, local));
-                    let to = stry!(to.eval_to_string(opts, env, event, meta, local));
+                    let from = stry!(from.eval_to_string(opts, env, event, state, meta, local));
+                    let to = stry!(to.eval_to_string(opts, env, event, state, meta, local));
 
                     if obj.contains_key(&to) {
                         return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
@@ -704,8 +707,8 @@ where
                     }
                 }
                 PatchOperation::Merge { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, meta, local));
-                    let merge_spec = stry!(expr.run(opts, env, event, meta, local));
+                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
+                    let merge_spec = stry!(expr.run(opts, env, event, state, meta, local));
 
                     match obj.get_mut(&new_key) {
                         Some(value @ Value::Object(_)) => {
@@ -728,7 +731,7 @@ where
                     }
                 }
                 PatchOperation::TupleMerge { expr } => {
-                    let merge_spec = stry!(expr.run(opts, env, event, meta, local));
+                    let merge_spec = stry!(expr.run(opts, env, event, state, meta, local));
 
                     stry!(merge_values(patch_expr, expr, value, &merge_spec));
                 }
@@ -746,6 +749,7 @@ fn test_guard<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     guard: &'script Option<ImutExprInt<'script>>,
@@ -757,7 +761,7 @@ where
     'event: 'run,
 {
     if let Some(guard) = guard {
-        let test = stry!(guard.run(opts, env, event, meta, local));
+        let test = stry!(guard.run(opts, env, event, state, meta, local));
         if let Some(b) = test.as_bool() {
             Ok(b)
         } else {
@@ -775,6 +779,7 @@ fn test_predicate_expr<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
@@ -794,6 +799,7 @@ where
                 opts.without_result(),
                 env,
                 event,
+                state,
                 meta,
                 local,
                 &target,
@@ -801,7 +807,7 @@ where
             ))
             .is_some()
             {
-                test_guard(outer, opts, env, event, meta, local, guard)
+                test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
             }
@@ -812,6 +818,7 @@ where
                 opts.without_result(),
                 env,
                 event,
+                state,
                 meta,
                 local,
                 &target,
@@ -819,16 +826,16 @@ where
             ))
             .is_some()
             {
-                test_guard(outer, opts, env, event, meta, local, guard)
+                test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
             }
         }
         Pattern::Expr(ref expr) => {
-            let v = stry!(expr.run(opts, env, event, meta, local));
+            let v = stry!(expr.run(opts, env, event, state, meta, local));
             let vb: &Value = v.borrow();
             if val_eq(target, vb) {
-                test_guard(outer, opts, env, event, meta, local, guard)
+                test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
             }
@@ -841,6 +848,7 @@ where
                         opts.with_result(),
                         env,
                         event,
+                        state,
                         meta,
                         local,
                         &target,
@@ -849,7 +857,7 @@ where
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
-                        test_guard(outer, opts, env, event, meta, local, guard)
+                        test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
                         Ok(false)
                     }
@@ -860,6 +868,7 @@ where
                         opts.with_result(),
                         env,
                         event,
+                        state,
                         meta,
                         local,
                         &target,
@@ -869,13 +878,13 @@ where
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
-                        test_guard(outer, opts, env, event, meta, local, guard)
+                        test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
                         Ok(false)
                     }
                 }
                 Pattern::Expr(ref expr) => {
-                    let v = stry!(expr.run(opts, env, event, meta, local));
+                    let v = stry!(expr.run(opts, env, event, state, meta, local));
                     let vb: &Value = v.borrow();
                     if val_eq(target, vb) {
                         // we need to assign prior to the guard so we can cehck
@@ -888,7 +897,7 @@ where
                             v.into_owned(),
                         ));
 
-                        test_guard(outer, opts, env, event, meta, local, guard)
+                        test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
                         Ok(false)
                     }
@@ -907,6 +916,7 @@ fn match_rp_expr<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
@@ -968,7 +978,7 @@ where
                     return Ok(None);
                 };
 
-                let rhs = stry!(rhs.run(opts, env, event, meta, local));
+                let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
                 let vb: &Value = rhs.borrow();
                 let r = val_eq(testee, vb);
                 let m = if *not { !r } else { r };
@@ -988,7 +998,7 @@ where
 
                 if testee.is_object() {
                     if let Some(m) = stry!(match_rp_expr(
-                        outer, opts, env, event, meta, local, testee, pattern,
+                        outer, opts, env, event, state, meta, local, testee, pattern,
                     )) {
                         if opts.result_needed {
                             known_key.insert(&mut acc, m)?;
@@ -1010,7 +1020,7 @@ where
 
                 if testee.is_array() {
                     if let Some(r) = stry!(match_ap_expr(
-                        outer, opts, env, event, meta, local, testee, pattern,
+                        outer, opts, env, event, state, meta, local, testee, pattern,
                     )) {
                         if opts.result_needed {
                             known_key.insert(&mut acc, r)?;
@@ -1036,6 +1046,7 @@ fn match_ap_expr<'run, 'event, 'script, Expr>(
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
+    state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
@@ -1054,7 +1065,7 @@ where
             'inner: for expr in &ap.exprs {
                 match expr {
                     ArrayPredicatePattern::Expr(e) => {
-                        let r = stry!(e.run(opts, env, event, meta, local));
+                        let r = stry!(e.run(opts, env, event, state, meta, local));
                         let vb: &Value = r.borrow();
 
                         // NOTE: We are creating a new value here so we have to clone
@@ -1076,7 +1087,7 @@ where
                     }
                     ArrayPredicatePattern::Record(rp) => {
                         if let Some(r) = stry!(match_rp_expr(
-                            outer, opts, env, event, meta, local, candidate, rp,
+                            outer, opts, env, event, state, meta, local, candidate, rp,
                         )) {
                             if opts.result_needed {
                                 acc.push(Value::Array(vec![Value::from(idx), r]))
@@ -1128,6 +1139,7 @@ impl<'script> GroupBy<'script> {
         &'script self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
+        state: &'run Value<'static>,
         node_meta: &'run NodeMetas<'script>,
         meta: &'run Value<'event>,
     ) -> Result<Vec<Vec<Value<'event>>>>
@@ -1173,7 +1185,7 @@ impl<'script> GroupByInt<'script> {
         match self {
             GroupByInt::Expr { expr, .. } => {
                 let v = expr
-                    .run(opts, &env, event, meta, &local_stack)?
+                    .run(opts, &env, event, state, meta, &local_stack)?
                     .into_owned();
                 if groups.is_empty() {
                     groups.push(vec![v]);
@@ -1186,7 +1198,7 @@ impl<'script> GroupByInt<'script> {
             GroupByInt::Set { items, .. } => {
                 for item in items {
                     item.0
-                        .generate_groups(ctx, event, node_meta, meta, groups)?
+                        .generate_groups(ctx, event, state, node_meta, meta, groups)?
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1205,7 +1217,7 @@ impl<'script> GroupByInt<'script> {
             }
             GroupByInt::Each { expr, .. } => {
                 let v = expr
-                    .run(opts, &env, event, meta, &local_stack)?
+                    .run(opts, &env, event, state, meta, &local_stack)?
                     .into_owned();
                 if let Some(each) = v.as_array() {
                     if groups.is_empty() {

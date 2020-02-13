@@ -37,11 +37,11 @@ use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
-use tremor_script::{AggrRegistry, Registry, Value};
+use tremor_script::{AggrRegistry, Object, Registry, Value};
 
 // Legacy ops for backwards compat with pipeline.yaml at runtime in trickle / extension
 use op::debug::EventHistoryFactory;
-use op::generic::{BackpressureFactory, BatchFactory};
+use op::generic::{BackpressureFactory, BatchFactory, CounterFactory};
 use op::grouper::BucketGrouperFactory;
 use op::runtime::TremorFactory;
 
@@ -105,6 +105,7 @@ impl Query {
         use crate::op::Operator;
         use crate::ExecutableGraph;
         use crate::NodeMetrics;
+        use crate::{State, StateObject};
         use std::iter;
 
         let script = self.0.suffix();
@@ -264,6 +265,10 @@ impl Query {
                         node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
+                    // TODO is this in the right place?
+                    //state
+                    //    .ops
+                    //    .insert(select_in.id.clone(), tremor_script::Object::new());
                     outputs.push(id);
                 }
                 Stmt::Stream(s) => {
@@ -280,6 +285,8 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
+                        // TODO is this in the right place?
+                        //state.ops.insert(name.clone(), tremor_script::Object::new());
                         let op = node.to_op(
                             supported_operators,
                             None,
@@ -324,7 +331,10 @@ impl Query {
                     };
                     let op = node.to_op(supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(&o.id), id);
+                    let node_id = common_cow(&o.id);
+                    nodes.insert(node_id.clone(), id);
+                    // TODO is this in the right place?
+                    //state.ops.insert(node_id, tremor_script::Object::new());
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(s) => {
@@ -358,7 +368,10 @@ impl Query {
 
                     let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(&o.id), id);
+                    let node_id = common_cow(&o.id);
+                    nodes.insert(node_id.clone(), id);
+                    // TODO is this in the right place?
+                    //state.ops.insert(node_id, tremor_script::Object::new());
                     outputs.push(id);
                 }
             };
@@ -463,6 +476,14 @@ impl Query {
                 id: "generated".to_string(), // FIXME make configurable
                 metrics_idx: i2pos[&nodes["metrics"]],
                 last_metrics: 0,
+                state: State {
+                    // TODO implement default for StateObject as following
+                    //ops: iter::repeat(StateObject::default())
+                    ops: iter::repeat(Value::from(Object::new()))
+                        .take(graph.len())
+                        .collect(),
+                    exports: StateObject::default(),
+                },
                 graph,
                 inputs: inputs2,
                 port_indexes: port_indexes2,
@@ -592,6 +613,7 @@ pub(crate) fn supported_operators(
         ["grouper", "bucket"] => BucketGrouperFactory::new_boxed().from_node(config)?,
         ["generic", "batch"] => BatchFactory::new_boxed().from_node(config)?,
         ["generic", "backpressure"] => BackpressureFactory::new_boxed().from_node(config)?,
+        ["generic", "counter"] => CounterFactory::new_boxed().from_node(config)?,
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }

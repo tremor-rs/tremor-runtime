@@ -199,8 +199,9 @@ where
         context: &'run EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
     ) -> Result<Return<'event>> {
-        self.script.suffix().run(context, aggr, event, meta)
+        self.script.suffix().run(context, aggr, event, state, meta)
     }
 }

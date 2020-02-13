@@ -14,6 +14,8 @@
 
 pub mod backpressure;
 pub mod batch;
+pub mod counter;
 
 pub use backpressure::BackpressureFactory;
 pub use batch::BatchFactory;
+pub use counter::CounterFactory;

@@ -58,6 +58,7 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         inner: &'script T,
@@ -68,11 +69,11 @@ where
         }
         // We know we have at least one element so [] access is safe!
         for effector in &effectors[..effectors.len() - 1] {
-            demit!(effector.run(opts.without_result(), env, event, meta, local,));
+            demit!(effector.run(opts.without_result(), env, event, state, meta, local,));
         }
         let effector = &effectors[effectors.len() - 1];
         Ok(Cont::Cont(demit!(
-            effector.run(opts, env, event, meta, local)
+            effector.run(opts, env, event, state, meta, local)
         )))
     }
 
@@ -82,11 +83,12 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         expr: &'script Match,
     ) -> Result<Cont<'run, 'event>> {
-        let target = stry!(expr.target.run(opts, env, event, meta, local));
+        let target = stry!(expr.target.run(opts, env, event, state, meta, local));
 
         for predicate in &expr.patterns {
             if stry!(test_predicate_expr(
@@ -94,6 +96,7 @@ where
                 opts,
                 env,
                 event,
+                state,
                 meta,
                 local,
                 &target,
@@ -104,6 +107,7 @@ where
                     opts,
                     env,
                     event,
+                    state,
                     meta,
                     local,
                     predicate,
@@ -120,16 +124,19 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
+        state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
         expr: &'script Patch,
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
         // NOTE: Is this good? I don't like it.
-        let value = stry!(expr.target.run(opts, env, event, meta, local));
+        let value = stry!(expr.target.run(opts, env, event, state, meta, local));
         let v: &Value = value.borrow();
         let v: &mut Value = unsafe { mem::transmute(v) };
-        stry!(patch_value(self, opts, env, event, meta, local, v, expr));
+        stry!(patch_value(
+            self, opts, env, event, state, meta, local, v, expr
+        ));
         Ok(Cow::Borrowed(v))
     }
 
@@ -139,18 +146,19 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         expr: &'script Merge,
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
         // NOTE: Is this good? I don't like it.
-        let value_cow = stry!(expr.target.run(opts, env, event, meta, local));
+        let value_cow = stry!(expr.target.run(opts, env, event, state, meta, local));
         let value: &Value = value_cow.borrow();
         let value: &mut Value = unsafe { mem::transmute(value) };
 
         if value.is_object() {
-            let replacement = stry!(expr.expr.run(opts, env, event, meta, local,));
+            let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local,));
 
             if replacement.is_object() {
                 stry!(merge_values(self, &expr.expr, value, &replacement));
@@ -168,6 +176,7 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         expr: &'script Comprehension,
@@ -176,7 +185,7 @@ where
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
-        let target_value = stry!(target.run(opts, env, event, meta, local,));
+        let target_value = stry!(target.run(opts, env, event, state, meta, local,));
 
         if let Some(target_map) = target_value.as_object() {
             // Record comprehension case
@@ -200,10 +209,11 @@ where
                 ));
                 stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
                 for e in cases {
-                    if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
-                        let v = demit!(
-                            self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)
-                        );
+                    if stry!(test_guard(
+                        self, opts, env, event, state, meta, local, &e.guard
+                    )) {
+                        let v = demit!(self
+                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
                         // NOTE: We are creating a new value so we have to clone;
                         if opts.result_needed {
                             value_vec.push(v.into_owned());
@@ -238,10 +248,11 @@ where
                 stry!(set_local_shadow(self, local, &env.meta, expr.val_id, x));
 
                 for e in cases {
-                    if stry!(test_guard(self, opts, env, event, meta, local, &e.guard)) {
-                        let v = demit!(
-                            self.execute_effectors(opts, env, event, meta, local, e, &e.exprs,)
-                        );
+                    if stry!(test_guard(
+                        self, opts, env, event, state, meta, local, &e.guard
+                    )) {
+                        let v = demit!(self
+                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
 
                         if opts.result_needed {
                             value_vec.push(v.into_owned());
@@ -266,10 +277,11 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         path: &'script Path,
-        value: Value<'event>,
+        mut value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         /* NOTE
          * This function is icky we got to do some trickery here.
@@ -353,6 +365,15 @@ where
                     };
                     event
                 }
+                Path::State(_path) => {
+                    // TODO heavy comment here for all the sorcery
+                    value = value.into_static();
+                    if segments.is_empty() {
+                        *state = mem::transmute(value);
+                        return Ok(Cow::Borrowed(state));
+                    };
+                    state
+                }
             }
         };
 
@@ -370,7 +391,7 @@ where
                         };
                     }
                     Segment::Element { expr, .. } => {
-                        let id = stry!(expr.eval_to_string(opts, env, event, meta, local));
+                        let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
                         let v: &mut Value = mem::transmute(current);
                         if let Some(map) = v.as_object_mut() {
                             current = if let Some(v) = map.get_mut(&id) {
@@ -395,7 +416,7 @@ where
         }
         if opts.result_needed {
             //Ok(Cow::Borrowed(current))
-            resolve(self, opts, env, event, meta, local, path)
+            resolve(self, opts, env, event, state, meta, local, path)
         } else {
             Ok(Cow::Borrowed(&NULL))
         }
@@ -407,6 +428,7 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
     ) -> Result<Cont<'run, 'event>> {
@@ -418,7 +440,10 @@ where
                     ..
                 } if segments.is_empty() => {
                     let port = if let Some(port) = port {
-                        Some(stry!(port.eval_to_string(opts, env, event, meta, local)).to_string())
+                        Some(
+                            stry!(port.eval_to_string(opts, env, event, state, meta, local))
+                                .to_string(),
+                        )
                     } else {
                         None
                     };
@@ -426,12 +451,15 @@ where
                 }
                 expr => {
                     let port = if let Some(port) = &expr.port {
-                        Some(stry!(port.eval_to_string(opts, env, event, meta, local)).to_string())
+                        Some(
+                            stry!(port.eval_to_string(opts, env, event, state, meta, local))
+                                .to_string(),
+                        )
                     } else {
                         None
                     };
                     Ok(Cont::Emit(
-                        stry!(expr.expr.run(opts, env, event, meta, local)).into_owned(),
+                        stry!(expr.expr.run(opts, env, event, state, meta, local)).into_owned(),
                         port,
                     ))
                 }
@@ -453,32 +481,33 @@ where
                 } else {
                     return error_oops(self, "Unknown local variable", &env.meta);
                 };
-                self.assign(opts, env, event, meta, local, &path, value)
+                self.assign(opts, env, event, state, meta, local, &path, value)
                     .map(Cont::Cont)
             }
             Expr::Assign { expr, path, .. } => {
                 // NOTE Since we are assigning a new value we do cline here.
                 // This is intended behaviour
-                let value =
-                    demit!(expr.run(opts.with_result(), env, event, meta, local)).into_owned();
-                self.assign(opts, env, event, meta, local, &path, value)
+                let value = demit!(expr.run(opts.with_result(), env, event, state, meta, local))
+                    .into_owned();
+                self.assign(opts, env, event, state, meta, local, &path, value)
                     .map(Cont::Cont)
             }
-            Expr::Match(ref expr) => self.match_expr(opts, env, event, meta, local, expr),
+            Expr::Match(ref expr) => self.match_expr(opts, env, event, state, meta, local, expr),
             Expr::MergeInPlace(ref expr) => self
-                .merge_in_place(opts, env, event, meta, local, expr)
+                .merge_in_place(opts, env, event, state, meta, local, expr)
                 .map(Cont::Cont),
             Expr::PatchInPlace(ref expr) => self
-                .patch_in_place(opts, env, event, meta, local, expr)
+                .patch_in_place(opts, env, event, state, meta, local, expr)
                 .map(Cont::Cont),
             Expr::Comprehension(ref expr) => {
-                self.comprehension(opts, env, event, meta, local, expr)
+                self.comprehension(opts, env, event, state, meta, local, expr)
             }
             Expr::Imut(expr) => {
                 // If we don't need the result of a imutable value then we
                 // don't need to evalute it.
                 if opts.result_needed {
-                    expr.run(opts, env, event, meta, local).map(Cont::Cont)
+                    expr.run(opts, env, event, state, meta, local)
+                        .map(Cont::Cont)
                 } else {
                     Ok(Cont::Cont(Cow::Borrowed(&NULL)))
                 }
