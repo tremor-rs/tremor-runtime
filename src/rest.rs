@@ -87,33 +87,6 @@ mod test {
 
     // NOTE We use postman's echo service for convenience
 
-    /* FIXME delete .unwrap()
-    #[test]
-    fn test_get_method() -> Result<()> {
-        let rest_cli = HttpC::new(ECHO.to_string());
-        let res = rest_cli.get("/get")?.send()?;
-        assert_eq!(200, res.status());
-
-        Ok(())
-    }
-
-        #[test]
-        fn test_patch_method() -> Result<()> {
-            let rest_cli = HttpC::new(ECHO.to_string());
-            let res = dbg!(rest_cli.patch("/patch")?.send()?);
-            assert_eq!(200, res.status());
-            Ok(())
-        }
-
-        #[test]
-        fn test_delete_method() -> Result<()> {
-            let rest_cli = HttpC::new(ECHO.to_string());
-            let res = dbg!(rest_cli.delete("/delete")?.send()?);
-            assert_eq!(200, res.status());
-            Ok(())
-        }
-    */
-
     #[test]
     fn test_post_method() -> Result<()> {
         let rest_cli = HttpC::new(ECHO.to_string());

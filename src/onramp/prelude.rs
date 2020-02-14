@@ -17,20 +17,14 @@ pub(crate) use crate::errors::*;
 pub(crate) use crate::metrics::RampReporter;
 pub(crate) use crate::onramp::{self, Onramp};
 pub(crate) use crate::preprocessor::{self, Preprocessors};
-//pub(crate) use crate::repository::ServantId;
 pub(crate) use crate::system::{PipelineAddr, PipelineMsg, METRICS_PIPELINE};
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{nanotime, ConfigImpl};
 pub(crate) use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
-//pub(crate) use halfbrown::HashMap;
 pub(crate) use simd_json::json;
-//pub(crate) use std::borrow::Cow;
 // TODO pub here too?
 use std::mem;
 pub(crate) use std::thread;
-//pub(crate) use tremor_pipeline::EventOriginUri;
-//pub(crate) use tremor_script::prelude::*;
-//pub use tremor_script::LineValue;
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors

@@ -32,19 +32,6 @@ where
     'script: 'event,
     'event: 'run,
 {
-    /*
-        #[inline]
-        pub(crate) fn eval_to_string(
-            &'script self,
-            opts: ExecOpts,
-            env: &'run Env<'run, 'event, 'script>,
-            event: &'run Value<'event>,
-            meta: &'run Value<'event>,
-            local: &'run LocalStack<'event>,
-        ) -> Result<Cow<'event, str>> {
-            self.0.eval_to_string(opts, env, event, meta, local)
-        }
-    */
     /// Evaluates the expression
     pub fn run(
         &'script self,
