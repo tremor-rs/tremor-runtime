@@ -14,6 +14,7 @@
 
 //NOTE: error_chain
 #![allow(deprecated)]
+#![allow(missing_docs)]
 #![allow(clippy::large_enum_variant)]
 
 use crate::async_sink;

@@ -19,17 +19,18 @@ use simd_json::json;
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 
+/// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
 #[derive(Debug)]
-pub struct Ramp {
+pub(crate) struct Ramp {
     r#in: u64,
     out: u64,
     error: u64,
 }
 
 #[derive(Debug)]
-pub struct RampReporter {
+pub(crate) struct RampReporter {
     artefact_url: TremorURL,
     metrics: Ramp,
     metrics_pipeline: Option<(TremorURL, PipelineAddr)>,

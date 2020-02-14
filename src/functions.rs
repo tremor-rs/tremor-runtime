@@ -14,9 +14,9 @@
 
 use crate::errors::*;
 use tremor_pipeline::FN_REGISTRY;
-//use tremor_script::grok;
 use tremor_script::tremor_fn;
 
+/// Loads the function library
 pub fn load() -> Result<()> {
     FN_REGISTRY
         .lock()?

@@ -25,11 +25,13 @@ pub struct Lines {
     buffer: Vec<u8>,
 }
 
-impl Lines {
-    pub fn default() -> Self {
+impl Default for Lines {
+    fn default() -> Self {
         Self::new('\n', 4096)
     }
+}
 
+impl Lines {
     // TODO have the params here as a config struct
     // also break lines on string (eg: \r\n)
     pub fn new(separator: char, max_length: usize) -> Self {

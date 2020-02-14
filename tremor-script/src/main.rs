@@ -14,6 +14,8 @@
 
 // We allow dead code and unused code in the main line because
 // it is just a utility
+// This isn't a external crate so we don't worry about docs
+// #![deny(missing_docs)]
 #![allow(dead_code, unused)]
 #![recursion_limit = "1024"]
 #![deny(

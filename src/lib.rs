@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tremor runtime
+
 #![forbid(warnings)]
+#![deny(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -30,71 +33,79 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-//#[cfg(feature = "mssql")]
-//extern crate tiberius;
-//#[cfg(feature = "kafka")]
-//extern crate tokio_threadpool;
-
 #[macro_use]
-pub mod macros;
-pub mod async_sink;
-pub mod config;
-pub mod dflt;
-pub mod errors;
-#[macro_use]
-pub mod functions;
+pub(crate) mod macros;
+pub(crate) mod async_sink;
+/// Tremor codecs
 pub mod codec;
-pub mod google;
-pub mod lifecycle;
+/// Tremor runtime configuration
+pub mod config;
+pub(crate) mod dflt;
+/// Tremor runtime errors
+pub mod errors;
+/// Tremor function library
+pub mod functions;
+pub(crate) mod google;
+pub(crate) mod lifecycle;
+/// Runtime metrics helper
 pub mod metrics;
-pub mod offramp;
-pub mod onramp;
-pub mod postprocessor;
-pub mod preprocessor;
+pub(crate) mod offramp;
+pub(crate) mod onramp;
+pub(crate) mod postprocessor;
+pub(crate) mod preprocessor;
+/// Tremor registry
 pub mod registry;
+/// The tremor repository
 pub mod repository;
+/// REST  helpers
 pub mod rest;
+/// Tremor runtime system
 pub mod system;
+/// Tremor URI
 pub mod url;
+/// Utility functions
 pub mod utils;
+/// Tremor runtime version tools
 pub mod version;
 
 use crate::errors::*;
 use tremor_pipeline;
 
-pub type OnRampVec = Vec<OnRamp>;
-pub type OffRampVec = Vec<OffRamp>;
-pub type BindingVec = config::BindingVec;
-pub type PipelineVec = Vec<tremor_pipeline::Pipeline>;
-pub type MappingMap = config::MappingMap;
+pub(crate) type OnRampVec = Vec<OnRamp>;
+pub(crate) type OffRampVec = Vec<OffRamp>;
+pub(crate) type BindingVec = config::BindingVec;
+pub(crate) type PipelineVec = Vec<tremor_pipeline::Pipeline>;
+pub(crate) type MappingMap = config::MappingMap;
 
-pub use crate::config::Binding;
-pub use crate::config::Config;
-pub use crate::config::OffRamp;
-pub use crate::config::OnRamp;
-pub use serde_yaml::Value as OpConfig;
-pub use tremor_pipeline::Event;
+pub(crate) use crate::config::Binding;
+//pub(crate) use crate::config::Config;
+pub(crate) use crate::config::OffRamp;
+pub(crate) use crate::config::OnRamp;
+pub(crate) use serde_yaml::Value as OpConfig;
+pub(crate) use tremor_pipeline::Event;
 
+/// In incarnated config
 #[derive(Debug)]
-pub struct Todo {
+pub struct IncarnatedConfig {
+    /// Onramps
     pub onramps: OnRampVec,
+    /// Offramps
     pub offramps: OffRampVec,
+    /// Bindings
     pub bindings: BindingVec,
+    /// Pipelines
     pub pipes: PipelineVec,
+    /// Mappings
     pub mappings: MappingMap,
 }
 
-pub fn incarnate(config: config::Config) -> Result<Todo> {
+/// Incarnates a configuration into it's runnable state
+pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
     let onramps = incarnate_onramps(config.onramp.clone());
     let offramps = incarnate_offramps(config.offramp.clone());
     let bindings = incarnate_links(&config.binding);
     let pipes = incarnate_pipes(config.pipeline)?;
-    // validate links ...
-    // ... registry
-    // check conflicts ( deploys, pipes )
-    // check deps ( links )
-    // push deploys, pipes, .... links ( always last )
-    Ok(Todo {
+    Ok(IncarnatedConfig {
         onramps,
         offramps,
         bindings,
@@ -115,7 +126,7 @@ fn incarnate_links(config: &[Binding]) -> BindingVec {
     config.to_owned()
 }
 
-pub fn incarnate_pipes(config: config::PipelineVec) -> Result<PipelineVec> {
+fn incarnate_pipes(config: config::PipelineVec) -> Result<PipelineVec> {
     config
         .into_iter()
         .map(|d| Ok(tremor_pipeline::build_pipeline(d)?))

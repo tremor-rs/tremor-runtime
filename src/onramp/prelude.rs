@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use crate::codec::{self, Codec};
-pub use crate::errors::*;
-pub use crate::metrics::RampReporter;
-pub use crate::onramp::{self, Onramp};
-pub use crate::preprocessor::{self, Preprocessor, Preprocessors};
-pub use crate::repository::ServantId;
-pub use crate::system::{PipelineAddr, PipelineMsg, METRICS_PIPELINE};
-pub use crate::url::TremorURL;
-pub use crate::utils::{nanotime, ConfigImpl};
-pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
-pub use halfbrown::HashMap;
-pub use simd_json::{json, OwnedValue};
-pub use std::borrow::Cow;
+pub(crate) use crate::codec::{self, Codec};
+pub(crate) use crate::errors::*;
+pub(crate) use crate::metrics::RampReporter;
+pub(crate) use crate::onramp::{self, Onramp};
+pub(crate) use crate::preprocessor::{self, Preprocessors};
+//pub(crate) use crate::repository::ServantId;
+pub(crate) use crate::system::{PipelineAddr, PipelineMsg, METRICS_PIPELINE};
+pub(crate) use crate::url::TremorURL;
+pub(crate) use crate::utils::{nanotime, ConfigImpl};
+pub(crate) use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+//pub(crate) use halfbrown::HashMap;
+pub(crate) use simd_json::json;
+//pub(crate) use std::borrow::Cow;
 // TODO pub here too?
 use std::mem;
-pub use std::thread;
-pub use tremor_pipeline::{Event, EventOriginUri};
-pub use tremor_script::prelude::*;
+pub(crate) use std::thread;
+//pub(crate) use tremor_pipeline::EventOriginUri;
+//pub(crate) use tremor_script::prelude::*;
 //pub use tremor_script::LineValue;
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
@@ -68,7 +68,7 @@ pub fn handle_pp(
     clippy::too_many_lines,
     clippy::too_many_arguments
 )]
-pub fn send_event(
+pub(crate) fn send_event(
     pipelines: &[(TremorURL, PipelineAddr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,

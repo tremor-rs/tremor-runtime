@@ -18,15 +18,14 @@ use std::io::Result;
 use yup_oauth2::{service_account_key_from_file, ServiceAccountAccess};
 
 /// Type alias for authenticating against GCP based on service accounts
-pub type GcpServiceAccess = (Client, ServiceAccountAccess<Client>);
 
 /// Type alias for access to Google Cloud storage
-pub type GcsHub = google_storage1::Storage<Client, ServiceAccountAccess<Client>>;
+pub(crate) type GcsHub = google_storage1::Storage<Client, ServiceAccountAccess<Client>>;
 
 /// Type alias for access to Google `PubSub`
-pub type GpsHub = google_pubsub1::Pubsub<Client, ServiceAccountAccess<Client>>;
+pub(crate) type GpsHub = google_pubsub1::Pubsub<Client, ServiceAccountAccess<Client>>;
 
-pub fn storage_api(secrets_file: &str) -> Result<GcsHub> {
+pub(crate) fn storage_api(secrets_file: &str) -> Result<GcsHub> {
     let client = hyper::Client::with_connector(hyper::net::HttpsConnector::new(
         hyper_rustls::TlsClient::new(),
     ));
@@ -38,7 +37,7 @@ pub fn storage_api(secrets_file: &str) -> Result<GcsHub> {
     Ok(GcsHub::new(client, access))
 }
 
-pub fn pubsub_api(secrets_file: &str) -> Result<GpsHub> {
+pub(crate) fn pubsub_api(secrets_file: &str) -> Result<GpsHub> {
     let client = hyper::Client::with_connector(hyper::net::HttpsConnector::new(
         hyper_rustls::TlsClient::new(),
     ));
@@ -52,7 +51,7 @@ pub fn pubsub_api(secrets_file: &str) -> Result<GpsHub> {
 
 /// When logging level is error or debug, print the result of each
 /// request to stdout
-pub fn verbose(
+pub(crate) fn verbose(
     result: google_storage1::Result<(hyper::client::Response, google_storage1::Object)>,
 ) -> google_storage1::Result<(hyper::client::Response, google_storage1::Object)> {
     if log_enabled!(Level::Error) || log_enabled!(Level::Debug) {

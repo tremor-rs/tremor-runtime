@@ -159,11 +159,11 @@ while getopts hauiprebldxc opt; do
                     echo "##[error] $file does not enforce clippy::all."
                     count=$((count + 1))
                 fi
-                if  grep 'clippy::missing_errors_doc' "$file" > /dev/null
-                then
-                    echo "##[error] $file does not enforce clippy::missing_errors_doc is mentioend but shouldn't be allowed."
-                    count=$((count + 1))
-                fi
+                # if  grep 'clippy::missing_errors_doc' "$file" > /dev/null
+                # then
+                #     echo "##[error] $file does not enforce clippy::missing_errors_doc is mentioend but shouldn't be allowed."
+                #     count=$((count + 1))
+                # fi
                 if  ! grep 'missing_docs' "$file" > /dev/null
                 then
                     echo "##[error] $file does not enforce missing_docs."

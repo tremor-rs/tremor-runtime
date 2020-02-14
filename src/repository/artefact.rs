@@ -23,25 +23,31 @@ use crate::url::{ResourceType, TremorURL};
 use futures::future::Future;
 use hashbrown::HashMap;
 use tremor_pipeline::query;
-pub type Id = TremorURL;
-pub use crate::OffRamp as OfframpArtefact;
-pub use crate::OnRamp as OnrampArtefact;
+pub(crate) type Id = TremorURL;
+pub(crate) use crate::OffRamp as OfframpArtefact;
+pub(crate) use crate::OnRamp as OnrampArtefact;
 use crossbeam_channel::bounded;
 
+/// A Binding
 #[derive(Clone, Debug)]
 pub struct Binding {
+    /// The binding itself
     pub binding: crate::Binding,
+    /// The mappings
     pub mapping: Option<crate::config::MappingMap>,
 }
 
+/// A Pipeline
 #[derive(Clone)]
 pub enum Pipeline {
+    /// A normal pipeline
     Pipeline(Box<tremor_pipeline::Pipeline>),
+    /// A query based pipeline
     Query(query::Query),
 }
 
 impl Pipeline {
-    pub fn to_executable_graph(
+    pub(crate) fn to_executable_graph(
         &self,
         resolver: tremor_pipeline::NodeLookupFn,
     ) -> Result<tremor_pipeline::ExecutableGraph> {

@@ -87,12 +87,7 @@ impl<T> AsyncSink<T> {
             },
         }
     }
-    pub fn empty(&mut self) -> Result<()> {
-        while let Some(rx) = self.queue.pop_front() {
-            rx.recv()??;
-        }
-        Ok(())
-    }
+
     pub fn has_capacity(&self) -> bool {
         self.size < self.capacity
     }

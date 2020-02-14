@@ -23,7 +23,7 @@ use tremor_runtime::repository::PipelineArtefact;
 
 #[derive(Serialize)]
 struct PipelineWrap {
-    artefact: tremor_pipeline::config::Pipeline,
+    pub artefact: tremor_pipeline::config::Pipeline,
     instances: Vec<String>,
 }
 

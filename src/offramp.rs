@@ -107,12 +107,12 @@ impl Actor for Manager {
     }
 }
 
-pub struct Create {
-    pub id: ServantId,
-    pub offramp: Box<dyn Offramp>,
-    pub codec: Box<dyn Codec>,
-    pub postprocessors: Vec<String>,
-    pub metrics_reporter: RampReporter,
+pub(crate) struct Create {
+    pub(crate) id: ServantId,
+    pub(crate) offramp: Box<dyn Offramp>,
+    pub(crate) codec: Box<dyn Codec>,
+    pub(crate) postprocessors: Vec<String>,
+    pub(crate) metrics_reporter: RampReporter,
 }
 
 impl fmt::Debug for Create {
