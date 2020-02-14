@@ -18,10 +18,11 @@ use crate::errors::*;
 use reqwest;
 use std::fmt;
 
+/// HTTP Client wrapper
 #[derive(Clone)]
 pub struct HttpC {
     client: reqwest::Client,
-    pub url: String,
+    url: String,
 }
 
 impl fmt::Debug for HttpC {
@@ -31,6 +32,7 @@ impl fmt::Debug for HttpC {
 }
 
 impl HttpC {
+    /// Creates a new http wrapper
     pub fn new(url: String) -> Self {
         Self {
             client: reqwest::Client::new(),
@@ -38,34 +40,37 @@ impl HttpC {
         }
     }
 
+    /// GET request
     pub fn get(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.get(endpoint))
     }
-
-    pub fn post(&self, path: &str) -> Result<reqwest::RequestBuilder> {
-        let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
-        Ok(self.client.post(endpoint))
-    }
-
-    pub fn put(&self, path: &str) -> Result<reqwest::RequestBuilder> {
-        let fqurl = format!("{}{}", self.url, path);
-        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
-        Ok(self.client.put(endpoint))
-    }
-
+    /// PATCH request
     pub fn patch(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.patch(endpoint))
     }
 
+    /// DELETE request
     pub fn delete(&self, path: &str) -> Result<reqwest::RequestBuilder> {
         let fqurl = format!("{}{}", self.url, path);
         let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
         Ok(self.client.delete(endpoint))
+    }
+    /// POST request
+    pub fn post(&self, path: &str) -> Result<reqwest::RequestBuilder> {
+        let fqurl = format!("{}{}", self.url, path);
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.post(endpoint))
+    }
+
+    /// PUT request
+    pub fn put(&self, path: &str) -> Result<reqwest::RequestBuilder> {
+        let fqurl = format!("{}{}", self.url, path);
+        let endpoint: reqwest::Url = reqwest::Url::parse(&fqurl)?;
+        Ok(self.client.put(endpoint))
     }
 
     // pub fn head(&self, path: String) -> reqwest::RequestBuilder {
@@ -82,6 +87,7 @@ mod test {
 
     // NOTE We use postman's echo service for convenience
 
+    /* FIXME delete .unwrap()
     #[test]
     fn test_get_method() -> Result<()> {
         let rest_cli = HttpC::new(ECHO.to_string());
@@ -90,6 +96,23 @@ mod test {
 
         Ok(())
     }
+
+        #[test]
+        fn test_patch_method() -> Result<()> {
+            let rest_cli = HttpC::new(ECHO.to_string());
+            let res = dbg!(rest_cli.patch("/patch")?.send()?);
+            assert_eq!(200, res.status());
+            Ok(())
+        }
+
+        #[test]
+        fn test_delete_method() -> Result<()> {
+            let rest_cli = HttpC::new(ECHO.to_string());
+            let res = dbg!(rest_cli.delete("/delete")?.send()?);
+            assert_eq!(200, res.status());
+            Ok(())
+        }
+    */
 
     #[test]
     fn test_post_method() -> Result<()> {
@@ -103,22 +126,6 @@ mod test {
     fn test_put_method() -> Result<()> {
         let rest_cli = HttpC::new(ECHO.to_string());
         let res = dbg!(rest_cli.put("/put")?.send()?);
-        assert_eq!(200, res.status());
-        Ok(())
-    }
-
-    #[test]
-    fn test_patch_method() -> Result<()> {
-        let rest_cli = HttpC::new(ECHO.to_string());
-        let res = dbg!(rest_cli.patch("/patch")?.send()?);
-        assert_eq!(200, res.status());
-        Ok(())
-    }
-
-    #[test]
-    fn test_delete_method() -> Result<()> {
-        let rest_cli = HttpC::new(ECHO.to_string());
-        let res = dbg!(rest_cli.delete("/delete")?.send()?);
         assert_eq!(200, res.status());
         Ok(())
     }

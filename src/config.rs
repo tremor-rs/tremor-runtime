@@ -17,73 +17,79 @@ use crate::url::TremorURL;
 use hashbrown::HashMap;
 use tremor_pipeline::config as dynaconfig;
 
-pub type ID = String;
+pub(crate) type ID = String;
+pub(crate) type OnRampVec = Vec<OnRamp>;
+pub(crate) type OffRampVec = Vec<OffRamp>;
+pub(crate) type PipelineVec = Vec<dynaconfig::Pipeline>;
+pub(crate) type BindingVec = Vec<Binding>;
+pub(crate) type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
+pub(crate) type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
 
-pub type OnRampVec = Vec<OnRamp>;
-pub type OffRampVec = Vec<OffRamp>;
-pub type PipelineVec = Vec<dynaconfig::Pipeline>;
-pub type BindingVec = Vec<Binding>;
-pub type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
-pub type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
-
+/// A full tremopr config
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "dflt")]
-    pub onramp: OnRampVec,
+    pub(crate) onramp: OnRampVec,
     #[serde(default = "dflt")]
-    pub offramp: OffRampVec,
+    pub(crate) offramp: OffRampVec,
     #[serde(default = "dflt")]
-    pub binding: Vec<Binding>,
+    pub(crate) binding: Vec<Binding>,
     #[serde(default = "dflt")]
-    pub pipeline: PipelineVec,
+    pub(crate) pipeline: PipelineVec,
     #[serde(default = "dflt")]
-    pub mapping: MappingMap,
+    pub(crate) mapping: MappingMap,
 }
 
+/// Configuration for an onramp
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OnRamp {
-    #[serde(rename = "type")]
-    pub binding_type: String,
+    /// ID of the onramp
     pub id: ID,
+    #[serde(rename = "type")]
+    pub(crate) binding_type: String,
     #[serde(default = "dflt")]
-    pub description: String,
+    pub(crate) description: String,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
-    pub codec: Option<String>,
+    pub(crate) codec: Option<String>,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
-    pub preprocessors: Option<Vec<String>>,
+    pub(crate) preprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metrics_interval_s: Option<u64>,
+    pub(crate) metrics_interval_s: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: dynaconfig::ConfigMap,
+    pub(crate) config: dynaconfig::ConfigMap,
 }
 
+/// Configuration of an offramp
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OffRamp {
-    #[serde(rename = "type")]
-    pub binding_type: String,
+    /// ID of the offramp
     pub id: ID,
+    #[serde(rename = "type")]
+    pub(crate) binding_type: String,
     #[serde(default = "dflt")]
-    pub description: String,
+    pub(crate) description: String,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
-    pub codec: Option<String>,
+    pub(crate) codec: Option<String>,
     #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
-    pub postprocessors: Option<Vec<String>>,
+    pub(crate) postprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metrics_interval_s: Option<u64>,
+    pub(crate) metrics_interval_s: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: dynaconfig::ConfigMap,
+    pub(crate) config: dynaconfig::ConfigMap,
 }
 
+/// Configuration for a Binding
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Binding {
+    /// ID of the binding
     pub id: ID,
     #[serde(default = "dflt")]
-    pub description: String,
-    pub links: BindingMap, // is this right? this should be url to url?
+    pub(crate) description: String,
+    pub(crate) links: BindingMap, // is this right? this should be url to url?
 }
 
 #[cfg(test)]

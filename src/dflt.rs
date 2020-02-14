@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{convert, f64};
+use std::convert;
 
 // just a default
 #[cfg_attr(tarpaulin, skip)]
@@ -37,50 +37,11 @@ where
 
 // just a default
 #[cfg_attr(tarpaulin, skip)]
-pub fn d_1<T>() -> T
-where
-    T: convert::From<u8>,
-{
-    T::from(1)
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
-pub fn d_inf() -> f64 {
-    f64::INFINITY
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_4<T>() -> T
 where
     T: convert::From<u8>,
 {
     T::from(4)
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
-pub fn d_100<T>() -> T
-where
-    T: convert::From<u8>,
-{
-    T::from(100)
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
-pub fn d_1000<T>() -> T
-where
-    T: convert::From<u16>,
-{
-    T::from(1000)
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
-pub fn d_none<T>() -> Option<T> {
-    None
 }
 
 // just a default

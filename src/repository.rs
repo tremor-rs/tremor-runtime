@@ -24,26 +24,35 @@ use std::default::Default;
 use std::fmt;
 use std::marker::PhantomData;
 
+/// A Servant ID
 pub use crate::registry::ServantId;
+/// A binding artefact
 pub use artefact::Binding as BindingArtefact;
-pub use artefact::OfframpArtefact;
-pub use artefact::OnrampArtefact;
+pub(crate) use artefact::OfframpArtefact;
+pub(crate) use artefact::OnrampArtefact;
+/// A pipeline artefact
 pub use artefact::Pipeline as PipelineArtefact;
-pub use artefact::{Artefact, Id as ArtefactId};
+pub(crate) use artefact::{Artefact, Id as ArtefactId};
 
+/// Wrapper around a repository
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoWrapper<A: Artefact> {
+    /// The artefact
     pub artefact: A,
+    /// Instances of this artefact
     pub instances: Vec<ServantId>,
+    /// If this is a protected system artefact
     pub system: bool,
 }
 
+/// Repository for artefacts
 #[derive(Default, Debug)]
-pub struct Repository<A: Artefact> {
+pub(crate) struct Repository<A: Artefact> {
     map: HashMap<ArtefactId, RepoWrapper<A>>,
 }
 
 impl<A: Artefact> Repository<A> {
+    /// Retrives the wraped artefacts
     pub fn values(&self) -> Vec<A> {
         self.map
             .values()
@@ -56,26 +65,27 @@ impl<A: Artefact> Repository<A> {
             })
             .collect()
     }
-
+    /// Number of artefacts in this repository
     pub fn count(&self) -> usize {
         self.map.len()
     }
-
+    /// New repository
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
         }
     }
-
+    /// Retreives the artifact Id's
     pub fn keys(&self) -> Vec<ArtefactId> {
         self.map.keys().cloned().collect()
     }
-
+    /// Finds an artefact by ID
     pub fn find(&self, mut id: ArtefactId) -> Option<&RepoWrapper<A>> {
         id.trim_to_artefact();
         self.map.get(&id)
     }
 
+    /// Publishes an artefact
     pub fn publish(&mut self, mut id: ArtefactId, system: bool, artefact: A) -> Result<&A> {
         id.trim_to_artefact();
         match self.map.entry(id.clone()) {
@@ -89,7 +99,7 @@ impl<A: Artefact> Repository<A> {
                 .artefact),
         }
     }
-
+    /// Unpublishes an artefact
     pub fn unpublish(&mut self, mut id: ArtefactId) -> Result<A> {
         id.trim_to_artefact();
         match self.map.entry(id.clone()) {
@@ -108,6 +118,7 @@ impl<A: Artefact> Repository<A> {
         }
     }
 
+    /// Binds an artefact to a given servant
     pub fn bind(&mut self, mut id: ArtefactId, mut sid: ServantId) -> Result<&A> {
         id.trim_to_artefact();
         sid.trim_to_instance();
@@ -119,7 +130,7 @@ impl<A: Artefact> Repository<A> {
             None => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
         }
     }
-
+    /// Unbinds an artefact with a given servant
     pub fn unbind(&mut self, mut id: ArtefactId, mut sid: ServantId) -> Result<&A> {
         id.trim_to_artefact();
         sid.trim_to_instance();
@@ -140,7 +151,7 @@ impl<A: 'static + Artefact> Actor for Repository<A> {
     }
 }
 
-struct ListArtefacts<A: Artefact> {
+pub(crate) struct ListArtefacts<A: Artefact> {
     _a: PhantomData<A>,
 }
 
@@ -308,6 +319,7 @@ impl<A: 'static + Artefact> Handler<system::Count> for Repository<A> {
     }
 }
 
+/// Repositories
 #[derive(Clone)]
 pub struct Repositories {
     pipeline: Addr<Repository<PipelineArtefact>>,
@@ -329,6 +341,7 @@ impl Default for Repositories {
 }
 
 impl Repositories {
+    /// Creates an empty repository
     pub fn new() -> Self {
         Self {
             pipeline: Repository::create(|_ctx| Repository::new()),
@@ -338,14 +351,17 @@ impl Repositories {
         }
     }
 
+    /// List the pipelines
     pub fn list_pipelines(&self) -> Result<Vec<ArtefactId>> {
         self.pipeline.send(ListArtefacts::new()).wait()?
     }
 
+    /// Serialises the pipelines
     pub fn serialize_pipelines(&self) -> Result<Vec<PipelineArtefact>> {
         self.pipeline.send(SerializeArtefacts::new()).wait()?
     }
 
+    /// Find a pipeline
     pub fn find_pipeline(&self, id: &TremorURL) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
         Ok(self
             .pipeline
@@ -353,6 +369,7 @@ impl Repositories {
             .wait()?)
     }
 
+    /// Publish a pipeline
     pub fn publish_pipeline(
         &self,
         id: &TremorURL,
@@ -368,6 +385,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unpublish a pipeline
     pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(UnpublishArtefact {
@@ -377,6 +395,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Bind a pipeline
     pub fn bind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(RegisterInstance::new(
@@ -386,6 +405,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unbinds a pipeline
     pub fn unbind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         self.pipeline
             .send(UnregisterInstance::new(
@@ -395,14 +415,17 @@ impl Repositories {
             .wait()?
     }
 
+    /// List onramps
     pub fn list_onramps(&self) -> Result<Vec<ArtefactId>> {
         self.onramp.send(ListArtefacts::new()).wait()?
     }
 
+    /// serializes onramps
     pub fn serialize_onramps(&self) -> Result<Vec<OnrampArtefact>> {
         self.onramp.send(SerializeArtefacts::new()).wait()?
     }
 
+    /// find an onramp
     pub fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
         Ok(self
             .onramp
@@ -410,6 +433,7 @@ impl Repositories {
             .wait()?)
     }
 
+    /// Publish onramp
     pub fn publish_onramp(
         &self,
         id: &TremorURL,
@@ -425,6 +449,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unpublish an onramp
     pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(UnpublishArtefact {
@@ -434,6 +459,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Binds an onramp
     pub fn bind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(RegisterInstance::new(
@@ -443,6 +469,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unbinds an onramp
     pub fn unbind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         self.onramp
             .send(UnregisterInstance::new(
@@ -452,14 +479,17 @@ impl Repositories {
             .wait()?
     }
 
+    /// List offramps
     pub fn list_offramps(&self) -> Result<Vec<ArtefactId>> {
         self.offramp.send(ListArtefacts::new()).wait()?
     }
 
+    /// Serialises offramps
     pub fn serialize_offramps(&self) -> Result<Vec<OfframpArtefact>> {
         self.offramp.send(SerializeArtefacts::new()).wait()?
     }
 
+    /// Find an offramp
     pub fn find_offramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
         Ok(self
             .offramp
@@ -467,6 +497,7 @@ impl Repositories {
             .wait()?)
     }
 
+    /// Publishes an offramp
     pub fn publish_offramp(
         &self,
         id: &TremorURL,
@@ -482,6 +513,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unpublishes an offramp
     pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(UnpublishArtefact {
@@ -491,6 +523,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Binds an offramp
     pub fn bind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(RegisterInstance::new(
@@ -500,6 +533,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unbinds an offramp
     pub fn unbind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         self.offramp
             .send(UnregisterInstance::new(
@@ -509,14 +543,17 @@ impl Repositories {
             .wait()?
     }
 
+    /// Lists bindings
     pub fn list_bindings(&self) -> Result<Vec<ArtefactId>> {
         self.binding.send(ListArtefacts::new()).wait()?
     }
 
+    /// Serialises bindings
     pub fn serialize_bindings(&self) -> Result<Vec<BindingArtefact>> {
         self.binding.send(SerializeArtefacts::new()).wait()?
     }
 
+    /// Find a binding
     pub fn find_binding(&self, id: &TremorURL) -> Result<Option<RepoWrapper<BindingArtefact>>> {
         Ok(self
             .binding
@@ -524,6 +561,7 @@ impl Repositories {
             .wait()?)
     }
 
+    /// Publish a binding
     pub fn publish_binding(
         &self,
         id: &TremorURL,
@@ -539,6 +577,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unpublishes a binding
     pub fn unpublish_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(UnpublishArtefact {
@@ -548,6 +587,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Binds a binding
     pub fn bind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(RegisterInstance::new(
@@ -557,6 +597,7 @@ impl Repositories {
             .wait()?
     }
 
+    /// Unbinds a binding
     pub fn unbind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         self.binding
             .send(UnregisterInstance::new(

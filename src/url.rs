@@ -17,22 +17,33 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use url;
 
+/// The type or resource the url references
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum ResourceType {
+    /// This is a pipeline
     Pipeline,
+    /// This is a onramp
     Onramp,
+    /// This is a offramop
     Offramp,
+    /// This is a binding
     Binding,
 }
 
+/// The scrope of the URL
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Scope {
+    /// This URL identifies a specific port
     Port,
-    Type,
-    Artefact,
+    /// This URL identifies a servant (a running instance)
     Servant,
+    /// This URL identifes an artefact (a non running configuration)
+    Artefact,
+    /// This URL identifies a type of artefact
+    Type,
 }
 
+/// A tremor URL identifying an entity in tremor
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TremorURL {
     scope: Scope,
@@ -83,14 +94,17 @@ impl fmt::Display for TremorURL {
 }
 
 impl TremorURL {
+    /// Creates an URL from a given onramp id
     pub fn from_onramp_id(id: &str) -> Result<Self> {
         Self::parse(&format!("/onramp/{}", id))
     }
 
+    /// Creates an URL from a given offramp id
     pub fn from_offramp_id(id: &str) -> Result<Self> {
         Self::parse(&format!("/offramp/{}", id))
     }
 
+    /// Parses a string into a Trmeor URL
     pub fn parse(url: &str) -> Result<Self> {
         let (r, relative) = Self::parse_url(url, false)?;
 
@@ -191,17 +205,22 @@ impl TremorURL {
         }
     }
 
+    /// Trims the url to the instance
     pub fn trim_to_instance(&mut self) {
         self.instance_port = None;
         self.scope = Scope::Servant;
     }
 
+    /// Trims the url to the artefact
     pub fn trim_to_artefact(&mut self) {
         self.instance_port = None;
         self.instance = None;
         self.scope = Scope::Artefact;
     }
 
+    /// Sets the instance of the URL, will extend
+    /// the scope to `Scope::Servant` if it was
+    /// `Artefact` before.
     pub fn set_instance(&mut self, i: String) {
         self.instance = Some(i);
         if self.scope == Scope::Artefact {
@@ -209,6 +228,9 @@ impl TremorURL {
         }
     }
 
+    /// Sets the port of the URL, will extend
+    /// the scope to `Scope::Port` if it was
+    /// `Servant` before.
     pub fn set_port(&mut self, i: String) {
         self.instance_port = Some(i);
         if self.scope == Scope::Servant {
@@ -216,18 +238,24 @@ impl TremorURL {
         }
     }
 
+    /// Retrives the instance
     pub fn instance(&self) -> Option<String> {
         self.instance.clone()
     }
+
+    /// Retrives the artefact
     pub fn artefact(&self) -> Option<String> {
         self.artefact.clone()
     }
+    /// Retrives the port
     pub fn instance_port(&self) -> Option<String> {
         self.instance_port.clone()
     }
+    /// Retrives the type
     pub fn resource_type(&self) -> Option<ResourceType> {
         self.resource_type
     }
+    /// Retrives the scope
     pub fn scope(&self) -> Scope {
         self.scope
     }

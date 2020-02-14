@@ -15,20 +15,23 @@
 use crate::errors::*;
 use simd_json::BorrowedValue;
 use tremor_script::LineValue;
-pub mod influx;
-pub mod json;
-pub mod msgpack;
-pub mod null;
-pub mod statsd;
-pub mod string;
-pub mod yaml;
+pub(crate) mod influx;
+pub(crate) mod json;
+pub(crate) mod msgpack;
+pub(crate) mod null;
+pub(crate) mod statsd;
+pub(crate) mod string;
+pub(crate) mod yaml;
 
+/// The codec trait, to encode and decode data
 pub trait Codec: Send {
+    /// Decode a binary, into an Value
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
+    /// Encodes a Value into a binary
     fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
 }
 
-// just a lookup
+/// Codec lookup function
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {

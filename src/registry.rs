@@ -60,7 +60,7 @@ pub use servant::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Servant<A>
+pub(crate) struct Servant<A>
 where
     A: Artefact,
 {
@@ -70,7 +70,7 @@ where
 }
 
 #[derive(Default, Debug)]
-pub struct Registry<A: Artefact> {
+pub(crate) struct Registry<A: Artefact> {
     map: HashMap<ServantId, ActivatorLifecycleFsm<A>>,
 }
 
@@ -84,10 +84,6 @@ impl<A: Artefact> Registry<A> {
     pub fn find(&self, mut id: ServantId) -> Option<&ActivatorLifecycleFsm<A>> {
         id.trim_to_instance();
         self.map.get(&id)
-    }
-
-    pub fn values(&self) -> Vec<A> {
-        self.map.values().map(|a| a.artefact.clone()).collect()
     }
 
     #[cfg(test)]
@@ -128,6 +124,7 @@ impl<A: 'static + Artefact> Actor for Registry<A> {
     }
 }
 
+/// Serilizer for a servant used to allow sendability
 pub struct SerializeServants<A: Artefact> {
     _a: PhantomData<A>,
 }
@@ -264,6 +261,7 @@ impl<A: 'static + Artefact> Handler<Transition<A>> for Registry<A> {
     }
 }
 
+/// The tremor registry holding running artifacts
 #[derive(Clone)]
 pub struct Registries {
     pipeline: Addr<Registry<PipelineArtefact>>,
@@ -284,6 +282,7 @@ impl Default for Registries {
 }
 
 impl Registries {
+    /// Create a new Registry
     pub fn new() -> Self {
         Self {
             pipeline: Registry::create(|_ctx| Registry::new()),
@@ -292,7 +291,7 @@ impl Registries {
             binding: Registry::create(|_ctx| Registry::new()),
         }
     }
-
+    /// serialize the mappings of this registry
     pub fn serialize_mappings(&self) -> Result<crate::config::MappingMap> {
         let r = self
             .binding
@@ -306,6 +305,7 @@ impl Registries {
             });
         Ok(r)
     }
+    /// Finds a pipeline
     pub fn find_pipeline(
         &self,
         id: &TremorURL,
@@ -315,7 +315,7 @@ impl Registries {
             .send(FindServant::new(PipelineArtefact::servant_id(id)?))
             .wait()?)
     }
-
+    /// Publishes a pipeline
     pub fn publish_pipeline(
         &self,
         id: &TremorURL,
@@ -329,6 +329,7 @@ impl Registries {
             .wait()?
     }
 
+    /// unpublishes a pipeline
     pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         self.pipeline
             .send(UnpublishServant {
@@ -337,6 +338,7 @@ impl Registries {
             .wait()?
     }
 
+    /// for testing only
     #[cfg(test)]
     pub fn transition_pipeline(
         &self,
@@ -350,7 +352,7 @@ impl Registries {
             ))
             .wait()?
     }
-
+    /// Finds an onramp
     pub fn find_onramp(
         &self,
         id: &TremorURL,
@@ -360,7 +362,7 @@ impl Registries {
             .send(FindServant::new(OnrampArtefact::servant_id(id)?))
             .wait()?)
     }
-
+    /// Publishes an onramp
     pub fn publish_onramp(
         &self,
         id: &TremorURL,
@@ -373,7 +375,7 @@ impl Registries {
             })
             .wait()?
     }
-
+    /// Usnpublishes an onramp
     pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         self.onramp
             .send(UnpublishServant {
@@ -393,6 +395,7 @@ impl Registries {
             .wait()?
     }
 
+    /// Finds an onramp
     pub fn find_offramp(
         &self,
         id: &TremorURL,
@@ -403,6 +406,7 @@ impl Registries {
             .wait()?)
     }
 
+    /// Publishes an offramp
     pub fn publish_offramp(
         &self,
         id: &TremorURL,
@@ -415,7 +419,7 @@ impl Registries {
             })
             .wait()?
     }
-
+    /// Unpublishes an offramp
     pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         self.offramp
             .send(UnpublishServant {
@@ -434,7 +438,7 @@ impl Registries {
             .send(Transition::new(OfframpArtefact::servant_id(id)?, new_state))
             .wait()?
     }
-
+    /// Finds a binding
     pub fn find_binding(
         &self,
         id: &TremorURL,
@@ -444,7 +448,7 @@ impl Registries {
             .send(FindServant::new(BindingArtefact::servant_id(id)?))
             .wait()?)
     }
-
+    /// Publishes a binding
     pub fn publish_binding(
         &self,
         id: &TremorURL,
@@ -458,6 +462,7 @@ impl Registries {
             .wait()?
     }
 
+    /// Unpublishes a binding
     pub fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
         self.binding
             .send(UnpublishServant {

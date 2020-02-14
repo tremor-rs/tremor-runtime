@@ -16,10 +16,11 @@ use chrono::{Timelike, Utc};
 use std::time::Duration;
 pub use tremor_pipeline::ConfigImpl;
 
-pub fn duration_to_millis(at: Duration) -> u64 {
+pub(crate) fn duration_to_millis(at: Duration) -> u64 {
     (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
 }
 
+/// Get a nanosecond timestamp
 #[allow(clippy::cast_sign_loss)]
 pub fn nanotime() -> u64 {
     let now = Utc::now();

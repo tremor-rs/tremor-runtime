@@ -37,32 +37,32 @@ use std::thread::JoinHandle;
 use tremor_pipeline;
 use tremor_pipeline::Event;
 
-pub use crate::offramp;
-pub use crate::onramp;
+pub(crate) use crate::offramp;
+pub(crate) use crate::onramp;
 
 lazy_static! {
-    pub static ref METRICS_PIPELINE: TremorURL = {
+    pub(crate) static ref METRICS_PIPELINE: TremorURL = {
         TremorURL::parse("/pipeline/system::metrics/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
     };
-    pub static ref STDOUT_OFFRAMP: TremorURL = {
+    pub(crate) static ref STDOUT_OFFRAMP: TremorURL = {
         TremorURL::parse("/offramp/system::stdout/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stdout offramp")
     };
-    pub static ref STDERR_OFFRAMP: TremorURL = {
+    pub(crate) static ref STDERR_OFFRAMP: TremorURL = {
         TremorURL::parse("/offramp/system::stderr/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stderr offramp")
     };
 }
 
-pub type Addr = ActixAddr<Manager>;
-pub type ActixHandle = JoinHandle<std::result::Result<(), std::io::Error>>;
+pub(crate) type Addr = ActixAddr<Manager>;
+pub(crate) type ActixHandle = JoinHandle<std::result::Result<(), std::io::Error>>;
 
 #[derive(Debug)]
-pub struct Manager {
+pub(crate) struct Manager {
     pub offramp: ActixAddr<offramp::Manager>,
     pub onramp: ActixAddr<onramp::Manager>,
     pub offramp_t: ActixHandle,
@@ -77,10 +77,11 @@ impl Actor for Manager {
     }
 }
 
+/// Address for a a pipeline
 #[derive(Clone)]
 pub struct PipelineAddr {
-    pub addr: Sender<PipelineMsg>,
-    pub id: ServantId,
+    pub(crate) addr: Sender<PipelineMsg>,
+    pub(crate) id: ServantId,
 }
 
 impl fmt::Debug for PipelineAddr {
@@ -89,7 +90,7 @@ impl fmt::Debug for PipelineAddr {
     }
 }
 
-pub struct CreatePipeline {
+pub(crate) struct CreatePipeline {
     pub config: PipelineArtefact,
     pub id: ServantId,
 }
@@ -99,7 +100,7 @@ impl Message for CreatePipeline {
 }
 
 #[derive(Debug)]
-pub enum PipelineMsg {
+pub(crate) enum PipelineMsg {
     Event {
         event: Event,
         input: Cow<'static, str>,
@@ -107,6 +108,7 @@ pub enum PipelineMsg {
     ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
     ConnectPipeline(Cow<'static, str>, TremorURL, PipelineAddr),
     Disconnect(Cow<'static, str>, TremorURL),
+    #[allow(dead_code)]
     Signal(Event),
     Insight(Event),
 }
@@ -275,7 +277,7 @@ impl Handler<onramp::Create> for Manager {
     }
 }
 
-pub struct Stop {}
+pub(crate) struct Stop {}
 
 impl Message for Stop {
     type Result = ();
@@ -307,16 +309,19 @@ impl Handler<Stop> for Manager {
     }
 }
 
-pub struct Count {}
+pub(crate) struct Count {}
 
 impl Message for Count {
     type Result = usize;
 }
 
+/// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
-    pub system: Addr,
+    pub(crate) system: Addr,
+    /// Repository
     pub repo: Repositories,
+    /// Registry
     pub reg: Registries,
     system_pipelines: HashMap<ServantId, PipelineAddr>,
     system_onramps: HashMap<ServantId, onramp::Addr>,
@@ -325,6 +330,7 @@ pub struct World {
 }
 
 impl World {
+    /// Bind a pipeline
     pub fn bind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id)?, &id.instance()) {
@@ -350,6 +356,7 @@ impl World {
         }
     }
 
+    /// Unbind a pipeline
     pub fn unbind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding pipeline {}", id);
         match (&self.repo.find_pipeline(id)?, &id.instance()) {
@@ -363,9 +370,11 @@ impl World {
         }
     }
 
+    /// Stop the runtime
     pub fn stop(&self) {
         self.system.do_send(Stop {});
     }
+    /// Links a pipeline
     pub fn link_pipeline(
         &self,
         id: &TremorURL,
@@ -384,7 +393,7 @@ impl World {
             Err(format!("Pipeline {} not found.", id).into())
         }
     }
-
+    /// Unlink a pipelein
     pub fn unlink_pipeline(
         &self,
         id: &TremorURL,
@@ -413,7 +422,7 @@ impl World {
         self.repo.publish_pipeline(id, false, artefact)?;
         self.bind_pipeline(id)
     }
-
+    /// Bind an onramp
     pub fn bind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id)?, &id.instance()) {
@@ -438,7 +447,7 @@ impl World {
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
-
+    /// Unbind an onramp
     pub fn unbind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding onramp {}", id);
         match (&self.repo.find_onramp(id)?, &id.instance()) {
@@ -452,6 +461,7 @@ impl World {
         }
     }
 
+    /// Link an onramp
     pub fn link_onramp(
         &self,
         id: &TremorURL,
@@ -470,6 +480,7 @@ impl World {
         }
     }
 
+    /// Unlink an onramp
     pub fn unlink_onramp(
         &self,
         id: &TremorURL,
@@ -489,6 +500,7 @@ impl World {
         }
     }
 
+    /// Bind an offramp
     pub fn bind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id)?, &id.instance()) {
@@ -516,6 +528,7 @@ impl World {
         }
     }
 
+    /// Unbind an offramp
     pub fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding offramp {}", id);
         match (&self.repo.find_offramp(id)?, &id.instance()) {
@@ -529,6 +542,7 @@ impl World {
         }
     }
 
+    /// Link an offramp
     pub fn link_offramp(
         &self,
         id: &TremorURL,
@@ -547,6 +561,7 @@ impl World {
         }
     }
 
+    /// Unlink an offramp
     pub fn unlink_offramp(
         &self,
         id: &TremorURL,
@@ -566,7 +581,7 @@ impl World {
         }
     }
 
-    pub fn bind_binding_a(
+    pub(crate) fn bind_binding_a(
         &self,
         id: &TremorURL,
         artefact: &BindingArtefact,
@@ -583,7 +598,7 @@ impl World {
         }
     }
 
-    pub fn unbind_binding_a(
+    pub(crate) fn unbind_binding_a(
         &self,
         id: &TremorURL,
         _artefact: &BindingArtefact,
@@ -599,6 +614,7 @@ impl World {
         }
     }
 
+    /// Links a binding
     pub fn link_binding(
         &self,
         id: &TremorURL,
@@ -618,6 +634,7 @@ impl World {
         }
     }
 
+    /// Turns the running system into a config
     pub fn to_config(&self) -> Result<Config> {
         let pipeline: PipelineVec = self
             .repo
@@ -646,7 +663,7 @@ impl World {
         };
         Ok(config)
     }
-
+    /// Saves the current config
     pub fn save_config(&self) -> Result<String> {
         if let Some(storage_directory) = &self.storage_directory {
             let config = self.to_config()?;
@@ -670,6 +687,7 @@ impl World {
         }
     }
 
+    /// Unlinks a binding
     pub fn unlink_binding(
         &self,
         id: &TremorURL,
@@ -687,6 +705,7 @@ impl World {
         Err(format!("Binding {:?} not found.", id).into())
     }
 
+    /// Starts the runtime system
     pub fn start(qsize: usize, storage_directory: Option<String>) -> Result<(Self, ActixHandle)> {
         use std::sync::mpsc;
 
@@ -804,7 +823,12 @@ type: stderr
 
         Ok(())
     }
-    pub fn start_pipeline(&self, config: PipelineArtefact, id: ServantId) -> Result<PipelineAddr> {
+
+    pub(crate) fn start_pipeline(
+        &self,
+        config: PipelineArtefact,
+        id: ServantId,
+    ) -> Result<PipelineAddr> {
         self.system.send(CreatePipeline { id, config }).wait()?
     }
 }

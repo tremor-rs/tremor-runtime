@@ -16,8 +16,13 @@ use crate::lifecycle::ActivatorLifecycleFsm;
 use crate::repository::{BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact};
 use crate::url::TremorURL;
 
+/// A servant ID
 pub type Id = TremorURL;
+/// A pipeline servant
 pub type Pipeline = ActivatorLifecycleFsm<PipelineArtefact>;
+/// An onramp servant
 pub type Onramp = ActivatorLifecycleFsm<OnrampArtefact>;
+/// An offramp servant
 pub type Offramp = ActivatorLifecycleFsm<OfframpArtefact>;
+/// A binding servant
 pub type Binding = ActivatorLifecycleFsm<BindingArtefact>;

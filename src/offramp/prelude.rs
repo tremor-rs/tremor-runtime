@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use crate::async_sink::{AsyncSink, SinkDequeueError};
-pub use crate::codec::{self, Codec};
-pub use crate::dflt::{self, *};
-pub use crate::errors::*;
-pub use crate::offramp::{self, Offramp};
-pub use crate::postprocessor::{self, Postprocessor, Postprocessors};
-pub use crate::system::{PipelineAddr, PipelineMsg};
-pub use crate::url::TremorURL;
-pub use crate::utils::ConfigImpl;
-pub use crate::utils::{duration_to_millis, nanotime};
-pub use crate::{Event, OpConfig};
-pub use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+pub(crate) use crate::async_sink::{AsyncSink, SinkDequeueError};
+pub(crate) use crate::codec::Codec;
+pub(crate) use crate::dflt::{self, *};
+pub(crate) use crate::errors::*;
+pub(crate) use crate::offramp::{self, Offramp};
+pub(crate) use crate::postprocessor::{self, Postprocessor, Postprocessors};
+pub(crate) use crate::system::{PipelineAddr, PipelineMsg};
+pub(crate) use crate::url::TremorURL;
+pub(crate) use crate::utils::ConfigImpl;
+pub(crate) use crate::utils::{duration_to_millis, nanotime};
+pub(crate) use crate::{Event, OpConfig};
+//pub(crate) use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::mem;
-pub use std::thread;
 
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
     postprocessors
