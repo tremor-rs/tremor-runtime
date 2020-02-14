@@ -124,7 +124,7 @@ impl EventContext {
         }
     }
 
-    /// returns the events ingest_ns
+    /// returns the events `ingest_ns`
     pub fn ingest_ns(&self) -> u64 {
         self.at
     }
