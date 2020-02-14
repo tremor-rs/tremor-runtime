@@ -24,7 +24,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate)]
+#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 /// The Tremor Script AST
 pub mod ast;
