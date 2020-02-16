@@ -32,6 +32,7 @@ awc = "0.2"
 
 base64 = "0.10"
 bytes = "0.4"
+bytes5 = { version = "0.5.0", package = "bytes" }
 byteorder = "1"
 chrono = "0.4"
 elastic = "0.21.0-pre.5"
@@ -70,6 +71,9 @@ indexmap = { version = "1", features=["serde-1"] }
 
 crossbeam-channel = "0.3"
 
+memmap = { version = "0.7.0" }
+tempfile = { version = "3.1" }
+
 # blaster / blackhole
 xz2 = {version = "0.1", optional = true }
 hdrhistogram = {version = "6", optional = true }
@@ -84,6 +88,11 @@ hdrhistogram = {version = "6", optional = true }
 # tiberius = { git = "https://github.com/Licenser/tiberius", branch="fixes", default-features=false, features=["chrono"], optional = true }
 # futures-state-stream = {version = "0.1", optional=true}
 # tokio-current-thread = {version = "0.1", optional=true}
+
+# postgres
+postgres = { version = "0.17.1", features = ["with-serde_json-1", "with-chrono-0_4"] }
+postgres-protocol = { version = "0.5" }
+tokio-postgres = { version = "0.5.2" }
 
 # kafka
 rdkafka = {version = "0.22", optional = true}

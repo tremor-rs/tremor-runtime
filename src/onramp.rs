@@ -27,6 +27,7 @@ mod file;
 mod gsub;
 mod kafka;
 mod metronome;
+mod postgres;
 mod prelude;
 mod rest;
 pub mod tcp;
@@ -63,6 +64,7 @@ pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onram
         "file" => file::File::from_config(config),
         "gsub" => gsub::GSub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
+        "postgres" => postgres::Postgres::from_config(config),
         "metronome" => metronome::Metronome::from_config(config),
         "crononome" => crononome::Crononome::from_config(config),
         "udp" => udp::Udp::from_config(config),

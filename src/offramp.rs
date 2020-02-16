@@ -32,6 +32,7 @@ mod file;
 mod gcs;
 mod gpub;
 mod kafka;
+mod postgres;
 mod prelude;
 mod rest;
 mod stderr;
@@ -85,6 +86,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "gcs" => gcs::GCS::from_config(config),
         "gpub" => gpub::GPub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
+        "postgres" => postgres::Postgres::from_config(config),
         "rest" => rest::Rest::from_config(config),
         "stdout" => stdout::StdOut::from_config(config),
         "stderr" => stderr::StdErr::from_config(config),

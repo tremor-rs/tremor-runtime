@@ -38,3 +38,6 @@ coverage.html
 temp/
 perf.data*
 **/*.docx
+.gitconfig
+logger-*
+tremor.log

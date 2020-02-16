@@ -53,6 +53,7 @@ pub(crate) mod offramp;
 pub(crate) mod onramp;
 pub(crate) mod postprocessor;
 pub(crate) mod preprocessor;
+pub(crate) mod ramp;
 /// Tremor registry
 pub mod registry;
 /// The tremor repository
