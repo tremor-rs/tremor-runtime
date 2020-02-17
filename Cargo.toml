@@ -23,12 +23,13 @@ lto = true
 opt-level = 3
 
 [dependencies]
-actix = "0.8"
-actix-codec = "0.1.2"
-actix-router = "0.1.5"
-actix-web = "1"
-actix-web-actors = "1.0.2"
-awc = "0.2"
+# actix = "0.8"
+# actix-codec = "0.1.2"
+# actix-router = "0.1.5"
+# actix-web = "1"
+# actix-web-actors = "1.0.2"
+# awc = "0.2"
+async-std = "1.0"
 
 base64 = "0.10"
 bytes = "0.4"
