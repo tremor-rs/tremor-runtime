@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
+use crate::StateObject;
 
 #[derive(Debug, Clone, Hash)]
 pub struct Passthrough {}
@@ -23,7 +24,7 @@ op!(PassthroughFactory (_node) {
 
 #[allow(unused_mut)]
 impl Operator for Passthrough {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         Ok(vec![("out".into(), event)])
     }
     fn skippable(&self) -> bool {

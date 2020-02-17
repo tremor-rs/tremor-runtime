@@ -1,0 +1,22 @@
+define script countable
+with
+  seed = 10,
+  name = "s0",
+script
+  match state of
+    case %{present count} =>
+      let state.count = state.count + 1
+    default =>
+      let state.count = args.seed
+  end;
+
+  { "e": event, "{args.name}": state.count }
+end;
+
+create script seq1 from countable with name = "s1" end;
+create script seq2 from countable with name = "s2", seed = 100 end;
+
+select event from in into seq1;
+select { "event": event.e, "s1": event.s1 } from seq1 into seq2;
+select { "event": event.e.`event`, "s1": event.e.s1, "s2": event.s2 } from seq2 into out;
+

@@ -84,7 +84,7 @@ impl Operator for TrickleSimpleSelect {
         clippy::transmute_ptr_to_ptr,
         clippy::too_many_lines
     )]
-    fn on_event2(
+    fn on_event(
         &mut self,
         _port: &str,
         state: &mut StateObject,

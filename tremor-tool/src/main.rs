@@ -211,6 +211,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
 
     let context = Context::new(666, None);
     let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
+    let mut state = Value::from(Object::new());
     for (num, line) in input.lines().enumerate() {
         let l = line?;
         if l.is_empty() || l.starts_with('#') {
@@ -218,11 +219,13 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
         }
         let mut codec = tremor_runtime::codec::lookup("json")?;
 
-        match codec.decode(l.as_bytes().to_vec(), 0) {
+        let enbuf = l.as_bytes().to_vec();
+        let debuf = codec.decode(enbuf, 0);
+        match debuf {
             Ok(Some(ref json)) => {
                 let mut global_map = Value::from(Object::new());
                 let (mut unwind_event, _) = json.parts();
-                match s.run(&context, AggrType::Emit, &mut unwind_event, &mut global_map) {
+                match s.run(&context, AggrType::Emit, &mut unwind_event, &mut state, &mut global_map) {
                     Ok(_result) => {
                         println!(
                             "{}",

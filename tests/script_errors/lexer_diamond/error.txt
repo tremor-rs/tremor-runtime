@@ -1,4 +1,4 @@
 Error: 
     1 | <>
-      | ^^ Found the token `<>` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<ident>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `heredoc`, `int`, `let`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `window`, `{`
+      | ^^ Found the token `<>` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<ident>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `heredoc`, `int`, `let`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `state`, `window`, `{`
       |    NOTE: Did you mean to use `!`?

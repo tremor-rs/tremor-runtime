@@ -34,12 +34,6 @@ pub trait Operator: std::fmt::Debug + Send {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
-        // TODO remove. dummy implementation for testing
-        Ok(vec![])
-    }
-
-    // TODO replace on_event with this
-    fn on_event2(
         &mut self,
         port: &str,
         state: &mut StateObject,

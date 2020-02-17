@@ -385,7 +385,7 @@ impl Operator for TrickleSelect {
         clippy::transmute_ptr_to_ptr,
         clippy::too_many_lines
     )]
-    fn on_event2(
+    fn on_event(
         &mut self,
         _port: &str,
         state: &mut StateObject,
@@ -907,7 +907,8 @@ mod test {
         op: &mut TrickleSelect,
         event: Event,
     ) -> Result<Option<(Cow<'static, str>, Event)>> {
-        let mut action = op.on_event("in", event)?;
+        let mut state = Value::null();
+        let mut action = op.on_event("in", &mut state, event)?;
         let first = action.pop();
         if action.is_empty() {
             Ok(first)
@@ -920,7 +921,8 @@ mod test {
         op: &mut TrickleSelect,
         event: Event,
     ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
-        let mut action = op.on_event("in", event)?;
+        let mut state = Value::null();
+        let mut action = op.on_event("in", &mut state, event)?;
         let r = action
             .pop()
             .and_then(|second| Some([action.pop()?, second]));

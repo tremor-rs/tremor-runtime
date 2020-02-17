@@ -68,6 +68,7 @@ use lru::LruCache;
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 use window::TimeWindow;
+use crate::StateObject;
 
 op!(BucketGrouperFactory(node) {
     if node.config.is_none() {
@@ -134,7 +135,7 @@ impl std::fmt::Debug for Grouper {
 }
 
 impl Operator for Grouper {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let meta = &event.data.suffix().meta;
         if let Some(class) = meta.get("class").and_then(Value::as_str) {
             let (_, groups) = self
