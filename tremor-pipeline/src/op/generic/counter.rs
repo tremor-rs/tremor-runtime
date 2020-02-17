@@ -24,12 +24,7 @@ op!(CounterFactory(_node) {
 
 #[allow(unused_mut)]
 impl Operator for Counter {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        Ok(vec![("out".into(), event)])
-    }
-
-    // TODO replace on_event with this
-    fn on_event2(
+    fn on_event(
         &mut self,
         _port: &str,
         state: &mut StateObject,
@@ -37,7 +32,7 @@ impl Operator for Counter {
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let mut count_tracker = Value::from(1 as u64);
         // TODO remove unwrap
-        if let Some(count) = state.as_object_mut().unwrap().get_mut("count") {
+        if let Some(count) = state.as_object_mut().expect("Expected Some not None for state").get_mut("count") {
             if let Some(n) = count.as_u64() {
                 count_tracker = Value::from(n + 1);
                 *count = count_tracker.clone();
@@ -45,7 +40,7 @@ impl Operator for Counter {
         } else {
             state
                 .as_object_mut()
-                .unwrap() // TODO remove
+                .expect("Expected Some not None for state") 
                 .insert("count".into(), count_tracker.clone());
         }
 

@@ -14,6 +14,7 @@
 
 use crate::config::dflt;
 use crate::op::prelude::*;
+use crate::StateObject;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,7 +69,7 @@ op!(BatchFactory(node) {
     }});
 
 impl Operator for Batch {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // TODO: This is ugly
         let Event {
             id,
@@ -192,8 +193,10 @@ mod test {
             kind: None,
         };
 
+        let mut state = Value::null();
+
         let r = op
-            .on_event("in", event1.clone())
+            .on_event("in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -207,7 +210,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event("in", event2.clone())
+            .on_event("in", &mut state, event2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
@@ -227,7 +230,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).expect("could not run pipeline");
+        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -261,8 +264,10 @@ mod test {
                 .encode()
         );
 
+        let mut state = Value::null();
+
         let r = op
-            .on_event("in", event1.clone())
+            .on_event("in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -276,7 +281,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event("in", event2.clone())
+            .on_event("in", &mut state, event2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty results");
@@ -297,7 +302,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).expect("could not run pipeline");
+        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -309,7 +314,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).expect("could not run pipeline");
+        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -336,8 +341,10 @@ mod test {
             kind: None,
         };
 
+        let mut state = Value::null();
+
         let r = op
-            .on_event("in", event1.clone())
+            .on_event("in", &mut state, event1.clone())
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
@@ -367,7 +374,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).expect("failed to run pipeline");
+        let r = op.on_event("in", &mut state, event).expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -379,7 +386,7 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", event).expect("failed to run piepeline");
+        let r = op.on_event("in", &mut state, event).expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }
 }

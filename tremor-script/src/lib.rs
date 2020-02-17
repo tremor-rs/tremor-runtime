@@ -334,11 +334,13 @@ mod tests {
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::from(Object::new());
+            let mut state = Value::from(Object::new());
             let mut global_map = Value::from(Object::new());
             let value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
+                &mut state,
                 &mut global_map,
             );
             assert_eq!(
@@ -368,11 +370,13 @@ mod tests {
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
+            let mut state = Value::object();
             let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
+                &mut state,
                 &mut global_map,
             );
             assert_eq!(global_map, $expected);
@@ -396,11 +400,13 @@ mod tests {
             let reg: Registry = registry::registry();
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
+            let mut state = Value::object();
             let mut global_map = Value::from(hashmap! {});
             let _value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,
                 &mut event,
+                &mut state,
                 &mut global_map,
             );
             assert_eq!(event, $expected);

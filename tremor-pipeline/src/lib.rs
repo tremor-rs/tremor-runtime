@@ -316,17 +316,13 @@ pub struct OperatorNode {
 }
 
 impl Operator for OperatorNode {
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        self.op.on_event(port, event)
-    }
-    // TODO replace on_event with this
-    fn on_event2(
+    fn on_event(
         &mut self,
         port: &str,
         state: &mut StateObject,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        self.op.on_event2(port, state, event)
+        self.op.on_event(port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
@@ -771,17 +767,7 @@ impl ExecutableGraph {
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
             } else {
-                // TODO: Do we want to fail on here or do something different?
-                // got to discuss this.
-                let res = if node.op_type == "generic::counter" || node.op_type == "runtime::tremor"
-                {
-                    // TODO replace on_event with this and get rid of the conditional here
-                    //dbg!(&self.state);
-                    node.on_event2(&port, &mut self.state.ops[idx], event)?
-                } else {
-                    node.on_event(&port, event)?
-                };
-                //let res = node.on_event(&port, event)?;
+                let res = node.on_event(&port, &mut self.state.ops[idx], event)?;
                 for (out_port, _) in &res {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs

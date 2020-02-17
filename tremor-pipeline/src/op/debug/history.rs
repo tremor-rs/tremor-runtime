@@ -46,7 +46,7 @@ pub struct EventHistory {
 }
 
 impl Operator for EventHistory {
-    fn on_event(&mut self, _port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let id = event.id;
         let (_, meta) = event.data.parts();
         match meta
@@ -122,8 +122,10 @@ mod test {
             kind: None,
         };
 
+        let mut state = Value::null();
+
         let (out, mut event) = op
-            .on_event("in", event)
+            .on_event("in", &mut state, event)
             .expect("Failed to run pipeline")
             .pop()
             .expect("Empty results");

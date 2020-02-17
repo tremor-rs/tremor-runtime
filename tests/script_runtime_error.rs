@@ -50,8 +50,9 @@ macro_rules! test_cases {
 
                 if let Some(mut json) =  in_json.pop() {
                     let context = EventContext::new(0, None);
-                    let  mut meta = Value::from(Object::default());
-                    let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
+                    let mut meta = Value::from(Object::default());
+                    let mut state = Value::from(Object::default());
+                    let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
                         let got = script.format_error(&e);
                         let got = got.trim();
@@ -97,8 +98,9 @@ macro_rules! ignore_cases {
 
                 if let Some(mut json) =  in_json.pop() {
                     let context = EventContext::new(0, None);
-                    let  mut meta = Value::from(Object::default());
-                    let s = script.run(&context, AggrType::Tick, &mut json, &mut meta);
+                    let mut meta = Value::from(Object::default());
+                    let mut state = Value::from(Object::default());
+                    let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
                         let mut h = Dumb::new();
                         script.format_error_with(&mut h, &e)?;

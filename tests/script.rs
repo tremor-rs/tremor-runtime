@@ -49,8 +49,9 @@ macro_rules! test_cases {
                 for (id, mut json) in in_json.into_iter().enumerate() {
 
                     let context = EventContext::new(id as u64, None);
-                    let  mut meta = Value::from(Object::default());
-                    match script.run(&context, AggrType::Tick, &mut json, &mut meta)? {
+                    let mut meta = Value::from(Object::default());
+                    let mut state = Value::from(Object::default());
+                    match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
                         Return::Drop => (),
                         Return::EmitEvent{..} => results.push(json),
                         Return::Emit{value, ..} => results.push(value),

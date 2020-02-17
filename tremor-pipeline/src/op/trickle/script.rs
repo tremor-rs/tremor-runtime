@@ -128,7 +128,7 @@ impl TrickleScript {
 
 impl Operator for TrickleScript {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn on_event2(
+    fn on_event(
         &mut self,
         _port: &str,
         state: &mut StateObject,

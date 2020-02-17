@@ -59,7 +59,7 @@ pub struct Tremor {
 
 impl Operator for Tremor {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn on_event2(
+    fn on_event(
         &mut self,
         _port: &str,
         state: &mut StateObject,
@@ -134,9 +134,10 @@ mod test {
             data: Value::from(json!({"a": 1})).into(),
             kind: None,
         };
+        let mut state = Value::null();
 
         let (out, event) = op
-            .on_event("in", event)
+            .on_event("in", &mut state, event)
             .expect("failed to run pipeline")
             .pop()
             .expect("no event returned");
