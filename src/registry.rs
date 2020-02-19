@@ -213,255 +213,221 @@ impl Registries {
         }
     }
     /// serialize the mappings of this registry
-    pub fn serialize_mappings(&self) -> crate::config::MappingMap {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding.send(Msg::SerializeServants(tx)).await;
-            rx.recv()
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|v| v.mapping)
-                .fold(HashMap::new(), |mut acc, v| {
-                    acc.extend(v);
-                    acc
-                })
-        })
+    pub async fn serialize_mappings(&self) -> crate::config::MappingMap {
+        let (tx, rx) = channel(1);
+        self.binding.send(Msg::SerializeServants(tx)).await;
+        rx.recv()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|v| v.mapping)
+            .fold(HashMap::new(), |mut acc, v| {
+                acc.extend(v);
+                acc
+            })
     }
     /// Finds a pipeline
-    pub fn find_pipeline(
+    pub async fn find_pipeline(
         &self,
         id: &TremorURL,
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline.send(Msg::FindServant(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.pipeline.send(Msg::FindServant(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Publishes a pipeline
-    pub fn publish_pipeline(
+    pub async fn publish_pipeline(
         &self,
         id: &TremorURL,
         servant: PipelineServant,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::PublishServant(tx, id.clone(), servant))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// unpublishes a pipeline
-    pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::UnpublishServant(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::UnpublishServant(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Transitions a pipeline
-    pub fn transition_pipeline(
+    pub async fn transition_pipeline(
         &self,
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::Transition(tx, id.clone(), new_state))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::Transition(tx, id.clone(), new_state))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Finds an onramp
-    pub fn find_onramp(
+    pub async fn find_onramp(
         &self,
         id: &TremorURL,
     ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp.send(Msg::FindServant(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.onramp.send(Msg::FindServant(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Publishes an onramp
-    pub fn publish_onramp(
+    pub async fn publish_onramp(
         &self,
         id: &TremorURL,
         servant: OnrampServant,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::PublishServant(tx, id.clone(), servant))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Usnpublishes an onramp
-    pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::UnpublishServant(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::UnpublishServant(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     #[cfg(test)]
-    pub fn transition_onramp(
+    pub async fn transition_onramp(
         &self,
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::Transition(tx, id.clone(), new_state))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::Transition(tx, id.clone(), new_state))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Finds an onramp
-    pub fn find_offramp(
+    pub async fn find_offramp(
         &self,
         id: &TremorURL,
     ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp.send(Msg::FindServant(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.offramp.send(Msg::FindServant(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Publishes an offramp
-    pub fn publish_offramp(
+    pub async fn publish_offramp(
         &self,
         id: &TremorURL,
         servant: OfframpServant,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::PublishServant(tx, id.clone(), servant))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Unpublishes an offramp
-    pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::UnpublishServant(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::UnpublishServant(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     #[cfg(test)]
-    pub fn transition_offramp(
+    pub async fn transition_offramp(
         &self,
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::Transition(tx, id.clone(), new_state))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::Transition(tx, id.clone(), new_state))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Finds a binding
-    pub fn find_binding(
+    pub async fn find_binding(
         &self,
         id: &TremorURL,
     ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding.send(Msg::FindServant(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.binding.send(Msg::FindServant(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
     /// Publishes a binding
-    pub fn publish_binding(
+    pub async fn publish_binding(
         &self,
         id: &TremorURL,
         servant: BindingServant,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::PublishServant(tx, id.clone(), servant))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unpublishes a binding
-    pub fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::UnpublishServant(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::UnpublishServant(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     #[cfg(test)]
-    pub fn transition_binding(
+    pub async fn transition_binding(
         &self,
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::Transition(tx, id.clone(), new_state))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::Transition(tx, id.clone(), new_state))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 }

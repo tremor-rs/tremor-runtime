@@ -133,6 +133,12 @@ mod test {
     use std::fs::File;
     use std::io::BufReader;
 
+    macro_rules! b {
+        ($f:expr) => {
+            async_std::task::block_on($f)
+        };
+    }
+
     fn slurp(file: &str) -> config::Config {
         let file = File::open(file).expect("could not open file");
         let buffered_reader = BufReader::new(file);
@@ -141,155 +147,152 @@ mod test {
 
     #[test]
     fn pipeline_activation_lifecycle() {
-        let (world, _) = World::start(10, None).expect("failed to start world");
+        let (world, _) = b!(World::start(10, None)).expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let pipeline = runtime.pipes.pop().expect("artefact not found");
         let id = TremorURL::parse("/pipeline/test/snot").expect("failed to parse id");
 
-        assert!(world
-            .repo
-            .find_pipeline(&id)
+        assert!(b!(world.repo.find_pipeline(&id))
             .expect("failed to communicate to repository")
             .is_none());
 
         // Legal <initial> -> Deactivated
         assert_eq!(
             Ok(ActivationState::Deactivated),
-            world.bind_pipeline_from_artefact(&id, pipeline.into())
+            b!(world.bind_pipeline_from_artefact(&id, pipeline.into()))
         );
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world
+            b!(world
                 .reg
-                .transition_pipeline(&id, ActivationState::Activated)
+                .transition_pipeline(&id, ActivationState::Activated))
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world.reg.transition_pipeline(&id, ActivationState::Zombie)
+            b!(world.reg.transition_pipeline(&id, ActivationState::Zombie))
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_pipeline(&id, ActivationState::Deactivated)
+                .transition_pipeline(&id, ActivationState::Deactivated))
         );
 
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_pipeline(&id, ActivationState::Activated)
+                .transition_pipeline(&id, ActivationState::Activated))
         );
     }
 
     #[test]
     fn onramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).expect("failed to start world");
+        let (world, _) = b!(World::start(10, None)).expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.onramps.pop().expect("artefact not found");
         let id = TremorURL::parse("/onramp/test/00").expect("artefact not found");
-        assert!(world
-            .repo
-            .find_onramp(&id)
+        assert!(b!(world.repo.find_onramp(&id))
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world.repo.publish_onramp(&id, false, artefact).is_ok());
+        assert!(b!(world.repo.publish_onramp(&id, false, artefact)).is_ok());
 
         // Legal <initial> -> Deactivated
-        assert_eq!(Ok(ActivationState::Deactivated), world.bind_onramp(&id),);
+        assert_eq!(Ok(ActivationState::Deactivated), b!(world.bind_onramp(&id)),);
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world.reg.transition_onramp(&id, ActivationState::Activated)
+            b!(world.reg.transition_onramp(&id, ActivationState::Activated))
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world.reg.transition_onramp(&id, ActivationState::Zombie)
+            b!(world.reg.transition_onramp(&id, ActivationState::Zombie))
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_onramp(&id, ActivationState::Deactivated)
+                .transition_onramp(&id, ActivationState::Deactivated))
         );
 
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world.reg.transition_onramp(&id, ActivationState::Activated)
+            b!(world.reg.transition_onramp(&id, ActivationState::Activated))
         );
     }
 
     #[test]
     fn offramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).expect("failed to start world");
+        let (world, _) = b!(World::start(10, None)).expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.offramps.pop().expect("artefact not found");
         let id = TremorURL::parse("/offramp/test/00").expect("artefact not found");
-        assert!(world
-            .repo
-            .find_offramp(&id)
+        assert!(b!(world.repo.find_offramp(&id))
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world.repo.publish_offramp(&id, false, artefact).is_ok());
+        assert!(b!(world.repo.publish_offramp(&id, false, artefact)).is_ok());
 
         // Legal <initial> -> Deactivated
-        assert_eq!(Ok(ActivationState::Deactivated), world.bind_offramp(&id));
+        assert_eq!(
+            Ok(ActivationState::Deactivated),
+            b!(world.bind_offramp(&id))
+        );
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world
+            b!(world
                 .reg
-                .transition_offramp(&id, ActivationState::Activated)
+                .transition_offramp(&id, ActivationState::Activated))
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world.reg.transition_offramp(&id, ActivationState::Zombie)
+            b!(world.reg.transition_offramp(&id, ActivationState::Zombie))
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_offramp(&id, ActivationState::Deactivated)
+                .transition_offramp(&id, ActivationState::Deactivated))
         );
 
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_offramp(&id, ActivationState::Activated)
+                .transition_offramp(&id, ActivationState::Activated))
         );
     }
 
     #[test]
     fn binding_activation_lifecycle() {
-        let (world, _) = World::start(10, None).expect("failed to start world");
+        let (world, _) = b!(World::start(10, None)).expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
@@ -299,63 +302,54 @@ mod test {
         };
         let id = TremorURL::parse("/binding/test/snot").expect("artefact not found");
 
-        assert!(world
-            .repo
-            .find_binding(&id)
+        assert!(b!(world.repo.find_binding(&id))
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world
-            .repo
-            .publish_binding(&id, false, artefact.clone())
-            .is_ok());
+        assert!(b!(world.repo.publish_binding(&id, false, artefact.clone())).is_ok());
 
-        assert!(world
-            .reg
-            .find_binding(&id)
+        assert!(b!(world.reg.find_binding(&id))
             .expect("failed to communicate to registry")
             .is_none());
 
         // Legal <initial> -> Deactivated
         assert_eq!(
             Ok(ActivationState::Deactivated),
-            world.bind_binding_a(&id, &artefact),
+            b!(world.bind_binding_a(&id, &artefact)),
         );
 
-        assert!(world
-            .reg
-            .find_binding(&id)
+        assert!(b!(world.reg.find_binding(&id))
             .expect("failed to communicate to registry")
             .is_some());
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world
+            b!(world
                 .reg
-                .transition_binding(&id, ActivationState::Activated)
+                .transition_binding(&id, ActivationState::Activated))
         );
 
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world.reg.transition_binding(&id, ActivationState::Zombie)
+            b!(world.reg.transition_binding(&id, ActivationState::Zombie))
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_binding(&id, ActivationState::Deactivated)
+                .transition_binding(&id, ActivationState::Deactivated))
         );
 
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            b!(world
                 .reg
-                .transition_binding(&id, ActivationState::Activated)
+                .transition_binding(&id, ActivationState::Activated))
         );
 
         // TODO - full undeployment 'white-box' acceptance tests
@@ -364,14 +358,9 @@ mod test {
         //        assert!(world.repo.unpublish_binding(&id).is_ok());
         println!(
             "TODO {:?}",
-            world
-                .reg
-                .find_binding(&id)
-                .expect("failed to communicate to registry")
+            b!(world.reg.find_binding(&id)).expect("failed to communicate to registry")
         );
-        assert!(world
-            .reg
-            .find_binding(&id)
+        assert!(b!(world.reg.find_binding(&id))
             .expect("failed to communicate to registry")
             .is_none());
     }

@@ -239,347 +239,300 @@ impl Repositories {
     }
 
     /// List the pipelines
-    pub fn list_pipelines(&self) -> Vec<ArtefactId> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline.send(Msg::ListArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn list_pipelines(&self) -> Vec<ArtefactId> {
+        let (tx, rx) = channel(1);
+        self.pipeline.send(Msg::ListArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Serialises the pipelines
-    pub fn serialize_pipelines(&self) -> Vec<PipelineArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline.send(Msg::SerializeArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn serialize_pipelines(&self) -> Vec<PipelineArtefact> {
+        let (tx, rx) = channel(1);
+        self.pipeline.send(Msg::SerializeArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Find a pipeline
-    pub fn find_pipeline(&self, id: &TremorURL) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline.send(Msg::FindArtefact(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn find_pipeline(
+        &self,
+        id: &TremorURL,
+    ) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
+        let (tx, rx) = channel(1);
+        self.pipeline.send(Msg::FindArtefact(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Publish a pipeline
-    pub fn publish_pipeline(
+    pub async fn publish_pipeline(
         &self,
         id: &TremorURL,
         system: bool,
         artefact: PipelineArtefact,
     ) -> Result<PipelineArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unpublish a pipeline
-    pub fn unpublish_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::UnpublishArtefact(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::UnpublishArtefact(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Bind a pipeline
-    pub fn bind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn bind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unbinds a pipeline
-    pub fn unbind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.pipeline
-                .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unbind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
+        let (tx, rx) = channel(1);
+        self.pipeline
+            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// List onramps
-    pub fn list_onramps(&self) -> Vec<ArtefactId> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp.send(Msg::ListArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn list_onramps(&self) -> Vec<ArtefactId> {
+        let (tx, rx) = channel(1);
+        self.onramp.send(Msg::ListArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// serializes onramps
-    pub fn serialize_onramps(&self) -> Vec<OnrampArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp.send(Msg::SerializeArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn serialize_onramps(&self) -> Vec<OnrampArtefact> {
+        let (tx, rx) = channel(1);
+        self.onramp.send(Msg::SerializeArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// find an onramp
-    pub fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp.send(Msg::FindArtefact(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
+        let (tx, rx) = channel(1);
+        self.onramp.send(Msg::FindArtefact(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Publish onramp
-    pub fn publish_onramp(
+    pub async fn publish_onramp(
         &self,
         id: &TremorURL,
         system: bool,
         artefact: OnrampArtefact,
     ) -> Result<OnrampArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unpublish an onramp
-    pub fn unpublish_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::UnpublishArtefact(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::UnpublishArtefact(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Binds an onramp
-    pub fn bind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn bind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unbinds an onramp
-    pub fn unbind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.onramp
-                .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unbind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
+        let (tx, rx) = channel(1);
+        self.onramp
+            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// List offramps
-    pub fn list_offramps(&self) -> Vec<ArtefactId> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp.send(Msg::ListArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn list_offramps(&self) -> Vec<ArtefactId> {
+        let (tx, rx) = channel(1);
+        self.offramp.send(Msg::ListArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Serialises offramps
-    pub fn serialize_offramps(&self) -> Vec<OfframpArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp.send(Msg::SerializeArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn serialize_offramps(&self) -> Vec<OfframpArtefact> {
+        let (tx, rx) = channel(1);
+        self.offramp.send(Msg::SerializeArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Find an offramp
-    pub fn find_offramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp.send(Msg::FindArtefact(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn find_offramp(
+        &self,
+        id: &TremorURL,
+    ) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
+        let (tx, rx) = channel(1);
+        self.offramp.send(Msg::FindArtefact(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Publishes an offramp
-    pub fn publish_offramp(
+    pub async fn publish_offramp(
         &self,
         id: &TremorURL,
         system: bool,
         artefact: OfframpArtefact,
     ) -> Result<OfframpArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unpublishes an offramp
-    pub fn unpublish_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::UnpublishArtefact(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::UnpublishArtefact(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Binds an offramp
-    pub fn bind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn bind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unbinds an offramp
-    pub fn unbind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.offramp
-                .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
+        let (tx, rx) = channel(1);
+        self.offramp
+            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Lists bindings
-    pub fn list_bindings(&self) -> Vec<ArtefactId> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding.send(Msg::ListArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn list_bindings(&self) -> Vec<ArtefactId> {
+        let (tx, rx) = channel(1);
+        self.binding.send(Msg::ListArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Serialises bindings
-    pub fn serialize_bindings(&self) -> Vec<BindingArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding.send(Msg::SerializeArtefacts(tx)).await;
-            rx.recv().await.unwrap_or_default()
-        })
+    pub async fn serialize_bindings(&self) -> Vec<BindingArtefact> {
+        let (tx, rx) = channel(1);
+        self.binding.send(Msg::SerializeArtefacts(tx)).await;
+        rx.recv().await.unwrap_or_default()
     }
 
     /// Find a binding
-    pub fn find_binding(&self, id: &TremorURL) -> Result<Option<RepoWrapper<BindingArtefact>>> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding.send(Msg::FindArtefact(tx, id.clone())).await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn find_binding(
+        &self,
+        id: &TremorURL,
+    ) -> Result<Option<RepoWrapper<BindingArtefact>>> {
+        let (tx, rx) = channel(1);
+        self.binding.send(Msg::FindArtefact(tx, id.clone())).await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Publish a binding
-    pub fn publish_binding(
+    pub async fn publish_binding(
         &self,
         id: &TremorURL,
         system: bool,
         artefact: BindingArtefact,
     ) -> Result<BindingArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unpublishes a binding
-    pub fn unpublish_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::UnpublishArtefact(tx, id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::UnpublishArtefact(tx, id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Binds a binding
-    pub fn bind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn bind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 
     /// Unbinds a binding
-    pub fn unbind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.binding
-                .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+    pub async fn unbind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
+        let (tx, rx) = channel(1);
+        self.binding
+            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 }
 

@@ -146,36 +146,6 @@ impl Manager {
         (h, tx)
     }
 }
-/*
-
-impl Actor for Manager {
-    type Context = Context<Self>;
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Onramp manager started");
-    }
-}
-
-impl Message for Create {
-    type Result = Result<Addr>;
-}
-
-impl Handler<Create> for Manager {
-    type Result = Result<Addr>;
-    fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
-        req.stream
-            .start(&req.codec, &req.preprocessors, req.metrics_reporter)
-    }
-}
-
-impl Handler<Stop> for Manager {
-    type Result = ();
-    fn handle(&mut self, _req: Stop, _ctx: &mut Self::Context) -> Self::Result {
-        // TODO: Propper shutdown needed?
-        info!("Stopping onramps");
-        System::current().stop();
-    }
-}
-*/
 
 #[cfg(test)]
 mod test {
@@ -192,6 +162,12 @@ mod test {
     use std::net::TcpStream;
     use std::net::UdpSocket;
     use std::ops::Range;
+
+    macro_rules! b {
+        ($f:expr) => {
+            async_std::task::block_on($f)
+        };
+    }
 
     #[allow(dead_code)]
     fn port_is_taken(port: u16) -> bool {
@@ -276,18 +252,18 @@ mod test {
     macro_rules! rampercize {
         ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
             let storage_directory = Some("./storage".to_string());
-            let (world, _handle) = system::World::start(50, storage_directory)?;
+            let (world, _handle) = b!(system::World::start(50, storage_directory))?;
             let config = serde_yaml::to_value($onramp_config).expect("json to yaml not ok");
 
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;
             let onramp_url = TremorURL::from_onramp_id("test").expect("bad url");
-            world.repo.publish_onramp(&onramp_url, false, onramp)?;
+            b!(world.repo.publish_onramp(&onramp_url, false, onramp))?;
 
             let config2 = serde_yaml::to_value($offramp_config).expect("json to yaml not ok");
 
             let offramp: crate::config::OffRamp = serde_yaml::from_value(config2)?;
             let offramp_url = TremorURL::from_offramp_id("test").expect("bad url");
-            world.repo.publish_offramp(&offramp_url, false, offramp)?;
+            b!(world.repo.publish_offramp(&offramp_url, false, offramp))?;
 
             let id = TremorURL::parse(&format!("/pipeline/{}", "test"))?;
 
@@ -305,7 +281,7 @@ links:
             let artefact = PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(
                 test_pipeline_config,
             )?));
-            world.repo.publish_pipeline(&id, false, artefact)?;
+            b!(world.repo.publish_pipeline(&id, false, artefact))?;
 
             let binding: Binding = serde_yaml::from_str(
                 r#"
@@ -316,14 +292,14 @@ links:
 "#,
             )?;
 
-            world.repo.publish_binding(
+            b!(world.repo.publish_binding(
                 &TremorURL::parse(&format!("/binding/{}", "test"))?,
                 false,
                 BindingArtefact {
                     binding,
                     mapping: None,
                 },
-            )?;
+            ))?;
 
             let mapping: MappingMap = serde_yaml::from_str(
                 r#"
@@ -333,7 +309,7 @@ links:
             )?;
 
             let id = TremorURL::parse(&format!("/binding/{}/01", "test"))?;
-            world.link_binding(&id, mapping[&id].clone())?;
+            b!(world.link_binding(&id, mapping[&id].clone()))?;
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
@@ -341,7 +317,7 @@ links:
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
-            world.stop();
+            b!(world.stop());
         };
     }
 

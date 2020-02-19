@@ -180,7 +180,7 @@ pub async fn reply<T: Serialize + Send + Sync + 'static>(
 ) -> Result<Response> {
     if persist {
         let world = &req.state().world;
-        world.save_config()?;
+        world.save_config().await?;
     }
     serialize(accept(&req), &result_in, ok_code)
 }

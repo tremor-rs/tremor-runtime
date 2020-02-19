@@ -51,7 +51,7 @@ use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::{self, config, errors, functions, metrics, system, url, version};
 
 #[cfg_attr(tarpaulin, skip)]
-fn load_file(world: &World, file_name: &str) -> Result<usize> {
+async fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
     let mut count = 0;
     let file = File::open(file_name)
@@ -63,7 +63,7 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
     for o in config.offramps {
         let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_offramp(&id, false, o)?;
+        world.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
     for pipeline in config.pipes {
@@ -71,37 +71,41 @@ fn load_file(world: &World, file_name: &str) -> Result<usize> {
         warn!("The pipeline {} is defined in the YAML file {}, this functionality is deprecated please migrate to trickle pipelines.", id, file_name);
         world
             .repo
-            .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))?;
+            .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
+            .await?;
         count += 1;
     }
     for o in config.onramps {
         let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_onramp(&id, false, o)?;
+        world.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.bindings {
         let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_binding(
-            &id,
-            false,
-            BindingArtefact {
-                binding,
-                mapping: None,
-            },
-        )?;
+        world
+            .repo
+            .publish_binding(
+                &id,
+                false,
+                BindingArtefact {
+                    binding,
+                    mapping: None,
+                },
+            )
+            .await?;
         count += 1;
     }
     for (binding, mapping) in config.mappings {
-        world.link_binding(&binding, mapping)?;
+        world.link_binding(&binding, mapping).await?;
         count += 1;
     }
     Ok(count)
 }
 
 #[cfg_attr(tarpaulin, skip)]
-fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
+async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     use std::ffi::OsStr;
     use std::io::Read;
     info!("Loading configuration from {}", file_name);
@@ -126,14 +130,15 @@ fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading {} from file.", id);
     world
         .repo
-        .publish_pipeline(&id, false, PipelineArtefact::Query(query))?;
+        .publish_pipeline(&id, false, PipelineArtefact::Query(query))
+        .await?;
 
     Ok(1)
 }
 
 #[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::too_many_lines)]
-fn run_dun() -> Result<()> {
+async fn run_dun() -> Result<()> {
     functions::load()?;
 
     let matches = args::parse().get_matches();
@@ -165,18 +170,18 @@ fn run_dun() -> Result<()> {
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
-    let (world, handle) = World::start(50, storage_directory)?;
+    let (world, handle) = World::start(64, storage_directory).await?;
 
     // We load queries first since those are only pipelines.
     if let Some(query_files) = matches.values_of("query") {
         for query_file in query_files {
-            load_query_file(&world, query_file)?;
+            load_query_file(&world, query_file).await?;
         }
     }
 
     if let Some(config_files) = matches.values_of("config") {
         for config_file in config_files {
-            load_file(&world, config_file)?;
+            load_file(&world, config_file).await?;
         }
     }
 
@@ -184,54 +189,52 @@ fn run_dun() -> Result<()> {
         .value_of("host")
         .ok_or_else(|| Error::from("host argument missing"))?;
 
-    task::block_on(async {
-        let mut app = tide::Server::with_state(api::State {
-            world: world.clone(),
-        });
-
-        app.at("/version").get(api::version::get);
-        app.at("/binding")
-            .get(api::binding::list_artefact)
-            .post(api::binding::publish_artefact);
-        app.at("/binding/{aid}")
-            .get(api::binding::get_artefact)
-            .delete(api::binding::unpublish_artefact);
-        app.at("/binding/{aid}/{sid}")
-            .get(api::binding::get_servant)
-            .post(api::binding::link_servant)
-            .delete(api::binding::unlink_servant);
-        app.at("/pipeline")
-            .get(api::pipeline::list_artefact)
-            .post(api::pipeline::publish_artefact);
-        app.at("/pipeline/{aid}")
-            .get(api::pipeline::get_artefact)
-            .delete(api::pipeline::unpublish_artefact);
-
-        app.at("/onramp")
-            .get(api::onramp::list_artefact)
-            .post(api::onramp::publish_artefact);
-        app.at("/onramp/{aid}")
-            .get(api::onramp::get_artefact)
-            .delete(api::onramp::unpublish_artefact);
-        app.at("/offramp")
-            .get(api::offramp::list_artefact)
-            .post(api::offramp::publish_artefact);
-        app.at("/offramp/{aid}")
-            .get(api::offramp::get_artefact)
-            .delete(api::offramp::unpublish_artefact);
-
-        if !matches.is_present("no-api") {
-            eprintln!("Listening at: http://{}", host);
-            info!("Listening at: http://{}", host);
-
-            if let Err(e) = app.listen(&host).await {
-                error!("API Error: {}", e);
-            }
-            warn!("API stopped");
-            world.stop();
-        }
+    let mut app = tide::Server::with_state(api::State {
+        world: world.clone(),
     });
-    task::block_on(handle);
+
+    app.at("/version").get(api::version::get);
+    app.at("/binding")
+        .get(api::binding::list_artefact)
+        .post(api::binding::publish_artefact);
+    app.at("/binding/{aid}")
+        .get(api::binding::get_artefact)
+        .delete(api::binding::unpublish_artefact);
+    app.at("/binding/{aid}/{sid}")
+        .get(api::binding::get_servant)
+        .post(api::binding::link_servant)
+        .delete(api::binding::unlink_servant);
+    app.at("/pipeline")
+        .get(api::pipeline::list_artefact)
+        .post(api::pipeline::publish_artefact);
+    app.at("/pipeline/{aid}")
+        .get(api::pipeline::get_artefact)
+        .delete(api::pipeline::unpublish_artefact);
+    app.at("/onramp")
+        .get(api::onramp::list_artefact)
+        .post(api::onramp::publish_artefact);
+    app.at("/onramp/{aid}")
+        .get(api::onramp::get_artefact)
+        .delete(api::onramp::unpublish_artefact);
+    app.at("/offramp")
+        .get(api::offramp::list_artefact)
+        .post(api::offramp::publish_artefact);
+    app.at("/offramp/{aid}")
+        .get(api::offramp::get_artefact)
+        .delete(api::offramp::unpublish_artefact);
+
+    if !matches.is_present("no-api") {
+        eprintln!("Listening at: http://{}", host);
+        info!("Listening at: http://{}", host);
+
+        if let Err(e) = app.listen(&host).await {
+            error!("API Error: {}", e);
+        }
+        warn!("API stopped");
+        world.stop().await;
+    }
+
+    handle.await;
     warn!("World stopped");
     Ok(())
 }
@@ -239,7 +242,7 @@ fn run_dun() -> Result<()> {
 #[cfg_attr(tarpaulin, skip)]
 fn main() {
     version::print();
-    if let Err(ref e) = run_dun() {
+    if let Err(ref e) = task::block_on(run_dun()) {
         error!("error: {}", e);
         eprintln!("error: {}", e);
         for e in e.iter().skip(1) {
