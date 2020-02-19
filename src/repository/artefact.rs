@@ -17,15 +17,16 @@ use crate::errors::*;
 use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
+use crate::pipeline;
 use crate::registry::ServantId;
-use crate::system::{PipelineAddr, PipelineMsg, World};
+use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
-use futures::future::Future;
 use hashbrown::HashMap;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
 pub(crate) use crate::OffRamp as OfframpArtefact;
 pub(crate) use crate::OnRamp as OnrampArtefact;
+use async_std::{sync::channel, task};
 use crossbeam_channel::bounded;
 
 /// A Binding
@@ -101,7 +102,7 @@ pub trait Artefact: Clone {
 }
 
 impl Artefact for Pipeline {
-    type SpawnResult = PipelineAddr;
+    type SpawnResult = pipeline::Addr;
     type LinkResult = bool;
     type LinkLHS = String;
     type LinkRHS = TremorURL;
@@ -127,7 +128,7 @@ impl Artefact for Pipeline {
                             pipeline
                                 .addr
                                 .clone()
-                                .send(PipelineMsg::ConnectOfframp(
+                                .send(pipeline::Msg::ConnectOfframp(
                                     from.clone().into(),
                                     to.clone(),
                                     offramp,
@@ -145,7 +146,7 @@ impl Artefact for Pipeline {
                             pipeline
                                 .addr
                                 .clone()
-                                .send(PipelineMsg::ConnectPipeline(
+                                .send(pipeline::Msg::ConnectPipeline(
                                     from.clone().into(),
                                     to.clone(),
                                     p,
@@ -180,13 +181,13 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Offramp) => {
                         pipeline
                             .addr
-                            .send(PipelineMsg::Disconnect(from.clone().into(), to))
+                            .send(pipeline::Msg::Disconnect(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     Some(ResourceType::Pipeline) => {
                         pipeline
                             .addr
-                            .send(PipelineMsg::Disconnect(from.clone().into(), to))
+                            .send(pipeline::Msg::Disconnect(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     _ => {
@@ -237,17 +238,29 @@ impl Artefact for OfframpArtefact {
             vec![]
         };
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-        let res = world
-            .system
-            .send(offramp::Create {
-                id: servant_id,
-                codec,
-                offramp,
-                postprocessors,
-                metrics_reporter,
-            })
-            .wait()??;
-        Ok(res)
+
+        let res = task::block_on(async {
+            let (tx, rx) = channel(1);
+
+            world
+                .system
+                .send(system::ManagerMsg::CreateOfframp(
+                    tx,
+                    offramp::Create {
+                        id: servant_id,
+                        codec,
+                        offramp,
+                        postprocessors,
+                        metrics_reporter,
+                    },
+                ))
+                .await;
+            rx.recv()
+                .await
+                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        });
+
+        res
     }
     fn link(
         &self,
@@ -333,17 +346,27 @@ impl Artefact for OnrampArtefact {
             vec![]
         };
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-        let res = world
-            .system
-            .send(onramp::Create {
-                id: servant_id,
-                preprocessors,
-                codec,
-                stream,
-                metrics_reporter,
-            })
-            .wait()??;
-        Ok(res)
+        let res = task::block_on(async {
+            let (tx, rx) = channel(1);
+
+            world
+                .system
+                .send(system::ManagerMsg::CreateOnrampt(
+                    tx,
+                    onramp::Create {
+                        id: servant_id,
+                        preprocessors,
+                        codec,
+                        stream,
+                        metrics_reporter,
+                    },
+                ))
+                .await;
+            rx.recv()
+                .await
+                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        });
+        res
     }
 
     fn link(

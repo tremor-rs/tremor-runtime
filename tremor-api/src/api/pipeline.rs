@@ -18,7 +18,6 @@ use actix_web::{
     web::{Data, Path},
     HttpRequest,
 };
-use tremor_runtime::errors::*;
 use tremor_runtime::repository::PipelineArtefact;
 
 #[derive(Serialize)]
@@ -28,12 +27,14 @@ struct PipelineWrap {
 }
 
 pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
-    let result: Result<Vec<String>> = data.world.repo.list_pipelines().map(|l| {
-        l.iter()
-            .filter_map(tremor_runtime::url::TremorURL::artefact)
-            .collect()
-    });
-    reply(&req, &data, result, false, 200)
+    let result: Vec<String> = data
+        .world
+        .repo
+        .list_pipelines()
+        .iter()
+        .filter_map(tremor_runtime::url::TremorURL::artefact)
+        .collect();
+    reply(&req, &data, Ok(result), false, 200)
 }
 
 pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {

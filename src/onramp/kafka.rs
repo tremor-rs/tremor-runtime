@@ -107,7 +107,7 @@ fn onramp_loop(
     let context = LoggingConsumerContext;
     let tid = 0; //TODO: get a good thread id
     let mut client_config = ClientConfig::new();
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     info!("Starting kafka onramp");
     let client_config = client_config
         .set("group.id", &config.group_id)

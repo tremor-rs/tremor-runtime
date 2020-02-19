@@ -207,7 +207,7 @@ fn onramp_loop(
             Ok(())
         })?;
 
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut id = 0;
     let mut no_pp = vec![];
 

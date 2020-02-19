@@ -44,6 +44,8 @@ use crate::errors::*;
 use crate::system::World;
 use crate::url::TremorURL;
 use actix_cors::Cors;
+use actix_files as fs;
+use async_std::task;
 use env_logger;
 use serde_yaml;
 use tremor_api;
@@ -269,9 +271,12 @@ fn run_dun() -> Result<()> {
         warn!("API stopped");
         world.stop();
     }
-    if let Err(e) = handle.join() {
+    /*
+    if let Err(e) = task::block_on(handle) {
         error!("Tremor terminated badly: {:?}", e);
     }
+    */
+    task::block_on(handle);
     warn!("World stopped");
     Ok(())
 }

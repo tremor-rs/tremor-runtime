@@ -18,7 +18,6 @@ use actix_web::{
     web::{Data, Path},
     HttpRequest,
 };
-use tremor_runtime::errors::*;
 
 #[derive(Serialize)]
 struct OnRampWrap {
@@ -27,12 +26,14 @@ struct OnRampWrap {
 }
 
 pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
-    let result: Result<Vec<String>> = data.world.repo.list_onramps().map(|l| {
-        l.iter()
-            .filter_map(tremor_runtime::url::TremorURL::artefact)
-            .collect()
-    });
-    reply(&req, &data, result, false, 200)
+    let result: Vec<String> = data
+        .world
+        .repo
+        .list_onramps()
+        .iter()
+        .filter_map(tremor_runtime::url::TremorURL::artefact)
+        .collect();
+    reply(&req, &data, Ok(result), false, 200)
 }
 
 pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {

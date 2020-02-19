@@ -57,7 +57,7 @@ pub struct Ws {
     addr: Option<WsAddr>,
     downed_at: u64,
     config: Config,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
     tx: Sender<Option<WsAddr>>,
     rx: Receiver<Option<WsAddr>>,
@@ -193,7 +193,7 @@ impl Offramp for Ws {
         Ok(())
     }
 
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {

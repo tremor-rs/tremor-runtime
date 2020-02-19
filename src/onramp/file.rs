@@ -58,7 +58,7 @@ fn onramp_loop(
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
     let source_data_file = FSFile::open(&config.source)?;
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut id = 0;
     let ext = Path::new(&config.source)
         .extension()

@@ -43,7 +43,7 @@ pub struct Rest {
     config: Config,
     pool: ThreadPool,
     queue: AsyncSink<u64>,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -96,7 +96,7 @@ impl Rest {
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = bounded(1);
         let config = self.config.clone();
-        let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+        let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
             .pipelines
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
@@ -120,7 +120,10 @@ impl Rest {
             };
 
             for (pid, p) in pipelines {
-                if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                if p.addr
+                    .send(pipeline::Msg::Insight(insight.clone()))
+                    .is_err()
+                {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
@@ -150,13 +153,16 @@ impl Rest {
                     kind: None,
                 };
 
-                let pipelines: Vec<(TremorURL, PipelineAddr)> = self
+                let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
                     .pipelines
                     .iter()
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
                 for (pid, p) in pipelines {
-                    if p.addr.send(PipelineMsg::Insight(insight.clone())).is_err() {
+                    if p.addr
+                        .send(pipeline::Msg::Insight(insight.clone()))
+                        .is_err()
+                    {
                         error!("Failed to send contraflow to pipeline {}", pid)
                     };
                 }
@@ -193,7 +199,7 @@ impl Offramp for Rest {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {

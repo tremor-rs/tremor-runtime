@@ -70,7 +70,7 @@ pub struct Kafka {
     pool: thread_pool::ThreadPool,
     topic: String,
     key: Option<String>,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -141,7 +141,7 @@ impl Offramp for Kafka {
         }
         Ok(())
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {

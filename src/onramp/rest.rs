@@ -236,7 +236,7 @@ fn onramp_loop(
                 return error!("Cannot run server: {}", err);
             }
         })?;
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut preprocessors = make_preprocessors(&preprocessors)?;
 
     loop {

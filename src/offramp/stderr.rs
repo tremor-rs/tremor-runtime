@@ -25,7 +25,7 @@ use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 
 pub struct StdErr {
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -49,7 +49,7 @@ impl Offramp for StdErr {
         }
         Ok(())
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {

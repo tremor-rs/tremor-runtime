@@ -25,10 +25,6 @@ pub enum ActivationState {
     Zombie,
 }
 
-pub trait Transition<S>: Sized {
-    fn transition(&mut self, to: S) -> Result<&mut Self>;
-}
-
 #[derive(Clone)]
 pub struct ActivatorLifecycleFsm<A: Artefact> {
     pub artefact: A,
@@ -91,8 +87,8 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
     }
 }
 
-impl<A: Artefact> Transition<ActivationState> for ActivatorLifecycleFsm<A> {
-    fn transition(&mut self, to: ActivationState) -> Result<&mut Self> {
+impl<A: Artefact> ActivatorLifecycleFsm<A> {
+    pub fn transition(&mut self, to: ActivationState) -> Result<&mut Self> {
         loop {
             match (&self.state, &to) {
                 (ActivationState::Deactivated, ActivationState::Activated) => {

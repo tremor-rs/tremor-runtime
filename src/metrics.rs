@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::system::{PipelineAddr, PipelineMsg};
+use crate::pipeline;
 use crate::url::TremorURL;
 use halfbrown::HashMap;
 use simd_json::json;
@@ -33,7 +33,7 @@ pub(crate) struct Ramp {
 pub(crate) struct RampReporter {
     artefact_url: TremorURL,
     metrics: Ramp,
-    metrics_pipeline: Option<(TremorURL, PipelineAddr)>,
+    metrics_pipeline: Option<(TremorURL, pipeline::Addr)>,
     flush_interval: Option<u64>, // as nano-seconds
     last_flush_ns: u64,
 }
@@ -53,7 +53,7 @@ impl RampReporter {
         }
     }
 
-    pub fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, PipelineAddr)) {
+    pub fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, pipeline::Addr)) {
         self.metrics_pipeline = Some(pipeline_tuple);
     }
 
@@ -120,7 +120,7 @@ impl RampReporter {
                     kind: None,
                 };
 
-                if let Err(e) = metrics_addr.addr.send(PipelineMsg::Event {
+                if let Err(e) = metrics_addr.addr.send(pipeline::Msg::Event {
                     input: input.into(),
                     event: metrics_event,
                 }) {

@@ -40,7 +40,7 @@ impl ConfigImpl for Config {}
 pub struct GPub {
     config: Config,
     hub: GpsHub,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -73,7 +73,7 @@ impl Offramp for GPub {
         Ok(())
     }
 
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
 

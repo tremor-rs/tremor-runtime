@@ -15,12 +15,14 @@
 use crate::codec::Codec;
 use crate::errors::*;
 use crate::metrics::RampReporter;
+use crate::pipeline;
 use crate::registry::ServantId;
-use crate::system::{PipelineAddr, Stop, METRICS_PIPELINE};
+use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
-use actix::prelude::*;
-use crossbeam_channel::{bounded, Sender};
+use async_std::sync::channel;
+use async_std::task::{self, JoinHandle};
+use crossbeam_channel::{bounded, Sender as CbSender};
 use std::borrow::Cow;
 use std::fmt;
 use std::thread;
@@ -48,15 +50,16 @@ pub enum Msg {
     },
     Connect {
         id: TremorURL,
-        addr: PipelineAddr,
+        addr: pipeline::Addr,
     },
     Disconnect {
         id: TremorURL,
-        tx: Sender<bool>,
+        tx: CbSender<bool>,
     },
 }
 
-pub type Addr = Sender<Msg>;
+pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
+pub type Addr = CbSender<Msg>;
 
 // We allow this here since we can't pass in &dyn Code as that would taint the
 // overlying object with lifetimes.
@@ -67,8 +70,8 @@ pub trait Offramp: Send {
     fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
     fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event) -> Result<()>;
     fn default_codec(&self) -> &str;
-    fn add_pipeline(&mut self, _id: TremorURL, _addr: PipelineAddr);
-    fn remove_pipeline(&mut self, _id: TremorURL) -> bool;
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
+    fn remove_pipeline(&mut self, id: TremorURL) -> bool;
 }
 
 pub trait Impl {
@@ -97,24 +100,12 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Manager {
-    pub qsize: usize,
-}
-
-impl Actor for Manager {
-    type Context = Context<Self>;
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Offramp manager started");
-    }
-}
-
 pub(crate) struct Create {
-    pub(crate) id: ServantId,
-    pub(crate) offramp: Box<dyn Offramp>,
-    pub(crate) codec: Box<dyn Codec>,
-    pub(crate) postprocessors: Vec<String>,
-    pub(crate) metrics_reporter: RampReporter,
+    pub id: ServantId,
+    pub offramp: Box<dyn Offramp>,
+    pub codec: Box<dyn Codec>,
+    pub postprocessors: Vec<String>,
+    pub metrics_reporter: RampReporter,
 }
 
 impl fmt::Debug for Create {
@@ -123,71 +114,122 @@ impl fmt::Debug for Create {
     }
 }
 
-impl Message for Create {
-    type Result = Result<Addr>;
+pub(crate) enum ManagerMsg {
+    Create(async_std::sync::Sender<Result<Addr>>, Create),
+    Stop,
 }
 
-impl Handler<Create> for Manager {
-    type Result = Result<Addr>;
-    fn handle(&mut self, mut req: Create, _ctx: &mut Context<Self>) -> Self::Result {
-        req.offramp.start(&req.codec, &req.postprocessors)?;
+#[derive(Debug, Default)]
+pub(crate) struct Manager {
+    qsize: usize,
+}
 
-        let (tx, rx) = bounded(self.qsize);
-        let offramp_id = req.id.clone();
-        // let mut s = req;
-        thread::spawn(move || {
-            info!("[Offramp::{}] started", offramp_id);
-            for m in rx {
-                match m {
-                    Msg::Event { event, input } => {
-                        req.metrics_reporter.periodic_flush(event.ingest_ns);
+impl Manager {
+    pub fn new(qsize: usize) -> Self {
+        Self { qsize }
+    }
 
-                        req.metrics_reporter.increment_in();
-                        // TODO FIXME implement postprocessors
-                        match req.offramp.on_event(&req.codec, input.into(), event) {
-                            Ok(_) => req.metrics_reporter.increment_out(),
+    pub fn start(self) -> (JoinHandle<bool>, Sender) {
+        let (tx, rx) = channel(64);
+
+        let h = task::spawn(async move {
+            info!("Onramp manager started");
+            loop {
+                match rx.recv().await {
+                    Some(ManagerMsg::Stop) => {
+                        info!("Stopping onramps...");
+                        break;
+                    }
+                    Some(ManagerMsg::Create(
+                        r,
+                        Create {
+                            codec,
+                            mut offramp,
+                            postprocessors,
+                            mut metrics_reporter,
+                            id,
+                        },
+                    )) => {
+                        match offramp.start(&codec, &postprocessors) {
+                            Ok(_) => (),
                             Err(e) => {
-                                req.metrics_reporter.increment_error();
-                                error!("[Offramp::{}] On Event error: {}", offramp_id, e);
+                                error!("Failed to create onramp {}: {}", id, e);
+                                continue;
                             }
                         }
-                    }
-                    Msg::Connect { id, addr } => {
-                        if id == *METRICS_PIPELINE {
-                            info!(
-                                "[Offramp::{}] Connecting system metrics pipeline {}",
-                                offramp_id, id
-                            );
-                            req.metrics_reporter.set_metrics_pipeline((id, addr));
-                        } else {
-                            info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
-                            req.offramp.add_pipeline(id, addr);
-                        }
-                    }
-                    Msg::Disconnect { id, tx } => {
-                        info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
-                        let r = req.offramp.remove_pipeline(id.clone());
-                        info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
-                        if r {
-                            info!("[Offramp::{}] Marked as done ", offramp_id);
-                        }
-                        if let Err(e) = tx.send(r) {
-                            error!("Failed to send reply: {}", e)
-                        }
-                    }
-                }
-            }
-            info!("[Offramp::{}] stopped", offramp_id);
-        });
-        Ok(tx)
-    }
-}
 
-impl Handler<Stop> for Manager {
-    type Result = ();
-    fn handle(&mut self, _req: Stop, _ctx: &mut Self::Context) -> Self::Result {
-        // TODO: Propper shutdown needed?
-        info!("Stopping offramps");
-        System::current().stop();
+                        let (tx, rx) = bounded(self.qsize);
+                        let offramp_id = id.clone();
+                        // let mut s = req;
+                        thread::spawn(move || {
+                            info!("[Offramp::{}] started", offramp_id);
+                            for m in rx {
+                                match m {
+                                    Msg::Event { event, input } => {
+                                        metrics_reporter.periodic_flush(event.ingest_ns);
+
+                                        metrics_reporter.increment_in();
+                                        // TODO FIXME implement postprocessors
+                                        match offramp.on_event(&codec, input.into(), event) {
+                                            Ok(_) => metrics_reporter.increment_out(),
+                                            Err(e) => {
+                                                metrics_reporter.increment_error();
+                                                error!(
+                                                    "[Offramp::{}] On Event error: {}",
+                                                    offramp_id, e
+                                                );
+                                            }
+                                        }
+                                    }
+                                    Msg::Connect { id, addr } => {
+                                        if id == *METRICS_PIPELINE {
+                                            info!(
+                                            "[Offramp::{}] Connecting system metrics pipeline {}",
+                                            offramp_id, id
+                                        );
+                                            metrics_reporter.set_metrics_pipeline((id, addr));
+                                        } else {
+                                            info!(
+                                                "[Offramp::{}] Connecting pipeline {}",
+                                                offramp_id, id
+                                            );
+                                            offramp.add_pipeline(id, addr);
+                                        }
+                                    }
+                                    Msg::Disconnect { id, tx } => {
+                                        info!(
+                                            "[Offramp::{}] Disconnecting pipeline {}",
+                                            offramp_id, id
+                                        );
+                                        let r = offramp.remove_pipeline(id.clone());
+                                        info!(
+                                            "[Offramp::{}] Pipeline {} disconnected",
+                                            offramp_id, id
+                                        );
+                                        if r {
+                                            info!("[Offramp::{}] Marked as done ", offramp_id);
+                                        }
+
+                                        if let Err(e) = tx.send(r) {
+                                            error!("Failed to send reply: {}", e)
+                                        }
+                                    }
+                                }
+                            }
+                            info!("[Offramp::{}] stopped", offramp_id);
+                        });
+                        r.send(Ok(tx)).await
+                    }
+                    None => {
+                        info!("Stopping onramps...");
+                        break;
+                    }
+                };
+            }
+            info!("Onramp manager stopped.");
+            true
+        });
+
+        (h, tx)
     }
 }

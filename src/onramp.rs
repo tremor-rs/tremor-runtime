@@ -14,11 +14,9 @@
 
 use crate::errors::*;
 use crate::metrics::RampReporter;
+use crate::pipeline;
 use crate::repository::ServantId;
-use crate::system::{PipelineAddr, Stop};
 use crate::url::TremorURL;
-use actix::prelude::*;
-use crossbeam_channel::Sender;
 use serde_yaml::Value;
 use std::fmt;
 mod blaster;
@@ -29,10 +27,15 @@ mod kafka;
 mod metronome;
 mod postgres;
 mod prelude;
-mod rest;
 pub mod tcp;
 mod udp;
-mod ws;
+use async_std::sync::channel;
+use async_std::task::{self, JoinHandle};
+use crossbeam_channel::Sender as CbSender;
+// mod rest; .unwrap()
+// mod ws; .unwrap() - reenable
+
+pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
@@ -40,11 +43,11 @@ pub(crate) trait Impl {
 
 #[derive(Clone, Debug)]
 pub enum Msg {
-    Connect(Vec<(TremorURL, PipelineAddr)>),
-    Disconnect { id: TremorURL, tx: Sender<bool> },
+    Connect(Vec<(TremorURL, pipeline::Addr)>),
+    Disconnect { id: TremorURL, tx: CbSender<bool> },
 }
 
-pub type Addr = Sender<Msg>;
+pub type Addr = CbSender<Msg>;
 
 pub(crate) trait Onramp: Send {
     fn start(
@@ -69,19 +72,9 @@ pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onram
         "crononome" => crononome::Crononome::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "tcp" => tcp::Tcp::from_config(config),
-        "rest" => rest::Rest::from_config(config),
-        "ws" => ws::Ws::from_config(config),
+        // "rest" => rest::Rest::from_config(config), .unwrap()
+        // "ws" => ws::Ws::from_config(config), .unwrap()
         _ => Err(format!("Onramp {} not known", name).into()),
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Manager {}
-
-impl Actor for Manager {
-    type Context = Context<Self>;
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Onramp manager started");
     }
 }
 
@@ -96,6 +89,69 @@ pub(crate) struct Create {
 impl fmt::Debug for Create {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "StartOnramp({})", self.id)
+    }
+}
+
+pub(crate) enum ManagerMsg {
+    Create(async_std::sync::Sender<Result<Addr>>, Create),
+    Stop,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Manager {
+    qsize: usize,
+}
+
+impl Manager {
+    pub fn new(qsize: usize) -> Self {
+        Self { qsize }
+    }
+    pub fn start(self) -> (JoinHandle<bool>, Sender) {
+        let (tx, rx) = channel(64);
+
+        let h = task::spawn(async move {
+            info!("Onramp manager started");
+            loop {
+                match rx.recv().await {
+                    Some(ManagerMsg::Stop) => {
+                        info!("Stopping onramps...");
+                        break;
+                    }
+                    Some(ManagerMsg::Create(
+                        r,
+                        Create {
+                            codec,
+                            mut stream,
+                            preprocessors,
+                            metrics_reporter,
+                            id,
+                        },
+                    )) => match stream.start(&codec, &preprocessors, metrics_reporter) {
+                        Ok(addr) => {
+                            info!("Onramp {} started.", id);
+                            r.send(Ok(addr)).await
+                        }
+                        Err(e) => error!("Creating an onramp failed: {}", e),
+                    },
+                    None => {
+                        info!("Stopping onramps...");
+                        break;
+                    }
+                }
+            }
+            info!("Onramp manager stopped.");
+            true
+        });
+
+        (h, tx)
+    }
+}
+/*
+
+impl Actor for Manager {
+    type Context = Context<Self>;
+    fn started(&mut self, _ctx: &mut Context<Self>) {
+        info!("Onramp manager started");
     }
 }
 
@@ -119,6 +175,7 @@ impl Handler<Stop> for Manager {
         System::current().stop();
     }
 }
+*/
 
 #[cfg(test)]
 mod test {
