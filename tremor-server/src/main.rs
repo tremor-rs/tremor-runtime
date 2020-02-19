@@ -29,12 +29,6 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-/*
-use jemallocator;
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-*/
-
 #[macro_use]
 extern crate log;
 
@@ -43,35 +37,18 @@ mod args;
 use crate::errors::*;
 use crate::system::World;
 use crate::url::TremorURL;
-use actix_cors::Cors;
-use actix_files as fs;
 use async_std::task;
 use env_logger;
 use serde_yaml;
-use tremor_api;
-use tremor_pipeline::query::Query;
-use tremor_pipeline::FN_REGISTRY;
-use tremor_runtime;
-use tremor_runtime::config;
-use tremor_runtime::errors;
-use tremor_runtime::functions;
-use tremor_runtime::metrics;
-use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
-use tremor_runtime::system;
-use tremor_runtime::url;
-use tremor_runtime::version;
-
-use actix_web::{
-    //error,
-    middleware,
-    web,
-    App,
-    HttpServer,
-};
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
 use std::path::Path;
+use tremor_api as api;
+use tremor_pipeline::query::Query;
+use tremor_pipeline::FN_REGISTRY;
+use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
+use tremor_runtime::{self, config, errors, functions, metrics, system, url, version};
 
 #[cfg_attr(tarpaulin, skip)]
 fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -207,75 +184,53 @@ fn run_dun() -> Result<()> {
         .value_of("host")
         .ok_or_else(|| Error::from("host argument missing"))?;
 
-    let w = world.clone();
-    let s = HttpServer::new(move || {
-        App::new()
-            .data(tremor_api::State { world: w.clone() })
-            .wrap(middleware::Logger::default())
-            .wrap(Cors::new())
-            .service(
-                web::resource("/binding")
-                    .route(web::get().to(tremor_api::binding::list_artefact))
-                    .route(web::post().to(tremor_api::binding::publish_artefact)),
-            )
-            .service(
-                web::resource("/binding/{aid}")
-                    .route(web::get().to(tremor_api::binding::get_artefact))
-                    .route(web::delete().to(tremor_api::binding::unpublish_artefact)),
-            )
-            .service(
-                web::resource("/binding/{aid}/{sid}")
-                    .route(web::get().to(tremor_api::binding::get_servant))
-                    .route(web::post().to(tremor_api::binding::link_servant))
-                    .route(web::delete().to(tremor_api::binding::unlink_servant)),
-            )
-            .service(
-                web::resource("/pipeline")
-                    .route(web::get().to(tremor_api::pipeline::list_artefact))
-                    .route(web::post().to(tremor_api::pipeline::publish_artefact)),
-            )
-            .service(
-                web::resource("/pipeline/{aid}")
-                    .route(web::get().to(tremor_api::pipeline::get_artefact))
-                    .route(web::delete().to(tremor_api::pipeline::unpublish_artefact)),
-            )
-            .service(
-                web::resource("/onramp")
-                    .route(web::get().to(tremor_api::onramp::list_artefact))
-                    .route(web::post().to(tremor_api::onramp::publish_artefact)),
-            )
-            .service(
-                web::resource("/onramp/{aid}")
-                    .route(web::get().to(tremor_api::onramp::get_artefact))
-                    .route(web::delete().to(tremor_api::onramp::unpublish_artefact)),
-            )
-            .service(
-                web::resource("/offramp")
-                    .route(web::get().to(tremor_api::offramp::list_artefact))
-                    .route(web::post().to(tremor_api::offramp::publish_artefact)),
-            )
-            .service(
-                web::resource("/offramp/{aid}")
-                    .route(web::get().to(tremor_api::offramp::get_artefact))
-                    .route(web::delete().to(tremor_api::offramp::unpublish_artefact)),
-            )
-            .service(web::resource("/version").route(web::get().to(tremor_api::version::get)))
-    });
-    eprintln!("Listening at: http://{}", host);
-    info!("Listening at: http://{}", host);
+    task::block_on(async {
+        let mut app = tide::Server::with_state(api::State {
+            world: world.clone(),
+        });
 
-    if !matches.is_present("no-api") {
-        s.bind(&host)
-            .map_err(|e| Error::from(format!("Can not bind to {}", e)))?
-            .run()?;
-        warn!("API stopped");
-        world.stop();
-    }
-    /*
-    if let Err(e) = task::block_on(handle) {
-        error!("Tremor terminated badly: {:?}", e);
-    }
-    */
+        app.at("/version").get(api::version::get);
+        app.at("/binding")
+            .get(api::binding::list_artefact)
+            .post(api::binding::publish_artefact);
+        app.at("/binding/{aid}")
+            .get(api::binding::get_artefact)
+            .delete(api::binding::unpublish_artefact);
+        app.at("/binding/{aid}/{sid}")
+            .get(api::binding::get_servant)
+            .post(api::binding::link_servant)
+            .delete(api::binding::unlink_servant);
+        app.at("/pipeline")
+            .get(api::pipeline::list_artefact)
+            .post(api::pipeline::publish_artefact);
+        app.at("/pipeline/{aid}")
+            .get(api::pipeline::get_artefact)
+            .delete(api::pipeline::unpublish_artefact);
+
+        app.at("/onramp")
+            .get(api::onramp::list_artefact)
+            .post(api::onramp::publish_artefact);
+        app.at("/onramp/{aid}")
+            .get(api::onramp::get_artefact)
+            .delete(api::onramp::unpublish_artefact);
+        app.at("/offramp")
+            .get(api::offramp::list_artefact)
+            .post(api::offramp::publish_artefact);
+        app.at("/offramp/{aid}")
+            .get(api::offramp::get_artefact)
+            .delete(api::offramp::unpublish_artefact);
+
+        if !matches.is_present("no-api") {
+            eprintln!("Listening at: http://{}", host);
+            info!("Listening at: http://{}", host);
+
+            if let Err(e) = app.listen(&host).await {
+                error!("API Error: {}", e);
+            }
+            warn!("API stopped");
+            world.stop();
+        }
+    });
     task::block_on(handle);
     warn!("World stopped");
     Ok(())

@@ -123,8 +123,6 @@ mssql = []
 drop_copy = []
 # used for autobahn testing - all WS inputs will be echoed back to the server
 ws-echo = []
-#mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
-# php-runtime = ["php"]
-# drop_copy = ["notify"]
 
 [patch.crates-io]
+tide = { path = '../../tide' }

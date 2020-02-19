@@ -120,9 +120,9 @@ pub struct World {
     pub repo: Repositories,
     /// Registry
     pub reg: Registries,
-    system_pipelines: HashMap<ServantId, pipeline::Addr>,
-    system_onramps: HashMap<ServantId, onramp::Addr>,
-    system_offramps: HashMap<ServantId, offramp::Addr>,
+    //system_pipelines: HashMap<ServantId, pipeline::Addr>,
+    //system_onramps: HashMap<ServantId, onramp::Addr>,
+    //system_offramps: HashMap<ServantId, offramp::Addr>,
     storage_directory: Option<String>,
 }
 
@@ -529,9 +529,9 @@ impl World {
             repo,
             reg,
             storage_directory,
-            system_pipelines: HashMap::new(),
-            system_onramps: HashMap::new(),
-            system_offramps: HashMap::new(),
+            //system_pipelines: HashMap::new(),
+            //system_onramps: HashMap::new(),
+            //system_offramps: HashMap::new(),
         };
 
         world.register_system()?;
@@ -557,11 +557,11 @@ links:
             .publish_pipeline(&METRICS_PIPELINE, true, artefact)?;
         self.bind_pipeline(&METRICS_PIPELINE)?;
 
-        let addr = self
+        let _addr = self
             .reg
             .find_pipeline(&METRICS_PIPELINE)?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
-        self.system_pipelines.insert(METRICS_PIPELINE.clone(), addr);
+        //self.system_pipelines.insert(METRICS_PIPELINE.clone(), addr);
 
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
@@ -572,11 +572,11 @@ type: stdout
         )?;
         self.repo.publish_offramp(&STDOUT_OFFRAMP, true, artefact)?;
         self.bind_offramp(&STDOUT_OFFRAMP)?;
-        let addr = self
+        let _addr = self
             .reg
             .find_offramp(&STDOUT_OFFRAMP)?
             .ok_or_else(|| Error::from("Failed to initialize stdout offramp."))?;
-        self.system_offramps.insert(STDOUT_OFFRAMP.clone(), addr);
+        //self.system_offramps.insert(STDOUT_OFFRAMP.clone(), addr);
 
         // Register stderr offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
@@ -587,11 +587,11 @@ type: stderr
         )?;
         self.repo.publish_offramp(&STDERR_OFFRAMP, true, artefact)?;
         self.bind_offramp(&STDERR_OFFRAMP)?;
-        let addr = self
+        let _addr = self
             .reg
             .find_offramp(&STDERR_OFFRAMP)?
             .ok_or_else(|| Error::from("Failed to initialize stderr offramp."))?;
-        self.system_offramps.insert(STDERR_OFFRAMP.clone(), addr);
+        //self.system_offramps.insert(STDERR_OFFRAMP.clone(), addr);
 
         Ok(())
     }

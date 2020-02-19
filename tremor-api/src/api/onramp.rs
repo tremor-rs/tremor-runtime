@@ -13,11 +13,6 @@
 // limitations under the License.
 
 use crate::api::*;
-use actix_web::{
-    error,
-    web::{Data, Path},
-    HttpRequest,
-};
 
 #[derive(Serialize)]
 struct OnRampWrap {
@@ -25,46 +20,49 @@ struct OnRampWrap {
     instances: Vec<String>,
 }
 
-pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
-    let result: Vec<String> = data
+pub async fn list_artefact(req: Request) -> Result<Response> {
+    let result: Vec<String> = req
+        .state()
         .world
         .repo
         .list_onramps()
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(&req, &data, Ok(result), false, 200)
+    reply(req, result, false, 200).await
 }
 
-pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
-    let decoded_data: tremor_runtime::config::OnRamp = decode(&req, &data_raw)?;
-    let url = build_url(&["onramp", &decoded_data.id])?;
-    let result = data.world.repo.publish_onramp(&url, false, decoded_data);
-    reply(&req, &data, result, true, 201)
+pub async fn publish_artefact(req: Request) -> Result<Response> {
+    let (req, data): (_, tremor_runtime::config::OnRamp) = decode(req).await?;
+    let url = build_url(&["onramp", &data.id])?;
+    let result = req.state().world.repo.publish_onramp(&url, false, data)?;
+    reply(req, result, true, 201).await
 }
 
-pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn unpublish_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["onramp", &id])?;
-    let result = data.world.repo.unpublish_onramp(&url);
-    reply(&req, &data, result, true, 200)
+    let result = req.state().world.repo.unpublish_onramp(&url)?;
+    reply(req, result, true, 200).await
 }
 
-pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn get_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["onramp", &id])?;
-    data.world
+    let result = req
+        .state()
+        .world
         .repo
-        .find_onramp(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?
-        .ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))
-        .map(|result| {
-            Ok(OnRampWrap {
-                artefact: result.artefact,
-                instances: result
-                    .instances
-                    .iter()
-                    .filter_map(tremor_runtime::url::TremorURL::instance)
-                    .collect(),
-            })
-        })
-        .and_then(|result| reply(&req, &data, result, false, 200))
+        .find_onramp(&url)?
+        .ok_or_else(Error::not_found)?;
+    let result = OnRampWrap {
+        artefact: result.artefact,
+        instances: result
+            .instances
+            .iter()
+            .filter_map(TremorURL::instance)
+            .collect(),
+    };
+
+    reply(req, result, false, 200).await
 }
