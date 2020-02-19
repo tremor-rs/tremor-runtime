@@ -26,7 +26,7 @@
 )]
 #![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
-#[macro_use]
+//#[macro_use]
 extern crate serde_derive;
 
 mod api;

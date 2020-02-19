@@ -12,15 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Screw actix web, it's not our fault!
-#![allow(clippy::type_complexity)]
-
 use crate::api::*;
-use actix_web::{
-    error,
-    web::{Data, Path},
-    Responder,
-};
 use hashbrown::HashMap;
 use tremor_runtime::repository::BindingArtefact;
 
@@ -30,87 +22,105 @@ struct BindingWrap {
     instances: Vec<String>,
 }
 
-pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    let result: Vec<String> = data
+pub async fn list_artefact(req: Request) -> Result<Response> {
+    let result: Vec<String> = req
+        .state()
         .world
         .repo
         .list_bindings()
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(&req, &data, Ok(result), false, 200)
+    reply(req, result, false, 200).await
 }
 
-pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
-    let binding: tremor_runtime::config::Binding = decode(&req, &data_raw)?;
+pub async fn publish_artefact(req: Request) -> Result<Response> {
+    let (req, binding): (_, tremor_runtime::config::Binding) = decode(req).await?;
     let url = build_url(&["binding", &binding.id])?;
-    let result = data.world.repo.publish_binding(
+
+    let result = req.state().world.repo.publish_binding(
         &url,
         false,
         BindingArtefact {
             binding,
             mapping: None,
         },
-    );
-    reply(&req, &data, result.map(|a| a.binding), true, 201)
+    )?;
+
+    reply(req, result.binding, true, 201).await
 }
 
-pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn unpublish_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["binding", &id])?;
-    let result = data.world.repo.unpublish_binding(&url);
-    reply(&req, &data, result.map(|a| a.binding), true, 200)
+    let result = req.state().world.repo.unpublish_binding(&url)?;
+    reply(req, result.binding, true, 200).await
 }
 
-pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn get_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["binding", &id])?;
-    data.world
+
+    let result = req
+        .state()
+        .world
         .repo
-        .find_binding(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))
-        .and_then(|result| {
-            result.ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))
-        })
-        .map(|result| {
-            Ok(BindingWrap {
-                artefact: result.artefact.binding,
-                instances: result
-                    .instances
-                    .iter()
-                    .filter_map(tremor_runtime::url::TremorURL::instance)
-                    .collect(),
-            })
-        })
-        .and_then(|result| reply(&req, &data, result, false, 200))
+        .find_binding(&url)?
+        .ok_or_else(Error::not_found)?;
+
+    let result = BindingWrap {
+        artefact: result.artefact.binding,
+        instances: result
+            .instances
+            .iter()
+            .filter_map(tremor_runtime::url::TremorURL::instance)
+            .collect(),
+    };
+
+    reply(req, result, false, 200).await
 }
 
-pub fn get_servant(
-    (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
-) -> HTTPResult {
-    let url = build_url(&["binding", &path.0, &path.1])?;
-    data.world
+pub async fn get_servant(req: Request) -> Result<Response> {
+    let a_id: String = req.param("aid").unwrap_or_default();
+    let s_id: String = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", &a_id, &s_id])?;
+
+    let result = req
+        .state()
+        .world
         .reg
-        .find_binding(&url)
-        .map_err(|e| error::ErrorInternalServerError(format!("Internal server error: {}", e)))
-        .and_then(|result| result.ok_or_else(|| error::ErrorNotFound("Binding not found")))
-        .and_then(|result| reply(&req, &data, Ok(result.binding), false, 200))
+        .find_binding(&url)?
+        .ok_or_else(Error::not_found)?
+        .binding;
+
+    reply(req, result, false, 200).await
 }
 
 // We really don't want to deal with that!
 #[allow(clippy::implicit_hasher)]
-pub fn link_servant(
-    (req, data, path, data_raw): (HttpRequest, Data<State>, Path<(String, String)>, String),
-) -> HTTPResult {
-    let decoded_data: HashMap<String, String> = decode(&req, &data_raw)?;
-    let url = build_url(&["binding", &path.0, &path.1])?;
-    let result = data.world.link_binding(&url, decoded_data);
-    reply(&req, &data, result.map(|a| a.binding), true, 201)
+pub async fn link_servant(req: Request) -> Result<Response> {
+    let (req, decoded_data): (_, HashMap<String, String>) = decode(req).await?;
+
+    let a_id: String = req.param("aid").unwrap_or_default();
+    let s_id: String = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", &a_id, &s_id])?;
+
+    let result = req.state().world.link_binding(&url, decoded_data)?.binding;
+
+    reply(req, result, true, 201).await
 }
 
 #[allow(clippy::implicit_hasher)]
-pub fn unlink_servant(
-    (req, data, path): (HttpRequest, Data<State>, Path<(String, String)>),
-) -> HTTPResult {
-    let url = build_url(&["binding", &path.0, &path.1])?;
-    let result = data.world.unlink_binding(&url, HashMap::new());
-    reply(&req, &data, result.map(|a| a.binding), true, 200)
+pub async fn unlink_servant(req: Request) -> Result<Response> {
+    let a_id: String = req.param("aid").unwrap_or_default();
+    let s_id: String = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", &a_id, &s_id])?;
+
+    let result = req
+        .state()
+        .world
+        .unlink_binding(&url, HashMap::new())?
+        .binding;
+
+    reply(req, result, true, 201).await
 }

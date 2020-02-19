@@ -16,12 +16,11 @@ clap = { version = "2", features = ["yaml"] }
 env_logger = "0.6"
 log = "0.4"
 log4rs = "0.8"
-actix-web = "1"
-actix-cors = "0.1"
 #mimalloc = { version = "0.1.6", default-features = false }
 #jemallocator = "0.3.2"
 mimalloc = { git = "https://github.com/purpleprotocol/mimalloc_rust", tag = "v0.1.6", default-features = false }
 async-std = {version = "1.5", features = ["unstable"]}
+tide = "0.6"
 
 [features]
 default = []

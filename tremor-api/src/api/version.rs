@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::api::{reply, State};
-use actix_web::{web::Data, HttpRequest, Responder};
+use crate::api::*;
 use tremor_runtime::version::VERSION;
 
 #[derive(Serialize, Deserialize)]
@@ -28,6 +27,6 @@ impl Version {
     }
 }
 
-pub fn get((req, data): (HttpRequest, Data<State>)) -> impl Responder {
-    reply(&req, &data, Ok(Version::default()), false, 200)
+pub async fn get(req: Request) -> Result<Response> {
+    reply(req, Version::default(), false, 200).await
 }

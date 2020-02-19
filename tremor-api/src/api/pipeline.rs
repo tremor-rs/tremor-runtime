@@ -13,11 +13,7 @@
 // limitations under the License.
 
 use crate::api::*;
-use actix_web::{
-    error,
-    web::{Data, Path},
-    HttpRequest,
-};
+use http::StatusCode;
 use tremor_runtime::repository::PipelineArtefact;
 
 #[derive(Serialize)]
@@ -26,23 +22,26 @@ struct PipelineWrap {
     instances: Vec<String>,
 }
 
-pub fn list_artefact((req, data): (HttpRequest, Data<State>)) -> HTTPResult {
-    let result: Vec<String> = data
+pub async fn list_artefact(req: Request) -> Result<Response> {
+    let result: Vec<String> = req
+        .state()
         .world
         .repo
         .list_pipelines()
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(&req, &data, Ok(result), false, 200)
+    reply(req, result, false, 200).await
 }
 
-pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String)) -> HTTPResult {
-    let decoded_data: tremor_pipeline::config::Pipeline = decode(&req, &data_raw)?;
+pub async fn publish_artefact(req: Request) -> Result<Response> {
+    let (req, decoded_data): (_, tremor_pipeline::config::Pipeline) = decode(req).await?;
+
     let url = build_url(&["pipeline", &decoded_data.id])?;
-    let pipeline = tremor_pipeline::build_pipeline(decoded_data)
-        .map_err(|e| error::ErrorBadRequest(format!("Bad pipeline: {}", e)))?;
-    let result = data
+    let pipeline = tremor_pipeline::build_pipeline(decoded_data)?;
+
+    let result = req
+        .state()
         .world
         .repo
         .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
@@ -50,46 +49,54 @@ pub fn publish_artefact((req, data, data_raw): (HttpRequest, Data<State>, String
             PipelineArtefact::Pipeline(p) => p.config,
             //ALLOW:  We publish a pipeline we can't ever get anything else back
             _ => unreachable!(),
-        });
-    reply(&req, &data, result, true, 201)
+        })?;
+    reply(req, result, true, 201).await
 }
 
-pub fn unpublish_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn unpublish_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", &id])?;
-    let result = data
-        .world
-        .repo
-        .unpublish_pipeline(&url)
-        .and_then(|result| match result {
-            PipelineArtefact::Pipeline(p) => Ok(p.config),
-            _ => Err("This is a query".into()), // FIXME
-        });
-    reply(&req, &data, result, true, 200)
+    let result =
+        req.state()
+            .world
+            .repo
+            .unpublish_pipeline(&url)
+            .and_then(|result| match result {
+                PipelineArtefact::Pipeline(p) => Ok(p.config),
+                _ => Err("This is a query".into()), // FIXME
+            })?;
+    reply(req, result, true, 200).await
 }
 
-pub fn get_artefact((req, data, id): (HttpRequest, Data<State>, Path<String>)) -> HTTPResult {
+pub async fn get_artefact(req: Request) -> Result<Response> {
+    let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", &id])?;
-    let result = data
+    let result = req
+        .state()
         .world
         .repo
-        .find_pipeline(&url)
-        .map_err(|_e| error::ErrorInternalServerError("lookup failed"))?
-        .ok_or_else(|| error::ErrorNotFound(r#"{"error": "Artefact not found"}"#))?;
+        .find_pipeline(&url)?
+        .ok_or_else(Error::not_found)?;
     match result.artefact {
-        PipelineArtefact::Pipeline(p) => reply(
-            &req,
-            &data,
-            Ok(PipelineWrap {
-                artefact: p.config,
-                instances: result
-                    .instances
-                    .iter()
-                    .filter_map(tremor_runtime::url::TremorURL::instance)
-                    .collect(),
-            }),
-            false,
-            200,
-        ),
-        _ => Err(error::ErrorNotFound(r#"{"error": "Artefact is a query"}"#)),
+        PipelineArtefact::Pipeline(p) => {
+            reply(
+                req,
+                PipelineWrap {
+                    artefact: p.config,
+                    instances: result
+                        .instances
+                        .iter()
+                        .filter_map(tremor_runtime::url::TremorURL::instance)
+                        .collect(),
+                },
+                false,
+                200,
+            )
+            .await
+        }
+        _ => Err(Error::json(
+            StatusCode::BAD_REQUEST,
+            &r#"{"error": "Artefact is a query"}"#,
+        )),
     }
 }
