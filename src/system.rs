@@ -26,10 +26,10 @@ use async_std::{
     task::{self, JoinHandle},
 };
 //use crossbeam_channel::Sender as CbSender;
+use async_std::fs::File;
+use async_std::io::prelude::*;
+use async_std::path::Path;
 use hashbrown::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
 use tremor_pipeline;
 
 pub(crate) use crate::offramp;
@@ -128,24 +128,24 @@ pub struct World {
 
 impl World {
     /// Bind a pipeline
-    pub fn bind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding pipeline {}", id);
-        match (&self.repo.find_pipeline(id)?, &id.instance()) {
+        match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant = ActivatorLifecycleFsm::new(
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
                 )?;
-                self.repo.bind_pipeline(id)?;
+                self.repo.bind_pipeline(id).await?;
                 // We link to the metrics pipeline
-                let res = self.reg.publish_pipeline(id, servant)?;
+                let res = self.reg.publish_pipeline(id, servant).await?;
                 let mut id = id.clone();
                 id.set_port("metrics".to_owned());
                 let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
-                self.link_pipeline(&id, m)?;
+                self.link_existing_pipeline(&id, m).await?;
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -154,12 +154,12 @@ impl World {
     }
 
     /// Unbind a pipeline
-    pub fn unbind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding pipeline {}", id);
-        match (&self.repo.find_pipeline(id)?, &id.instance()) {
+        match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instance_id)) => {
-                let r = self.reg.unpublish_pipeline(id)?;
-                self.repo.unbind_pipeline(id)?;
+                let r = self.reg.unpublish_pipeline(id).await?;
+                self.repo.unbind_pipeline(id).await?;
                 Ok(r)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -168,11 +168,11 @@ impl World {
     }
 
     /// Stop the runtime
-    pub fn stop(&self) {
-        task::block_on(self.system.send(ManagerMsg::Stop));
+    pub async fn stop(&self) {
+        self.system.send(ManagerMsg::Stop).await;
     }
     /// Links a pipeline
-    pub fn link_pipeline(
+    pub async fn link_pipeline(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -181,17 +181,18 @@ impl World {
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
         info!("Linking pipeline {} to {:?}", id, mappings);
-        if let Some(pipeline_a) = self.repo.find_pipeline(id)? {
-            if self.reg.find_pipeline(id)?.is_none() {
-                self.bind_pipeline(&id)?;
+        if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
+            if self.reg.find_pipeline(id).await?.is_none() {
+                self.bind_pipeline(&id).await?;
             };
             pipeline_a.artefact.link(self, id, mappings)
         } else {
             Err(format!("Pipeline {} not found.", id).into())
         }
     }
-    /// Unlink a pipelein
-    pub fn unlink_pipeline(
+
+    /// Links a pipeline
+    async fn link_existing_pipeline(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -199,10 +200,27 @@ impl World {
             <PipelineArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
-        if let Some(pipeline_a) = self.repo.find_pipeline(id)? {
+        info!("Linking pipeline {} to {:?}", id, mappings);
+        if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
+            pipeline_a.artefact.link(self, id, mappings)
+        } else {
+            Err(format!("Pipeline {} not found.", id).into())
+        }
+    }
+
+    /// Unlink a pipelein
+    pub async fn unlink_pipeline(
+        &self,
+        id: &TremorURL,
+        mappings: HashMap<
+            <PipelineArtefact as Artefact>::LinkLHS,
+            <PipelineArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
+        if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             let r = pipeline_a.artefact.unlink(self, id, mappings);
-            if self.reg.find_pipeline(id)?.is_some() {
-                self.unbind_pipeline(id)?;
+            if self.reg.find_pipeline(id).await?.is_some() {
+                self.unbind_pipeline(id).await?;
             };
             r
         } else {
@@ -211,33 +229,33 @@ impl World {
     }
 
     #[cfg(test)]
-    pub fn bind_pipeline_from_artefact(
+    pub async fn bind_pipeline_from_artefact(
         &self,
         id: &TremorURL,
         artefact: PipelineArtefact,
     ) -> Result<ActivationState> {
-        self.repo.publish_pipeline(id, false, artefact)?;
-        self.bind_pipeline(id)
+        self.repo.publish_pipeline(id, false, artefact).await?;
+        self.bind_pipeline(id).await
     }
     /// Bind an onramp
-    pub fn bind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding onramp {}", id);
-        match (&self.repo.find_onramp(id)?, &id.instance()) {
+        match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant = ActivatorLifecycleFsm::new(
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
                 )?;
-                self.repo.bind_onramp(id)?;
+                self.repo.bind_onramp(id).await?;
                 // We link to the metrics pipeline
-                let res = self.reg.publish_onramp(id, servant)?;
+                let res = self.reg.publish_onramp(id, servant).await?;
                 let mut id = id.clone();
                 id.set_port("metrics".to_owned());
                 let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
-                self.link_onramp(&id, m)?;
+                self.link_existing_onramp(&id, m).await?;
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -245,12 +263,12 @@ impl World {
         }
     }
     /// Unbind an onramp
-    pub fn unbind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding onramp {}", id);
-        match (&self.repo.find_onramp(id)?, &id.instance()) {
+        match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instsance_id)) => {
-                let r = self.reg.unpublish_onramp(id);
-                self.repo.unbind_onramp(id)?;
+                let r = self.reg.unpublish_onramp(id).await;
+                self.repo.unbind_onramp(id).await?;
                 r
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -259,7 +277,7 @@ impl World {
     }
 
     /// Link an onramp
-    pub fn link_onramp(
+    pub async fn link_onramp(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -267,9 +285,9 @@ impl World {
             <OnrampArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
-        if let Some(onramp_a) = self.repo.find_onramp(id)? {
-            if self.reg.find_onramp(id)?.is_none() {
-                self.bind_onramp(&id)?;
+        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
+            if self.reg.find_onramp(id).await?.is_none() {
+                self.bind_onramp(&id).await?;
             };
             onramp_a.artefact.link(self, id, mappings)
         } else {
@@ -277,8 +295,7 @@ impl World {
         }
     }
 
-    /// Unlink an onramp
-    pub fn unlink_onramp(
+    async fn link_existing_onramp(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -286,10 +303,26 @@ impl World {
             <OnrampArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
-        if let Some(onramp_a) = self.repo.find_onramp(id)? {
+        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
+            onramp_a.artefact.link(self, id, mappings)
+        } else {
+            Err(format!("Onramp {:?} not found.", id).into())
+        }
+    }
+
+    /// Unlink an onramp
+    pub async fn unlink_onramp(
+        &self,
+        id: &TremorURL,
+        mappings: HashMap<
+            <OnrampArtefact as Artefact>::LinkLHS,
+            <OnrampArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
+        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
             let r = onramp_a.artefact.unlink(self, id, mappings)?;
             if r {
-                self.unbind_onramp(&id)?;
+                self.unbind_onramp(&id).await?;
             };
             Ok(r)
         } else {
@@ -298,18 +331,18 @@ impl World {
     }
 
     /// Bind an offramp
-    pub fn bind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding offramp {}", id);
-        match (&self.repo.find_offramp(id)?, &id.instance()) {
+        match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant = ActivatorLifecycleFsm::new(
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
                 )?;
-                self.repo.bind_offramp(id)?;
+                self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
-                let res = self.reg.publish_offramp(id, servant)?;
+                let res = self.reg.publish_offramp(id, servant).await?;
                 // TODO remove
                 //let mut id = id.clone();
                 //id.set_port("metrics".to_owned());
@@ -317,7 +350,7 @@ impl World {
                 let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
                     .into_iter()
                     .collect();
-                self.link_offramp(&id, m)?;
+                self.link_existing_offramp(&id, m).await?;
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -326,12 +359,12 @@ impl World {
     }
 
     /// Unbind an offramp
-    pub fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding offramp {}", id);
-        match (&self.repo.find_offramp(id)?, &id.instance()) {
+        match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instsance_id)) => {
-                let r = self.reg.unpublish_offramp(id);
-                self.repo.unbind_offramp(id)?;
+                let r = self.reg.unpublish_offramp(id).await;
+                self.repo.unbind_offramp(id).await?;
                 r
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
@@ -340,7 +373,7 @@ impl World {
     }
 
     /// Link an offramp
-    pub fn link_offramp(
+    pub async fn link_offramp(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -348,9 +381,9 @@ impl World {
             <OfframpArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
-        if let Some(offramp_a) = self.repo.find_offramp(id)? {
-            if self.reg.find_offramp(id)?.is_none() {
-                self.bind_offramp(&id)?;
+        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
+            if self.reg.find_offramp(id).await?.is_none() {
+                self.bind_offramp(&id).await?;
             };
             offramp_a.artefact.link(self, id, mappings)
         } else {
@@ -358,8 +391,7 @@ impl World {
         }
     }
 
-    /// Unlink an offramp
-    pub fn unlink_offramp(
+    async fn link_existing_offramp(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -367,10 +399,26 @@ impl World {
             <OfframpArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
-        if let Some(offramp_a) = self.repo.find_offramp(id)? {
+        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
+            offramp_a.artefact.link(self, id, mappings)
+        } else {
+            Err(format!("Offramp {:?} not found.", id).into())
+        }
+    }
+
+    /// Unlink an offramp
+    pub async fn unlink_offramp(
+        &self,
+        id: &TremorURL,
+        mappings: HashMap<
+            <OfframpArtefact as Artefact>::LinkLHS,
+            <OfframpArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
+        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
             let r = offramp_a.artefact.unlink(self, id, mappings)?;
             if r {
-                self.unbind_offramp(id)?;
+                self.unbind_offramp(id).await?;
             };
             Ok(r)
         } else {
@@ -378,7 +426,7 @@ impl World {
         }
     }
 
-    pub(crate) fn bind_binding_a(
+    pub(crate) async fn bind_binding_a(
         &self,
         id: &TremorURL,
         artefact: &BindingArtefact,
@@ -388,14 +436,14 @@ impl World {
             Some(_instance_id) => {
                 let servant =
                     ActivatorLifecycleFsm::new(self.clone(), artefact.to_owned(), id.clone())?;
-                self.repo.bind_binding(id)?;
-                self.reg.publish_binding(id, servant)
+                self.repo.bind_binding(id).await?;
+                self.reg.publish_binding(id, servant).await
             }
             None => Err(format!("Invalid URI for instance {}", id).into()),
         }
     }
 
-    pub(crate) fn unbind_binding_a(
+    pub(crate) async fn unbind_binding_a(
         &self,
         id: &TremorURL,
         _artefact: &BindingArtefact,
@@ -403,8 +451,8 @@ impl World {
         info!("Unbinding binding {}", id);
         match &id.instance() {
             Some(_instance_id) => {
-                let servant = self.reg.unpublish_binding(id)?;
-                self.repo.unbind_binding(id)?;
+                let servant = self.reg.unpublish_binding(id).await?;
+                self.repo.unbind_binding(id).await?;
                 Ok(servant)
             }
             None => Err(format!("Invalid URI for instance {}", id).into()),
@@ -412,7 +460,7 @@ impl World {
     }
 
     /// Links a binding
-    pub fn link_binding(
+    pub async fn link_binding(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -420,10 +468,10 @@ impl World {
             <BindingArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
-        if let Some(binding_a) = self.repo.find_binding(id)? {
+        if let Some(binding_a) = self.repo.find_binding(id).await? {
             let r = binding_a.artefact.link(self, id, mappings)?;
-            if self.reg.find_binding(id)?.is_none() {
-                self.bind_binding_a(id, &r)?;
+            if self.reg.find_binding(id).await?.is_none() {
+                self.bind_binding_a(id, &r).await?;
             };
             Ok(r)
         } else {
@@ -432,25 +480,27 @@ impl World {
     }
 
     /// Turns the running system into a config
-    pub fn to_config(&self) -> Result<Config> {
+    pub async fn to_config(&self) -> Result<Config> {
         let pipeline: PipelineVec = self
             .repo
             .serialize_pipelines()
+            .await
             .into_iter()
             .filter_map(|p| match p {
                 PipelineArtefact::Pipeline(p) => Some(p.config),
                 PipelineArtefact::Query(_q) => None, // FIXME
             })
             .collect();
-        let onramp: OnRampVec = self.repo.serialize_onramps();
-        let offramp: OffRampVec = self.repo.serialize_offramps();
+        let onramp: OnRampVec = self.repo.serialize_onramps().await;
+        let offramp: OffRampVec = self.repo.serialize_offramps().await;
         let binding: BindingVec = self
             .repo
             .serialize_bindings()
+            .await
             .into_iter()
             .map(|b| b.binding)
             .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings();
+        let mapping: MappingMap = self.reg.serialize_mappings().await;
         let config = crate::config::Config {
             pipeline,
             onramp,
@@ -461,9 +511,9 @@ impl World {
         Ok(config)
     }
     /// Saves the current config
-    pub fn save_config(&self) -> Result<String> {
+    pub async fn save_config(&self) -> Result<String> {
         if let Some(storage_directory) = &self.storage_directory {
-            let config = self.to_config()?;
+            let config = self.to_config().await?;
             let path = Path::new(storage_directory);
             let file_name = format!("config_{}.yaml", nanotime());
             let mut file_path = path.to_path_buf();
@@ -472,12 +522,12 @@ impl World {
                 "Serializing configuration to file {}",
                 file_path.to_string_lossy()
             );
-            let mut f = File::create(file_path.clone())?;
-            f.write_all(&serde_yaml::to_vec(&config)?)?;
+            let mut f = File::create(file_path.clone()).await?;
+            f.write_all(&serde_yaml::to_vec(&config)?).await?;
             // lets really sync this!
-            f.sync_all()?;
-            f.sync_all()?;
-            f.sync_all()?;
+            f.sync_all().await?;
+            f.sync_all().await?;
+            f.sync_all().await?;
             Ok(file_path.to_string_lossy().to_string())
         } else {
             Ok("".to_string())
@@ -485,7 +535,7 @@ impl World {
     }
 
     /// Unlinks a binding
-    pub fn unlink_binding(
+    pub async fn unlink_binding(
         &self,
         id: &TremorURL,
         mappings: HashMap<
@@ -493,9 +543,9 @@ impl World {
             <BindingArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
-        if let Some(mapping) = self.reg.find_binding(id)? {
+        if let Some(mapping) = self.reg.find_binding(id).await? {
             if mapping.unlink(self, id, mappings)? {
-                self.unbind_binding_a(id, &mapping)?;
+                self.unbind_binding_a(id, &mapping).await?;
             }
             return Ok(mapping);
         }
@@ -503,7 +553,7 @@ impl World {
     }
 
     /// Starts the runtime system
-    pub fn start(
+    pub async fn start(
         qsize: usize,
         storage_directory: Option<String>,
     ) -> Result<(Self, JoinHandle<()>)> {
@@ -534,11 +584,11 @@ impl World {
             //system_offramps: HashMap::new(),
         };
 
-        world.register_system()?;
+        world.register_system().await?;
         Ok((world, system_h))
     }
 
-    fn register_system(&mut self) -> Result<()> {
+    async fn register_system(&mut self) -> Result<()> {
         // register metrics pipeline
         let metric_config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(
             r#"
@@ -554,12 +604,14 @@ links:
         let artefact =
             PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(metric_config)?));
         self.repo
-            .publish_pipeline(&METRICS_PIPELINE, true, artefact)?;
-        self.bind_pipeline(&METRICS_PIPELINE)?;
+            .publish_pipeline(&METRICS_PIPELINE, true, artefact)
+            .await?;
+        self.bind_pipeline(&METRICS_PIPELINE).await?;
 
         let _addr = self
             .reg
-            .find_pipeline(&METRICS_PIPELINE)?
+            .find_pipeline(&METRICS_PIPELINE)
+            .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
         //self.system_pipelines.insert(METRICS_PIPELINE.clone(), addr);
 
@@ -570,11 +622,14 @@ id: system::stdout
 type: stdout
 "#,
         )?;
-        self.repo.publish_offramp(&STDOUT_OFFRAMP, true, artefact)?;
-        self.bind_offramp(&STDOUT_OFFRAMP)?;
+        self.repo
+            .publish_offramp(&STDOUT_OFFRAMP, true, artefact)
+            .await?;
+        self.bind_offramp(&STDOUT_OFFRAMP).await?;
         let _addr = self
             .reg
-            .find_offramp(&STDOUT_OFFRAMP)?
+            .find_offramp(&STDOUT_OFFRAMP)
+            .await?
             .ok_or_else(|| Error::from("Failed to initialize stdout offramp."))?;
         //self.system_offramps.insert(STDOUT_OFFRAMP.clone(), addr);
 
@@ -585,11 +640,14 @@ id: system::stderr
 type: stderr
 "#,
         )?;
-        self.repo.publish_offramp(&STDERR_OFFRAMP, true, artefact)?;
-        self.bind_offramp(&STDERR_OFFRAMP)?;
+        self.repo
+            .publish_offramp(&STDERR_OFFRAMP, true, artefact)
+            .await?;
+        self.bind_offramp(&STDERR_OFFRAMP).await?;
         let _addr = self
             .reg
-            .find_offramp(&STDERR_OFFRAMP)?
+            .find_offramp(&STDERR_OFFRAMP)
+            .await?
             .ok_or_else(|| Error::from("Failed to initialize stderr offramp."))?;
         //self.system_offramps.insert(STDERR_OFFRAMP.clone(), addr);
 

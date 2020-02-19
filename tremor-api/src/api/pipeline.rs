@@ -23,11 +23,11 @@ struct PipelineWrap {
 }
 
 pub async fn list_artefact(req: Request) -> Result<Response> {
-    let result: Vec<String> = req
-        .state()
-        .world
-        .repo
+    let repo = &req.state().world.repo;
+
+    let result: Vec<String> = repo
         .list_pipelines()
+        .await
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
@@ -40,11 +40,10 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     let url = build_url(&["pipeline", &decoded_data.id])?;
     let pipeline = tremor_pipeline::build_pipeline(decoded_data)?;
 
-    let result = req
-        .state()
-        .world
-        .repo
+    let repo = &req.state().world.repo;
+    let result = repo
         .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
+        .await
         .map(|result| match result {
             PipelineArtefact::Pipeline(p) => p.config,
             //ALLOW:  We publish a pipeline we can't ever get anything else back
@@ -56,26 +55,24 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", &id])?;
-    let result =
-        req.state()
-            .world
-            .repo
-            .unpublish_pipeline(&url)
-            .and_then(|result| match result {
-                PipelineArtefact::Pipeline(p) => Ok(p.config),
-                _ => Err("This is a query".into()), // FIXME
-            })?;
+    let repo = &req.state().world.repo;
+    let result = repo
+        .unpublish_pipeline(&url)
+        .await
+        .and_then(|result| match result {
+            PipelineArtefact::Pipeline(p) => Ok(p.config),
+            _ => Err("This is a query".into()), // FIXME
+        })?;
     reply(req, result, true, 200).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", &id])?;
-    let result = req
-        .state()
-        .world
-        .repo
-        .find_pipeline(&url)?
+    let repo = &req.state().world.repo;
+    let result = repo
+        .find_pipeline(&url)
+        .await?
         .ok_or_else(Error::not_found)?;
     match result.artefact {
         PipelineArtefact::Pipeline(p) => {
