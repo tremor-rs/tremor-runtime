@@ -255,7 +255,7 @@ fn onramp_loop(
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut id = 0;
     let mut cq = ChronomicQueue::default();
 

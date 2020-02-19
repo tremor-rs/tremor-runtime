@@ -16,11 +16,12 @@ pub(crate) use crate::codec::{self, Codec};
 pub(crate) use crate::errors::*;
 pub(crate) use crate::metrics::RampReporter;
 pub(crate) use crate::onramp::{self, Onramp};
+pub(crate) use crate::pipeline;
 pub(crate) use crate::preprocessor::{self, Preprocessors};
-pub(crate) use crate::system::{PipelineAddr, PipelineMsg, METRICS_PIPELINE};
+pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{nanotime, ConfigImpl};
-pub(crate) use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+pub(crate) use crossbeam_channel::{bounded, Receiver, TryRecvError};
 pub(crate) use simd_json::json;
 // TODO pub here too?
 use std::mem;
@@ -63,7 +64,7 @@ pub fn handle_pp(
     clippy::too_many_arguments
 )]
 pub(crate) fn send_event(
-    pipelines: &[(TremorURL, PipelineAddr)],
+    pipelines: &[(TremorURL, pipeline::Addr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     metrics_reporter: &mut RampReporter,
@@ -93,7 +94,7 @@ pub(crate) fn send_event(
 
                     for (input, addr) in &pipelines[0..len - 1] {
                         if let Some(input) = input.instance_port() {
-                            if let Err(e) = addr.addr.send(PipelineMsg::Event {
+                            if let Err(e) = addr.addr.send(pipeline::Msg::Event {
                                 input: input.into(),
                                 event: event.clone(),
                             }) {
@@ -104,7 +105,7 @@ pub(crate) fn send_event(
 
                     let (input, addr) = &pipelines[len - 1];
                     if let Some(input) = input.instance_port() {
-                        if let Err(e) = addr.addr.send(PipelineMsg::Event {
+                        if let Err(e) = addr.addr.send(pipeline::Msg::Event {
                             input: input.into(),
                             event,
                         }) {

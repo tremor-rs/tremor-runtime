@@ -21,24 +21,20 @@ use crate::repository::{
 };
 use crate::url::TremorURL;
 use crate::utils::nanotime;
-use actix;
-use actix::prelude::*;
-use actix::Addr as ActixAddr;
-use crossbeam_channel::{bounded, Sender};
-use futures::future::Future;
+use async_std::{
+    sync::{self, channel},
+    task::{self, JoinHandle},
+};
+//use crossbeam_channel::Sender as CbSender;
 use hashbrown::HashMap;
-use std::borrow::Cow;
-use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::thread;
-use std::thread::JoinHandle;
 use tremor_pipeline;
-use tremor_pipeline::Event;
 
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
+pub(crate) use crate::pipeline;
 
 lazy_static! {
     pub(crate) static ref METRICS_PIPELINE: TremorURL = {
@@ -58,272 +54,73 @@ lazy_static! {
     };
 }
 
-pub(crate) type Addr = ActixAddr<Manager>;
-pub(crate) type ActixHandle = JoinHandle<std::result::Result<(), std::io::Error>>;
+pub(crate) enum ManagerMsg {
+    CreatePipeline(sync::Sender<Result<pipeline::Addr>>, pipeline::Create),
+    CreateOnrampt(sync::Sender<Result<onramp::Addr>>, onramp::Create),
+    CreateOfframp(sync::Sender<Result<offramp::Addr>>, offramp::Create),
+    Stop,
+    //Count,
+}
+
+//pub(crate) type Addr = Sender<ManagerMsg>;
+pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
+//pub type Addr = CbSender<Msg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
-    pub offramp: ActixAddr<offramp::Manager>,
-    pub onramp: ActixAddr<onramp::Manager>,
-    pub offramp_t: ActixHandle,
-    pub onramp_t: ActixHandle,
+    pub offramp: offramp::Sender,
+    pub onramp: onramp::Sender,
+    pub pipeline: pipeline::Sender,
+    pub offramp_h: JoinHandle<bool>,
+    pub onramp_h: JoinHandle<bool>,
+    pub pipeline_h: JoinHandle<bool>,
     pub qsize: usize,
 }
 
-impl Actor for Manager {
-    type Context = Context<Self>;
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Pipeline manager started");
-    }
-}
-
-/// Address for a a pipeline
-#[derive(Clone)]
-pub struct PipelineAddr {
-    pub(crate) addr: Sender<PipelineMsg>,
-    pub(crate) id: ServantId,
-}
-
-impl fmt::Debug for PipelineAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Pipeline({})", self.id)
-    }
-}
-
-pub(crate) struct CreatePipeline {
-    pub config: PipelineArtefact,
-    pub id: ServantId,
-}
-
-impl Message for CreatePipeline {
-    type Result = Result<PipelineAddr>;
-}
-
-#[derive(Debug)]
-pub(crate) enum PipelineMsg {
-    Event {
-        event: Event,
-        input: Cow<'static, str>,
-    },
-    ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
-    ConnectPipeline(Cow<'static, str>, TremorURL, PipelineAddr),
-    Disconnect(Cow<'static, str>, TremorURL),
-    #[allow(dead_code)]
-    Signal(Event),
-    Insight(Event),
-}
-
-#[derive(Debug)]
-enum PipelineDest {
-    Offramp(offramp::Addr),
-    Pipeline(PipelineAddr),
-}
-
-impl PipelineDest {
-    pub fn send_event(&self, input: Cow<'static, str>, event: Event) -> Result<()> {
-        match self {
-            Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event })?,
-            Self::Pipeline(addr) => addr.addr.send(PipelineMsg::Event { input, event })?,
-        }
-        Ok(())
-    }
-}
-
-impl Handler<CreatePipeline> for Manager {
-    type Result = Result<PipelineAddr>;
-    #[allow(clippy::too_many_lines)]
-    fn handle(&mut self, req: CreatePipeline, _ctx: &mut Self::Context) -> Self::Result {
-        #[inline]
-        fn send_events(
-            eventset: &mut Vec<(Cow<'static, str>, Event)>,
-            dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>>,
-        ) -> Result<()> {
-            for (output, event) in eventset.drain(..) {
-                if let Some(dest) = dests.get(&output) {
-                    let len = dest.len();
-                    //We know we have len, so grabbing len - 1 elementsis safe
-                    for (id, offramp) in unsafe { dest.get_unchecked(..len - 1) } {
-                        offramp.send_event(
-                            id.instance_port()
-                                .ok_or_else(|| {
-                                    Error::from(format!("missing instance port in {}.", id))
-                                })?
-                                .clone()
-                                .into(),
-                            event.clone(),
-                        )?;
+impl Manager {
+    pub fn start(self) -> (JoinHandle<()>, Sender) {
+        let (tx, rx) = channel(64);
+        let system_h = task::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Some(ManagerMsg::CreatePipeline(r, c)) => {
+                        self.pipeline.send(pipeline::ManagerMsg::Create(r, c)).await
                     }
-                    //We know we have len, so grabbing the last elementsis safe
-                    let (id, offramp) = unsafe { dest.get_unchecked(len - 1) };
-                    offramp.send_event(
-                        id.instance_port()
-                            .ok_or_else(|| {
-                                Error::from(format!("missing instance port in {}.", id))
-                            })?
-                            .clone()
-                            .into(),
-                        event,
-                    )?;
-                };
-            }
-            Ok(())
-        }
-        let config = req.config;
-        let id = req.id.clone();
-        let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>> =
-            halfbrown::HashMap::new();
-        let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
-        let (tx, rx) = bounded::<PipelineMsg>(self.qsize);
-        let mut pipeline = config.to_executable_graph(tremor_pipeline::buildin_ops)?;
-        let mut pid = req.id.clone();
-        pid.trim_to_instance();
-        pipeline.id = pid.to_string();
-        thread::Builder::new()
-            .name(format!("pipeline-{}", id.clone()))
-            .spawn(move || {
-                info!("[Pipeline:{}] starting thread.", id);
-                for req in rx {
-                    match req {
-                        PipelineMsg::Event { input, event } => {
-                            match pipeline.enqueue(&input, event, &mut eventset) {
-                                Ok(()) => {
-                                    if let Err(e) = send_events(&mut eventset, &dests) {
-                                        error!("Failed to send event: {}", e)
-                                    }
-                                }
-                                Err(e) => error!("error: {:?}", e),
-                            }
-                        }
-                        PipelineMsg::Insight(insight) => {
-                            pipeline.contraflow(insight);
-                        }
-                        PipelineMsg::Signal(signal) => {
-                            match pipeline.enqueue_signal(signal, &mut eventset) {
-                                Ok(()) => {
-                                    if let Err(e) = send_events(&mut eventset, &dests) {
-                                        error!("Failed to send event: {}", e)
-                                    }
-                                }
-                                Err(e) => error!("error: {:?}", e),
-                            }
-                        }
-
-                        PipelineMsg::ConnectOfframp(output, offramp_id, offramp) => {
-                            info!(
-                                "[Pipeline:{}] connecting {} to offramp {}",
-                                id, output, offramp_id
-                            );
-                            if let Some(offramps) = dests.get_mut(&output) {
-                                offramps.push((offramp_id, PipelineDest::Offramp(offramp)));
-                            } else {
-                                dests.insert(
-                                    output,
-                                    vec![(offramp_id, PipelineDest::Offramp(offramp))],
-                                );
-                            }
-                        }
-                        PipelineMsg::ConnectPipeline(output, pipeline_id, pipeline) => {
-                            info!(
-                                "[Pipeline:{}] connecting {} to pipeline {}",
-                                id, output, pipeline_id
-                            );
-                            if let Some(offramps) = dests.get_mut(&output) {
-                                offramps.push((pipeline_id, PipelineDest::Pipeline(pipeline)));
-                            } else {
-                                dests.insert(
-                                    output,
-                                    vec![(pipeline_id, PipelineDest::Pipeline(pipeline))],
-                                );
-                            }
-                        }
-                        PipelineMsg::Disconnect(output, to_delete) => {
-                            let mut remove = false;
-                            if let Some(offramp_vec) = dests.get_mut(&output) {
-                                offramp_vec.retain(|(this_id, _)| this_id != &to_delete);
-                                remove = offramp_vec.is_empty();
-                            }
-                            if remove {
-                                dests.remove(&output);
-                            }
-                        }
-                    };
+                    Some(ManagerMsg::CreateOnrampt(r, c)) => {
+                        self.onramp.send(onramp::ManagerMsg::Create(r, c)).await
+                    }
+                    Some(ManagerMsg::CreateOfframp(r, c)) => {
+                        self.offramp.send(offramp::ManagerMsg::Create(r, c)).await
+                    }
+                    Some(ManagerMsg::Stop) => {
+                        info!("Stopping offramps...");
+                        self.offramp.send(offramp::ManagerMsg::Stop).await;
+                        info!("Stopping pipelines...");
+                        self.pipeline.send(pipeline::ManagerMsg::Stop).await;
+                        info!("Stopping onramps...");
+                        self.onramp.send(onramp::ManagerMsg::Stop).await;
+                        break;
+                    }
+                    None => {
+                        info!("Stopping onramps in an odd way...");
+                        break;
+                    }
                 }
-                info!("[Pipeline:{}] stopping thread.", id);
-            })?;
-        Ok(PipelineAddr {
-            id: req.id,
-            addr: tx,
-        })
+            }
+        });
+        (system_h, tx)
     }
-}
-
-impl Handler<offramp::Create> for Manager {
-    type Result = Result<offramp::Addr>;
-    fn handle(&mut self, req: offramp::Create, _ctx: &mut Self::Context) -> Self::Result {
-        self.offramp
-            .send(req)
-            .wait()
-            .map_err(|e| Error::from(format!("Milbox error: {:?}", e)))?
-    }
-}
-
-impl Handler<onramp::Create> for Manager {
-    type Result = Result<onramp::Addr>;
-    fn handle(&mut self, req: onramp::Create, _ctx: &mut Self::Context) -> Self::Result {
-        self.onramp
-            .send(req)
-            .wait()
-            .map_err(|e| Error::from(format!("Milbox error: {:?}", e)))?
-    }
-}
-
-pub(crate) struct Stop {}
-
-impl Message for Stop {
-    type Result = ();
-}
-
-impl Handler<Stop> for Manager {
-    type Result = ();
-    fn handle(&mut self, _req: Stop, ctx: &mut Self::Context) -> Self::Result {
-        warn!("Stopping system");
-        self.onramp
-            .send(Stop {})
-            .into_actor(self)
-            .then(|_res, act, ctx| {
-                warn!("Onramp Stopped");
-                // TODO: How to shut down the pool here?
-                // act.pool.shutdown_now();
-                act.offramp
-                    .send(Stop {})
-                    .into_actor(act)
-                    .then(|_, _, _| {
-                        System::current().stop();
-                        warn!("Offramp system");
-                        actix::fut::ok(())
-                    })
-                    .wait(ctx);
-                actix::fut::ok(())
-            })
-            .wait(ctx);
-    }
-}
-
-pub(crate) struct Count {}
-
-impl Message for Count {
-    type Result = usize;
 }
 
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
-    pub(crate) system: Addr,
+    pub(crate) system: Sender,
     /// Repository
     pub repo: Repositories,
     /// Registry
     pub reg: Registries,
-    system_pipelines: HashMap<ServantId, PipelineAddr>,
+    system_pipelines: HashMap<ServantId, pipeline::Addr>,
     system_onramps: HashMap<ServantId, onramp::Addr>,
     system_offramps: HashMap<ServantId, offramp::Addr>,
     storage_directory: Option<String>,
@@ -372,7 +169,7 @@ impl World {
 
     /// Stop the runtime
     pub fn stop(&self) {
-        self.system.do_send(Stop {});
+        task::block_on(self.system.send(ManagerMsg::Stop));
     }
     /// Links a pipeline
     pub fn link_pipeline(
@@ -638,22 +435,22 @@ impl World {
     pub fn to_config(&self) -> Result<Config> {
         let pipeline: PipelineVec = self
             .repo
-            .serialize_pipelines()?
+            .serialize_pipelines()
             .into_iter()
             .filter_map(|p| match p {
                 PipelineArtefact::Pipeline(p) => Some(p.config),
                 PipelineArtefact::Query(_q) => None, // FIXME
             })
             .collect();
-        let onramp: OnRampVec = self.repo.serialize_onramps()?;
-        let offramp: OffRampVec = self.repo.serialize_offramps()?;
+        let onramp: OnRampVec = self.repo.serialize_onramps();
+        let offramp: OffRampVec = self.repo.serialize_offramps();
         let binding: BindingVec = self
             .repo
-            .serialize_bindings()?
+            .serialize_bindings()
             .into_iter()
             .map(|b| b.binding)
             .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings()?;
+        let mapping: MappingMap = self.reg.serialize_mappings();
         let config = crate::config::Config {
             pipeline,
             onramp,
@@ -706,53 +503,27 @@ impl World {
     }
 
     /// Starts the runtime system
-    pub fn start(qsize: usize, storage_directory: Option<String>) -> Result<(Self, ActixHandle)> {
-        use std::sync::mpsc;
+    pub fn start(
+        qsize: usize,
+        storage_directory: Option<String>,
+    ) -> Result<(Self, JoinHandle<()>)> {
+        let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
+        let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
+        let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
-        let (tx, rx) = mpsc::channel();
-        let onramp_t = thread::spawn(|| {
-            info!("Onramp thread started");
-            actix::System::run(move || {
-                let manager = onramp::Manager::create(|_ctx| onramp::Manager::default());
+        let (system_h, system) = Manager {
+            offramp,
+            onramp,
+            pipeline,
+            offramp_h,
+            onramp_h,
+            pipeline_h,
+            qsize,
+        }
+        .start();
 
-                if let Err(e) = tx.send(manager) {
-                    error!("Failed to send manager info: {}", e)
-                }
-            })
-        });
-        let onramp = rx.recv()?;
-
-        let (tx, rx) = mpsc::channel();
-        let offramp_t = thread::spawn(move || {
-            info!("Offramp thread started");
-            actix::System::run(move || {
-                let manager = offramp::Manager::create(move |_ctx| offramp::Manager { qsize });
-
-                if let Err(e) = tx.send(manager) {
-                    error!("Failed to send manager info: {}", e)
-                }
-            })
-        });
-        let offramp = rx.recv()?;
-
-        let (tx, rx) = mpsc::channel();
-        let system_t = thread::spawn(move || {
-            actix::System::run(move || {
-                let system = Manager::create(move |_ctx| Manager {
-                    offramp,
-                    onramp,
-                    offramp_t,
-                    onramp_t,
-                    qsize,
-                });
-
-                if let Err(e) = tx.send((system, Repositories::new(), Registries::new())) {
-                    error!("Failed to send manager info: {}", e)
-                }
-            })
-        });
-
-        let (system, repo, reg) = rx.recv()?;
+        let repo = Repositories::new();
+        let reg = Registries::new();
         let mut world = Self {
             system,
             repo,
@@ -762,8 +533,9 @@ impl World {
             system_onramps: HashMap::new(),
             system_offramps: HashMap::new(),
         };
+
         world.register_system()?;
-        Ok((world, system_t))
+        Ok((world, system_h))
     }
 
     fn register_system(&mut self) -> Result<()> {
@@ -828,7 +600,18 @@ type: stderr
         &self,
         config: PipelineArtefact,
         id: ServantId,
-    ) -> Result<PipelineAddr> {
-        self.system.send(CreatePipeline { id, config }).wait()?
+    ) -> Result<pipeline::Addr> {
+        task::block_on(async {
+            let (tx, rx) = channel(1);
+            self.system
+                .send(ManagerMsg::CreatePipeline(
+                    tx,
+                    pipeline::Create { id, config },
+                ))
+                .await;
+            rx.recv()
+                .await
+                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        })
     }
 }

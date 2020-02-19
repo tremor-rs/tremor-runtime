@@ -36,7 +36,7 @@ pub struct Debug {
     update_time: Duration,
     buckets: HashMap<String, DebugBucket>,
     cnt: u64,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -82,7 +82,7 @@ impl Offramp for Debug {
         }
         Ok(())
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {

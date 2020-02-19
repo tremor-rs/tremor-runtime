@@ -51,7 +51,7 @@ pub struct GCS {
     config: Config,
     hub: GcsHub,
     cnt: u64,
-    pipelines: HashMap<TremorURL, PipelineAddr>,
+    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -80,7 +80,7 @@ impl offramp::Impl for GCS {
 }
 
 impl Offramp for GCS {
-    fn add_pipeline(&mut self, id: TremorURL, addr: PipelineAddr) {
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
 

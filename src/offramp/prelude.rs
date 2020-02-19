@@ -14,11 +14,11 @@
 
 pub(crate) use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub(crate) use crate::codec::Codec;
-pub(crate) use crate::dflt::{self, *};
+pub(crate) use crate::dflt::{self};
 pub(crate) use crate::errors::*;
 pub(crate) use crate::offramp::{self, Offramp};
+pub(crate) use crate::pipeline;
 pub(crate) use crate::postprocessor::{self, Postprocessor, Postprocessors};
-pub(crate) use crate::system::{PipelineAddr, PipelineMsg};
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::ConfigImpl;
 pub(crate) use crate::utils::{duration_to_millis, nanotime};

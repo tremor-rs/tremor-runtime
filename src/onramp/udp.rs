@@ -60,7 +60,7 @@ fn onramp_loop(
     // Limit of a UDP package
     let mut buf = [0; 65535];
 
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut id = 0;
 
     let mut origin_uri = tremor_pipeline::EventOriginUri {

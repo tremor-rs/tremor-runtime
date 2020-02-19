@@ -82,7 +82,7 @@ fn onramp_loop(
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let mut pipelines: Vec<(TremorURL, PipelineAddr)> = Vec::new();
+    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
     let mut acc = Acc::default();
     let elements: Result<Vec<Vec<u8>>> = data
         .lines()

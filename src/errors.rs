@@ -18,7 +18,6 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::async_sink;
-use actix;
 use base64;
 use chrono;
 use elastic;
@@ -40,12 +39,6 @@ use url;
 impl Clone for Error {
     fn clone(&self) -> Self {
         ErrorKind::ClonedError(format!("{}", self)).into()
-    }
-}
-
-impl From<actix::MailboxError> for Error {
-    fn from(m: actix::MailboxError) -> Self {
-        ErrorKind::MailboxError(m).into()
     }
 }
 
@@ -149,9 +142,9 @@ error_chain! {
     }
 
     errors {
-        MailboxError(e: actix::MailboxError) {
-            description("Actix mailbox error")
-                display("Actix mailbox error: {:?}", e)
+        AsyncRecvError {
+            description("Failed to recive from a task")
+                display("Failed to recive from a task")
         }
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
