@@ -45,7 +45,7 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
 }
 
 impl<A: Artefact> ActivatorLifecycleFsm<A> {
-    pub fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
+    pub async fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
         let mut fresh = Self {
             artefact,
             world,
@@ -53,13 +53,13 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
             resolution: None,
             id,
         };
-        let resoluion = fresh.on_spawn()?; // Initial transition
+        let resoluion = fresh.on_spawn().await?; // Initial transition
         fresh.resolution = Some(resoluion);
         Ok(fresh)
     }
 
-    fn on_spawn(&self) -> Result<A::SpawnResult> {
-        self.artefact.spawn(&self.world, self.id.clone())
+    async fn on_spawn(&self) -> Result<A::SpawnResult> {
+        self.artefact.spawn(&self.world, self.id.clone()).await
     }
 
     fn on_activate(&self) {

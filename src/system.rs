@@ -136,7 +136,8 @@ impl World {
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
-                )?;
+                )
+                .await?;
                 self.repo.bind_pipeline(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
@@ -185,7 +186,7 @@ impl World {
             if self.reg.find_pipeline(id).await?.is_none() {
                 self.bind_pipeline(&id).await?;
             };
-            pipeline_a.artefact.link(self, id, mappings)
+            pipeline_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Pipeline {} not found.", id).into())
         }
@@ -202,7 +203,7 @@ impl World {
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
         info!("Linking pipeline {} to {:?}", id, mappings);
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
-            pipeline_a.artefact.link(self, id, mappings)
+            pipeline_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Pipeline {} not found.", id).into())
         }
@@ -218,7 +219,7 @@ impl World {
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
-            let r = pipeline_a.artefact.unlink(self, id, mappings);
+            let r = pipeline_a.artefact.unlink(self, id, mappings).await;
             if self.reg.find_pipeline(id).await?.is_some() {
                 self.unbind_pipeline(id).await?;
             };
@@ -246,7 +247,8 @@ impl World {
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
-                )?;
+                )
+                .await?;
                 self.repo.bind_onramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_onramp(id, servant).await?;
@@ -289,7 +291,7 @@ impl World {
             if self.reg.find_onramp(id).await?.is_none() {
                 self.bind_onramp(&id).await?;
             };
-            onramp_a.artefact.link(self, id, mappings)
+            onramp_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Onramp {:?} not found.", id).into())
         }
@@ -304,7 +306,7 @@ impl World {
         >,
     ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
-            onramp_a.artefact.link(self, id, mappings)
+            onramp_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Onramp {:?} not found.", id).into())
         }
@@ -320,7 +322,7 @@ impl World {
         >,
     ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
-            let r = onramp_a.artefact.unlink(self, id, mappings)?;
+            let r = onramp_a.artefact.unlink(self, id, mappings).await?;
             if r {
                 self.unbind_onramp(&id).await?;
             };
@@ -339,7 +341,8 @@ impl World {
                     self.clone(),
                     artefact.artefact.to_owned(),
                     id.clone(),
-                )?;
+                )
+                .await?;
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
@@ -385,7 +388,7 @@ impl World {
             if self.reg.find_offramp(id).await?.is_none() {
                 self.bind_offramp(&id).await?;
             };
-            offramp_a.artefact.link(self, id, mappings)
+            offramp_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Offramp {:?} not found.", id).into())
         }
@@ -400,7 +403,7 @@ impl World {
         >,
     ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
         if let Some(offramp_a) = self.repo.find_offramp(id).await? {
-            offramp_a.artefact.link(self, id, mappings)
+            offramp_a.artefact.link(self, id, mappings).await
         } else {
             Err(format!("Offramp {:?} not found.", id).into())
         }
@@ -416,7 +419,7 @@ impl World {
         >,
     ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
         if let Some(offramp_a) = self.repo.find_offramp(id).await? {
-            let r = offramp_a.artefact.unlink(self, id, mappings)?;
+            let r = offramp_a.artefact.unlink(self, id, mappings).await?;
             if r {
                 self.unbind_offramp(id).await?;
             };
@@ -435,7 +438,8 @@ impl World {
         match &id.instance() {
             Some(_instance_id) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.to_owned(), id.clone())?;
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.to_owned(), id.clone())
+                        .await?;
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
@@ -469,7 +473,7 @@ impl World {
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
         if let Some(binding_a) = self.repo.find_binding(id).await? {
-            let r = binding_a.artefact.link(self, id, mappings)?;
+            let r = binding_a.artefact.link(self, id, mappings).await?;
             if self.reg.find_binding(id).await?.is_none() {
                 self.bind_binding_a(id, &r).await?;
             };
@@ -545,7 +549,7 @@ impl World {
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
         if let Some(mapping) = self.reg.find_binding(id).await? {
-            if mapping.unlink(self, id, mappings)? {
+            if mapping.unlink(self, id, mappings).await? {
                 self.unbind_binding_a(id, &mapping).await?;
             }
             return Ok(mapping);
@@ -655,22 +659,20 @@ type: stderr
         Ok(())
     }
 
-    pub(crate) fn start_pipeline(
+    pub(crate) async fn start_pipeline(
         &self,
         config: PipelineArtefact,
         id: ServantId,
     ) -> Result<pipeline::Addr> {
-        task::block_on(async {
-            let (tx, rx) = channel(1);
-            self.system
-                .send(ManagerMsg::CreatePipeline(
-                    tx,
-                    pipeline::Create { id, config },
-                ))
-                .await;
-            rx.recv()
-                .await
-                .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
-        })
+        let (tx, rx) = channel(1);
+        self.system
+            .send(ManagerMsg::CreatePipeline(
+                tx,
+                pipeline::Create { id, config },
+            ))
+            .await;
+        rx.recv()
+            .await
+            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 }
