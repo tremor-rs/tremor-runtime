@@ -510,6 +510,7 @@ impl World {
         };
         Ok(config)
     }
+
     /// Saves the current config
     pub async fn save_config(&self) -> Result<String> {
         if let Some(storage_directory) = &self.storage_directory {
