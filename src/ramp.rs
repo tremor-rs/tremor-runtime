@@ -68,8 +68,8 @@ impl KV for MmapFile {
     }
 
     fn set(&mut self, obj: simd_json::OwnedValue) -> Result<()> {
-        let mut string = obj.encode();
-        let bytes = unsafe { string.as_bytes_mut() };
+        let string = obj.encode();
+        let bytes = string.as_bytes();
         if bytes.len() > self.len {
             return Err("object too large to store in memory-mapped file".into());
         }
@@ -91,8 +91,8 @@ impl KV for MmapAnon {
     }
 
     fn set(&mut self, obj: simd_json::OwnedValue) -> Result<()> {
-        let mut string = obj.encode();
-        let bytes = unsafe { string.as_bytes_mut() };
+        let string = obj.encode();
+        let bytes = string.as_bytes();
         if self.store.len() < bytes.len() {
             let new_size = bytes.len();
             let len = cmp::max(self.len + self.len, new_size);
@@ -124,8 +124,8 @@ pub struct Config {
 impl MmapAnon {
     fn from_config(config: Option<Config>, obj: &simd_json::OwnedValue) -> Result<Box<dyn KV>> {
         if let Some(_config) = config {
-            let mut string = obj.encode();
-            let bytes = unsafe { string.as_bytes_mut() };
+            let string = obj.encode();
+            let bytes = string.as_bytes();
             let len = bytes.len();
             let mut store = MmapOptions::new().len(len).map_anon()?;
             store.copy_from_slice(bytes);
@@ -153,8 +153,8 @@ impl MmapFile {
                 .open(p)?;
             file.set_len(config.size as u64)?;
             let len = config.size as usize;
-            let mut string = obj.encode();
-            let bytes = unsafe { string.as_bytes_mut() };
+            let string = obj.encode();
+            let bytes = string.as_bytes();
             let end = bytes.len();
             file.write_all(&bytes)?;
             let store = unsafe { MmapOptions::new().map(&file)? };
