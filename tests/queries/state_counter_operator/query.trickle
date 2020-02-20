@@ -1,0 +1,6 @@
+define generic::counter operator my_counter;
+
+create operator my_counter;
+
+select event from in into my_counter;
+select event from my_counter into out;
