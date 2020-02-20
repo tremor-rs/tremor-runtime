@@ -79,9 +79,8 @@ jobs:
       #- name: Prepare sccache command bin for cache
       #  if: steps.cache-sccache.outputs.cache-hit != 'true'
       #  run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
-      #- name: Build
-      #  env:
-      #    RUSTC_WRAPPER: sccache
+      - name: Build
+        run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
         run: ./.github/checks/api.sh -c
       - name: Run tremor-tool tests
