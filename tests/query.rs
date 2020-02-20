@@ -103,6 +103,7 @@ test_cases!(
     script_params_overwrite,
     script_params,
     state,
+    state_counter_operator,
     streams,
     tremor_map,
     where_filter,

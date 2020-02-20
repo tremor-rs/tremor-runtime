@@ -137,6 +137,7 @@ impl TrickleOperator {
                             id: common_cow(&op.id),
                         })
                     }
+                    ("generic", "counter") => Box::new(op::generic::counter::Counter {}),
                     ("grouper", "bucket") => Box::new(op::grouper::bucket::Grouper {
                         buckets: HashMap::new(),
                         _id: common_cow(&op.id),

@@ -16,6 +16,7 @@ use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone)]
+// TODO add seed value and field name as config items
 pub struct Counter {}
 
 op!(CounterFactory(_node) {
@@ -32,7 +33,11 @@ impl Operator for Counter {
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let mut count_tracker = Value::from(1 as u64);
         // TODO remove unwrap
-        if let Some(count) = state.as_object_mut().expect("Expected Some not None for state").get_mut("count") {
+        if let Some(count) = state
+            .as_object_mut()
+            .expect("Expected Some not None for state")
+            .get_mut("count")
+        {
             if let Some(n) = count.as_u64() {
                 count_tracker = Value::from(n + 1);
                 *count = count_tracker.clone();
@@ -40,7 +45,7 @@ impl Operator for Counter {
         } else {
             state
                 .as_object_mut()
-                .expect("Expected Some not None for state") 
+                .expect("Expected Some not None for state")
                 .insert("count".into(), count_tracker.clone());
         }
 
