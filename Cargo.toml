@@ -125,4 +125,4 @@ drop_copy = []
 ws-echo = []
 
 [patch.crates-io]
-tide = { path = '../../tide' }
+tide = { git = "https://github.com/Licenser/tide", branch = "result-into-response" }
