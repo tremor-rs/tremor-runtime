@@ -13,31 +13,31 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - uses: actions/cache@v1
-        id: cache-build
-        with:
-          path: ~/.cache/sccache
-          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            sccache-cache-${{ runner.os }}-
-      - uses: actions/cache@v1
-        id: cache-sccache
-        with:
-          path: ~/sccache
-          key: sccache-${{ runner.os }}
-      - name: restore sccache
-        if: steps.cache-sccache.outputs.cache-hit == 'true'
-        run: cp ~/sccache/* ~/.cargo/bin
-      - name: install sccache
-        if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: cargo install sccache
-      - name: Prepare sccache command bin for cache
-        if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
-      - name: Run Integration Tests
-        env:
-          RUSTC_WRAPPER: sccache
-        run: make it
+      #- uses: actions/cache@v1
+      #  id: cache-build
+      #  with:
+      #    path: ~/.cache/sccache
+      #    key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      #    restore-keys: |
+      #      sccache-cache-${{ runner.os }}-
+      #- uses: actions/cache@v1
+      #  id: cache-sccache
+      #  with:
+      #    path: ~/sccache
+      #    key: sccache-${{ runner.os }}
+      #- name: restore sccache
+      #  if: steps.cache-sccache.outputs.cache-hit == 'true'
+      #  run: cp ~/sccache/* ~/.cargo/bin
+      #- name: install sccache
+      #  if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #  run: cargo install sccache
+      #- name: Prepare sccache command bin for cache
+      #  if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #  run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
+      #- name: Run Integration Tests
+      #  env:
+      #    RUSTC_WRAPPER: sccache
+      #  run: make it
   api-tests:
     runs-on: ubuntu-latest
     steps:
@@ -58,30 +58,28 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - uses: actions/cache@v1
-        id: cache-build
-        with:
-          path: ~/.cache/sccache
-          key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            sccache-cache-${{ runner.os }}-
-      - uses: actions/cache@v1
-        id: cache-sccache
-        with:
-          path: ~/sccache
-          key: sccache-${{ runner.os }}
-      - name: restore sccache
-        if: steps.cache-sccache.outputs.cache-hit == 'true'
-        run: cp ~/sccache/* ~/.cargo/bin
-      - name: install sccache
-        if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: cargo install sccache
-      - name: Prepare sccache command bin for cache
-        if: steps.cache-sccache.outputs.cache-hit != 'true'
-        run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
+      #- uses: actions/cache@v1
+      #  id: cache-build
+      #  with:
+      #    path: ~/.cache/sccache
+      #    key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      #    restore-keys: |
+      #      sccache-cache-${{ runner.os }}-
+      #- uses: actions/cache@v1
+      #  id: cache-sccache
+      #  with:
+      #    path: ~/sccache
+      #    key: sccache-${{ runner.os }}
+      #- name: restore sccache
+      #  if: steps.cache-sccache.outputs.cache-hit == 'true'
+      #  run: cp ~/sccache/* ~/.cargo/bin
+      #- name: install sccache
+      #  if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #  run: cargo install sccache
+      #- name: Prepare sccache command bin for cache
+      #  if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #  run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
-        env:
-          RUSTC_WRAPPER: sccache
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
         run: ./.github/checks/api.sh -c
