@@ -265,10 +265,6 @@ impl Query {
                         node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
-                    // TODO is this in the right place?
-                    //state
-                    //    .ops
-                    //    .insert(select_in.id.clone(), tremor_script::Object::new());
                     outputs.push(id);
                 }
                 Stmt::Stream(s) => {
@@ -285,8 +281,6 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
-                        // TODO is this in the right place?
-                        //state.ops.insert(name.clone(), tremor_script::Object::new());
                         let op = node.to_op(
                             supported_operators,
                             None,
@@ -333,8 +327,6 @@ impl Query {
                     pipe_ops.insert(id, op);
                     let node_id = common_cow(&o.id);
                     nodes.insert(node_id.clone(), id);
-                    // TODO is this in the right place?
-                    //state.ops.insert(node_id, tremor_script::Object::new());
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(s) => {
@@ -370,8 +362,6 @@ impl Query {
                     pipe_ops.insert(id, op);
                     let node_id = common_cow(&o.id);
                     nodes.insert(node_id.clone(), id);
-                    // TODO is this in the right place?
-                    //state.ops.insert(node_id, tremor_script::Object::new());
                     outputs.push(id);
                 }
             };
@@ -478,7 +468,6 @@ impl Query {
                 last_metrics: 0,
                 state: State {
                     ops: iter::repeat(Value::null()).take(graph.len()).collect(),
-                    exports: Value::null(),
                 },
                 graph,
                 inputs: inputs2,
