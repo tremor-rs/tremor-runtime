@@ -13,6 +13,7 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::ValueBuilder;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;
@@ -50,7 +51,7 @@ macro_rules! test_cases {
 
                     let context = EventContext::new(id as u64, None);
                     let mut meta = Value::from(Object::default());
-                    let mut state = Value::from(Object::default());
+                    let mut state = Value::null();
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
                         Return::Drop => (),
                         Return::EmitEvent{..} => results.push(json),
@@ -115,6 +116,7 @@ test_cases!(
     record,
     regex,
     simple_match,
+    state_null,
     string_concat,
     string_interpolation,
     subslice,

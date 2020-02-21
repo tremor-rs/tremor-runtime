@@ -14,7 +14,6 @@
 
 use crate::config::dflt;
 use crate::op::prelude::*;
-use crate::StateObject;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,7 +68,12 @@ op!(BatchFactory(node) {
     }});
 
 impl Operator for Batch {
-    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(
+        &mut self,
+        _port: &str,
+        _state: &mut Value<'static>,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // TODO: This is ugly
         let Event {
             id,
@@ -230,7 +234,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
+        let r = op
+            .on_event("in", &mut state, event)
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -302,7 +308,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
+        let r = op
+            .on_event("in", &mut state, event)
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -314,7 +322,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", &mut state, event).expect("could not run pipeline");
+        let r = op
+            .on_event("in", &mut state, event)
+            .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
@@ -374,7 +384,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", &mut state, event).expect("failed to run pipeline");
+        let r = op
+            .on_event("in", &mut state, event)
+            .expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
@@ -386,7 +398,9 @@ mod test {
             kind: None,
         };
 
-        let r = op.on_event("in", &mut state, event).expect("failed to run piepeline");
+        let r = op
+            .on_event("in", &mut state, event)
+            .expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }
 }

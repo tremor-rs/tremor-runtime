@@ -26,7 +26,7 @@
 //! be discarded.
 
 use crate::errors::*;
-use crate::{ConfigImpl, Event, Operator, StateObject};
+use crate::{ConfigImpl, Event, Operator};
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 
@@ -121,7 +121,12 @@ op!(BackpressureFactory(node) {
     }});
 
 impl Operator for Backpressure {
-    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(
+        &mut self,
+        _port: &str,
+        _state: &mut Value<'static>,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let mut output = None;
         for n in 0..self.outputs.len() {
             let id = (self.next + n) % self.outputs.len();

@@ -46,7 +46,12 @@ pub struct EventHistory {
 }
 
 impl Operator for EventHistory {
-    fn on_event(&mut self, _port: &str, _state: &mut StateObject, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_event(
+        &mut self,
+        _port: &str,
+        _state: &mut Value<'static>,
+        event: Event,
+    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let id = event.id;
         let (_, meta) = event.data.parts();
         match meta

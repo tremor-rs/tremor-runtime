@@ -29,7 +29,7 @@ use op::trickle::{
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
-use simd_json::Value as ValueTrait;
+use simd_json::{Value as ValueTrait, ValueBuilder};
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
@@ -37,7 +37,7 @@ use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
-use tremor_script::{AggrRegistry, Object, Registry, Value};
+use tremor_script::{AggrRegistry, Registry, Value};
 
 // Legacy ops for backwards compat with pipeline.yaml at runtime in trickle / extension
 use op::debug::EventHistoryFactory;
@@ -105,7 +105,7 @@ impl Query {
         use crate::op::Operator;
         use crate::ExecutableGraph;
         use crate::NodeMetrics;
-        use crate::{State, StateObject};
+        use crate::State;
         use std::iter;
 
         let script = self.0.suffix();
@@ -477,12 +477,8 @@ impl Query {
                 metrics_idx: i2pos[&nodes["metrics"]],
                 last_metrics: 0,
                 state: State {
-                    // TODO implement default for StateObject as following
-                    //ops: iter::repeat(StateObject::default())
-                    ops: iter::repeat(Value::from(Object::new()))
-                        .take(graph.len())
-                        .collect(),
-                    exports: StateObject::default(),
+                    ops: iter::repeat(Value::null()).take(graph.len()).collect(),
+                    exports: Value::null(),
                 },
                 graph,
                 inputs: inputs2,

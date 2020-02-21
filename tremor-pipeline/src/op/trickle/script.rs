@@ -131,7 +131,7 @@ impl Operator for TrickleScript {
     fn on_event(
         &mut self,
         _port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);

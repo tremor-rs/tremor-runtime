@@ -17,6 +17,7 @@ use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
 use crate::{registry, EventContext};
 use simd_json::borrowed::{Object, Value};
+use simd_json::value::ValueBuilder;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;
@@ -29,7 +30,7 @@ fn eval(src: &str) -> Result<String> {
 
     let mut event = Value::from(Object::new());
     let mut meta = Value::from(Object::new());
-    let mut state = Value::from(Object::new());
+    let mut state = Value::null();
     let value = script.run(
         &EventContext::new(0, None),
         AggrType::Emit,

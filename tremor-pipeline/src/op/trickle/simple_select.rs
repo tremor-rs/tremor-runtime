@@ -15,7 +15,7 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::*;
-use crate::{Event, Operator, StateObject};
+use crate::{Event, Operator};
 use std::borrow::Cow;
 use tremor_script::interpreter::Env;
 use tremor_script::{
@@ -87,7 +87,7 @@ impl Operator for TrickleSimpleSelect {
     fn on_event(
         &mut self,
         _port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();

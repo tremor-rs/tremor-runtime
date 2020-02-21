@@ -165,7 +165,7 @@ impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
         port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, state, event)
