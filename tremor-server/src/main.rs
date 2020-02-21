@@ -44,7 +44,6 @@ use crate::errors::*;
 use crate::system::World;
 use crate::url::TremorURL;
 use actix_cors::Cors;
-use actix_files as fs;
 use env_logger;
 use serde_yaml;
 use tremor_api;
@@ -259,7 +258,6 @@ fn run_dun() -> Result<()> {
                     .route(web::delete().to(tremor_api::offramp::unpublish_artefact)),
             )
             .service(web::resource("/version").route(web::get().to(tremor_api::version::get)))
-            .service(fs::Files::new("/api-docs", "static").index_file("index.html"))
     });
     eprintln!("Listening at: http://{}", host);
     info!("Listening at: http://{}", host);
