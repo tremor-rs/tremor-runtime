@@ -80,6 +80,8 @@ jobs:
       #  if: steps.cache-sccache.outputs.cache-hit != 'true'
       #  run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
       - name: Build
+      # env:
+      #   RUSTC_WRAPPER: sccache
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
         run: ./.github/checks/api.sh -c
