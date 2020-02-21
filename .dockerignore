@@ -4,3 +4,4 @@ target*
 Dockerfile
 grcov
 .dockerignore
+perf.*
