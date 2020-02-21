@@ -38,11 +38,11 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            match state of
-              case %{present count} =>
-                let state.count = state.count + 1
+            match type::is_null(state) of
+              case true =>
+                let state = {"count": 1}
               default =>
-                let state.count = 1
+                let state.count = state.count + 1
             end;
 
             # simulates what the generic::counter operator does
@@ -54,24 +54,14 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            # TODO fix initial state as null
-            #match state of
-            #  case null =>
-            #    let state = [event]
-            #  default =>
-            #    let state = array::push(state, event)
-            #end;
-            #
-            #state
-
-            match state of
-              case %{present events} =>
-                let state.events = array::push(state.events, event)
+            match type::is_null(state) of
+              case true =>
+                let state = [event]
               default =>
-                let state.events = [event]
+                let state = array::push(state, event)
             end;
 
-            state.events
+            state
     links:
       in: [ counter-op, counter-script, events-script ]
       counter-op: [ out ]

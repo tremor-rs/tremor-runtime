@@ -113,14 +113,11 @@ pub struct Pipeline {
     pub(crate) graph: ConfigGraph,
 }
 
-// TODO eliminate this alias
-pub type StateObject = Value<'static>;
-
 #[derive(Clone, Debug, Default)]
 pub struct State {
     // ordered in the same way as nodes in the executable graph
-    pub ops: Vec<StateObject>,
-    pub exports: StateObject,
+    pub ops: Vec<Value<'static>>,
+    pub exports: Value<'static>,
 }
 
 pub type PipelineVec = Vec<Pipeline>;
@@ -319,7 +316,7 @@ impl Operator for OperatorNode {
     fn on_event(
         &mut self,
         port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         self.op.on_event(port, state, event)
@@ -974,14 +971,8 @@ impl Pipeline {
             metrics_idx: i2pos[&self.nodes["metrics"]],
             last_metrics: 0,
             state: State {
-                // TODO implement default for StateObject as following
-                // also fix null initialization
-                //ops: iter::repeat(StateObject::default())
-                //ops: iter::repeat(Value::null()).take(graph.len()).collect(),
-                ops: iter::repeat(Value::from(Object::new()))
-                    .take(graph.len())
-                    .collect(),
-                exports: StateObject::default(),
+                ops: iter::repeat(Value::null()).take(graph.len()).collect(),
+                exports: Value::null(),
             },
             graph,
             inputs,

@@ -233,7 +233,7 @@ fn main() -> Result<()> {
             };
 
             let mut global_map = Value::from(Object::new());
-            let mut state = Value::from(Object::new());
+            let mut state = Value::null();
             let mut event = events
                 .pop()
                 .ok_or_else(|| Error::from("At least one event needs to be specified"))?;

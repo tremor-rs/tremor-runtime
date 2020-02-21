@@ -20,7 +20,7 @@ pub mod prelude;
 pub mod runtime;
 pub mod trickle;
 
-use super::{Event, NodeConfig, StateObject};
+use super::{Event, NodeConfig};
 use crate::errors::*;
 use halfbrown::HashMap;
 use regex::Regex;
@@ -36,7 +36,7 @@ pub trait Operator: std::fmt::Debug + Send {
     fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
         &mut self,
         port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         Ok(vec![])

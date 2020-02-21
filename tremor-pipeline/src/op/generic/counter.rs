@@ -28,36 +28,25 @@ impl Operator for Counter {
     fn on_event(
         &mut self,
         _port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        let mut count_tracker = Value::from(1 as u64);
-        // TODO remove unwrap
-        if let Some(count) = state
-            .as_object_mut()
-            .expect("Expected Some not None for state")
-            .get_mut("count")
-        {
-            if let Some(n) = count.as_u64() {
-                count_tracker = Value::from(n + 1);
-                *count = count_tracker.clone();
-            }
+        if state.is_null() {
+            *state = Value::from(1 as u64);
         } else {
-            state
-                .as_object_mut()
-                .expect("Expected Some not None for state")
-                .insert("count".into(), count_tracker.clone());
+            *state = Value::from(
+                state
+                    .as_u64()
+                    .ok_or_else(|| Error::from("Expected Some not None for state"))?
+                    + 1,
+            );
         }
 
-        //dbg!(&state);
-
         let (value, _) = event.data.parts();
-        // TODO remove
-        //dbg!(&value);
 
-        // TODO build data.map() functionality with rentals to avoid the clone here
         *value = Value::from(hashmap! {
-            "count".into() => count_tracker,
+            "count".into() => state.clone(),
+            // FIXME build data.map() functionality with rentals to avoid the clone here
             "event".into() => value.clone_static(),
         });
 

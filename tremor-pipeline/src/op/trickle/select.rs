@@ -15,7 +15,7 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::*;
-use crate::{Event, Operator, StateObject};
+use crate::{Event, Operator};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
 use std::borrow::{Borrow, Cow};
@@ -81,7 +81,7 @@ pub struct TrickleSelect {
 }
 
 pub trait WindowTrait: std::fmt::Debug {
-    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent>;
+    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent>;
     fn eviction_ns(&self) -> Option<u64>;
 }
 
@@ -118,7 +118,7 @@ impl std::default::Default for WindowImpl {
 }
 
 impl WindowTrait for WindowImpl {
-    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
         match self {
             Self::TumblingTimeBased(w) => w.on_event(state, event),
             Self::TumblingCountBased(w) => w.on_event(state, event),
@@ -168,7 +168,7 @@ impl WindowTrait for NoWindow {
     fn eviction_ns(&self) -> Option<u64> {
         None
     }
-    fn on_event(&mut self, _state: &mut StateObject, _event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, _state: &mut Value<'static>, _event: &Event) -> Result<WindowEvent> {
         if self.open {
             Ok(WindowEvent {
                 open: false,
@@ -214,7 +214,7 @@ impl WindowTrait for TumblingWindowOnTime {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
         let time = self
             .script
             .as_ref()
@@ -291,7 +291,7 @@ impl WindowTrait for TumblingWindowOnNumber {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, state: &mut StateObject, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
         let count = self
             .script
             .as_ref()
@@ -388,7 +388,7 @@ impl Operator for TrickleSelect {
     fn on_event(
         &mut self,
         _port: &str,
-        state: &mut StateObject,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let opts = Self::opts();
