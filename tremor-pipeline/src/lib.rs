@@ -113,13 +113,6 @@ pub struct Pipeline {
     pub(crate) graph: ConfigGraph,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct State {
-    // ordered in the same way as nodes in the executable graph
-    pub ops: Vec<Value<'static>>,
-    pub exports: Value<'static>,
-}
-
 pub type PipelineVec = Vec<Pipeline>;
 
 /// Type of nodes
@@ -300,7 +293,6 @@ impl std::hash::Hash for NodeConfig {
 
 /// An executable operator
 #[derive(Debug)]
-// TODO add operator specific state here?
 pub struct OperatorNode {
     /// ID of the operator
     pub id: Cow<'static, str>,
@@ -436,7 +428,7 @@ pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
             defn: None,
             node: None,
         });
-        nodes.insert(node_id.clone(), id);
+        nodes.insert(node_id, id);
     }
 
     for stream in &config.interface.outputs {
@@ -553,23 +545,29 @@ impl NodeMetrics {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct State {
+    // for operator node-level state (ordered in the same way as nodes in the executable graph)
+    ops: Vec<Value<'static>>,
+}
+
 /// An executable graph, this is the executable
 /// form of a pipeline
 #[derive(Debug)]
 pub struct ExecutableGraph {
     /// ID of the graph
     pub id: String,
-    pub graph: Vec<OperatorNode>,
-    pub state: State,
-    pub inputs: HashMap<Cow<'static, str>, usize>,
-    pub stack: Vec<(usize, Cow<'static, str>, Event)>,
-    pub signalflow: Vec<usize>,
-    pub contraflow: Vec<usize>,
-    pub port_indexes: ExecPortIndexMap,
-    pub metrics: Vec<NodeMetrics>,
-    pub metrics_idx: usize,
-    pub last_metrics: u64,
-    pub metric_interval: Option<u64>,
+    graph: Vec<OperatorNode>,
+    state: State,
+    inputs: HashMap<Cow<'static, str>, usize>,
+    stack: Vec<(usize, Cow<'static, str>, Event)>,
+    signalflow: Vec<usize>,
+    contraflow: Vec<usize>,
+    port_indexes: ExecPortIndexMap,
+    metrics: Vec<NodeMetrics>,
+    metrics_idx: usize,
+    last_metrics: u64,
+    metric_interval: Option<u64>,
 }
 
 /// The return of a graph execution
@@ -972,7 +970,6 @@ impl Pipeline {
             last_metrics: 0,
             state: State {
                 ops: iter::repeat(Value::null()).take(graph.len()).collect(),
-                exports: Value::null(),
             },
             graph,
             inputs,

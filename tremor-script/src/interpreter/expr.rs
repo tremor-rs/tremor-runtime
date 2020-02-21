@@ -285,21 +285,21 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         /* NOTE
          * This function is icky we got to do some trickery here.
-         * Since it's dangerous and icky it deserves some explenation
+         * Since it's dangerous and icky it deserves some explanation
          * What we do here is we borrow the target we want to set
-         * as imutable and mem::transmute it to mutable where needed.
+         * as immutable and mem::transmute it to mutable where needed.
          *
          * We do this since there is no way to tell rust that it's safe
-         * to borrow imuatble out of something that' mutable even if
+         * to borrow immuatble out of something that's mutable even if
          * we clone data out.
          *
          * This is safe because:
          *
          * We only borrow Cow<'event, str> out of the host. So the
-         * reference points to either the event or script and we.
+         * reference points to either the event or script and we
          * never mutate strings only ever replace them.
-         * So even if the map the Cow orriginally came form we won't
-         * loose the refferenced data. (Famous last words)
+         * So even if the map the Cow originally came from we won't
+         * lose the referenced data. (Famous last words)
          */
         use std::mem;
         let segments = path.segments();
@@ -366,9 +366,14 @@ where
                     event
                 }
                 Path::State(_path) => {
-                    // TODO heavy comment here for all the sorcery
+                    // Extend the lifetime of value to be static (also forces all strings and
+                    // object keys in value to be owned COW's). This ensures that the current
+                    // value is kept as part of state across subsequent state assignments (if
+                    // users choose to do so).
                     value = value.into_static();
                     if segments.is_empty() {
+                        // for the compiler, the type of value still has 'event as the lifetime
+                        // so we transmute it to conform with the lifetime of state ('static).
                         *state = mem::transmute(value);
                         return Ok(Cow::Borrowed(state));
                     };

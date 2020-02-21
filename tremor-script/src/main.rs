@@ -53,6 +53,7 @@ use clap::{App, Arg};
 use ctx::{EventContext, EventOriginUri};
 use halfbrown::hashmap;
 use simd_json::borrowed::{Object, Value};
+use simd_json::value::ValueBuilder;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{BufReader, Read};
