@@ -31,7 +31,8 @@ pub mod ast;
 mod compat;
 mod ctx;
 mod datetime;
-pub(crate) mod docs;
+/// Tremor script function doc helper
+pub mod docs;
 /// Errors
 pub mod errors;
 /// GROK implementaiton
