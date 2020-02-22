@@ -94,7 +94,7 @@ $ RUST_BACKTRACE=1 tremor-server...
 
 ## The Build System
 
-For info on how to configure and build the project, please see [the tremor build guide][tremor-build-guide]. 
+For info on how to configure and build the project, please see [the tremor build guide][tremor-build-guide].
 This guide contains info for contributions to the project and the standard facilities. It also lists some
 really useful commands to the build system, which could save you a lot of time.
 
@@ -157,8 +157,8 @@ Once your merge request is approved it will enter the merge queue
 
 [darach]: https://github.com/darach
 
-Speaking of tests, Rust has a comprehensive test suite. More information about
-it can be found [here][https://github.com/wayfair-incubator/tremor-runtime/blob/master/docs/development/testing.md].
+Speaking of tests, tremor has a comprehensive test suite. More information about
+it can be found [here][https://github.com/wayfair-tremor/tremor-www-docs/blob/master/docs/development/testing.md].
 
 ### External Dependencies
 
