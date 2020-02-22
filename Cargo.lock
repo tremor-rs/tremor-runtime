@@ -3729,7 +3729,7 @@ dependencies = [
  "serde_json 1.0.48 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_yaml 0.8.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "tremor-script 0.7.0",
+ "tremor-script 0.7.1",
  "window 0.1.0 (git+https://github.com/wayfair-tremor/window.git)",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -3744,7 +3744,7 @@ dependencies = [
  "serde_json 1.0.48 (registry+https://github.com/rust-lang/crates.io-index)",
  "simd-json 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.7.0",
- "tremor-script 0.7.0",
+ "tremor-script 0.7.1",
 ]
 
 [[package]]
@@ -3809,7 +3809,7 @@ dependencies = [
  "tokio-postgres 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-threadpool 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.7.0",
- "tremor-script 0.7.0",
+ "tremor-script 0.7.1",
  "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "xz2 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "yup-oauth2 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3817,7 +3817,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3871,7 +3871,7 @@ dependencies = [
  "tremor-api 0.7.0",
  "tremor-pipeline 0.7.0",
  "tremor-runtime 0.7.0",
- "tremor-script 0.7.0",
+ "tremor-script 0.7.1",
 ]
 
 [[package]]
@@ -3890,7 +3890,7 @@ dependencies = [
  "simd-json 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-pipeline 0.7.0",
  "tremor-runtime 0.7.0",
- "tremor-script 0.7.0",
+ "tremor-script 0.7.1",
 ]
 
 [[package]]

@@ -67,7 +67,7 @@ To run `tremor` locally and introspect its docker environment do the following:
 
 ```bash
 make image
-docker run tremor-runtime
+docker run tremorproject/tremor:latest
 ```
 
 A local shell can be gotten by finding the container id of the running docker container and using that to attach a shell to the image.
