@@ -33,8 +33,8 @@ termcolor = "1.0"
 unicode-xid = "0.2"
 halfbrown = "0.1"
 base64 = "0.10.1"
-kv = { git = "https://github.com/wayfair-tremor/kv.git" }
-dissect = { git = "https://github.com/wayfair-tremor/dissect.git" }
+tremor-kv = "0.1"
+dissect = "0.1"
 distance = "0.4"
 chrono = "0.4"
 clap = "2.33.0"
