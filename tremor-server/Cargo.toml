@@ -1,6 +1,7 @@
 [package]
 name = "tremor-server"
-version = "0.1.0"
+version = "0.7.0"
+description = "Tremor Runtime Server"
 authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
