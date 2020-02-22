@@ -46,7 +46,7 @@ services:
     depends_on:
       - influx
   tremor:
-    image: tremor-runtime
+    image: tremorproject/tremor:latest
     depends_on:
       - kibana
       - kafka
