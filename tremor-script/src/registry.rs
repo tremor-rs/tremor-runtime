@@ -640,6 +640,11 @@ impl Registry {
         self.modules.push(source);
         Ok(warnings)
     }
+
+    /// Finds a module in the registry
+    pub fn find_module(&self, module: &str) -> Option<&HashMap<String, TremorFnWrapper>> {
+        self.functions.get(module)
+    }
 }
 
 /// Wrapper around an aggregate function
@@ -766,6 +771,11 @@ impl Aggr {
             self.functions.insert(module_name, module);
         }
         self
+    }
+
+    /// Finds a module in the registry
+    pub fn find_module(&self, module: &str) -> Option<&HashMap<String, TremorAggrFnWrapper>> {
+        self.functions.get(module)
     }
 }
 

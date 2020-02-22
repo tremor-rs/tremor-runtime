@@ -76,6 +76,13 @@ pub struct Script {
     warnings: Vec<Warning>,
 }
 
+impl Script {
+    /// Get script warnings
+    pub fn warnings(&self) -> &Vec<Warning> {
+        &self.warnings
+    }
+}
+
 rental! {
     mod rentals {
         use crate::ast;

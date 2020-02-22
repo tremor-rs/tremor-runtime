@@ -22,9 +22,13 @@ use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) enum ErrorLevel {
+/// Error Level
+pub enum ErrorLevel {
+    /// Error
     Error,
+    /// Warning
     Warning,
+    /// Hint
     Hint,
 }
 
@@ -46,6 +50,38 @@ pub struct Error {
     hint: Option<String>,
     level: ErrorLevel,
     token: Option<String>,
+}
+
+impl Error {
+    /// Get start location of the error
+    pub fn start(&self) -> Location {
+        self.start
+    }
+
+    /// Get end location of the error
+    pub fn end(&self) -> Location {
+        self.end
+    }
+
+    /// Get end location of the error
+    pub fn callout(&self) -> &String {
+        &self.callout
+    }
+
+    /// Get hint on how to fix the error
+    pub fn hint(&self) -> Option<&String> {
+        self.hint.as_ref()
+    }
+
+    /// Get the level of the error. See `ErrorLevel` for possible values.
+    pub fn level(&self) -> &ErrorLevel {
+        &self.level
+    }
+
+    /// Get error token
+    pub fn token(&self) -> Option<&String> {
+        self.token.as_ref()
+    }
 }
 
 impl From<&ScriptError> for Error {

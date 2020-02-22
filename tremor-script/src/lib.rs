@@ -48,10 +48,11 @@ pub mod lexer;
 // We need this because of lalrpop
 #[allow(unused)]
 pub(crate) mod parser;
-pub(crate) mod pos;
+/// Tremor Script Position
+pub mod pos;
 /// Prelude module with important exports
 pub mod prelude;
-/// Tremor Querty
+/// Tremor Query
 pub mod query;
 /// Function registry
 pub mod registry;
