@@ -36,7 +36,6 @@ use cidr_utils::{
 };
 use dissect::Pattern;
 use glob;
-use kv;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
 use simd_json::{Value as ValueTrait, ValueBuilder};
@@ -46,6 +45,7 @@ use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
+use tremor_kv as kv;
 
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
     let mut network_length = match itr.next()? {
