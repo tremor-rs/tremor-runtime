@@ -25,9 +25,13 @@
 )]
 #![allow(clippy::must_use_candidate)]
 
-use mimalloc::MiMalloc;
+#[cfg(not(feature = "snmalloc"))]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg(feature = "snmalloc")]
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+
 
 #[macro_use]
 extern crate log;
