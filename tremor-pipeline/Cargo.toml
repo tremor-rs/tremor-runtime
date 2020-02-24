@@ -1,6 +1,6 @@
 [package]
 name = "tremor-pipeline"
-version = "0.7.0"
+version = "0.7.3"
 description = "Tremor Pipeline DAG Runtime"
 authors = ["The Tremor Team"]
 edition = "2018"
