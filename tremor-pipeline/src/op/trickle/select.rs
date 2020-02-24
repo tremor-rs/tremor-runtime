@@ -81,7 +81,7 @@ pub struct TrickleSelect {
 }
 
 pub trait WindowTrait: std::fmt::Debug {
-    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent>;
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
     fn eviction_ns(&self) -> Option<u64>;
 }
 
@@ -118,11 +118,11 @@ impl std::default::Default for WindowImpl {
 }
 
 impl WindowTrait for WindowImpl {
-    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_event(state, event),
-            Self::TumblingCountBased(w) => w.on_event(state, event),
-            Self::No(w) => w.on_event(state, event),
+            Self::TumblingTimeBased(w) => w.on_event(event),
+            Self::TumblingCountBased(w) => w.on_event(event),
+            Self::No(w) => w.on_event(event),
         }
     }
     fn eviction_ns(&self) -> Option<u64> {
@@ -168,7 +168,7 @@ impl WindowTrait for NoWindow {
     fn eviction_ns(&self) -> Option<u64> {
         None
     }
-    fn on_event(&mut self, _state: &mut Value<'static>, _event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
         if self.open {
             Ok(WindowEvent {
                 open: false,
@@ -214,7 +214,7 @@ impl WindowTrait for TumblingWindowOnTime {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         let time = self
             .script
             .as_ref()
@@ -226,9 +226,9 @@ impl WindowTrait for TumblingWindowOnTime {
                 let value = script.run(
                     &context,
                     AggrType::Emit,
-                    &mut unwind_event, // event
-                    state,             // state
-                    &mut event_meta,   // $
+                    &mut unwind_event,  // event
+                    &mut Value::null(), // state for the window
+                    &mut event_meta,    // $
                 )?;
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),
@@ -291,7 +291,7 @@ impl WindowTrait for TumblingWindowOnNumber {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
     }
-    fn on_event(&mut self, state: &mut Value<'static>, event: &Event) -> Result<WindowEvent> {
+    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         let count = self
             .script
             .as_ref()
@@ -303,9 +303,9 @@ impl WindowTrait for TumblingWindowOnNumber {
                 let value = script.run(
                     &context,
                     AggrType::Emit,
-                    &mut unwind_event, // event
-                    state,             // state
-                    &mut event_meta,   // $
+                    &mut unwind_event,  // event
+                    &mut Value::null(), // state for the window
+                    &mut event_meta,    // $
                 )?;
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),
@@ -531,7 +531,7 @@ impl Operator for TrickleSelect {
                             }),
                         )
                     });
-                let window_event = this_group.window.on_event(state, &event)?;
+                let window_event = this_group.window.on_event(&event)?;
                 // FIXME
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the inital frame
