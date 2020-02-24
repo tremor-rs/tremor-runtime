@@ -379,7 +379,9 @@ impl Artefact for OnrampArtefact {
                 //TODO: Check that we really have the right onramp!
                 if let Some(ResourceType::Pipeline) = to.resource_type() {
                     if let Some(pipeline) = system.reg.find_pipeline(&to).await? {
-                        onramp.send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))?;
+                        onramp
+                            .send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))
+                            .await;
                     } else {
                         return Err(format!("Pipeline {:?} not found", to).into());
                     }
@@ -407,10 +409,12 @@ impl Artefact for OnrampArtefact {
                 links.push(to.to_owned())
             }
             for (_port, pipeline_id) in mappings {
-                onramp.send(onramp::Msg::Disconnect {
-                    id: pipeline_id,
-                    tx: tx.clone(),
-                })?;
+                onramp
+                    .send(onramp::Msg::Disconnect {
+                        id: pipeline_id,
+                        tx: tx.clone(),
+                    })
+                    .await;
             }
             for empty in rx {
                 if empty {

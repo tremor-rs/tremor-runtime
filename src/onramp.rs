@@ -29,13 +29,13 @@ mod postgres;
 mod prelude;
 pub mod tcp;
 mod udp;
-use async_std::sync::channel;
+use async_std::sync::{self, channel};
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::Sender as CbSender;
 // mod rest; .unwrap()
 // mod ws; .unwrap() - reenable
 
-pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
+pub(crate) type Sender = sync::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
@@ -47,7 +47,7 @@ pub enum Msg {
     Disconnect { id: TremorURL, tx: CbSender<bool> },
 }
 
-pub type Addr = CbSender<Msg>;
+pub type Addr = sync::Sender<Msg>;
 
 pub(crate) trait Onramp: Send {
     fn start(

@@ -108,36 +108,10 @@ fn onramp_loop(
 
     let mut events = Events::with_capacity(1024);
     loop {
-        while pipelines.is_empty() {
-            match rx.recv()? {
-                onramp::Msg::Connect(ps) => {
-                    for p in &ps {
-                        if p.0 == *METRICS_PIPELINE {
-                            metrics_reporter.set_metrics_pipeline(p.clone());
-                        } else {
-                            pipelines.push(p.clone());
-                        }
-                    }
-                }
-                onramp::Msg::Disconnect { tx, .. } => {
-                    tx.send(true)?;
-                    return Ok(());
-                }
-            };
-        }
-        match rx.try_recv() {
-            Err(TryRecvError::Empty) => (),
-            Err(_e) => error!("Crossbream receive error"),
-            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(onramp::Msg::Disconnect { id, tx }) => {
-                pipelines.retain(|(pipeline, _)| pipeline != &id);
-                if pipelines.is_empty() {
-                    tx.send(true)?;
-                    return Ok(());
-                } else {
-                    tx.send(false)?;
-                }
-            }
+        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+            PipeHandlerResult::Retry => continue,
+            PipeHandlerResult::Terminate => return Ok(()),
+            PipeHandlerResult::Normal => (),
         }
 
         // wait for events and then process them
@@ -235,23 +209,16 @@ fn onramp_loop(
                                 Err(ref e) if e.kind() == ErrorKind::Interrupted => {
                                     // To be sure we can accept pipeline events in a hot stream
                                     // we try to check on the pipeline rx during interupts
-                                    match rx.try_recv() {
-                                        Err(TryRecvError::Empty) => (),
-                                        Err(_e) => error!("Crossbream receive error"),
-                                        Ok(onramp::Msg::Connect(mut ps)) => {
-                                            pipelines.append(&mut ps)
+                                    match task::block_on(handle_pipelines(
+                                        &rx,
+                                        &mut pipelines,
+                                        &mut metrics_reporter,
+                                    ))? {
+                                        PipeHandlerResult::Normal | PipeHandlerResult::Retry => {
+                                            continue
                                         }
-                                        Ok(onramp::Msg::Disconnect { id, tx }) => {
-                                            pipelines.retain(|(pipeline, _)| pipeline != &id);
-                                            if pipelines.is_empty() {
-                                                tx.send(true)?;
-                                                return Ok(());
-                                            } else {
-                                                tx.send(false)?;
-                                            }
-                                        }
+                                        PipeHandlerResult::Terminate => return Ok(()),
                                     }
-                                    continue;
                                 } // will continue read
                                 Err(e) => {
                                     error!("Failed to read data from tcp client connection: {}", e);
@@ -278,7 +245,7 @@ impl Onramp for Tcp {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = bounded(0);
+        let (tx, rx) = channel(1);
         let config = self.config.clone();
         let preprocessors = preprocessors.to_vec();
         let codec = codec::lookup(codec)?;
