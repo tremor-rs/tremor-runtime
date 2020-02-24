@@ -11,23 +11,23 @@
 
 ---
 
-In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language and a query language. 
+In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language. 
 
-More about the [history](docs/history.md) and [architecture](docs/architecture.md) can be found in [the documentation](docs/index.md).
+More about the [history](https://docs.tremor.rs/history/) and [architecture](dochttps://docs.tremor.rs/overview/) can be found in [the documentation](https://docs.tremor.rs/).
 
 ## Audience
 
-Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
+Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route, or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
 
 ## Use Cases
 
-### Elastic Search data ingress and rate limiting
+### Elastic Search data ingress and rate-limiting
 
-Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify and rate limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes.
+Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify, and rate-limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate-limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes.
 
 ### HTTP to Kafka bridge
 
-Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead only relying on HTTP as its transport.
+Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime, this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead, only relying on HTTP as its transport.
 
 ### When to use Tremor
 
@@ -38,10 +38,10 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 ### When not to use Tremor
 
-Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reallity your contributions are more then welcome.
+Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reality your contributions are more then welcome.
 
-* Your events structure can not be represented by JSONesque data structures. (If unsure feel free to reach out and create a ticket and explain your use case - [codecs](docs/artefacts/codecs.md) are easy to write!)
-* Your onramps or offramps are not supported. (If you sitll wish to use tremor please reach out and create a ticket - [onramps](docs/artefacts/onramps.md) and [offramps](docs/artefacts/offramps.md) too are easy to write!)
+* Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](docs/artefacts/codecs.md) are easy to write!)
+* Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](docs/artefacts/onramps.md) and [offramps](docs/artefacts/offramps.md) too are easy to write!)
 
 ### Example use cases
 
@@ -53,7 +53,7 @@ We provide some usage examples of this in the `docs/workshop` folder. Those exam
 
 Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
 
-Note that sice the image is building tremor in release mode it requires some serious resources, we recommand allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. depending on the system building the image can take up to an hour.
+Note that sice the image is building tremor in release mode it requires some serious resources, we recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
 ### Local builds
 
@@ -63,7 +63,7 @@ For local builds, tremor requires rust 2018 (version `1.31` or later), along wit
 
 ## Running locally
 
-To run `tremor` locally and introspect its docker environment do the following:
+To run `tremor` locally and introspect its docker environment, do the following:
 
 ```bash
 make image
@@ -97,9 +97,9 @@ Tremor uses YAML, or [tremor-query](docs/tremor-query/index.md) to configure pip
 
 Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
 
-The documentation for different operations can found in in the [docs](doc/tremor_runtime/index.html). The `onramps` and `op` modules hold the relevant information.
+The documentation for different operations can found in the [docs](doc/tremor_runtime/index.html). The `onramps` and `op` modules hold the relevant information.
 
-For each operation, the `Config` struct defines the parameters that can be passed to configure it and the description holds additional details and examples.
+For each operation, the `Config` struct defines the parameters that can be passed to configure it, and the description holds additional details and examples.
 
 ### file sections
 
@@ -130,7 +130,7 @@ To demo run `make demo`, this requires the tremor-runtime image to exist on your
 
 ### Design
 
-The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on Kafka and from there reads it into the tremor container to apply classification and bucketing. Finally it off-ramps statistics of the data based on those steps.
+The demo mode logically follows the flow outlined below. It reads the data from data.json.xz, sends it at a fixed rate to the `demo` bucket on Kafka and from there reads it into the tremor container to apply classification and bucketing. Finally, it off-ramps statistics of the data based on those steps.
 
 ```text
 ╔════════════════════╗   ╔════════════════════╗   ╔════════════════════╗
@@ -171,7 +171,7 @@ Configuration lives in `demo/configs`.
 
 #### Test data
 
-The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case a valid JSON object) per line and be compressed with `xz`.
+The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case, a valid JSON object) per line and be compressed with `xz`.
 
 #### Benchmark Framework
 
