@@ -440,14 +440,7 @@ impl Operator for TrickleSelect {
             let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
             let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(
-                    &ctx,
-                    &unwind_event,
-                    state,
-                    &node_meta,
-                    &event_meta,
-                    &mut group_values,
-                )?
+                group_by.generate_groups(&ctx, &unwind_event, state, &node_meta, &event_meta)?
             } else {
                 vec![]
             }

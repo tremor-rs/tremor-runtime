@@ -33,14 +33,12 @@ use tremor_script::Value;
 pub trait Operator: std::fmt::Debug + Send {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
-    fn on_event(&mut self, port: &str, event: Event) -> Result<Vec<(Cow<'static, str>, Event)>>;
+    fn on_event(
         &mut self,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        Ok(vec![])
-    }
+    ) -> Result<Vec<(Cow<'static, str>, Event)>>;
 
     /// Defines if the operatoir shold be called on the singalflow, defaults
     /// to `false`. If set to `true`, `on_signal` should also be implemented.

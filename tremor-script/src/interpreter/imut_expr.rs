@@ -38,10 +38,11 @@ where
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
+        state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
-        self.0.run(opts, env, event, meta, local)
+        self.0.run(opts, env, event, state, meta, local)
     }
 }
 impl<'run, 'event, 'script> ImutExprInt<'script>
@@ -76,12 +77,12 @@ where
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
-            ImutExpr::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
-            ImutExpr::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
-            ImutExpr::Present { path, .. } => {
+            ImutExprInt::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
+            ImutExprInt::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
+            ImutExprInt::Present { path, .. } => {
                 self.present(opts, env, event, state, meta, local, path)
             }
-            ImutExpr::Record(ref record) => {
+            ImutExprInt::Record(ref record) => {
                 let mut object: Object = Object::with_capacity(record.fields.len());
 
                 for field in &record.fields {
@@ -101,14 +102,22 @@ where
                 }
                 Ok(Cow::Owned(Value::Array(r)))
             }
-            ImutExpr::Invoke1(ref call) => self.invoke1(opts, env, event, state, meta, local, call),
-            ImutExpr::Invoke2(ref call) => self.invoke2(opts, env, event, state, meta, local, call),
-            ImutExpr::Invoke3(ref call) => self.invoke3(opts, env, event, state, meta, local, call),
-            ImutExpr::Invoke(ref call) => self.invoke(opts, env, event, state, meta, local, call),
-            ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
-            ImutExpr::Patch(ref expr) => self.patch(opts, env, event, state, meta, local, expr),
-            ImutExpr::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
-            ImutExpr::Local {
+            ImutExprInt::Invoke1(ref call) => {
+                self.invoke1(opts, env, event, state, meta, local, call)
+            }
+            ImutExprInt::Invoke2(ref call) => {
+                self.invoke2(opts, env, event, state, meta, local, call)
+            }
+            ImutExprInt::Invoke3(ref call) => {
+                self.invoke3(opts, env, event, state, meta, local, call)
+            }
+            ImutExprInt::Invoke(ref call) => {
+                self.invoke(opts, env, event, state, meta, local, call)
+            }
+            ImutExprInt::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
+            ImutExprInt::Patch(ref expr) => self.patch(opts, env, event, state, meta, local, expr),
+            ImutExprInt::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
+            ImutExprInt::Local {
                 idx,
                 mid,
                 is_const: false,
@@ -142,12 +151,14 @@ where
                 Some(v) => Ok(Cow::Borrowed(v)),
                 _ => error_oops(self, "Unknown const variable", &env.meta),
             },
-            ImutExpr::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
-            ImutExpr::Binary(ref expr) => self.binary(opts, env, event, state, meta, local, expr),
-            ImutExpr::Match(ref expr) => {
+            ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
+            ImutExprInt::Binary(ref expr) => {
+                self.binary(opts, env, event, state, meta, local, expr)
+            }
+            ImutExprInt::Match(ref expr) => {
                 self.match_expr(opts, env, event, state, meta, local, expr)
             }
-            ImutExpr::Comprehension(ref expr) => {
+            ImutExprInt::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
         }

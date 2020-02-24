@@ -325,8 +325,7 @@ impl Query {
                     };
                     let op = node.to_op(supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    let node_id = common_cow(&o.id);
-                    nodes.insert(node_id.clone(), id);
+                    nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
                 }
                 Stmt::ScriptDecl(s) => {
@@ -360,8 +359,7 @@ impl Query {
 
                     let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
-                    let node_id = common_cow(&o.id);
-                    nodes.insert(node_id.clone(), id);
+                    nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
                 }
             };

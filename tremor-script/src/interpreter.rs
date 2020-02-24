@@ -1149,7 +1149,7 @@ impl<'script> GroupBy<'script> {
     {
         let mut groups = Vec::with_capacity(16);
         self.0
-            .generate_groups(ctx, event, node_meta, meta, &mut groups)?;
+            .generate_groups(ctx, event, state, node_meta, meta, &mut groups)?;
         Ok(groups)
     }
 }
@@ -1160,6 +1160,7 @@ impl<'script> GroupByInt<'script> {
         &'script self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
+        state: &'run Value<'static>,
         node_meta: &'run NodeMetas<'script>,
         meta: &'run Value<'event>,
         groups: &'run mut Vec<Vec<Value<'event>>>,
