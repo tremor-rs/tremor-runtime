@@ -832,7 +832,7 @@ pub(crate) struct EventPath<'script> {
 impl_expr2!(EventPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub struct StatePath<'script> {
+pub(crate) struct StatePath<'script> {
     pub mid: usize,
     pub segments: Segments<'script>,
 }

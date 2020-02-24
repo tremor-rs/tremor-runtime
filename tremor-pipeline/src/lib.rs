@@ -113,8 +113,6 @@ pub struct Pipeline {
     pub(crate) graph: ConfigGraph,
 }
 
-pub type PipelineVec = Vec<Pipeline>;
-
 /// Type of nodes
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum NodeKind {
