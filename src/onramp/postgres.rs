@@ -119,6 +119,11 @@ fn onramp_loop(
     let mut stmt: Option<postgres::Statement> = None;
 
     loop {
+        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+            PipeHandlerResult::Retry => continue,
+            PipeHandlerResult::Terminate => return Ok(()),
+            PipeHandlerResult::Normal => (),
+        }
         if cli.is_none() {
             cli = loop {
                 match init_cli(&config) {
@@ -149,41 +154,6 @@ fn onramp_loop(
                     continue;
                 }
             }
-        }
-
-        if pipelines.is_empty() {
-            match rx.recv()? {
-                onramp::Msg::Connect(ps) => {
-                    for p in &ps {
-                        if p.0 == *METRICS_PIPELINE {
-                            metrics_reporter.set_metrics_pipeline(p.clone());
-                        } else {
-                            pipelines.push(p.clone());
-                        }
-                    }
-                }
-
-                onramp::Msg::Disconnect { tx, .. } => {
-                    tx.send(true)?;
-                    return Ok(());
-                }
-            };
-            continue;
-        } else {
-            match rx.try_recv() {
-                Err(TryRecvError::Empty) => (),
-                Err(_e) => error!("Crossbeam receive error"),
-                Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-                Ok(onramp::Msg::Disconnect { id, tx }) => {
-                    pipelines.retain(|(pipeline, _)| pipeline != &id);
-                    if pipelines.is_empty() {
-                        tx.send(true)?;
-                        return Ok(());
-                    } else {
-                        tx.send(false)?;
-                    }
-                }
-            };
         }
 
         let mut obj = match cache.get() {
@@ -334,7 +304,7 @@ impl Onramp for Postgres {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = bounded(0);
+        let (tx, rx) = channel(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;

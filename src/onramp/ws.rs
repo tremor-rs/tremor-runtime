@@ -312,11 +312,9 @@ async fn onramp_loop(
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter
  ) -> Result<(), IoError> {
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
-    let state = PeerMap::new(Mutex::new(HashMap::new()));
+    let addr = format!("{}:{}", config.host, config.port);
+
 
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&addr).await;
@@ -333,13 +331,14 @@ async fn onramp_loop(
 
 
 impl Onramp for Ws {
+    
     fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = bounded(0);
+        let (tx, rx) = channel(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         // we need to change this here since ws is special
@@ -353,6 +352,7 @@ impl Onramp for Ws {
             })?;
         Ok(tx)
     }
+
     fn default_codec(&self) -> &str {
         "string"
     }

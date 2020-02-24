@@ -196,56 +196,21 @@ fn onramp_loop(
 
     // We do this twice so we don't consume a message from kafka and then wait
     // as this could lead to timeouts
-    while pipelines.is_empty() {
-        match rx.recv()? {
-            onramp::Msg::Connect(ps) => {
-                for p in &ps {
-                    if p.0 == *METRICS_PIPELINE {
-                        metrics_reporter.set_metrics_pipeline(p.clone());
-                    } else {
-                        pipelines.push(p.clone());
-                    }
-                }
-            }
-            onramp::Msg::Disconnect { tx, .. } => {
-                tx.send(true)?;
-                return Ok(());
-            }
-        };
+    loop {
+        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+            PipeHandlerResult::Retry => continue,
+            PipeHandlerResult::Terminate => return Ok(()),
+            PipeHandlerResult::Normal => break,
+        }
     }
     for m in stream.wait() {
-        while pipelines.is_empty() {
-            match rx.recv()? {
-                onramp::Msg::Connect(ps) => {
-                    for p in &ps {
-                        if p.0 == *METRICS_PIPELINE {
-                            metrics_reporter.set_metrics_pipeline(p.clone());
-                        } else {
-                            pipelines.push(p.clone());
-                        }
-                    }
-                }
-                onramp::Msg::Disconnect { tx, .. } => {
-                    tx.send(true)?;
-                    return Ok(());
-                }
-            };
-        }
-        match rx.try_recv() {
-            Err(TryRecvError::Empty) => (),
-            Err(_e) => return Err("Crossbream receive error".into()),
-            Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-            Ok(onramp::Msg::Disconnect { id, tx }) => {
-                pipelines.retain(|(pipeline, _)| pipeline != &id);
-                if pipelines.is_empty() {
-                    tx.send(true)?;
-                    break;
-                } else {
-                    tx.send(false)?;
-                }
+        loop {
+            match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+                PipeHandlerResult::Retry => continue,
+                PipeHandlerResult::Terminate => return Ok(()),
+                PipeHandlerResult::Normal => break,
             }
-        };
-
+        }
         if let Ok(m) = m {
             if let Ok(m) = m {
                 if let Some(data) = m.payload_view::<[u8]>() {
@@ -288,7 +253,7 @@ impl Onramp for Kafka {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = bounded(0);
+        let (tx, rx) = channel(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;

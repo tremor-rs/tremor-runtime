@@ -271,41 +271,10 @@ fn onramp_loop(
     };
 
     loop {
-        if pipelines.is_empty() {
-            match rx.recv()? {
-                onramp::Msg::Connect(ps) => {
-                    for p in &ps {
-                        if p.0 == *METRICS_PIPELINE {
-                            metrics_reporter.set_metrics_pipeline(p.clone());
-                        } else {
-                            pipelines.push(p.clone());
-                        }
-                    }
-                }
-                onramp::Msg::Disconnect { tx, .. } => {
-                    tx.send(true)?;
-                    return Ok(());
-                }
-            };
-            continue;
-        } else {
-            // TODO better sleep
-            thread::sleep(Duration::from_millis(100));
-
-            match rx.try_recv() {
-                Err(TryRecvError::Empty) => (),
-                Err(_e) => return Err("Crossbream receive error".into()),
-                Ok(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-                Ok(onramp::Msg::Disconnect { id, tx }) => {
-                    pipelines.retain(|(pipeline, _)| pipeline != &id);
-                    if pipelines.is_empty() {
-                        tx.send(true)?;
-                        return Ok(());
-                    } else {
-                        tx.send(false)?;
-                    }
-                }
-            };
+        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+            PipeHandlerResult::Retry => continue,
+            PipeHandlerResult::Terminate => return Ok(()),
+            PipeHandlerResult::Normal => (),
         }
         thread::sleep(Duration::from_millis(100));
 
@@ -354,7 +323,7 @@ impl Onramp for Crononome {
                 .into());
             }
         }
-        let (tx, rx) = bounded(0);
+        let (tx, rx) = channel(1);
         let codec = codec::lookup(codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;
         thread::Builder::new()
