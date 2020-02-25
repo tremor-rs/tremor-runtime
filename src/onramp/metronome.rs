@@ -15,7 +15,6 @@
 use crate::onramp::prelude::*;
 //NOTE: This is required for StreamHander's stream
 use crate::utils::nanotime;
-use hostname::get_hostname;
 use serde_yaml::Value;
 use simd_json::json;
 use std::time::Duration;
@@ -55,7 +54,7 @@ fn onramp_loop(
 
     let origin_uri = tremor_pipeline::EventOriginUri {
         scheme: "tremor-metronome".to_string(),
-        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        host: hostname(),
         port: None,
         path: vec![config.interval.to_string()],
     };

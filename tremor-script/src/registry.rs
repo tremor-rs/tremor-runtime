@@ -21,11 +21,11 @@ pub use custom_fn::*;
 
 use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::*;
+use crate::utils::hostname as get_hostname;
 use crate::{tremor_fn, EventContext};
 use chrono::{Timelike, Utc};
 use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
-use hostname::get_hostname;
 use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
@@ -98,14 +98,7 @@ pub fn registry() -> Registry {
     let mut registry = Registry::default();
 
     registry.insert(tremor_fn!(system::hostname(_context) {
-        if let Some(hostname) = get_hostname(){
-            Ok(Value::from(hostname))
-        } else {
-            Err(FunctionError::RuntimeError{
-                mfa: mfa("system", "hostname", 0),
-                error: "could not get hostname".into()
-            })
-        }
+        Ok(Value::from( get_hostname()))
     }));
 
     registry.insert(tremor_fn!(system::ingest_ns(_context) {

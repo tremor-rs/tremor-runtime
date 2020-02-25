@@ -41,7 +41,7 @@ mod stderr;
 mod stdout;
 mod tcp;
 mod udp;
-// mod ws; .unwrap() - reenable
+mod ws;
 
 pub enum Msg {
     Event {
@@ -95,7 +95,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "stderr" => stderr::StdErr::from_config(config),
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
-        // "ws" => ws::Ws::from_config(config), .unwrap() reenable
+        "ws" => ws::Ws::from_config(config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

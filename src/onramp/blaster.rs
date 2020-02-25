@@ -15,7 +15,6 @@
 use crate::dflt;
 use crate::onramp::prelude::*;
 use async_std::sync::{channel, Receiver};
-use hostname::get_hostname;
 use serde_yaml::Value;
 use std::fs::File;
 use std::io::{BufRead, Read};
@@ -100,7 +99,7 @@ fn onramp_loop(
 
     let origin_uri = tremor_pipeline::EventOriginUri {
         scheme: "tremor-blaster".to_string(),
-        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        host: hostname(),
         port: None,
         path: vec![config.source.clone()],
     };

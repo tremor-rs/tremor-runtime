@@ -16,6 +16,14 @@ use crate::errors::*;
 use simd_json::BorrowedValue as Value;
 use std::io::prelude::*;
 
+/// Fetches a hostname with `tremor-host.local` being the default
+pub fn hostname() -> String {
+    hostname::get()
+        .map_err(|_| ())
+        .and_then(|s| s.into_string().map_err(|_| ()))
+        .unwrap_or_else(|_| "tremor-host.local".to_string())
+}
+
 /// Serialize a Value in a sorted fashion to allow equality compairison
 /// the result
 pub fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {

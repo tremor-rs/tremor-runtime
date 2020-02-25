@@ -19,7 +19,10 @@ pub mod lines;
 use crate::errors::*;
 use base64;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use bytes::buf::Buf;
 use bytes::BytesMut;
+
+use std::io;
 
 //pub type Lines = lines::Lines;
 
@@ -159,11 +162,11 @@ impl Preprocessor for Xz2 {
 pub struct Snappy {}
 impl Preprocessor for Snappy {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use snap::Reader;
-        use std::io::Read;
-        let mut reader = Reader::new(data);
-        let mut decompressed = Vec::new();
-        reader.read_to_end(&mut decompressed)?;
+        use snap::read::FrameDecoder;
+        let mut rdr = FrameDecoder::new(data);
+        let decompressed_len = snap::raw::decompress_len(data)?;
+        let mut decompressed = Vec::with_capacity(decompressed_len);
+        io::copy(&mut rdr, &mut decompressed)?;
         Ok(vec![decompressed])
     }
 }
@@ -215,11 +218,11 @@ impl Preprocessor for Decompress {
             }
             // Some(b"sNaPpY") => {
             Some(&[0xff, _, _, _, _, _]) => {
-                use snap::Decoder;
-                let mut decoder = Decoder::new();
-                let decompressed_len = snap::decompress_len(data)?;
+                use snap::read::FrameDecoder;
+                let mut rdr = FrameDecoder::new(data);
+                let decompressed_len = snap::raw::decompress_len(data)?;
                 let mut decompressed = Vec::with_capacity(decompressed_len);
-                decoder.decompress(data, &mut decompressed)?;
+                io::copy(&mut rdr, &mut decompressed)?;
                 decompressed
             }
             Some(&[0x04, 0x22, 0x4D, 0x18, _, _]) => {

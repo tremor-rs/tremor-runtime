@@ -16,6 +16,14 @@ use chrono::{Timelike, Utc};
 use std::time::Duration;
 pub use tremor_pipeline::ConfigImpl;
 
+/// Fetches a hostname with `tremor-host.local` being the default
+pub fn hostname() -> String {
+    hostname::get()
+        .map_err(|_| ())
+        .and_then(|s| s.into_string().map_err(|_| ()))
+        .unwrap_or_else(|_| "tremor-host.local".to_string())
+}
+
 pub(crate) fn duration_to_millis(at: Duration) -> u64 {
     (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
 }

@@ -20,10 +20,12 @@ pub(crate) use crate::pipeline;
 pub(crate) use crate::preprocessor::{self, Preprocessors};
 pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
-pub(crate) use crate::utils::{nanotime, ConfigImpl};
+pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
 pub(crate) use async_std::sync::{channel, Receiver};
 pub(crate) use async_std::task;
 pub(crate) use simd_json::json;
+pub(crate) use tremor_pipeline::EventOriginUri;
+
 // TODO pub here too?
 use std::mem;
 pub(crate) use std::thread;
@@ -141,7 +143,29 @@ pub(crate) async fn handle_pipelines(
 ) -> Result<PipeHandlerResult> {
     if pipelines.is_empty() {
         match rx.recv().await {
-            Some(onramp::Msg::Connect(ps)) => {
+            Some(msg) => handle_pipelines_msg(msg, pipelines, metrics_reporter),
+            None => return Err("Channel receive error".into()),
+        }
+    } else {
+        if !rx.is_empty() {
+            match task::block_on(rx.recv()) {
+                None => Err("Channel receive error".into()),
+                Some(msg) => handle_pipelines_msg(msg, pipelines, metrics_reporter),
+            }
+        } else {
+            Ok(PipeHandlerResult::Normal)
+        }
+    }
+}
+
+pub(crate) fn handle_pipelines_msg(
+    msg: onramp::Msg,
+    pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
+    metrics_reporter: &mut RampReporter,
+) -> Result<PipeHandlerResult> {
+    if pipelines.is_empty() {
+        match msg {
+            onramp::Msg::Connect(ps) => {
                 for p in &ps {
                     if p.0 == *METRICS_PIPELINE {
                         metrics_reporter.set_metrics_pipeline(p.clone());
@@ -149,30 +173,26 @@ pub(crate) async fn handle_pipelines(
                         pipelines.push(p.clone());
                     }
                 }
+                Ok(PipeHandlerResult::Retry)
             }
-            Some(onramp::Msg::Disconnect { tx, .. }) => {
+            onramp::Msg::Disconnect { tx, .. } => {
                 tx.send(true)?;
-                return Ok(PipeHandlerResult::Terminate);
+                Ok(PipeHandlerResult::Terminate)
             }
-            None => return Err("Channel receive error".into()),
-        };
-        return Ok(PipeHandlerResult::Retry);
-    } else {
-        if !rx.is_empty() {
-            match task::block_on(rx.recv()) {
-                None => return Err("Channel receive error".into()),
-                Some(onramp::Msg::Connect(mut ps)) => pipelines.append(&mut ps),
-                Some(onramp::Msg::Disconnect { id, tx }) => {
-                    pipelines.retain(|(pipeline, _)| pipeline != &id);
-                    if pipelines.is_empty() {
-                        tx.send(true)?;
-                        return Ok(PipeHandlerResult::Terminate);
-                    } else {
-                        tx.send(false)?;
-                    }
-                }
-            };
         }
+    } else {
+        match msg {
+            onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
+            onramp::Msg::Disconnect { id, tx } => {
+                pipelines.retain(|(pipeline, _)| pipeline != &id);
+                if pipelines.is_empty() {
+                    tx.send(true)?;
+                    return Ok(PipeHandlerResult::Terminate);
+                } else {
+                    tx.send(false)?;
+                }
+            }
+        };
+        Ok(PipeHandlerResult::Normal)
     }
-    Ok(PipeHandlerResult::Normal)
 }

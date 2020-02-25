@@ -103,9 +103,9 @@ impl Postprocessor for Xz2 {
 pub struct Snappy {}
 impl Postprocessor for Snappy {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use snap::Writer;
+        use snap::write::FrameEncoder;
         use std::io::Write;
-        let mut writer = Writer::new(vec![]);
+        let mut writer = FrameEncoder::new(vec![]);
         writer.write_all(data)?;
         let compressed = writer
             .into_inner()

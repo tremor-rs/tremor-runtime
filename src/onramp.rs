@@ -32,8 +32,8 @@ mod udp;
 use async_std::sync::{self, channel};
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::Sender as CbSender;
-// mod rest; .unwrap()
-// mod ws; .unwrap() - reenable
+// mod rest;
+mod ws;
 
 pub(crate) type Sender = sync::Sender<ManagerMsg>;
 
@@ -72,8 +72,8 @@ pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onram
         "crononome" => crononome::Crononome::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "tcp" => tcp::Tcp::from_config(config),
-        // "rest" => rest::Rest::from_config(config), .unwrap()
-        // "ws" => ws::Ws::from_config(config), .unwrap()
+        // "rest" => rest::Rest::from_config(config),
+        "ws" => ws::Ws::from_config(config),
         _ => Err(format!("Onramp {} not known", name).into()),
     }
 }
@@ -92,6 +92,8 @@ impl fmt::Debug for Create {
     }
 }
 
+/// This is control plane
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
     Create(async_std::sync::Sender<Result<Addr>>, Create),
     Stop,
@@ -107,7 +109,7 @@ impl Manager {
         Self { qsize }
     }
     pub fn start(self) -> (JoinHandle<bool>, Sender) {
-        let (tx, rx) = channel(64);
+        let (tx, rx) = channel(self.qsize);
 
         let h = task::spawn(async move {
             info!("Onramp manager started");
@@ -404,6 +406,7 @@ links:
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn rest_onramp() -> Result<()> {
         let port = find_free_port(9200..9299).expect("no free port");

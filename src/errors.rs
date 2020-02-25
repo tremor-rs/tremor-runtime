@@ -27,7 +27,6 @@ use hdrhistogram::{self, serialization as hdr_s};
 use log4rs;
 use rdkafka;
 use rental;
-use reqwest;
 use rmp_serde;
 use serde_json;
 use serde_yaml;
@@ -62,6 +61,12 @@ impl From<hdrhistogram::RecordError> for Error {
 
 impl From<hdrhistogram::serialization::V2SerializeError> for Error {
     fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<surf::Exception> for Error {
+    fn from(e: surf::Exception) -> Self {
         Self::from(format!("{:?}", e))
     }
 }
@@ -122,7 +127,6 @@ error_chain! {
         Io(std::io::Error) #[cfg(unix)];
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
-        HTTPClientError(reqwest::Error);
         FromUTF8Error(std::string::FromUtf8Error);
         UTF8Error(std::str::Utf8Error);
         ElasticError(elastic::Error);
@@ -139,6 +143,7 @@ error_chain! {
         SnappyError(snap::Error);
         AddrParseError(std::net::AddrParseError);
         RegexError(regex::Error);
+
     }
 
     errors {
