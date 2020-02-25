@@ -27,19 +27,27 @@
 
 #[macro_use]
 extern crate serde_derive;
-#[cfg(feature = "kafka")]
-extern crate rdkafka_sys;
 // This is silly but serde is forcing you to import serde if you want serde_derive
 #[allow(unused_extern_crates)]
 extern crate serde;
-#[cfg(feature = "mssql")]
-extern crate tiberius;
-#[cfg(feature = "kafka")]
-extern crate tokio_threadpool;
 
+use crate::errors::*;
+use async_std::task;
 use clap::load_yaml;
+use clap::ArgMatches;
 use dirs;
+use halfbrown::HashMap;
 use http::status::StatusCode;
+use simd_json::borrowed::{Object, Value};
+use simd_json::value::ValueBuilder;
+use std::ffi::OsStr;
+use std::fs;
+use std::fs::File;
+use std::io;
+use std::io::prelude::*;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use tremor_pipeline;
 use tremor_runtime;
 use tremor_runtime::config;
 use tremor_runtime::errors;
@@ -49,21 +57,6 @@ use tremor_runtime::utils;
 use tremor_script::grok;
 use tremor_script::interpreter::AggrType;
 use tremor_script::EventContext as Context;
-
-use clap::ArgMatches;
-use std::io;
-use tremor_pipeline;
-
-use crate::errors::*;
-use halfbrown::HashMap;
-use simd_json::borrowed::{Object, Value};
-use simd_json::value::ValueBuilder;
-use std::ffi::OsStr;
-use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
 
 enum FormatKind {
     Json,
@@ -153,7 +146,7 @@ impl<'a> TremorApp<'a> {
     }
 }
 
-fn usage(app: &TremorApp) -> Result<()> {
+fn usage(app: &TremorApp<'_>) -> Result<()> {
     println!("{}", app.app.usage());
     println!();
     println!();
@@ -175,7 +168,7 @@ fn run(mut app: TremorApp) -> Result<()> {
     } else if let Some(matches) = cmd.subcommand_matches("pipe") {
         pipe_cmd(&app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("api") {
-        conductor_cmd(&mut app, &matches)
+        task::block_on(conductor_cmd(&mut app, &matches))
     } else {
         usage(&app)
     }
@@ -190,7 +183,7 @@ fn main() -> Result<()> {
     run(app)
 }
 
-fn script_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn script_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     tr_fun::load()?;
     if let Some(matches) = cmd.subcommand_matches("run") {
         script_run_cmd(&matches)
@@ -199,7 +192,7 @@ fn script_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     }
 }
 
-fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
+fn script_run_cmd(cmd: &ArgMatches<'_>) -> Result<()> {
     let f = cmd.value_of("SCRIPT").ok_or("SCRIPT not provided")?;
     let mut file = File::open(f)?;
     let mut script = String::new();
@@ -266,7 +259,7 @@ fn script_run_cmd(cmd: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn grok_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn grok_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         grok_run_cmd(&matches)
     } else {
@@ -274,7 +267,7 @@ fn grok_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     }
 }
 
-fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
+fn grok_run_cmd(cmd: &ArgMatches<'_>) -> Result<()> {
     let test_pattern = cmd
         .value_of("TEST_PATTERN")
         .ok_or("TEST_PATTERN not provided")?;
@@ -316,7 +309,7 @@ fn grok_run_cmd(cmd: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn pipe_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn pipe_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         pipe_run_cmd(app, &matches)
     } else if let Some(matches) = cmd.subcommand_matches("dot") {
@@ -326,7 +319,7 @@ fn pipe_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     }
 }
 
-fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn pipe_run_cmd(_app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
     let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
@@ -364,7 +357,7 @@ fn pipe_run_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn pipe_to_dot_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn pipe_to_dot_cmd(_app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let script = cmd.value_of("CONFIG").ok_or("CONFIG not provided")?;
     let config = slurp(script)?;
     let runtime = tremor_runtime::incarnate(config)?;
@@ -373,19 +366,19 @@ fn pipe_to_dot_cmd(_app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn conductor_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("version") {
-        conductor_version_cmd(app, &matches)
+        conductor_version_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("binding") {
-        conductor_binding_cmd(app, &matches)
+        conductor_binding_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("pipeline") {
-        conductor_pipeline_cmd(app, &matches)
+        conductor_pipeline_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("onramp") {
-        conductor_onramp_cmd(app, &matches)
+        conductor_onramp_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("offramp") {
-        conductor_offramp_cmd(app, &matches)
+        conductor_offramp_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("target") {
-        conductor_target_cmd(app, &matches)
+        conductor_target_cmd(app, &matches).await
     } else {
         usage(app)
     }
@@ -411,13 +404,13 @@ struct Binding {
 // API host targetting //
 /////////////////////////
 
-fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_target_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_target_list_cmd(app, &matches)
+        conductor_target_list_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_target_create_cmd(app, &matches)
+        conductor_target_create_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_target_delete_cmd(app, &matches)
+        conductor_target_delete_cmd(app, &matches).await
     } else {
         println!("{}", serde_json::to_string(&app.config.instances)?);
         Ok(())
@@ -428,7 +421,7 @@ fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
 // API endpoint targetting //
 /////////////////////////////
 
-fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
+async fn conductor_target_list_cmd(app: &TremorApp<'_>, _cmd: &ArgMatches<'_>) -> Result<()> {
     println!(
         "{:?}",
         app.config
@@ -440,7 +433,7 @@ fn conductor_target_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_target_create_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
@@ -449,7 +442,7 @@ fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<
     save_config(&app.config)
 }
 
-fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_target_delete_cmd(app: &mut TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     app.config.instances.remove(&id.to_string());
     save_config(&app.config)
@@ -459,11 +452,11 @@ fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<
 // API Version  //
 //////////////////
 
-fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_version_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let endpoint = &format!("{}version", base_url);
-    let mut response = reqwest::get(endpoint)?;
-    let version: Version = response.json()?;
+    let response = reqwest::get(endpoint).await?;
+    let version: Version = response.json().await?;
     println!(
         "{}",
         match cmd.value_of("format") {
@@ -482,69 +475,70 @@ fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 // API Pipeline subcommands //
 //////////////////////////////
 
-fn conductor_pipeline_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_pipeline_list_cmd(app, &matches)
+        conductor_pipeline_list_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_pipeline_get_cmd(app, &matches)
+        conductor_pipeline_get_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_pipeline_delete_cmd(app, &matches)
+        conductor_pipeline_delete_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_pipeline_create_cmd(app, &matches)
+        conductor_pipeline_create_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_pipeline_instance_cmd(app, &matches)
+        conductor_pipeline_instance_cmd(app, &matches).await
     } else {
         usage(app)
     }
 }
 
-fn conductor_pipeline_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_get_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_pipeline_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_delete_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("pipeline/{id}", id = id);
-    let mut response = restc.delete(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.delete(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_pipeline_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_list_cmd(app: &TremorApp<'_>, _cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "pipeline".to_string();
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_pipeline_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_create_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "pipeline";
-    let mut response = restc
+    let response = restc
         .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
-        .send()?;
-    handle_response(&mut response)
+        .send()
+        .await?;
+    handle_response(response).await
 }
 
-fn conductor_pipeline_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_pipeline_instance_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -554,81 +548,82 @@ fn conductor_pipeline_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("pipeline/{id}/{instance}", id = a_id, instance = s_id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
 /////////////////////////////
 // API Binding subcommands //
 /////////////////////////////
 
-fn conductor_binding_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_binding_list_cmd(app, &matches)
+        conductor_binding_list_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_binding_get_cmd(app, &matches)
+        conductor_binding_get_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_binding_delete_cmd(app, &matches)
+        conductor_binding_delete_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_binding_create_cmd(app, &matches)
+        conductor_binding_create_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_binding_instance_cmd(app, &matches)
+        conductor_binding_instance_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("activate") {
-        conductor_binding_activate_cmd(app, &matches)
+        conductor_binding_activate_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("deactivate") {
-        conductor_binding_deactivate_cmd(app, &matches)
+        conductor_binding_deactivate_cmd(app, &matches).await
     } else {
         usage(app)
     }
 }
 
-fn conductor_binding_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_get_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_delete_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("binding/{id}", id = id);
-    let mut response = restc.delete(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.delete(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_list_cmd(app: &TremorApp<'_>, _cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "binding".to_string();
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_create_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "binding";
-    let mut response = restc
+    let response = restc
         .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
-        .send()?;
-    handle_response(&mut response)
+        .send()
+        .await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_instance_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -638,11 +633,11 @@ fn conductor_binding_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_activate_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -655,16 +650,17 @@ fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
-    let mut response = restc
+    let response = restc
         .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
-        .send()?;
-    handle_response(&mut response)
+        .send()
+        .await?;
+    handle_response(response).await
 }
 
-fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_binding_deactivate_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -674,77 +670,78 @@ fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("binding/{id}/{instance}", id = a_id, instance = s_id);
-    let mut response = restc.delete(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.delete(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
 //////////////////////////
 // API Offramp commands //
 //////////////////////////
 
-fn conductor_offramp_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_offramp_list_cmd(app, &matches)
+        conductor_offramp_list_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_offramp_get_cmd(app, &matches)
+        conductor_offramp_get_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_offramp_delete_cmd(app, &matches)
+        conductor_offramp_delete_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_offramp_create_cmd(app, &matches)
+        conductor_offramp_create_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_offramp_instance_cmd(app, &matches)
+        conductor_offramp_instance_cmd(app, &matches).await
     } else {
         usage(app)
     }
 }
 
-fn conductor_offramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_get_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_offramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_delete_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("offramp/{id}", id = id);
-    let mut response = restc.delete(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.delete(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_offramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_list_cmd(app: &TremorApp<'_>, _cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "offramp".to_string();
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_offramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_create_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "offramp";
-    let mut response = restc
+    let response = restc
         .post(&endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
-        .send()?;
-    handle_response(&mut response)
+        .send()
+        .await?;
+    handle_response(response).await
 }
 
-fn conductor_offramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_offramp_instance_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -754,77 +751,78 @@ fn conductor_offramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<(
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("offramp/{id}/{instance}", id = a_id, instance = s_id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
 /////////////////////////
 // API Onramp commands //
 /////////////////////////
 
-fn conductor_onramp_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("list") {
-        conductor_onramp_list_cmd(app, &matches)
+        conductor_onramp_list_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_onramp_get_cmd(app, &matches)
+        conductor_onramp_get_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_onramp_delete_cmd(app, &matches)
+        conductor_onramp_delete_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_onramp_create_cmd(app, &matches)
+        conductor_onramp_create_cmd(app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_onramp_instance_cmd(app, &matches)
+        conductor_onramp_instance_cmd(app, &matches).await
     } else {
         usage(app)
     }
 }
 
-fn conductor_onramp_get_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_get_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_onramp_delete_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_delete_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let endpoint = format!("onramp/{id}", id = id);
-    let mut response = restc.delete(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.delete(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_onramp_list_cmd(app: &TremorApp, _cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_list_cmd(app: &TremorApp<'_>, _cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let endpoint = "onramp".to_string();
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
-fn conductor_onramp_create_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_create_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let endpoint = "onramp";
-    let mut response = restc
+    let response = restc
         .post(endpoint)?
         .header("content-type", content_type(app))
         .header("accept", accept(app))
         .body(ser)
-        .send()?;
-    handle_response(&mut response)
+        .send()
+        .await?;
+    handle_response(response).await
 }
 
-fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
+async fn conductor_onramp_instance_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let restc = rest::HttpC::new(base_url.to_string());
     let a_id = cmd
@@ -834,8 +832,8 @@ fn conductor_onramp_instance_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!("onramp/{id}/{instance}", id = a_id, instance = s_id);
-    let mut response = restc.get(&endpoint)?.send()?;
-    handle_response(&mut response)
+    let response = restc.get(&endpoint)?.send().await?;
+    handle_response(response).await
 }
 
 //////////////////
@@ -860,24 +858,24 @@ fn load(path_to_file: &str) -> Result<serde_json::Value> {
     }
 }
 
-fn content_type(app: &TremorApp) -> &'static str {
+fn content_type(app: &TremorApp<'_>) -> &'static str {
     match app.format {
         FormatKind::Json => "application/json",
         FormatKind::Yaml => "application/yaml",
     }
 }
 
-fn accept(app: &TremorApp) -> &'static str {
+fn accept(app: &TremorApp<'_>) -> &'static str {
     match app.format {
         FormatKind::Json => "application/json",
         FormatKind::Yaml => "application/yaml",
     }
 }
 
-fn handle_response(response: &mut reqwest::Response) -> Result<()> {
+async fn handle_response(response: surf::Response) -> Result<()> {
     let status = response.status();
     match status {
-        StatusCode::OK | StatusCode::CREATED => println!("{}", &response.text()?),
+        StatusCode::OK | StatusCode::CREATED => println!("{}", response.text().await?),
         StatusCode::NOT_FOUND => eprintln!("Not found"),
         StatusCode::CONFLICT => eprintln!("Conflict"),
         _ => eprintln!("Unexpected response ( status: {} )", status.as_u16()),
@@ -885,7 +883,7 @@ fn handle_response(response: &mut reqwest::Response) -> Result<()> {
     Ok(())
 }
 
-fn ser(app: &TremorApp, json: &serde_json::Value) -> Result<String> {
+fn ser(app: &TremorApp<'_>, json: &serde_json::Value) -> Result<String> {
     Ok(match app.format {
         FormatKind::Json => serde_json::to_string(&json)?,
         FormatKind::Yaml => serde_yaml::to_string(&json)?,

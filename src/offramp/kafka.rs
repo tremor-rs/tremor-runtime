@@ -21,13 +21,10 @@
 //! See [Config](struct.Config.html) for details.
 
 use crate::offramp::prelude::*;
-use futures::Future;
 use halfbrown::HashMap;
-use hostname::get_hostname;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::fmt;
-use tokio_threadpool as thread_pool;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -58,16 +55,12 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 fn d_host() -> String {
-    match get_hostname() {
-        Some(h) => h,
-        None => "tremor-host.local".to_string(),
-    }
+    hostname()
 }
 
 /// Kafka offramp connectoz
 pub struct Kafka {
     producer: FutureProducer,
-    pool: thread_pool::ThreadPool,
     topic: String,
     key: Option<String>,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
@@ -98,12 +91,8 @@ impl offramp::Impl for Kafka {
                 .create()?;
             let key = config.key.clone();
             // Create the thread pool where the expensive computation will be performed.
-            let pool = thread_pool::Builder::new()
-                .name_prefix("kafka-pool-")
-                .pool_size(config.threads)
-                .build();
+
             Ok(Box::new(Self {
-                pool,
                 producer,
                 topic: config.topic,
                 pipelines: HashMap::new(),
@@ -124,20 +113,11 @@ impl Offramp for Kafka {
             let mut record = FutureRecord::to(&self.topic);
             record = record.payload(&raw);
             //TODO: Key
-            let r = if let Some(ref k) = self.key {
-                self.producer.send(record.key(k.as_str()), 1)
+            if let Some(ref k) = self.key {
+                task::spawn(self.producer.send(record.key(k.as_str()), 1));
             } else {
-                self.producer.send(record, 1)
+                task::spawn(self.producer.send(record, 1));
             };
-            let producer_future = r.then(|_result| {
-                // match result {
-                //     Ok(Ok(_delivery)) => ret.send(),
-                //     Ok(Err((e, _))) => ret.with_value(Err(e.into())).send(),
-                //     Err(_) => ret.with_value(Err("Future cancled".into())).send(),
-                // }
-                Ok(())
-            });
-            self.pool.spawn(producer_future);
         }
         Ok(())
     }

@@ -20,9 +20,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use bytes5;
-use bytes5::buf::BufMut;
-use bytes5::buf::BufMutExt;
+use bytes;
+use bytes::buf::{BufMut, BufMutExt};
 use chrono::prelude::*;
 use postgres::types::to_sql_checked;
 use postgres_protocol;
@@ -40,7 +39,7 @@ impl postgres::types::ToSql for Record<'_> {
     fn to_sql(
         &self,
         type_: &postgres::types::Type,
-        w: &mut bytes5::BytesMut,
+        w: &mut bytes::BytesMut,
     ) -> std::result::Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
     {
         if self.value.is_null() {

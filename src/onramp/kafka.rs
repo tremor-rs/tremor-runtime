@@ -17,18 +17,15 @@ use crate::errors::*;
 use crate::onramp::prelude::*;
 
 //NOTE: This is required for StreamHander's stream
-use futures::stream::Stream;
+use futures::StreamExt;
 use halfbrown::HashMap;
-use hostname::get_hostname;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::consumer::{Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::Message;
-use rdkafka_sys;
 use serde_yaml::Value;
-use std::thread;
 use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -81,11 +78,7 @@ pub struct LoggingConsumerContext;
 impl ClientContext for LoggingConsumerContext {}
 
 impl ConsumerContext for LoggingConsumerContext {
-    fn commit_callback(
-        &self,
-        result: KafkaResult<()>,
-        _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList,
-    ) {
+    fn commit_callback(&self, result: KafkaResult<()>, _offsets: &rdkafka::TopicPartitionList) {
         match result {
             Ok(_) => info!("Offsets committed successfully"),
             Err(e) => warn!("Error while committing offsets: {}", e),
@@ -96,22 +89,21 @@ impl ConsumerContext for LoggingConsumerContext {
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
-fn onramp_loop(
-    rx: &Receiver<onramp::Msg>,
+async fn onramp_loop(
+    rx: Receiver<onramp::Msg>,
     config: &Config,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let hostname = get_hostname().unwrap_or_else(|| "tremor-host.local".to_string());
     let context = LoggingConsumerContext;
-    let tid = 0; //TODO: get a good thread id
     let mut client_config = ClientConfig::new();
     let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
+    let tid = task::current().id();
     info!("Starting kafka onramp");
     let client_config = client_config
         .set("group.id", &config.group_id)
-        .set("client.id", &format!("tremor-{}-{}", hostname, tid))
+        .set("client.id", &format!("tremor-{}-{:?}", hostname(), tid))
         .set("bootstrap.servers", &config.brokers.join(","))
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
@@ -151,7 +143,7 @@ fn onramp_loop(
         path: vec![],
     };
 
-    let stream = consumer.start();
+    let mut stream = consumer.start();
 
     info!("[kafka] subscribing to: {:?}", topics);
     // This is terribly ugly, thank you rdkafka!
@@ -203,7 +195,7 @@ fn onramp_loop(
             PipeHandlerResult::Normal => break,
         }
     }
-    for m in stream.wait() {
+    for m in stream.next().await {
         loop {
             match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
                 PipeHandlerResult::Retry => continue,
@@ -212,31 +204,27 @@ fn onramp_loop(
             }
         }
         if let Ok(m) = m {
-            if let Ok(m) = m {
-                if let Some(data) = m.payload_view::<[u8]>() {
-                    if let Ok(data) = data {
-                        id += 1;
-                        let mut ingest_ns = nanotime();
-                        origin_uri.path = vec![
-                            m.topic().to_string(),
-                            m.partition().to_string(),
-                            m.offset().to_string(),
-                        ];
-                        send_event(
-                            &pipelines,
-                            &mut preprocessors,
-                            &mut codec,
-                            &mut metrics_reporter,
-                            &mut ingest_ns,
-                            &origin_uri,
-                            id,
-                            data.to_vec(),
-                        );
-                    } else {
-                        error!("failed to fetch data from kafka")
-                    }
+            if let Some(data) = m.payload_view::<[u8]>() {
+                if let Ok(data) = data {
+                    id += 1;
+                    let mut ingest_ns = nanotime();
+                    origin_uri.path = vec![
+                        m.topic().to_string(),
+                        m.partition().to_string(),
+                        m.offset().to_string(),
+                    ];
+                    send_event(
+                        &pipelines,
+                        &mut preprocessors,
+                        &mut codec,
+                        &mut metrics_reporter,
+                        &mut ingest_ns,
+                        &origin_uri,
+                        id,
+                        data.to_vec(),
+                    );
                 } else {
-                    error!("No data in kafka message");
+                    error!("failed to fetch data from kafka")
                 }
             } else {
                 error!("Failed to fetch kafka message.");
@@ -257,10 +245,12 @@ impl Onramp for Kafka {
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;
-        thread::Builder::new()
+        task::Builder::new()
             .name(format!("onramp-kafka-{}", "???"))
-            .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
+            .spawn(async move {
+                if let Err(e) =
+                    onramp_loop(rx, &config, preprocessors, codec, metrics_reporter).await
+                {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

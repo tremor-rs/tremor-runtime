@@ -16,7 +16,6 @@ use crate::onramp::prelude::*;
 use crate::utils::nanotime;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
-use hostname::get_hostname;
 use serde_yaml::Value;
 use std::clone::Clone;
 use std::cmp::Reverse;
@@ -265,7 +264,7 @@ fn onramp_loop(
 
     let origin_uri = tremor_pipeline::EventOriginUri {
         scheme: "tremor-crononome".to_string(),
-        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        host: hostname(),
         port: None,
         path: vec![],
     };

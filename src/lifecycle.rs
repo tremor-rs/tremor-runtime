@@ -354,7 +354,7 @@ mod test {
 
         // TODO - full undeployment 'white-box' acceptance tests
         //        println!("TODO {:?}", world.repo.unpublish_binding(&id));
-        let _r = world.unbind_binding_a(&id, &artefact);
+        let _r = b!(world.unbind_binding_a(&id, &artefact));
         //        assert!(world.repo.unpublish_binding(&id).is_ok());
         println!(
             "TODO {:?}",

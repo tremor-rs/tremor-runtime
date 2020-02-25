@@ -13,27 +13,20 @@
 // limitations under the License.
 
 use crate::offramp::prelude::*;
-use actix::io::SinkWrite;
-use actix::prelude::*;
-use actix_codec::Framed;
-use awc::{
-    error::WsProtocolError,
-    ws::{CloseCode, CloseReason, Codec as AxCodec, Frame, Message},
-    BoxedSocket, Client,
-};
-use bytes::Bytes;
-use crossbeam_channel::{bounded, Receiver, Sender};
-use futures::{
-    lazy,
-    stream::{SplitSink, Stream},
-    Future,
-};
+use async_std::sync::{channel, Receiver, Sender};
+//use crossbeam_channel::{bounded, Receiver, Sender};
+use async_tungstenite::async_std::connect_async;
+use futures::SinkExt;
 use halfbrown::HashMap;
 use serde_yaml;
+use std::time::Duration;
+use tungstenite::protocol::Message;
+use url::Url;
+/*
+use async_std::net::TcpStream;
+use bytes::Bytes;
 use std::io;
 use std::thread;
-use std::time::Duration;
-
 macro_rules! eat_error {
     ($e:expr) => {
         if let Err(e) = $e {
@@ -41,34 +34,130 @@ macro_rules! eat_error {
         }
     };
 }
+*/
 
-type WsAddr = Addr<WsOfframpWorker>;
+type WsAddr = Sender<WsMessage>;
+
+enum WsMessage {
+    Binary(Vec<u8>),
+    Text(String),
+}
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// Host to use as source
     pub url: String,
-    #[serde(default = "d_false")]
+    #[serde(default)]
     pub binary: bool,
 }
 
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
     addr: Option<WsAddr>,
-    downed_at: u64,
     config: Config,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
-    tx: Sender<Option<WsAddr>>,
     rx: Receiver<Option<WsAddr>>,
 }
 
-#[derive(Message)]
-enum WsMessage {
-    Binary(Vec<u8>),
-    Text(String),
+async fn ws_loop(url: String, offramp_tx: Sender<Option<WsAddr>>) {
+    loop {
+        let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
+            ws_stream
+        } else {
+            error!("Failed to connect to {}, retrying in 1s", url);
+            offramp_tx.send(None).await;
+            task::sleep(Duration::from_secs(1)).await;
+            continue;
+        };
+        let (tx, rx) = channel(64);
+        offramp_tx.send(Some(tx)).await;
+
+        while let Some(msg) = rx.recv().await {
+            let r = match msg {
+                WsMessage::Text(t) => ws_stream.send(Message::Text(t)).await,
+                WsMessage::Binary(t) => ws_stream.send(Message::Binary(t)).await,
+            };
+            if let Err(e) = r {
+                error!(
+                    "Websocket send error: {} for endppoint {}, reconnecting",
+                    e, url
+                );
+                break;
+            }
+        }
+    }
 }
 
+impl offramp::Impl for Ws {
+    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+        if let Some(config) = config {
+            let config: Config = serde_yaml::from_value(config.clone())?;
+            // Ensure we have valid url
+            Url::parse(&config.url)?;
+            let (tx, rx) = channel(1);
+
+            task::spawn(ws_loop(config.url.clone(), tx));
+
+            Ok(Box::new(Self {
+                addr: None,
+                config,
+                pipelines: HashMap::new(),
+                postprocessors: vec![],
+                rx,
+            }))
+        } else {
+            Err("[WS Offramp] Offramp requires a config".into())
+        }
+    }
+}
+
+impl Offramp for Ws {
+    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+        task::block_on(async {
+            while !self.rx.is_empty() {
+                self.addr = self.rx.recv().await.unwrap_or_default();
+            }
+
+            if let Some(addr) = &self.addr {
+                for value in event.value_iter() {
+                    let raw = codec.encode(value)?;
+                    let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
+                    for raw in datas {
+                        if self.config.binary {
+                            addr.send(WsMessage::Binary(raw)).await;
+                        } else if let Ok(txt) = String::from_utf8(raw) {
+                            addr.send(WsMessage::Text(txt)).await;
+                        } else {
+                            error!("[WS Offramp] Invalid utf8 data for text message");
+                            return Err(Error::from("Invalid utf8 data for text message"));
+                        }
+                    }
+                }
+            } else {
+                return Err(Error::from("not connected"));
+            };
+            Ok(())
+        })
+    }
+
+    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
+        self.pipelines.insert(id, addr);
+    }
+    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
+        self.pipelines.remove(&id);
+        self.pipelines.is_empty()
+    }
+    fn default_codec(&self) -> &str {
+        "json"
+    }
+    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
+    }
+}
+
+/*
 impl offramp::Impl for Ws {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
@@ -305,3 +394,4 @@ impl StreamHandler<Frame, WsProtocolError> for WsOfframpWorker {
         ctx.stop()
     }
 }
+*/

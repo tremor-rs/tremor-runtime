@@ -37,11 +37,10 @@ use crate::offramp::prelude::*;
 // use elastic::prelude::SyncClientBuilder;
 use elastic::prelude::*;
 
-use halfbrown::HashMap;
-// use hostname::get_hostname;
 use crate::offramp::prelude::make_postprocessors;
 use crate::postprocessor::Postprocessors;
 use crossbeam_channel::bounded;
+use halfbrown::HashMap;
 use simd_json::json;
 use std::str;
 use std::time::Instant;
@@ -94,7 +93,7 @@ impl offramp::Impl for Elastic {
 
             let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
-            //let hostname = match get_hostname() {
+            //let hostname = match hostname::get() {
             //    Some(h) => h,
             //    None => "tremor-host.local".to_string(),
             //};

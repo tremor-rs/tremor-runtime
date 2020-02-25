@@ -24,7 +24,7 @@ pub(crate) mod string;
 pub(crate) mod yaml;
 
 /// The codec trait, to encode and decode data
-pub trait Codec: Send {
+pub trait Codec: Send + Sync {
     /// Decode a binary, into an Value
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
     /// Encodes a Value into a binary

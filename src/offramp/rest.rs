@@ -13,12 +13,10 @@
 // limitations under the License.
 
 use crate::offramp::prelude::*;
-use crate::rest::HttpC;
 use crossbeam_channel::bounded;
 use halfbrown::HashMap;
 use std::str;
 use std::time::Instant;
-use threadpool::ThreadPool;
 use tremor_script::prelude::*;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -39,9 +37,7 @@ impl ConfigImpl for Config {}
 
 pub struct Rest {
     client_idx: usize,
-    clients: Vec<HttpC>,
     config: Config,
-    pool: ThreadPool,
     queue: AsyncSink<u64>,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
@@ -51,21 +47,13 @@ impl offramp::Impl for Rest {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            let clients = config
-                .endpoints
-                .iter()
-                .map(|endpoint| HttpC::new(endpoint.clone()))
-                .collect();
 
-            let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
             Ok(Box::new(Self {
                 client_idx: 0,
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
                 config,
-                pool,
-                clients,
                 queue,
             }))
         } else {
@@ -75,25 +63,29 @@ impl offramp::Impl for Rest {
 }
 
 impl Rest {
-    fn flush(client: &HttpC, config: Config, payload: Vec<u8>) -> Result<u64> {
+    async fn flush(endpoint: &str, config: Config, payload: Vec<u8>) -> Result<u64> {
         let start = Instant::now();
-        let c = if config.put {
-            client.put("")?
+        let mut c = if config.put {
+            surf::put(endpoint)
         } else {
-            client.post("")?
+            surf::post(endpoint)
         };
-        let c = config
-            .headers
-            .into_iter()
-            .fold(c, |c, (k, v)| c.header(k.as_str(), v.as_str()));
-        c.body(payload).send()?;
+        c = c.body_bytes(&payload);
+        for (k, v) in config.headers {
+            use http::header::HeaderName;
+            c = c.set_header(
+                &HeaderName::from_bytes(k.as_str().as_bytes()).unwrap(),
+                v.as_str(),
+            );
+        }
+        c.await?;
         let d = duration_to_millis(start.elapsed());
         Ok(d)
     }
 
     fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
-        self.client_idx = (self.client_idx + 1) % self.clients.len();
-        let destination = self.clients[self.client_idx].clone();
+        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
+        let destination = self.config.endpoints[self.client_idx].clone();
         let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
@@ -101,8 +93,8 @@ impl Rest {
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
-        self.pool.execute(move || {
-            let r = Self::flush(&destination, config, payload);
+        task::spawn(async move {
+            let r = Self::flush(&destination, config, payload).await;
             let mut m = Object::new();
             if let Ok(t) = r {
                 m.insert("time".into(), t.into());

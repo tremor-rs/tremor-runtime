@@ -22,7 +22,6 @@ use crate::ramp;
 use crate::ramp::postgres::row_to_json;
 use crate::ramp::Config as CacheConfig;
 use chrono::prelude::*;
-use hostname::get_hostname;
 use postgres::{Client, NoTls};
 use serde_json;
 use serde_yaml::Value;
@@ -84,7 +83,7 @@ fn onramp_loop(
 
     let origin_uri = tremor_pipeline::EventOriginUri {
         scheme: "tremor-file".to_string(),
-        host: get_hostname().unwrap_or_else(|| "tremor-host.local".to_string()),
+        host: hostname(),
         port: None,
         path: vec![config.host.clone()],
     };

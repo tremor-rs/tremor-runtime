@@ -13,16 +13,13 @@
 // limitations under the License.
 
 use crate::onramp::prelude::*;
-use crate::utils::nanotime;
-use actix::prelude::*;
-use actix_web::{middleware, web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
-use actix_web_actors::ws;
-use crossbeam_channel::{select, Sender};
+//use crate::utils::nanotime;
+use async_std::sync::Sender;
+use futures::{select, FutureExt, StreamExt};
 use serde_yaml::Value;
-use std::io;
-use std::thread;
-/*
-type ActixResult<T> = std::result::Result<T, ActixError>;
+//use std::io;
+//use std::thread;
+use tungstenite::protocol::Message;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -46,10 +43,13 @@ impl onramp::Impl for Ws {
         }
     }
 }
-
 enum WsOnrampMessage {
-    Data(u64, tremor_pipeline::EventOriginUri, Vec<u8>),
+    Data(u64, EventOriginUri, Vec<u8>),
 }
+/*
+type ActixResult<T> = std::result::Result<T, ActixError>;
+
+
 
 /// websocket connection is long running connection, it easier
 /// to handle with an actor
@@ -258,63 +258,82 @@ fn onramp_loop(
 */
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
-use tungstenite::protocol::Message;
 
-async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr) {
-    println!("Incoming TCP connection from: {}", addr);
+async fn handle_connection(
+    loop_tx: Sender<WsOnrampMessage>,
+    raw_stream: TcpStream,
+    mut preprocessors: Preprocessors,
+) -> Result<()> {
+    let mut ws_stream = async_tungstenite::accept_async(raw_stream).await.unwrap();
 
-    let ws_stream = async_tungstenite::accept_async(raw_stream)
-        .await
-        .expect("Error during the websocket handshake occurred");
-    println!("WebSocket connection established: {}", addr);
+    let origin_uri = tremor_pipeline::EventOriginUri {
+        scheme: "tremor-ws".to_string(),
+        host: "tremor-ws-client-host.remote".to_string(),
+        port: None,
+        // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
+        path: vec![String::default()],
+    };
 
     // Insert the write part of this peer to the peer map.
-    let (tx, rx) = unbounded();
-    peer_map.lock().unwrap().insert(addr, tx);
+    //let (tx, rx) = channel(64);
 
-    let (outgoing, incoming) = ws_stream.split();
+    //let (_outgoing, _incoming) = ws_stream.split();
 
-    let broadcast_incoming = incoming.try_for_each(|msg| {
-        println!(
-            "Received a message from {}: {}",
-            addr,
-            msg.to_text().unwrap()
-        );
-        let peers = peer_map.lock().unwrap();
-
-        // We want to broadcast the message to everyone except ourselves.
-        let broadcast_recipients = peers
-            .iter()
-            .filter(|(peer_addr, _)| peer_addr != &&addr)
-            .map(|(_, ws_sink)| ws_sink);
-
-        for recp in broadcast_recipients {
-            recp.unbounded_send(msg.clone()).unwrap();
+    while let Some(msg) = ws_stream.next().await {
+        match msg {
+            Ok(Message::Text(t)) => {
+                let mut ingest_ns = nanotime();
+                if let Ok(data) = handle_pp(&mut preprocessors, &mut ingest_ns, t.into_bytes()) {
+                    for d in data {
+                        loop_tx
+                            .send(WsOnrampMessage::Data(
+                                ingest_ns,
+                                // TODO possible to avoid clone here? we clone again inside send_event
+                                origin_uri.clone(),
+                                d,
+                            ))
+                            .await;
+                    }
+                }
+            }
+            Ok(Message::Binary(b)) => {
+                let mut ingest_ns = nanotime();
+                if let Ok(data) = handle_pp(&mut preprocessors, &mut ingest_ns, b) {
+                    for d in data {
+                        loop_tx
+                            .send(WsOnrampMessage::Data(
+                                ingest_ns,
+                                // TODO possible to avoid clone here? we clone again inside send_event
+                                origin_uri.clone(),
+                                d,
+                            ))
+                            .await;
+                    }
+                }
+            }
+            Ok(Message::Ping(_)) => (),
+            Ok(Message::Pong(_)) => (),
+            Ok(Message::Close(_)) => break,
+            Err(e) => error!("WS error returned while waiting for client data: {}", e),
         }
-
-        future::ok(())
-    });
-
-    let receive_from_others = rx.map(Ok).forward(outgoing);
-
-    pin_mut!(broadcast_incoming, receive_from_others);
-    future::select(broadcast_incoming, receive_from_others).await;
-
-    println!("{} disconnected", &addr);
-    peer_map.lock().unwrap().remove(&addr);
+    }
+    Ok(())
 }
-
 
 async fn onramp_loop(
     rx: &Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
     mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampReporter
- ) -> Result<(), IoError> {
+    mut metrics_reporter: RampReporter,
+) -> Result<()> {
+    let (loop_tx, loop_rx) = channel(64);
 
     let addr = format!("{}:{}", config.host, config.port);
 
+    let mut pipelines = Vec::new();
+    let mut id = 0;
+    let mut no_pp = vec![];
 
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&addr).await;
@@ -322,16 +341,47 @@ async fn onramp_loop(
     println!("Listening on: {}", addr);
 
     // Let's spawn the handling of each connection in a separate task.
-    while let Ok((stream, addr)) = listener.accept().await {
-        task::spawn(handle_connection(state.clone(), stream, addr));
-    }
 
+    loop {
+        loop {
+            match handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter).await? {
+                PipeHandlerResult::Retry => continue,
+                PipeHandlerResult::Terminate => return Ok(()),
+                PipeHandlerResult::Normal => break,
+            }
+        }
+        select! {
+            msg = listener.accept().fuse() => if let Ok((stream, _socket)) = msg {
+                let preprocessors = make_preprocessors(&preprocessors)?;
+
+                task::spawn(handle_connection(loop_tx.clone(), stream, preprocessors));
+            },
+            msg = loop_rx.recv().fuse() => if let Some(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) = msg {
+                id += 1;
+                send_event(
+                    &pipelines,
+                    &mut no_pp,
+                    &mut codec,
+                    &mut metrics_reporter,
+                    &mut ingest_ns,
+                    &origin_uri,
+                    id,
+                    data
+                );
+
+            },
+            msg = rx.recv().fuse() => if let Some(msg) = msg {
+                match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
+                    PipeHandlerResult::Retry | PipeHandlerResult::Normal => continue,
+                    PipeHandlerResult::Terminate => break,
+                }
+            }
+        }
+    }
     Ok(())
 }
 
-
 impl Onramp for Ws {
-    
     fn start(
         &mut self,
         codec: &str,
@@ -345,8 +395,10 @@ impl Onramp for Ws {
         let preprocessors = preprocessors.to_vec();
         task::Builder::new()
             .name(format!("onramp-ws-{}", "???"))
-            .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, config, preprocessors, codec, metrics_reporter).await {
+            .spawn(async move {
+                if let Err(e) =
+                    onramp_loop(&rx, config, preprocessors, codec, metrics_reporter).await
+                {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;
