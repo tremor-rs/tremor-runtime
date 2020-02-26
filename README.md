@@ -1,11 +1,11 @@
 # Tremor &emsp; ![Build Status] ![Quality Checks] ![License Checks] ![Security Checks] [![Code Coverage]][codecov.io]
 
-[Build Status]: https://github.com/wayfair-incubator/tremor-runtime/workflows/Tests/badge.svg
-[Quality Checks]: https://github.com/wayfair-incubator/tremor-runtime/workflows/Checks/badge.svg
-[License Checks]: https://github.com/wayfair-incubator/repo-template/workflows/License%20audit/badge.svg
-[Security Checks]: https://github.com/wayfair-incubator/repo-template/workflows/Security%20audit/badge.svg
-[Code Coverage]: https://codecov.io/gh/wayfair-incubator/tremor-runtime/branch/master/graph/badge.svg
-[codecov.io]: https://codecov.io/gh/wayfair-incubator/tremor-runtime
+[Build Status]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Tests/badge.svg
+[Quality Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Checks/badge.svg
+[License Checks]: https://github.com/wayfair-tremor/repo-template/workflows/License%20audit/badge.svg
+[Security Checks]: https://github.com/wayfair-tremor/repo-template/workflows/Security%20audit/badge.svg
+[Code Coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/master/graph/badge.svg
+[codecov.io]: https://codecov.io/gh/wayfair-tremor/tremor-runtime
 
 **Template repository with git files, License and so on**
 
@@ -40,8 +40,8 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reality your contributions are more then welcome.
 
-* Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](docs/artefacts/codecs.md) are easy to write!)
-* Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](docs/artefacts/onramps.md) and [offramps](docs/artefacts/offramps.md) too are easy to write!)
+* Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](https://docs.tremor.rs/artefacts/codecs/) are easy to write!)
+* Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/) too are easy to write!)
 
 ### Example use cases
 
@@ -91,13 +91,13 @@ docker exec -it 838f22d9cb98 sh
 
 ## Configuration file
 
-Tremor uses YAML, or [tremor-query](docs/tremor-query/index.md) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
+Tremor uses YAML, or [tremor-query](https://docs.tremor.rs/tremor-query/) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
 
 ### Operations
 
 Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
 
-The documentation for different operations can found in the [docs](doc/tremor_runtime/index.html). The `onramps` and `op` modules hold the relevant information.
+The documentation for different operations can found in the [docs](https://docs.tremor.rs/tremor-script/). The `onramps` and `op` modules hold the relevant information.
 
 For each operation, the `Config` struct defines the parameters that can be passed to configure it, and the description holds additional details and examples.
 
