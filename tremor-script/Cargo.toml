@@ -6,6 +6,8 @@ authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
 build = "build.rs"
+readme = "README.md"
+documentation = "https://docs.rs/tremor-script"
 
 [[bin]]
 name = "tremor-script"
