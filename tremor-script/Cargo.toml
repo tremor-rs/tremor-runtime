@@ -1,6 +1,6 @@
 [package]
 name = "tremor-script"
-version = "0.7.4"
+version = "0.7.5"
 description = "Tremor Script Interpreter"
 authors = ["The Tremor Team"]
 edition = "2018"
@@ -8,6 +8,14 @@ license = "Apache-2.0"
 build = "build.rs"
 readme = "README.md"
 documentation = "https://docs.rs/tremor-script"
+
+
+
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+
+# Additional `RUSTFLAGS` to set (default: none)
+rustc-args = [ "-C target-cpu=native" ]
 
 [[bin]]
 name = "tremor-script"
