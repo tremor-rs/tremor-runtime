@@ -213,15 +213,15 @@ pub const fn _with_nanoseconds(n: u32) -> u64 {
 }
 
 pub const fn _with_microseconds(n: u32) -> u64 {
-    (n * 1_000) as u64
+    n as u64 * 1_000
 }
 
 pub const fn _with_milliseconds(n: u32) -> u64 {
-    (n * 1_000_000) as u64
+    n as u64 * 1_000_000
 }
 
 pub const fn _with_seconds(n: u32) -> u64 {
-    (n as u64 * 1_000_000_000)
+    n as u64 * 1_000_000_000
 }
 
 pub const fn _with_minutes(n: u32) -> u64 {
