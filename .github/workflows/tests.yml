@@ -69,14 +69,13 @@ jobs:
       # - name: Prepare sccache command bin for cache
       #   if: steps.cache-sccache.outputs.cache-hit != 'true'
       #   run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
-      - name: install tarpaulin
-        run: bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
-      - name: run tarpaulin
-        # env:
-        #   RUSTC_WRAPPER: sccache
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
         env:
           RUSTFLAGS: -C target-cpu=native
-        run: cargo tarpaulin -v --out Xml --exclude-files target* --exclude-files depricated/* --all
+        with:
+          version: '0.11.0'
+          args: '--out Xml --exclude-files target* --exclude-files depricated/* --all'
       - uses: codecov/codecov-action@v1.0.2
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
