@@ -359,4 +359,39 @@ mod tests {
         let input = 1_559_655_782_123_456_789u64;
         assert_eq!(_without_subseconds(input), 1_559_655_782u64);
     }
+    #[test]
+    pub fn test_with_microseconds() {
+        assert_eq!(_with_microseconds(1), 1_000);
+    }
+
+    #[test]
+    pub fn test_with_milliseconds() {
+        assert_eq!(_with_milliseconds(1), 1_000_000);
+    }
+    #[test]
+    pub fn test_with_seconds() {
+        assert_eq!(_with_seconds(1), 1_000_000_000);
+    }
+
+    #[test]
+    pub fn test_with_minutes() {
+        assert_eq!(_with_minutes(1), 60_000_000_000);
+    }
+    #[test]
+    pub fn test_with_hours() {
+        assert_eq!(_with_hours(1), 3_600_000_000_000);
+    }
+
+    #[test]
+    pub fn test_with_days() {
+        assert_eq!(_with_days(1), 86_400_000_000_000);
+    }
+    #[test]
+    pub fn test_with_weeks() {
+        assert_eq!(_with_weeks(1), 604_800_000_000_000);
+    }
+    #[test]
+    pub fn test_with_years() {
+        assert_eq!(_with_years(1), 31_536_000_000_000_000);
+    }
 }
