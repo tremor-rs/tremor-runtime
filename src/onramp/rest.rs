@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+/*
 use crate::errors::Error;
 use crate::onramp::prelude::*;
 use actix_router::ResourceDef;
@@ -296,3 +296,4 @@ pub struct Response {
 }
 
 type RestOnrampMessage = (tremor_pipeline::EventOriginUri, Response);
+*/
