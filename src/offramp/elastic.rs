@@ -31,10 +31,6 @@
 //! enqueued due to overload
 
 use crate::offramp::prelude::*;
-// use elastic::client::prelude::BulkErrorsResponse;
-// use elastic::client::requests::BulkRequest;
-// use elastic::client::{Client, SyncSender};
-// use elastic::prelude::SyncClientBuilder;
 use elastic::prelude::*;
 
 use crate::offramp::prelude::make_postprocessors;

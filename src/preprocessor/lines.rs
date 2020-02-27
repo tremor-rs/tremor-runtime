@@ -96,10 +96,6 @@ impl Lines {
             // further allocation), then copy the buffer over to v
             self.buffer.append(v);
             *v = self.buffer.clone();
-            // alt methods
-            // TODO remove
-            //v.splice(0..0, self.buffer.iter().cloned());
-            //*v = [&self.buffer[..], v].concat();
 
             trace!(
                 "Added line fragment of length {} from preprocessor buffer: {:?}",

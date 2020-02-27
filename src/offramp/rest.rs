@@ -73,10 +73,12 @@ impl Rest {
         c = c.body_bytes(&payload);
         for (k, v) in config.headers {
             use http::header::HeaderName;
-            c = c.set_header(
-                &HeaderName::from_bytes(k.as_str().as_bytes()).unwrap(),
-                v.as_str(),
-            );
+            match HeaderName::from_bytes(k.as_str().as_bytes()) {
+                Ok(h) => {
+                    c = c.set_header(&h, v.as_str());
+                }
+                Err(e) => error!("Bad header name: {}", e),
+            }
         }
         c.await?;
         let d = duration_to_millis(start.elapsed());

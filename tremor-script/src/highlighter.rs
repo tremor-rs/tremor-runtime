@@ -15,7 +15,6 @@ use crate::ast::Warning;
 use crate::errors::{Error as ScriptError, *};
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::*;
-//use lalrpop_util::ParseError;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::io::Write;

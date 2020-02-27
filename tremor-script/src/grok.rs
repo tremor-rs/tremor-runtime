@@ -215,25 +215,6 @@ mod tests {
         }));
     }
 
-    /* TODO Needs a test-local patterns file for CI #[test]
-        fn decode_windows_nxlog() {
-            let pat1 = r#"%{NXLOG_SUPPLIER_CHAIN_SYSTEM} (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-            let pat2 = r#"%{NXLOG_SQL_SERVER} (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-
-            assert_grok_ok!(
-                pat1,
-                "<blork 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                json!({})
-            );
-
-            assert_grok_ok!(
-                pat2,
-                "<blork 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-                json!({})
-            );
-        }
-    */
-
     #[test]
     fn decode_standard_syslog() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp0}|%{TIMESTAMP_ISO8601:syslog_timestamp1}) %{SYSLOGHOST:syslog_hostname}  ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;

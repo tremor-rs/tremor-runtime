@@ -451,12 +451,12 @@ impl Artefact for Binding {
     type LinkResult = Self;
     type LinkLHS = String;
     type LinkRHS = String;
-    async fn spawn(&self, _world: &World, _servant_id: ServantId) -> Result<Self::SpawnResult> {
+    async fn spawn(&self, _: &World, _: ServantId) -> Result<Self::SpawnResult> {
         //TODO: Validate
         Ok(self.clone())
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     async fn link(
         &self,
         system: &World,
@@ -605,8 +605,8 @@ impl Artefact for Binding {
     async fn unlink(
         &self,
         system: &World,
-        _id: &TremorURL,
-        _mappings_unused: HashMap<Self::LinkLHS, Self::LinkRHS>,
+        _: &TremorURL,
+        _: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
         // TODO Quiescence Protocol ( termination correctness checks )
         //

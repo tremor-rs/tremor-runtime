@@ -144,16 +144,14 @@ pub(crate) async fn handle_pipelines(
     if pipelines.is_empty() {
         match rx.recv().await {
             Some(msg) => handle_pipelines_msg(msg, pipelines, metrics_reporter),
-            None => return Err("Channel receive error".into()),
+            None => Err("Channel receive error".into()),
         }
+    } else if rx.is_empty() {
+        Ok(PipeHandlerResult::Normal)
     } else {
-        if !rx.is_empty() {
-            match task::block_on(rx.recv()) {
-                None => Err("Channel receive error".into()),
-                Some(msg) => handle_pipelines_msg(msg, pipelines, metrics_reporter),
-            }
-        } else {
-            Ok(PipeHandlerResult::Normal)
+        match task::block_on(rx.recv()) {
+            None => Err("Channel receive error".into()),
+            Some(msg) => handle_pipelines_msg(msg, pipelines, metrics_reporter),
         }
     }
 }

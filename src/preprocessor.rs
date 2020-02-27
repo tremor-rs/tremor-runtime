@@ -22,7 +22,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
 
-use std::io;
+use std::io::{self, Read};
 
 //pub type Lines = lines::Lines;
 
@@ -124,7 +124,6 @@ pub struct Gzip {}
 impl Preprocessor for Gzip {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
-        use std::io::Read;
         let mut decoder = MultiDecoder::new(&data[..])?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
@@ -137,7 +136,6 @@ pub struct Zlib {}
 impl Preprocessor for Zlib {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Decoder;
-        use std::io::Read;
         let mut decoder = Decoder::new(&data[..])?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
@@ -149,7 +147,6 @@ impl Preprocessor for Zlib {
 pub struct Xz2 {}
 impl Preprocessor for Xz2 {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Read;
         use xz2::read::XzDecoder as Decoder;
         let mut decoder = Decoder::new(data);
         let mut decompressed = Vec::new();
@@ -176,7 +173,6 @@ pub struct Lz4 {}
 impl Preprocessor for Lz4 {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::Decoder;
-        use std::io::Read;
         let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
@@ -188,8 +184,6 @@ impl Preprocessor for Lz4 {
 pub struct Decompress {}
 impl Preprocessor for Decompress {
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Read;
-
         let r = match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => {
                 use libflate::gzip::Decoder;

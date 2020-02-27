@@ -54,11 +54,11 @@ pub(crate) enum Msg {
 }
 
 #[derive(Debug)]
-pub enum PipelineDest {
+pub enum Dest {
     Offramp(offramp::Addr),
     Pipeline(Addr),
 }
-impl PipelineDest {
+impl Dest {
     pub fn send_event(&self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event })?,
@@ -111,11 +111,13 @@ impl Manager {
         });
         (h, tx)
     }
+
+    #[allow(clippy::too_many_lines)]
     fn start_pipeline(&self, req: Create) -> Result<Addr> {
         #[inline]
         fn send_events(
             eventset: &mut Vec<(Cow<'static, str>, Event)>,
-            dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>>,
+            dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>,
         ) -> Result<()> {
             for (output, event) in eventset.drain(..) {
                 if let Some(dest) = dests.get(&output) {
@@ -149,7 +151,7 @@ impl Manager {
         }
         let config = req.config;
         let id = req.id.clone();
-        let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, PipelineDest)>> =
+        let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>> =
             halfbrown::HashMap::new();
         let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
         let (tx, rx) = bounded::<Msg>(self.qsize);
@@ -192,12 +194,9 @@ impl Manager {
                                 id, output, offramp_id
                             );
                             if let Some(offramps) = dests.get_mut(&output) {
-                                offramps.push((offramp_id, PipelineDest::Offramp(offramp)));
+                                offramps.push((offramp_id, Dest::Offramp(offramp)));
                             } else {
-                                dests.insert(
-                                    output,
-                                    vec![(offramp_id, PipelineDest::Offramp(offramp))],
-                                );
+                                dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp))]);
                             }
                         }
                         Msg::ConnectPipeline(output, pipeline_id, pipeline) => {
@@ -206,12 +205,9 @@ impl Manager {
                                 id, output, pipeline_id
                             );
                             if let Some(offramps) = dests.get_mut(&output) {
-                                offramps.push((pipeline_id, PipelineDest::Pipeline(pipeline)));
+                                offramps.push((pipeline_id, Dest::Pipeline(pipeline)));
                             } else {
-                                dests.insert(
-                                    output,
-                                    vec![(pipeline_id, PipelineDest::Pipeline(pipeline))],
-                                );
+                                dests.insert(output, vec![(pipeline_id, Dest::Pipeline(pipeline))]);
                             }
                         }
                         Msg::Disconnect(output, to_delete) => {

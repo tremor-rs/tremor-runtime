@@ -62,13 +62,6 @@ impl PartialEq for Error {
 type ParserError<'screw_lalrpop> =
     lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, errors::Error>;
 
-/* waiting for try_trait
-impl From<std::option::NoneError> for Error {
-    fn from(error: std::option::NoneError) -> Self {
-        ErrorKind::NotFound.into()
-    }
-}
-*/
 impl From<url::ParseError> for Error {
     fn from(e: url::ParseError) -> Self {
         Self::from(format!("Url Parse Error: {:?}", e))

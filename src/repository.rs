@@ -142,6 +142,8 @@ impl<A: Artefact> Repository<A> {
     }
 }
 
+/// This is control plane
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Msg<A: Artefact> {
     //Count(sync::Sender<usize>),
     ListArtefacts(sync::Sender<Vec<ArtefactId>>),
@@ -178,22 +180,22 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                         r.send(A::artefact_id(&id).and_then(|id| self.unpublish(id)))
                             .await
                     }
-                    Some(Msg::RegisterInstance(r, aid, sid)) => {
+                    Some(Msg::RegisterInstance(r, a_id, s_id)) => {
                         r.send(
-                            A::artefact_id(&aid)
-                                .and_then(|aid| Ok((aid, A::servant_id(&sid)?)))
+                            A::artefact_id(&a_id)
+                                .and_then(|aid| Ok((aid, A::servant_id(&s_id)?)))
                                 .and_then(|(aid, sid)| {
                                     self.bind(aid, sid).map(std::clone::Clone::clone)
                                 }),
                         )
                         .await
                     }
-                    Some(Msg::UnregisterInstance(r, aid, sid)) => {
+                    Some(Msg::UnregisterInstance(r, a_id, s_id)) => {
                         r.send(
-                            A::artefact_id(&aid)
-                                .and_then(|aid| Ok((aid, A::servant_id(&sid)?)))
-                                .and_then(|(aid, sid)| {
-                                    self.unbind(aid, sid).map(std::clone::Clone::clone)
+                            A::artefact_id(&a_id)
+                                .and_then(|a_id| Ok((a_id, A::servant_id(&s_id)?)))
+                                .and_then(|(a_id, s_id)| {
+                                    self.unbind(a_id, s_id).map(std::clone::Clone::clone)
                                 }),
                         )
                         .await

@@ -16,10 +16,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::registry::Registry;
-// use crate::tremor_fn;
 
-pub fn load(_registry: &mut Registry) {
-    //    registry.insert(tremor_fn! (system::ingest_ns(_context) {
-    //        Ok(Value::from(0))
-    //    }));
-}
+pub fn load(_registry: &mut Registry) {}

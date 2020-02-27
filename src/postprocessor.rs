@@ -20,6 +20,7 @@ use base64;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
+use std::io::Write;
 
 pub trait Postprocessor: Send {
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
@@ -68,7 +69,7 @@ pub struct Gzip {}
 impl Postprocessor for Gzip {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
-        use std::io::Write;
+
         let mut encoder = Encoder::new(Vec::new())?;
         encoder.write_all(&data)?;
         Ok(vec![encoder.finish().into_result()?])
@@ -80,7 +81,6 @@ pub struct Zlib {}
 impl Postprocessor for Zlib {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
-        use std::io::Write;
         let mut encoder = Encoder::new(Vec::new())?;
         encoder.write_all(&data)?;
         Ok(vec![encoder.finish().into_result()?])
@@ -91,7 +91,6 @@ impl Postprocessor for Zlib {
 pub struct Xz2 {}
 impl Postprocessor for Xz2 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Write;
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), 9);
         encoder.write_all(&data)?;
@@ -104,7 +103,6 @@ pub struct Snappy {}
 impl Postprocessor for Snappy {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use snap::write::FrameEncoder;
-        use std::io::Write;
         let mut writer = FrameEncoder::new(vec![]);
         writer.write_all(data)?;
         let compressed = writer
@@ -119,7 +117,6 @@ pub struct Lz4 {}
 impl Postprocessor for Lz4 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
-        use std::io::Write;
         let buffer = Vec::<u8>::new();
         let mut encoder = EncoderBuilder::new().level(4).build(buffer)?;
         encoder.write_all(&data)?;
@@ -130,7 +127,6 @@ impl Postprocessor for Lz4 {
 pub struct AttachIngresTS {}
 impl Postprocessor for AttachIngresTS {
     fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Write;
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(ingres_ns)?;
         res.write_all(&data)?;
@@ -143,7 +139,6 @@ impl Postprocessor for AttachIngresTS {
 pub struct LengthPrefix {}
 impl Postprocessor for LengthPrefix {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Write;
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(data.len() as u64)?;
         res.write_all(&data)?;

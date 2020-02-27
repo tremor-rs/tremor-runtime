@@ -88,8 +88,8 @@ pub async fn get_servant(req: Request) -> Result<Response> {
     let s_id: String = req.param("sid").unwrap_or_default();
     let url = build_url(&["binding", &a_id, &s_id])?;
 
-    let reg = &req.state().world.reg;
-    let result = reg
+    let registry = &req.state().world.reg;
+    let result = registry
         .find_binding(&url)
         .await?
         .ok_or_else(Error::not_found)?

@@ -26,10 +26,9 @@
 #![allow(clippy::must_use_candidate)]
 
 use crate::query::Query; // {Query, Return};
-use clap::{App, Arg};
-// use halfbrown::hashmap;
 pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use chrono::{Timelike, Utc};
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
