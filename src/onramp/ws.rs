@@ -62,11 +62,6 @@ async fn handle_connection(
         path: vec![String::default()],
     };
 
-    // Insert the write part of this peer to the peer map.
-    //let (tx, rx) = channel(64);
-
-    //let (_outgoing, _incoming) = ws_stream.split();
-
     while let Some(msg) = ws_stream.next().await {
         match msg {
             Ok(Message::Text(t)) => {
@@ -127,8 +122,6 @@ async fn onramp_loop(
     // Create the event loop and TCP listener we'll accept connections on.
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
-
-    // Let's spawn the handling of each connection in a separate task.
 
     loop {
         loop {

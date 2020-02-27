@@ -107,15 +107,11 @@ impl<A: Artefact> Registry<A> {
         }
     }
 
-    //pub fn count(&self) -> usize {
-    //    self.map.len()
-    //}
     pub fn values(&self) -> Vec<A> {
         self.map.values().map(|v| v.artefact.clone()).collect()
     }
 }
 pub(crate) enum Msg<A: Artefact> {
-    //Count(sync::Sender<usize>),
     SerializeServants(sync::Sender<Vec<A>>),
     FindServant(sync::Sender<Result<Option<A::SpawnResult>>>, ServantId),
     PublishServant(
@@ -142,7 +138,6 @@ where
         task::spawn(async move {
             loop {
                 match rx.recv().await {
-                    //Some(Msg::Count(r)) => r.send(self.count()).await,
                     Some(Msg::SerializeServants(r)) => r.send(self.values()).await,
                     Some(Msg::FindServant(r, id)) => {
                         r.send(

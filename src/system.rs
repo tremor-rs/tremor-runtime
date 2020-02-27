@@ -60,12 +60,9 @@ pub(crate) enum ManagerMsg {
     CreateOnrampt(sync::Sender<Result<onramp::Addr>>, onramp::Create),
     CreateOfframp(sync::Sender<Result<offramp::Addr>>, offramp::Create),
     Stop,
-    //Count,
 }
 
-//pub(crate) type Addr = Sender<ManagerMsg>;
 pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
-//pub type Addr = CbSender<Msg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
@@ -121,9 +118,6 @@ pub struct World {
     pub repo: Repositories,
     /// Registry
     pub reg: Registries,
-    //system_pipelines: HashMap<ServantId, pipeline::Addr>,
-    //system_onramps: HashMap<ServantId, onramp::Addr>,
-    //system_offramps: HashMap<ServantId, offramp::Addr>,
     storage_directory: Option<String>,
 }
 
@@ -347,10 +341,6 @@ impl World {
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
-                // TODO remove
-                //let mut id = id.clone();
-                //id.set_port("metrics".to_owned());
-                //let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
                 let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
                     .into_iter()
                     .collect();
@@ -585,9 +575,6 @@ impl World {
             repo,
             reg,
             storage_directory,
-            //system_pipelines: HashMap::new(),
-            //system_onramps: HashMap::new(),
-            //system_offramps: HashMap::new(),
         };
 
         world.register_system().await?;

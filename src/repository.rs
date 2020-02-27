@@ -63,10 +63,6 @@ impl<A: Artefact> Repository<A> {
             })
             .collect()
     }
-    /// Number of artefacts in this repository
-    //pub fn count(&self) -> usize {
-    //    self.map.len()
-    //}
     /// New repository
     pub fn new() -> Self {
         Self {
@@ -145,7 +141,6 @@ impl<A: Artefact> Repository<A> {
 /// This is control plane
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Msg<A: Artefact> {
-    //Count(sync::Sender<usize>),
     ListArtefacts(sync::Sender<Vec<ArtefactId>>),
     SerializeArtefacts(sync::Sender<Vec<A>>),
     FindArtefact(sync::Sender<Result<Option<RepoWrapper<A>>>>, ArtefactId),
@@ -162,7 +157,6 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
             loop {
                 match rx.recv().await {
                     Some(Msg::ListArtefacts(r)) => r.send(self.keys()).await,
-                    //Some(Msg::Count(r)) => r.send(self.count()).await,
                     Some(Msg::SerializeArtefacts(r)) => r.send(self.values()).await,
                     Some(Msg::FindArtefact(r, id)) => {
                         r.send(A::artefact_id(&id).map(|id| self.find(id).cloned()))
