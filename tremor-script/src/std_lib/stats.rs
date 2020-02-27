@@ -18,6 +18,7 @@ use crate::registry::{
 };
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
+use math as libmath;
 use simd_json::value::borrowed::Value;
 use simd_json::value::{Value as ValueTrait, ValueBuilder};
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
@@ -461,7 +462,7 @@ impl TremorAggrFn for Dds {
                 for (pcn, percentile) in &self.percentiles {
                     match histo.quantile(*percentile) {
                         Ok(Some(quantile)) => {
-                            let quantile_dsp = math::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            let quantile_dsp = libmath::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
                             p.insert(pcn.clone().into(), Value::from(quantile_dsp));
                         }
                         _ => {
@@ -500,7 +501,7 @@ impl TremorAggrFn for Dds {
                 for (pcn, percentile) in &self.percentiles {
                     match histo.quantile(*percentile) {
                         Ok(Some(quantile)) => {
-                            let quantile_dsp = math::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            let quantile_dsp = libmath::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
                             p.insert(pcn.clone().into(), Value::from(quantile_dsp));
                         }
                         _ => {
