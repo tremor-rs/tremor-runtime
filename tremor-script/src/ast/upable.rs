@@ -35,19 +35,3 @@ impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
         self.map(|v| v.up(helper)).transpose()
     }
 }
-
-/*
-use halfbrown::HashMap;
-#[allow(clippy::implicit_hasher, clippy::use_self)]
-impl<'script, K, U: Upable<'script>> Upable<'script> for HashMap<K, U>
-where
-    K: std::cmp::Eq + std::hash::Hash,
-{
-    type Target = HashMap<K, U::Target>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.into_iter()
-            .map(|(k, v)| Ok((k, v.up(helper)?)))
-            .collect()
-    }
-}
-*/

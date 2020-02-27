@@ -195,7 +195,7 @@ async fn onramp_loop(
             PipeHandlerResult::Normal => break,
         }
     }
-    for m in stream.next().await {
+    while let Some(m) = stream.next().await {
         loop {
             match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
                 PipeHandlerResult::Retry => continue,

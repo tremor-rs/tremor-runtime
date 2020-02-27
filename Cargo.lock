@@ -26,9 +26,9 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743ad5a418686aad3b87fd14c43badd828cf26e214a00f92a384291cf22e1811"
+checksum = "d5e63fd144e18ba274ae7095c0197a870a7b9468abc801dd62f190d80817d2ec"
 dependencies = [
  "memchr",
 ]
@@ -429,9 +429,9 @@ dependencies = [
 
 [[package]]
 name = "cidr-utils"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29edc54101d76c9c1bd5075f8221b12de101a77612f6121eb91628d76455bae2"
+checksum = "ef797505126deac4e35c6cbf35ea0b761f499eb246f85e9906e23ee57eab63e2"
 dependencies = [
  "debug-helper",
  "lazy_static",
@@ -633,6 +633,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cced8691919c02aac3cb0a1bc2e9b73d89e832bf9a06fc579d4e71b68a2da061"
 dependencies = [
  "crossbeam-utils 0.7.2",
+ "maybe-uninit",
 ]
 
 [[package]]
@@ -732,6 +733,37 @@ checksum = "47c5e5ac752e18207b12e16b10631ae5f7f68f8805f335f9b817ead83d9ffce1"
 dependencies = [
  "quote 1.0.2",
  "syn 1.0.16",
+]
+
+[[package]]
+name = "curl"
+version = "0.4.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06aa71e9208a54def20792d877bc663d6aae0732b9852e612c4a933177c31283"
+dependencies = [
+ "curl-sys",
+ "libc",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "socket2",
+ "winapi 0.3.8",
+]
+
+[[package]]
+name = "curl-sys"
+version = "0.4.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0853fe2a575bb381b1f173610372c7722d9fa9bc4056512ed99fe6a644c388c6"
+dependencies = [
+ "cc",
+ "libc",
+ "libnghttp2-sys",
+ "libz-sys",
+ "openssl-sys",
+ "pkg-config",
+ "vcpkg",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -1395,16 +1427,6 @@ dependencies = [
  "ahash 0.3.2",
  "autocfg 1.0.0",
  "serde",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "728e7d31e63d53c436094370f1e6fa249f60a4bb318cc5dfbbbe0aa2bc5a29d7"
-dependencies = [
- "ahash 0.3.2",
- "autocfg 1.0.0",
 ]
 
 [[package]]
@@ -3386,9 +3408,9 @@ checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
 name = "sluice"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6428a51b12f86b02672d0aabc26141e37828d4f05dfeb3b6f45831de9f292360"
+checksum = "fed13b7cb46f13a15db2c4740f087a848acc8b31af89f95844d40137451f89b1"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -3989,10 +4011,8 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.7.3"
 dependencies = [
- "async-std",
- "hashbrown 0.6.3",
- "http 0.2.0",
- "log 0.4.8",
+ "hashbrown 0.7.0",
+ "http 0.1.21",
  "serde",
  "serde_derive",
  "serde_json",
@@ -4071,7 +4091,7 @@ dependencies = [
  "google-storage1",
  "grok",
  "halfbrown",
- "hashbrown 0.6.3",
+ "hashbrown 0.7.0",
  "hdrhistogram",
  "hostname",
  "http 0.1.21",

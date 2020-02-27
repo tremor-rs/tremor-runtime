@@ -181,7 +181,6 @@ where
         local: &'run mut LocalStack<'event>,
         expr: &'script Comprehension,
     ) -> Result<Cont<'run, 'event>> {
-        //use std::borrow::Cow;
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;

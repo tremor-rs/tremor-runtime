@@ -123,7 +123,6 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
 
 #[cfg(test)]
 mod test {
-    //use super::Transition
     use super::*;
     use crate::config;
     use crate::incarnate;

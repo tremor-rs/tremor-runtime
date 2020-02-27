@@ -1583,25 +1583,6 @@ mod tests {
         }};
     }
 
-    /*
-    macro_rules! lex_ko {
-        ($src:expr, $span:expr => $error:expr) => {{
-            let lexed_tokens: Vec<Result<Token>> = tokenizer($src)
-                .filter(|t| match t {
-                    Ok(Spanned { .. }) => false,
-                    Err(_) => true,
-                })
-                .map(|t| match t {
-                    Ok(Spanned { value: t, .. }) => Ok(t),
-                    Err(e) => Err(e),
-                })
-                .collect();
-
-            assert_eq!(lexed_tokens, vec![Err($error)]);
-        }};
-    }
-     */
-
     #[test]
     fn interpolat() {
         lex_ok! {

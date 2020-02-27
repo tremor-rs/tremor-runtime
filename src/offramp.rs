@@ -114,6 +114,8 @@ impl fmt::Debug for Create {
     }
 }
 
+/// This is control plane
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
     Create(async_std::sync::Sender<Result<Addr>>, Create),
     Stop,

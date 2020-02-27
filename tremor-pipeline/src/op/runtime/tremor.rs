@@ -97,7 +97,6 @@ impl Operator for Tremor {
                 if let Some(error) = unwind_event.as_object_mut() {
                     error.insert("event".into(), o);
                 };
-                //*unwind_event = data;
                 Ok(vec![("error".into(), event)])
             }
         }

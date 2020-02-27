@@ -27,10 +27,6 @@ pub struct Config {
     /// The port to listen on.
     pub port: u16,
     pub host: String,
-    /*
-    #[serde(default = "dflt::d_false")]
-    pub close_on_done: bool,
-    */
 }
 
 impl ConfigImpl for Config {}

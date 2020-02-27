@@ -21,14 +21,13 @@ use crate::repository::{
 };
 use crate::url::TremorURL;
 use crate::utils::nanotime;
+use async_std::fs::File;
+use async_std::io::prelude::*;
+use async_std::path::Path;
 use async_std::{
     sync::{self, channel},
     task::{self, JoinHandle},
 };
-//use crossbeam_channel::Sender as CbSender;
-use async_std::fs::File;
-use async_std::io::prelude::*;
-use async_std::path::Path;
 use hashbrown::HashMap;
 use tremor_pipeline;
 
@@ -54,6 +53,8 @@ lazy_static! {
     };
 }
 
+/// This is control plane
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
     CreatePipeline(sync::Sender<Result<pipeline::Addr>>, pipeline::Create),
     CreateOnrampt(sync::Sender<Result<onramp::Addr>>, onramp::Create),
@@ -613,12 +614,10 @@ links:
             .await?;
         self.bind_pipeline(&METRICS_PIPELINE).await?;
 
-        let _addr = self
-            .reg
+        self.reg
             .find_pipeline(&METRICS_PIPELINE)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
-        //self.system_pipelines.insert(METRICS_PIPELINE.clone(), addr);
 
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
@@ -631,12 +630,10 @@ type: stdout
             .publish_offramp(&STDOUT_OFFRAMP, true, artefact)
             .await?;
         self.bind_offramp(&STDOUT_OFFRAMP).await?;
-        let _addr = self
-            .reg
+        self.reg
             .find_offramp(&STDOUT_OFFRAMP)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize stdout offramp."))?;
-        //self.system_offramps.insert(STDOUT_OFFRAMP.clone(), addr);
 
         // Register stderr offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
@@ -649,12 +646,10 @@ type: stderr
             .publish_offramp(&STDERR_OFFRAMP, true, artefact)
             .await?;
         self.bind_offramp(&STDERR_OFFRAMP).await?;
-        let _addr = self
-            .reg
+        self.reg
             .find_offramp(&STDERR_OFFRAMP)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize stderr offramp."))?;
-        //self.system_offramps.insert(STDERR_OFFRAMP.clone(), addr);
 
         Ok(())
     }

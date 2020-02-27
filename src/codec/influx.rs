@@ -666,46 +666,4 @@ mod tests {
             );
         }
     }
-
-    /*
-    #[bench]
-    fn parse_bench(b: &mut Bencher) {
-        let sarr = &[
-    "weather,location=us-midwest too_hot=true 1465839830100400200",
-    "weather,location=us-midwest too_hot=True 1465839830100400200",
-    "weather,location=us-midwest too_hot=TRUE 1465839830100400200",
-    "weather,location=us-midwest too_hot=t 1465839830100400200",
-    "weather,location=us-midwest too_hot=T 1465839830100400200",
-    "weather,location=us-midwest too_hot=false 1465839830100400200",
-    "weather,location=us-midwest too_hot=False 1465839830100400200",
-    "weather,location=us-midwest too_hot=FALSE 1465839830100400200",
-    "weather,location=us-midwest too_hot=f 1465839830100400200",
-    "weacrther,location=us-midwest too_hot=F 1465839830100400200",
-    "weather,location=us-midwest temperature=82 1465839830100400200",
-    "weather,location=us-midwest,season=summer temperature=82 1465839830100400200",
-    "weather temperature=82 1465839830100400200",
-    "weather temperature=82i 1465839830100400200",
-    "weather,location=us-midwest temperature=\"too warm\" 1465839830100400200",
-    "weather,location=us\\,midwest temperature=82 1465839830100400200",
-    "weather,location=us-midwest temp\\=rature=82 1465839830100400200",
-    "weather,location\\ place=us-midwest temperature=82 1465839830100400200",
-    "wea\\,ther,location=us-midwest temperature=82 1465839830100400200",
-    "wea\\ ther,location=us-midwest temperature=82 1465839830100400200",
-    "weather,location=us-midwest temperature=\"too\\\"hot\\\"\" 1465839830100400200",
-    "weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400201",
-    "weather,location=us-midwest temperature_str=\"too hot\\cold\" 1465839830100400202",
-    "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\cold\" 1465839830100400205",
-    "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\\\cold\" 1465839830100400206",
-    "weather,location=us-midwest temperature=82 1465839830100400200",
-    "weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200",
-    "weather,location=us-midwest temperature_str=\"too hot\\\\cold\" 1465839830100400203",
-    "weather,location=us-midwest temperature_str=\"too hot\\\\\\cold\" 1465839830100400204"];
-
-        b.iter(|| {
-            for s in sarr {
-                parse(s, 0);
-            }
-        });
-    }
-    */
 }

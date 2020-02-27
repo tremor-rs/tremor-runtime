@@ -32,7 +32,6 @@ use serde_json;
 use serde_yaml;
 use std;
 use tremor_pipeline;
-//use tremor_script::LineValue;
 use url;
 
 impl Clone for Error {
@@ -143,7 +142,7 @@ error_chain! {
         SnappyError(snap::Error);
         AddrParseError(std::net::AddrParseError);
         RegexError(regex::Error);
-
+        WsError(tungstenite::Error);
     }
 
     errors {

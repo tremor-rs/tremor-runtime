@@ -24,22 +24,12 @@ const ONRAMP: Token = Token(0);
 
 // TODO expose this as config (would have to change buffer to be vector?)
 const BUFFER_SIZE_BYTES: usize = 8192;
-// TODO remove later. test value
-//const BUFFER_SIZE_BYTES: usize = 16;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub port: u16,
     pub host: String,
-    //#[serde(default = "dflt_bsize")]
-    //pub buffer_size_bytes: usize,
 }
-
-/*
-fn dflt_bsize() -> usize {
-    8192 // in bytes
-}
-*/
 
 impl ConfigImpl for Config {}
 

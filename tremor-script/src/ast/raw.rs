@@ -143,36 +143,6 @@ impl<'script> ScriptRaw<'script> {
 
         for e in self.exprs {
             match e {
-                /*
-                ExprRaw::Const {
-                    name,
-                    expr,
-                    start,
-                    end,
-                } => {
-                    if helper.consts.contains_key(&name.to_string()) {
-                        return Err(ErrorKind::DoubleConst(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            name.to_string(),
-                        )
-                        .into());
-                    }
-                    helper.consts.insert(name.to_string(), consts.len());
-                    let expr = expr.up(&mut helper)?;
-                    if i == len - 1 {
-                        exprs.push(Expr::Imut(ImutExpr::Local {
-                            id: name.clone(),
-                            is_const: true,
-                            idx: consts.len(),
-                            start,
-                            end,
-                        }))
-                    }
-
-                    consts.push(reduce2(expr)?);
-                }
-                */
                 ExprRaw::FnDecl(f) => {
                     unsafe {
                         let f = f.up(&mut helper)?;
