@@ -7,7 +7,6 @@ edition = "2018"
 license = "Apache-2.0"
 
 [dependencies]
-downcast-rs = "1.1"
 serde = "1"
 serde_derive = "1"
 simd-json = {version = "0.2", features = ["known-key"] }
@@ -18,7 +17,7 @@ tremor-script = { path = "../tremor-script" }
 lazy_static = "1"
 window = { git = "https://github.com/wayfair-tremor/window.git" }
 indexmap = { version = "1", features=["serde-1"] }
-lru = "0.3"
+lru = "0.4"
 serde_json = "1"
 halfbrown = "0.1"
 log = "0.4"
@@ -26,6 +25,6 @@ rental = "0.5"
 regex = "1"
 
 [dev-dependencies]
-criterion = "0.3.0"
+criterion = "0.3"
 xz2 = "0.1"
-base64 = "0.10"
+base64 = "0.11"

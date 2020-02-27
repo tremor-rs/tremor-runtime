@@ -38,8 +38,8 @@ serde_derive = "1.0"
 serde = "1.0"
 glob = "0.3"
 hostname = "0.3"
-codespan = "0.5"
-termcolor = "1.0"
+codespan = "0.8"
+termcolor = "1.1"
 unicode-xid = "0.2"
 halfbrown = "0.1"
 base64 = "0.11"
@@ -55,18 +55,18 @@ rand = { version = "0.7", features = ["small_rng"] }
 hdrhistogram = "7"
 sketches-ddsketch = "0.1.1"
 xz2 = "0.1"
-url = "1.7"
-libmath = "0.1.4"
+url = "2"
+libmath = "0.2"
 
 [build-dependencies]
 lalrpop = "0.17"
 matches = "0.1.8"
 
 [dev-dependencies]
-criterion = "0.3.0"
+criterion = "0.3"
 matches = "0.1"
 pretty_assertions = "0.6.1"
-float-cmp = "0.5"
+float-cmp = "0.6"
 
 [features]
 fns = []
