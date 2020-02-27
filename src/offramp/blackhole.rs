@@ -162,7 +162,6 @@ fn quantiles<R: Read, W: Write>(
             "{:>10} {:>quantile_precision$} {:>10} {:>14}\n\n",
             "Value",
             "Percentile",
-            // "QuantileIteration",
             "TotalCount",
             "1/(1-Percentile)",
             quantile_precision = quantile_precision + 2 // + 2 from leading "0." for numbers

@@ -228,7 +228,7 @@ fn onramp_loop(
             let s = HttpServer::new(move || {
                 App::new()
                     .register_data(data.clone())
-                    .service(web::resource("/*").to(handler))
+                    //.service(web::resource("/*").to(handler))
             })
             .bind(host);
 
