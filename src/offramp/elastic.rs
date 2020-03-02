@@ -30,12 +30,11 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use crate::offramp::prelude::*;
-use elastic::prelude::*;
-
 use crate::offramp::prelude::make_postprocessors;
+use crate::offramp::prelude::*;
 use crate::postprocessor::Postprocessors;
 use crossbeam_channel::bounded;
+use elastic::prelude::*;
 use halfbrown::HashMap;
 use simd_json::json;
 use std::str;

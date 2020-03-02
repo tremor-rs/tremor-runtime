@@ -45,7 +45,7 @@ rmp-serde = "0.14"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.8"
-simd-json = {version = "0.2", features = ["known-key"]}
+simd-json = {version = "0.3", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "2.1"
@@ -119,3 +119,5 @@ snmalloc = [ "snmalloc-rs" ]
 tide = { git = "https://github.com/Licenser/tide", branch = "result-into-response" }
 surf = { git = "https://github.com/http-rs/surf", rev = "8368e88f6545e950b06e36e874c098f800a2ca47" }
 simd-json = { git = "https://github.com/simd-lite/simdjson-rs", branch = "trait-improvements" }
+tremor-kv = { git = "https://github.com/wayfair-tremor/kv", branch = "simdjson-3" }
+dissect = { git = "https://github.com/wayfair-tremor/dissect", branch = "simdjson-3" }

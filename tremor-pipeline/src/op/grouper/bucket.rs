@@ -65,6 +65,7 @@ use crate::errors::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
+use simd_json::value::WritableValue;
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 use window::TimeWindow;

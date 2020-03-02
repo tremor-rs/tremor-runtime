@@ -14,12 +14,18 @@
 // limitations under the License.
 
 use crate::{EncoderError as Error, EncoderResult as Result};
-use simd_json::{BorrowedValue as Value, Value as ValueTrait, ValueType};
-use std::borrow::Cow;
+use simd_json::WritableValue;
+use simd_json::{Value, ValueType};
+use std::borrow::Borrow;
+use std::hash::Hash;
 use std::io::Write;
 
 /// Tries to compile a value to a influx line value
-pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
+pub fn encode<'input, V>(v: &V) -> Result<Vec<u8>>
+where
+    V: Value + WritableValue + 'input,
+    <V as Value>::Key: Borrow<str> + Hash + Eq + Ord + ToString,
+{
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(
         &mut output,
@@ -38,12 +44,12 @@ pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
         .ok_or(Error::InvalidField("tags"))?
         .iter()
         .filter_map(|(key, value)| Some((key, value.as_str()?.to_owned())))
-        .collect::<Vec<(&Cow<'input, str>, String)>>();
+        .collect::<Vec<(&<V as Value>::Key, String)>>();
     tag_collection.sort_by_key(|v| v.0);
 
     for (key, value) in tag_collection {
         output.write_all(&[b','])?;
-        write_escaped_key(&mut output, key.as_bytes())?;
+        write_escaped_key(&mut output, key.borrow().as_bytes())?;
         output.write_all(&[b'='])?;
         // For the fields we escape differently then for values ...
         write_escaped_key(&mut output, value.as_bytes())?;
@@ -56,7 +62,8 @@ pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
         .ok_or(Error::MissingField("fields"))?
         .as_object()
         .ok_or(Error::InvalidField("fields"))?;
-    let mut field_collection: Vec<(&Cow<'input, str>, &Value)> = fields.iter().collect();
+    let mut field_collection: Vec<(&<V as simd_json::value::Value>::Key, &V)> =
+        fields.iter().collect();
     field_collection.sort_by_key(|v| v.0);
     let mut first = true;
     for (key, value) in field_collection {
@@ -65,7 +72,7 @@ pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
         } else {
             output.write_all(&[b','])?;
         }
-        write_escaped_key(&mut output, key.as_bytes())?;
+        write_escaped_key(&mut output, key.borrow().as_bytes())?;
         output.write_all(&[b'='])?;
 
         if let Some(s) = value.as_str() {
@@ -77,7 +84,7 @@ pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
                     value.write(&mut output)?;
                     output.write_all(&[b'i'])?
                 }
-                _ => return Err(Error::InvalidValue(key.to_string(), value.clone_static())),
+                _ => return Err(Error::InvalidValue(key.to_string(), value.value_type())),
             }
         }
     }
@@ -88,7 +95,7 @@ pub fn encode<'input>(v: &Value<'input>) -> Result<Vec<u8>> {
         t.write(&mut output)?;
         Ok(output)
     } else {
-        Err(Error::InvalidTimestamp(t.clone_static()))
+        Err(Error::InvalidTimestamp(t.value_type()))
     }
 }
 

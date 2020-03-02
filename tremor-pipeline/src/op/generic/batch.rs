@@ -172,6 +172,7 @@ impl Operator for Batch {
 #[cfg(test)]
 mod test {
     use super::*;
+    use simd_json::value::WritableValue;
     use tremor_script::Value;
 
     #[test]

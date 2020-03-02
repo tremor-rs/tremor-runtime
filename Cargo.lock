@@ -846,8 +846,7 @@ dependencies = [
 [[package]]
 name = "dissect"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ccb26c945a641aaac746ee820037cda3cddc4ec2f6c8a27b84575b381e7b85a"
+source = "git+https://github.com/wayfair-tremor/dissect?branch=simdjson-3#ca6fec8b279f3aeb54bc095a834364dc6fc6d617"
 dependencies = [
  "halfbrown",
  "simd-json",
@@ -3354,8 +3353,8 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "simd-json"
-version = "0.2.6"
-source = "git+https://github.com/simd-lite/simdjson-rs?branch=trait-improvements#7013466d131bff64eb5932b0c56463a429969725"
+version = "0.3.0"
+source = "git+https://github.com/simd-lite/simdjson-rs?branch=trait-improvements#aea7418f432ee4f4243de00023bd4308e3005943"
 dependencies = [
  "float-cmp 0.5.3",
  "halfbrown",
@@ -4051,8 +4050,7 @@ dependencies = [
 [[package]]
 name = "tremor-kv"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ce51fd3ee566eacf5b3fe3ef1ccaae1e87a66e7e7246081eed50ab8fe8ec0f2"
+source = "git+https://github.com/wayfair-tremor/kv?branch=simdjson-3#02b59b84e5d525a518ae828feb997be7aa6b8bb4"
 dependencies = [
  "serde",
  "simd-json",

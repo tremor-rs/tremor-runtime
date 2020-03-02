@@ -16,7 +16,7 @@ use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnW
 use crate::tremor_const_fn;
 use crate::EventContext;
 use simd_json::value::Value as ValueTrait;
-use simd_json::BorrowedValue as Value;
+use simd_json::{BorrowedValue as Value, WritableValue};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {

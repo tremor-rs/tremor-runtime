@@ -89,9 +89,9 @@ mod tests {
     use super::*;
     use crate::codec::binflux::BInflux;
     use pretty_assertions::assert_eq;
+    use simd_json::value::WritableValue;
     use simd_json::{json, value::borrowed::Value};
     use tremor_influx as influx;
-
     #[test]
     fn simple_bin_parse() -> Result<()> {
         let s = "weather,location=us-midwest,name=cake temperature=82 1465839830100400200";
