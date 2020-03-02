@@ -19,7 +19,7 @@ log4rs = "0.10.0"
 mimalloc = { version = "0.1", default-features = false }
 async-std = { version = "1", features = ["unstable"] }
 tide = "0.6"
-snmalloc-rs = { version = "0.1.0", optional = true }
+snmalloc-rs = { version = "0.2", optional = true }
 
 [features]
 default = []

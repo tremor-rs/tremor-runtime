@@ -69,16 +69,16 @@ memmap = { version = "0.7.0" }
 tempfile = { version = "3.1" }
 
 # blaster / blackhole
-xz2 = {version = "0.1", optional = true }
-hdrhistogram = {version = "7", optional = true }
+xz2 = "0.1"
+hdrhistogram = "7"
 
 # postgres
 postgres = { version = "0.17.1", features = ["with-serde_json-1", "with-chrono-0_4"] }
-postgres-protocol = { version = "0.5" }
-tokio-postgres = { version = "0.5.2" }
+postgres-protocol = "0.5" 
+tokio-postgres = "0.5"
 
 # kafka
-rdkafka = {version = "0.23", optional = true}
+rdkafka = "0.23"
 
 # crononome
 cron = "0.6.0"
@@ -94,7 +94,7 @@ hyper = "0.10"  # chan't update this because of google
 # logstash grok patterns
 grok = "1"
 
-snmalloc-rs = { version = "0.1.0", optional = true }
+snmalloc-rs = { version = "0.2", optional = true }
 
 [dependencies.tungstenite]
 version = "0.10"
@@ -109,18 +109,8 @@ regex = "1"
 env_logger = "0.6"
 
 [features]
-default = ["kafka", "bench" ]
-kafka = [ "rdkafka" ]
-bench = ["xz2", "hdrhistogram" ]
-php-runtime = []
-mssql = []
-drop_copy = []
-# used for autobahn testing - all WS inputs will be echoed back to the server
-ws-echo = []
-#mssql = ["tiberius", "futures-state-stream", "tokio-current-thread" ]
-# php-runtime = ["php"]
-# drop_copy = ["notify"]
-snmalloc = ["snmalloc-rs"]
+default = [ "snmalloc" ]
+snmalloc = [ "snmalloc-rs" ]
 
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
