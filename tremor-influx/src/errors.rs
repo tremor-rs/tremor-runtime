@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use simd_json::value::borrowed::Value;
+use simd_json::ValueType;
 use std::fmt;
 use std::io;
 
@@ -21,8 +21,8 @@ use std::io;
 #[derive(Debug)]
 pub enum EncoderError {
     InvalidField(&'static str),
-    InvalidTimestamp(Value<'static>),
-    InvalidValue(String, Value<'static>),
+    InvalidTimestamp(ValueType),
+    InvalidValue(String, ValueType),
     Io(io::Error),
     MissingField(&'static str),
 }

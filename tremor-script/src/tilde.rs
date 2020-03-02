@@ -392,7 +392,7 @@ impl Extractor {
                     }
                 }
                 Self::Kv(kv) => {
-                    if let Some(r) = kv.run(s) {
+                    if let Some(r) = kv.run::<Value>(s) {
                         if !result_needed {
                             return Ok(Value::null());
                         }

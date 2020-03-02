@@ -9,7 +9,7 @@ license = "Apache-2.0"
 [dependencies]
 serde = "1"
 serde_derive = "1"
-simd-json = {version = "0.2", features = ["known-key"] }
+simd-json = {version = "0.3", features = ["known-key"] }
 serde_yaml = "0.8"
 petgraph = "0.5"
 error-chain="0.12"

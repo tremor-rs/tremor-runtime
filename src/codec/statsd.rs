@@ -16,6 +16,7 @@ use super::Codec;
 use crate::errors::*;
 use simd_json::value::borrowed::{Object, Value};
 use simd_json::value::Value as ValueTrait;
+use simd_json::value::WritableValue;
 use std::str;
 use tremor_script::prelude::*;
 

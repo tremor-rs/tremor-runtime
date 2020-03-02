@@ -14,6 +14,7 @@
 use crate::errors::*;
 use crate::utils::ConfigImpl;
 use memmap::MmapOptions;
+use simd_json::value::WritableValue;
 use std::cmp;
 use std::fs::OpenOptions;
 use std::io;

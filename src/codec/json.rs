@@ -15,6 +15,7 @@
 use super::Codec;
 use crate::errors::*;
 use simd_json;
+use simd_json::value::WritableValue;
 use tremor_script::prelude::*;
 
 #[derive(Clone)]
