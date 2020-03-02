@@ -151,6 +151,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
             }
         }
         (Static(StaticNode::Bool(l)), Static(StaticNode::Bool(r))) => *l == *r,
+        (Static(StaticNode::Null), Static(StaticNode::Null)) => true,
         (String(l), String(r)) => *l == *r,
         (l, r) => {
             if let (Some(l), Some(r)) = (l.as_u64(), r.as_u64()) {
