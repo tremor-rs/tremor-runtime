@@ -13,16 +13,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{DecoderError as Error, DecoderResult as Result};
-use simd_json::value::borrowed::{Object, Value};
-//use simd_json::value::Value as ValueTrait;
 use crate::enumerate::Enumerate;
-use simd_json::value::{MutableValue, ValueBuilder};
+use crate::{DecoderError as Error, DecoderResult as Result};
+//use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::{MutableValue, Value, ValueBuilder};
 use std::borrow::Cow;
+use std::hash::Hash;
 use std::str::Chars;
 
+macro_rules! cant_error {
+    ($e:expr) => {
+        if $e.is_err() {
+            unreachable!()
+        }
+    };
+}
+
 /// Tries to parse a striung as an influx line protocl message
-pub fn decode<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<'input>>> {
+pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    <V as MutableValue>::Key: From<Cow<'input, str>> + From<&'input str> + Hash + Eq,
+{
     let data = data.trim();
 
     if data.is_empty() || data.starts_with('#') {
@@ -34,10 +46,10 @@ pub fn decode<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<
     let tags = if c == ',' {
         parse_tags(&mut chars)?
     } else {
-        Value::object()
+        V::object()
     };
 
-    let fields = parse_fields(&mut chars)?;
+    let fields: V = parse_fields(&mut chars)?;
     let (idx, timestamp_str) = chars.parts();
     let timestamp_str = timestamp_str.as_str();
     let timestamp = if timestamp_str.is_empty() {
@@ -48,39 +60,45 @@ pub fn decode<'input>(data: &'input str, ingest_ns: u64) -> Result<Option<Value<
             .map_err(|e| Error::ParseIntError(idx, e))?
     };
 
-    let mut m = Object::with_capacity(4);
-    m.insert_nocheck("measurement".into(), Value::String(measurement));
-    m.insert_nocheck("tags".into(), tags);
-    m.insert_nocheck("fields".into(), Value::from(fields));
-    m.insert_nocheck("timestamp".into(), timestamp.into());
-    Ok(Some(Value::from(m)))
+    let mut m = V::object_with_capacity(4);
+    cant_error!(m.insert("measurement", V::from(measurement)));
+    cant_error!(m.insert("tags", tags));
+    cant_error!(m.insert("fields", fields));
+    cant_error!(m.insert("timestamp", V::from(timestamp)));
+    Ok(Some(V::from(m)))
 }
 
-fn parse_string<'input>(
-    chars: &mut Enumerate<Chars>,
-) -> Result<(Value<'input>, Option<char>, usize)> {
+fn parse_string<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+{
     let val = parse_to_char(chars, '"')?;
     let idx = chars.current_count();
     match chars.next() {
-        Some((i, c @ ',')) | Some((i, c @ ' ')) => Ok((Value::String(val), Some(c), i)),
-        None => Ok((Value::String(val), None, idx)),
+        Some((i, c @ ',')) | Some((i, c @ ' ')) => Ok((V::from(val), Some(c), i)),
+        None => Ok((V::from(val), None, idx)),
         Some((i, _)) => Err(Error::TrailingCharacter(i)),
     }
 }
 
-fn float_or_bool(idx: usize, s: &str) -> Result<Value<'static>> {
+fn float_or_bool<'input, V>(idx: usize, s: &str) -> Result<V>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+{
     match s {
-        "t" | "T" | "true" | "True" | "TRUE" => Ok(Value::from(true)),
-        "f" | "F" | "false" | "False" | "FALSE" => Ok(Value::from(false)),
-        _ => Ok(Value::from(
+        "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
+        "f" | "F" | "false" | "False" | "FALSE" => Ok(V::from(false)),
+        _ => Ok(V::from(
             s.parse::<f64>()
                 .map_err(|e| Error::ParseFloatError(idx, e))?,
         )),
     }
 }
-fn parse_value<'input>(
-    chars: &mut Enumerate<Chars>,
-) -> Result<(Value<'input>, Option<char>, usize)> {
+fn parse_value<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
+{
     let mut res = String::new();
     let idx = chars.current_count();
     match chars.next() {
@@ -98,14 +116,14 @@ fn parse_value<'input>(
             Some((i, 'i')) => match chars.next() {
                 Some((_, c @ ' ')) | Some((_, c @ ',')) => {
                     return Ok((
-                        Value::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
+                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
                         Some(c),
                         idx,
                     ))
                 }
                 None => {
                     return Ok((
-                        Value::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
+                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
                         None,
                         idx,
                     ))
@@ -126,22 +144,22 @@ fn parse_value<'input>(
     }
 }
 
-fn parse_fields<'input>(chars: &mut Enumerate<Chars>) -> Result<Value<'input>> {
-    let mut res = Value::object();
+fn parse_fields<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
+{
+    let mut res = V::object();
     loop {
         let key = parse_to_char(chars, '=')?;
 
-        let (val, c, idx) = parse_value(chars)?;
+        let (val, c, idx): (V, _, _) = parse_value(chars)?;
         match c {
             Some(',') => {
-                if res.insert(key, val).is_err() {
-                    unreachable!();
-                };
+                cant_error!(res.insert(key, val));
             }
             Some(' ') | None => {
-                if res.insert(key, val).is_err() {
-                    unreachable!();
-                };
+                cant_error!(res.insert(key, val));
                 return Ok(res);
             }
             _ => return Err(Error::InvalidFields(idx).into()),
@@ -149,8 +167,13 @@ fn parse_fields<'input>(chars: &mut Enumerate<Chars>) -> Result<Value<'input>> {
     }
 }
 
-fn parse_tags<'input>(chars: &mut Enumerate<Chars>) -> Result<Value<'input>> {
-    let mut res = Value::object();
+fn parse_tags<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
+where
+    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
+    V: From<Cow<'input, str>>,
+{
+    let mut res = V::object();
     loop {
         let (key, c_key, idx) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
         if c_key != '=' {
@@ -160,9 +183,7 @@ fn parse_tags<'input>(chars: &mut Enumerate<Chars>) -> Result<Value<'input>> {
         if c_val == '=' {
             return Err(Error::EqInTagValue(idx));
         }
-        if res.insert(key, Value::String(val)).is_err() {
-            unreachable!();
-        };
+        cant_error!(res.insert(key, V::from(val)));
         if c_val == ' ' {
             return Ok(res);
         }

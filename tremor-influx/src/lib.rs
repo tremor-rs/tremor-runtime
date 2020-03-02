@@ -29,6 +29,55 @@ mod tests {
     use simd_json::{json, BorrowedValue as Value};
 
     #[test]
+    fn unparse_test() {
+        let s = "weather,location=us-midwest temperature=82 1465839830100400200";
+        let d = decode(s, 0)
+            .expect("failed to parse")
+            .expect("failed to parse");
+        // This is a bit ugly but to make a sensible compairison we got to convert the data
+        // from an object to json to an object
+        let j: Value = d;
+        let e: Value = json!({
+            "measurement": "weather",
+            "tags": {"location": "us-midwest"},
+            "fields": {"temperature": 82.0},
+            "timestamp": 1_465_839_830_100_400_200_i64
+        })
+        .into();
+
+        assert_eq!(e, j)
+    }
+
+    #[test]
+    fn unparse_empty() {
+        let s = "";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  ";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  \n";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = " \t \n";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+    }
+
+    #[test]
+    fn unparse_comment() {
+        let s = "# bla";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = "  # bla";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+        let s = " \t \n# bla";
+        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        assert!(d.is_none());
+    }
+
+    #[test]
     fn parse_simple() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
         let r: Value = json!({
@@ -44,6 +93,7 @@ mod tests {
         .into();
         assert_eq!(Ok(Some(r)), decode(s, 0))
     }
+
     #[test]
     fn parse_simple2() {
         let s = "weather,location=us-midwest,season=summer temperature=82 1465839830100400200";

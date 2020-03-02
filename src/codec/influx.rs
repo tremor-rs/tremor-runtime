@@ -38,28 +38,16 @@
 
 use super::Codec;
 use crate::errors::*;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::io::{Cursor, Write};
-use std::str;
-use tremor_script::{
-    influx::{parse, try_to_bytes},
-    prelude::*,
-};
-
-const TYPE_I64: u8 = 0;
-const TYPE_F64: u8 = 1;
-const TYPE_STRING: u8 = 2;
-const TYPE_TRUE: u8 = 3;
-const TYPE_FALSE: u8 = 4;
+use std::{mem, str};
+use tremor_influx as influx;
+use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct Influx {}
 
 // This is ugly but we need to handle comments, thanks rental!
 #[allow(clippy::large_enum_variant)]
-enum RentalSnot {
+pub(crate) enum RentalSnot {
     Error(Error),
     Skip,
 }
@@ -73,10 +61,14 @@ impl From<std::str::Utf8Error> for RentalSnot {
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
-            match parse(str::from_utf8(&raw[0])?, ingest_ns) {
+            let s: &'static str = unsafe { mem::transmute(str::from_utf8(&raw[0])?) };
+            match influx::decode::<'static, Value<'static>>(s, ingest_ns) {
                 Ok(None) => Err(RentalSnot::Skip),
                 Ok(Some(v)) => Ok(v.into()),
-                Err(e) => Err(RentalSnot::Error(e.into())),
+                Err(e) => Err(RentalSnot::Error(
+                    ErrorKind::InvalidInfluxData(String::from_utf8_lossy(&raw[0]).to_string(), e)
+                        .into(),
+                )),
             }
         })
         .map_err(|e| e.0);
@@ -88,203 +80,24 @@ impl Codec for Influx {
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        if let Some(bytes) = try_to_bytes(data) {
-            Ok(bytes)
-        } else {
-            Err(ErrorKind::InvalidInfluxData(
-                "This event does not conform with the influx schema ".into(),
-            )
-            .into())
-        }
-    }
-}
-
-// This is a pun
-#[allow(clippy::module_name_repetitions)]
-pub struct BInflux {}
-
-impl BInflux {
-    pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
-            w.write_u16::<BigEndian>(
-                u16::try_from(s.len())
-                    .map_err(|_| ErrorKind::InvalidInfluxData("string too long".into()))?,
-            )?;
-            w.write_all(s.as_bytes())?;
-            Ok(())
-        }
-
-        let mut res = Vec::with_capacity(512);
-        res.write_u16::<BigEndian>(0)?;
-        if let Some(measurement) = v.get("measurement").and_then(Value::as_str) {
-            write_str(&mut res, measurement)?;
-        } else {
-            return Err(ErrorKind::InvalidInfluxData("measurement missing".into()).into());
-        }
-
-        if let Some(timestamp) = v.get("timestamp").and_then(Value::as_u64) {
-            res.write_u64::<BigEndian>(timestamp)?;
-        } else {
-            return Err(ErrorKind::InvalidInfluxData("timestamp missing".into()).into());
-        }
-        if let Some(tags) = v.get("tags").and_then(Value::as_object) {
-            res.write_u16::<BigEndian>(
-                u16::try_from(tags.len())
-                    .map_err(|_| ErrorKind::InvalidInfluxData("too many tags".into()))?,
-            )?;
-
-            for (k, v) in tags {
-                if let Some(v) = v.as_str() {
-                    write_str(&mut res, k)?;
-                    write_str(&mut res, v)?;
-                }
-            }
-        } else {
-            res.write_u16::<BigEndian>(0 as u16)?;
-        }
-
-        if let Some(fields) = v.get("fields").and_then(Value::as_object) {
-            res.write_u16::<BigEndian>(
-                u16::try_from(fields.len())
-                    .map_err(|_| ErrorKind::InvalidInfluxData("too many fields".into()))?,
-            )?;
-            for (k, v) in fields {
-                write_str(&mut res, k)?;
-                if let Some(v) = v.as_i64() {
-                    res.write_u8(TYPE_I64)?;
-                    res.write_i64::<BigEndian>(v)?;
-                } else if let Some(v) = v.as_f64() {
-                    res.write_u8(TYPE_F64)?;
-                    res.write_f64::<BigEndian>(v)?;
-                } else if let Some(v) = v.as_bool() {
-                    if v {
-                        res.write_u8(TYPE_TRUE)?;
-                    } else {
-                        res.write_u8(TYPE_FALSE)?;
-                    }
-                } else if let Some(v) = v.as_str() {
-                    res.write_u8(TYPE_STRING)?;
-                    write_str(&mut res, v)?;
-                } else {
-                    error!("Unknown type as influx line value: {:?}", v.value_type())
-                }
-            }
-        } else {
-            res.write_u16::<BigEndian>(0 as u16)?;
-        }
-        Ok(res)
-    }
-
-    pub fn decode<'event>(data: &'event [u8]) -> Result<Value<'event>> {
-        fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<Cow<'event, str>> {
-            let l = c.read_u16::<BigEndian>()? as usize;
-            #[allow(clippy::cast_possible_truncation)]
-            let p = c.position() as usize;
-            c.set_position((p + l) as u64);
-            unsafe { Ok(str::from_utf8_unchecked(&c.get_ref()[p..p + l]).into()) }
-        };
-        let mut c = Cursor::new(data);
-        let vsn = c.read_u16::<BigEndian>()?;
-        if vsn != 0 {
-            return Err(ErrorKind::InvalidInfluxData("invalid version".into()).into());
-        };
-        let measurement = Value::from(read_string(&mut c)?);
-        let timestamp = Value::from(c.read_u64::<BigEndian>()?);
-        let tag_count = c.read_u16::<BigEndian>()? as usize;
-        let mut tags = Object::with_capacity(tag_count);
-        for _i in 0..tag_count {
-            let key = read_string(&mut c)?;
-            let value = read_string(&mut c)?;
-            tags.insert(key, Value::from(value));
-        }
-        let field_count = c.read_u16::<BigEndian>()? as usize;
-        let mut fields = Object::with_capacity(field_count);
-        for _i in 0..field_count {
-            let key = read_string(&mut c)?;
-            let kind = c.read_u8()?;
-            match kind {
-                TYPE_I64 => {
-                    let value = c.read_i64::<BigEndian>()?;
-                    fields.insert(key, Value::from(value));
-                }
-                TYPE_F64 => {
-                    let value = c.read_f64::<BigEndian>()?;
-                    fields.insert(key, Value::from(value));
-                }
-                TYPE_STRING => {
-                    let value = read_string(&mut c)?;
-                    fields.insert(key, Value::from(value));
-                }
-                TYPE_TRUE => {
-                    fields.insert(key, Value::from(true));
-                }
-                TYPE_FALSE => {
-                    fields.insert(key, Value::from(false));
-                }
-                o => error!("bad field type: {}", o),
-            }
-        }
-        let mut result = Object::with_capacity(4);
-        result.insert("measurement".into(), measurement);
-        result.insert("tags".into(), Value::from(tags));
-        result.insert("fields".into(), Value::from(fields));
-        result.insert("timestamp".into(), timestamp);
-
-        Ok(Value::from(result))
-    }
-}
-
-impl Codec for BInflux {
-    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
-            Self::decode(&raw[0])
-                .map(ValueAndMeta::from)
-                .map_err(RentalSnot::Error)
-        })
-        .map_err(|e| e.0);
-        match r {
-            Ok(v) => Ok(Some(v)),
-            Err(RentalSnot::Skip) => Ok(None),
-            Err(RentalSnot::Error(e)) => Err(e),
-        }
-    }
-
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        Self::encode(data)
+        Ok(influx::encode(data)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halfbrown::HashMap;
+    use crate::codec::binflux::BInflux;
     use pretty_assertions::assert_eq;
-    use simd_json::{json, BorrowedValue as Value};
-
-    #[test]
-    fn unparse_test() {
-        let s = "weather,location=us-midwest temperature=82 1465839830100400200";
-        let d = parse(s, 0)
-            .expect("failed to parse")
-            .expect("failed to parse");
-        // This is a bit ugly but to make a sensible compairison we got to convert the data
-        // from an object to json to an object
-        let j: Value = d;
-        let e: Value = json!({
-            "measurement": "weather",
-            "tags": {"location": "us-midwest"},
-            "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200_i64
-        })
-        .into();
-
-        assert_eq!(e, j)
-    }
+    use simd_json::{json, value::borrowed::Value};
+    use tremor_influx as influx;
 
     #[test]
     fn simple_bin_parse() -> Result<()> {
         let s = "weather,location=us-midwest,name=cake temperature=82 1465839830100400200";
-        let d = parse(s, 0)?.expect("failed to parse");
+        let d = influx::decode(s, 0)
+            .expect("failed to parse")
+            .expect("failed to parse");
         let b = BInflux::encode(&d)?;
         let e = BInflux::decode(&b)?;
         assert_eq!(e, d);
@@ -292,85 +105,10 @@ mod tests {
     }
 
     #[test]
-    fn unparse_empty() {
-        let s = "";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-        let s = "  ";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-        let s = "  \n";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-        let s = " \t \n";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-    }
-
-    #[test]
-    fn unparse_comment() {
-        let s = "# bla";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-        let s = "  # bla";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-        let s = " \t \n# bla";
-        let d = parse(s, 0).expect("failed to parse");
-        assert!(d.is_none());
-    }
-
-    #[test]
-    pub fn decode() {
-        let s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
-        let mut codec = Influx {};
-
-        let decoded = codec
-            .decode(s, 0)
-            .expect("failed to decode")
-            .expect("failed to decode");
-
-        let e: Value = json!({
-            "measurement": "weather",
-            "tags": {"location": "us-midwest"},
-            "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200i64
-        })
-        .into();
-        assert_eq!(decoded.suffix().value, e)
-    }
-
-    #[test]
-    pub fn encode() {
-        let s: Value = json!({
-            "measurement": "weather",
-           "tags": {"location": "us-midwest"},
-            "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200i64
-        })
-        .into();
-
-        let codec = Influx {};
-
-        let encoded = codec.encode(&s).expect("failed to encode");
-
-        let influx: Value = json!({
-            "measurement": "weather",
-            "tags": {"location": "us-midwest"},
-            "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200i64
-        })
-        .into();
-
-        assert_eq!(encoded, try_to_bytes(&influx).expect("failed to encode"))
-    }
-
-    #[test]
     pub fn encode_mixed_bag() {
-        let tags: HashMap<String, String> = HashMap::new();
         let s: Value = json!({
             "measurement": r#"wea,\ ther"#,
-            "tags": tags,
+            "tags": {},
             "fields": {"temp=erature": 82.0, r#"too\ \\\"hot""#: true},
             "timestamp": 1_465_839_830_100_400_200i64
         })
@@ -393,8 +131,27 @@ mod tests {
             raw
         );
     }
+    #[test]
+    pub fn decode_test() {
+        let s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
+        let mut codec = Influx {};
 
-    pub fn get_data_for_tests() -> [(Vec<u8>, Value<'static>, &'static str); 13] {
+        let decoded = codec
+            .decode(s, 0)
+            .expect("failed to decode")
+            .expect("failed to decode");
+
+        let e: Value = json!({
+            "measurement": "weather",
+            "tags": {"location": "us-midwest"},
+            "fields": {"temperature": 82.0},
+            "timestamp": 1_465_839_830_100_400_200i64
+        })
+        .into();
+        assert_eq!(decoded.suffix().value, e)
+    }
+
+    fn get_data_for_tests() -> [(Vec<u8>, Value<'static>, &'static str); 13] {
         [
             (
                 b"weather,location=us\\,midwest temperature=82 1465839830100400200".to_vec(),

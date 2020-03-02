@@ -193,7 +193,7 @@ impl ErrorKind {
             | NoObjectError(_)
             | NotFound
             | Grok(_)
-            | InvalidInfluxData(_)
+            | InvalidInfluxData(_, _)
             | Io(_)
             | JSONError(_)
             | Msg(_)
@@ -567,9 +567,9 @@ error_chain! {
                 display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(*val))
         }
 
-        InvalidInfluxData(s: String) {
+        InvalidInfluxData(s: String, e: tremor_influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}", s)
+                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
         }
 
         /*

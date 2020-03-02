@@ -31,6 +31,7 @@ use rmp_serde;
 use serde_json;
 use serde_yaml;
 use std;
+use tremor_influx as influx;
 use tremor_pipeline;
 use url;
 
@@ -143,6 +144,7 @@ error_chain! {
         AddrParseError(std::net::AddrParseError);
         RegexError(regex::Error);
         WsError(tungstenite::Error);
+        InfluxEncoderError(influx::EncoderError);
     }
 
     errors {
@@ -241,9 +243,13 @@ error_chain! {
             description("Onramp is missing a pipeline")
                 display("The onramp '{}' is missing a pipeline", o)
         }
-        InvalidInfluxData(s: String) {
+        InvalidInfluxData(s: String, e: influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}", s)
+                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
+        }
+        InvalidBInfluxData(s: String) {
+            description("Invalid BInflux Line Protocol data")
+                display("Invalid BInflux Line Protocol data: {}", s)
         }
         BadOutputid(i: usize) {
             description("Bad output pipeline id.")

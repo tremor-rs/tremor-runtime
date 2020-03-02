@@ -19,3 +19,4 @@ simd-json = {version = "0.2", features = ["known-key"]}
 chrono = "0.4"
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-script = { path = "../tremor-script" }
+tremor-influx = { path = "../tremor-influx" }

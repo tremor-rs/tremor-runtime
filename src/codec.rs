@@ -15,6 +15,7 @@
 use crate::errors::*;
 use simd_json::BorrowedValue;
 use tremor_script::LineValue;
+pub(crate) mod binflux;
 pub(crate) mod influx;
 pub(crate) mod json;
 pub(crate) mod msgpack;
@@ -38,7 +39,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "json" => Ok(Box::new(json::JSON {})),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "influx" => Ok(Box::new(influx::Influx {})),
-        "binflux" => Ok(Box::new(influx::BInflux {})),
+        "binflux" => Ok(Box::new(binflux::BInflux {})),
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
