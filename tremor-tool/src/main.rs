@@ -132,7 +132,10 @@ fn load_config() -> Result<TargetConfig> {
 
 impl<'a> TremorApp<'a> {
     fn try_new(app: &'a clap::App) -> Result<Self> {
-        let cmd = app.clone().get_matches();
+        let cmd = app
+            .clone()
+            .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
+            .get_matches();
         let format = match cmd.value_of("format") {
             Some("json") => FormatKind::Json,
             Some("yaml") | _ => FormatKind::Yaml,

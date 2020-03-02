@@ -1,4 +1,4 @@
-name: tremor-cli
+name: tremor-tool
 version: "1.0"
 author: The Tremor Team
 about: Tremor command line interface tool

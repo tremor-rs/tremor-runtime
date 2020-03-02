@@ -50,7 +50,7 @@ pub fn nanotime() -> u64 {
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let matches = App::new("tremor-query")
-        .version("0.6.0")
+        .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Tremor interpreter")
         .arg(
             Arg::with_name("SCRIPT")

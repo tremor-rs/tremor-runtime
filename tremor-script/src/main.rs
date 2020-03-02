@@ -67,7 +67,7 @@ use crate::registry::Registry;
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let matches = App::new("tremor-script")
-        .version("0.5.0")
+        .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Tremor interpreter")
         .arg(
             Arg::with_name("SCRIPT")
