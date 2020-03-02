@@ -1,0 +1,4 @@
+match event of
+  case null => "is null"
+  default => "is set"
+end
