@@ -28,7 +28,6 @@ use halfbrown::{hashmap, HashMap};
 
 use crate::datetime;
 use crate::grok::Pattern as GrokPattern;
-use crate::influx;
 use crate::EventContext;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
@@ -45,6 +44,7 @@ use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
+use tremor_influx as influx;
 use tremor_kv as kv;
 
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
@@ -347,7 +347,7 @@ impl Extractor {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn extract<'event, 'run, 'script>(
+    pub fn extract<'script, 'event, 'run, 'influx>(
         &'script self,
         result_needed: bool,
         v: &'run Value<'event>,
@@ -356,6 +356,7 @@ impl Extractor {
     where
         'script: 'event,
         'event: 'run,
+        'run: 'influx,
     {
         if let Some(s) = v.as_str() {
             match self {
@@ -477,7 +478,8 @@ impl Extractor {
                     };
                     Ok(o.into())
                 }
-                Self::Influx => match influx::parse(s, ctx.ingest_ns()) {
+                Self::Influx => match influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
+                {
                     Ok(ref _x) if !result_needed => Ok(Value::null()),
                     Ok(Some(r)) => Ok(r.into_static()),
                     Ok(None) | Err(_) => Err(ExtractorError {

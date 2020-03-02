@@ -114,9 +114,9 @@ error_chain! {
             description("Onramp is missing a pipeline")
                 display("The onramp '{}' is missing a pipeline", o)
         }
-        InvalidInfluxData(s: String) {
+        InvalidInfluxData(s: String, e: tremor_influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}", s)
+                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
         }
         InvalidJsonData(s: String) {
             description("Invalid JSON")

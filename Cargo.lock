@@ -3354,9 +3354,8 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "simd-json"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e63b97da242649ac0d7caa428ba5594d13cc5044e0f3699903e4a1e90665a698"
+version = "0.2.6"
+source = "git+https://github.com/simd-lite/simdjson-rs?branch=trait-improvements#7013466d131bff64eb5932b0c56463a429969725"
 dependencies = [
  "float-cmp 0.5.3",
  "halfbrown",
@@ -4079,6 +4078,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "simd-json",
+ "tremor-influx",
  "tremor-script",
  "window",
  "xz2",
@@ -4093,6 +4093,7 @@ dependencies = [
  "halfbrown",
  "serde_json",
  "simd-json",
+ "tremor-influx",
  "tremor-pipeline",
  "tremor-script",
 ]
@@ -4152,6 +4153,7 @@ dependencies = [
  "tempfile",
  "threadpool",
  "tokio-postgres",
+ "tremor-influx",
  "tremor-pipeline",
  "tremor-script",
  "tungstenite",
@@ -4195,6 +4197,7 @@ dependencies = [
  "simd-json",
  "sketches-ddsketch",
  "termcolor",
+ "tremor-influx",
  "tremor-kv",
  "unicode-xid 0.2.0",
  "url 2.1.1",

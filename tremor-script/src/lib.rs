@@ -39,8 +39,6 @@ pub mod errors;
 pub mod grok;
 /// Tremor Script highlighter
 pub mod highlighter;
-/// Influx Line protocl parser
-pub mod influx;
 /// Tremor Script Interpreter
 pub mod interpreter;
 /// The Tremor Script Lexer

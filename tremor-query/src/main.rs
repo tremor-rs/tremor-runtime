@@ -181,7 +181,10 @@ fn main() -> Result<()> {
             .collect();
         inputs = lines?;
         for i in &inputs {
-            if let Some(i) = influx::parse(std::str::from_utf8(i)?, 0)? {
+            let s = std::str::from_utf8(i)?;
+            if let Some(i) = tremor_influx::decode(s, 0)
+                .map_err(|e| ErrorKind::InvalidInfluxData(s.to_string(), e))?
+            {
                 r.push(i);
             }
         }

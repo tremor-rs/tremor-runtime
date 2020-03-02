@@ -61,6 +61,7 @@ snap = "1"
 lz4 = "1.23.1"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
+tremor-influx = { path = "tremor-influx" }
 http = "0.1" # we need this for surf
 indexmap = { version = "1", features=["serde-1"] }
 
@@ -117,3 +118,4 @@ snmalloc = [ "snmalloc-rs" ]
 #  waiting for https://github.com/http-rs/tide/pull/408
 tide = { git = "https://github.com/Licenser/tide", branch = "result-into-response" }
 surf = { git = "https://github.com/http-rs/surf", rev = "8368e88f6545e950b06e36e874c098f800a2ca47" }
+simd-json = { git = "https://github.com/simd-lite/simdjson-rs", branch = "trait-improvements" }
