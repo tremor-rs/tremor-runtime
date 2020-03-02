@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "kafka")]
 use rdkafka::util::get_rdkafka_version;
 
 /// Version of the tremor crate;
@@ -21,21 +20,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Prints tremor and librdkafka version.
 pub fn print() {
     eprintln!("tremor version: {}", VERSION);
-    #[cfg(feature = "kafka")]
-    {
-        let (version_n, version_s) = get_rdkafka_version();
-        eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
-    }
+    let (version_n, version_s) = get_rdkafka_version();
+    eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
     info!("tremor version: {}", VERSION);
-    #[cfg(feature = "kafka")]
-    {
-        let (version_n, version_s) = get_rdkafka_version();
-        info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
-    }
+    let (version_n, version_s) = get_rdkafka_version();
+    info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
 #[cfg(test)]
