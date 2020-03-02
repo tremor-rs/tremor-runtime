@@ -4042,6 +4042,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-influx"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "simd-json",
+]
+
+[[package]]
 name = "tremor-kv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
