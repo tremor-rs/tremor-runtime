@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::{Value as ValueTrait, ValueType};
+use simd_json::prelude::*;
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
@@ -60,8 +60,9 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
+    use simd_json::prelude::*;
     use simd_json::value::borrowed::Object;
-    use simd_json::{BorrowedValue as Value, ValueBuilder};
+    use simd_json::BorrowedValue as Value;
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {

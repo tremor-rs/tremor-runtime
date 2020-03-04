@@ -25,7 +25,7 @@ use bytes::buf::{BufMut, BufMutExt};
 use chrono::prelude::*;
 use postgres::types::to_sql_checked;
 use postgres_protocol;
-use simd_json::value::Value;
+use simd_json::prelude::*;
 use std::time::SystemTime;
 
 #[derive(Debug)]

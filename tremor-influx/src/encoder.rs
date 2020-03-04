@@ -14,8 +14,7 @@
 // limitations under the License.
 
 use crate::{EncoderError as Error, EncoderResult as Result};
-use simd_json::WritableValue;
-use simd_json::{Value, ValueType};
+use simd_json::prelude::*;
 use std::borrow::Borrow;
 use std::hash::Hash;
 use std::io::Write;
@@ -23,8 +22,8 @@ use std::io::Write;
 /// Tries to compile a value to a influx line value
 pub fn encode<'input, V>(v: &V) -> Result<Vec<u8>>
 where
-    V: Value + WritableValue + 'input,
-    <V as Value>::Key: Borrow<str> + Hash + Eq + Ord + ToString,
+    V: ValueTrait + Writable + 'input,
+    <V as ValueTrait>::Key: Borrow<str> + Hash + Eq + Ord + ToString,
 {
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(
@@ -44,7 +43,7 @@ where
         .ok_or(Error::InvalidField("tags"))?
         .iter()
         .filter_map(|(key, value)| Some((key, value.as_str()?.to_owned())))
-        .collect::<Vec<(&<V as Value>::Key, String)>>();
+        .collect::<Vec<(&<V as ValueTrait>::Key, String)>>();
     tag_collection.sort_by_key(|v| v.0);
 
     for (key, value) in tag_collection {
@@ -62,8 +61,7 @@ where
         .ok_or(Error::MissingField("fields"))?
         .as_object()
         .ok_or(Error::InvalidField("fields"))?;
-    let mut field_collection: Vec<(&<V as simd_json::value::Value>::Key, &V)> =
-        fields.iter().collect();
+    let mut field_collection: Vec<(&<V as ValueTrait>::Key, &V)> = fields.iter().collect();
     field_collection.sort_by_key(|v| v.0);
     let mut first = true;
     for (key, value) in field_collection {

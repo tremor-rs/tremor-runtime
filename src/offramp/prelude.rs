@@ -24,7 +24,7 @@ pub(crate) use crate::utils::ConfigImpl;
 pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_std::task;
-pub(crate) use simd_json::value::WritableValue;
+pub(crate) use simd_json::prelude::*;
 
 //pub(crate) use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::mem;

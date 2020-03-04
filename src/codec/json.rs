@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Codec;
-use crate::errors::*;
+use super::prelude::*;
 use simd_json;
-use simd_json::value::WritableValue;
-use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct JSON {}

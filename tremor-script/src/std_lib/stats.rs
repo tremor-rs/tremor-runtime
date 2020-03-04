@@ -19,8 +19,8 @@ use crate::registry::{
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
 use math as libmath;
+use simd_json::prelude::*;
 use simd_json::value::borrowed::Value;
-use simd_json::value::{Value as ValueTrait, ValueBuilder};
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
 use std::f64;

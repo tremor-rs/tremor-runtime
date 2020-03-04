@@ -37,7 +37,7 @@ use dissect::Pattern;
 use glob;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
-use simd_json::{Value as ValueTrait, ValueBuilder};
+use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};

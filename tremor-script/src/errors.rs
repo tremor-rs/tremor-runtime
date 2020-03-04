@@ -34,7 +34,7 @@ use regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 pub use simd_json::ValueType;
-use simd_json::{BorrowedValue as Value, Value as ValueTrait};
+use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
 use std::ops::{Range as IRange, RangeInclusive};
 use url;

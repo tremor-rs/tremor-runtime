@@ -68,7 +68,7 @@ extern crate rental;
 
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{self, Serialize};
-use simd_json::value::Value as ValueTrait;
+use simd_json::prelude::*;
 
 pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
 pub use crate::ctx::{EventContext, EventOriginUri};
@@ -313,7 +313,6 @@ mod tests {
     use crate::lexer::TokenSpan;
     use halfbrown::hashmap;
     use simd_json::borrowed::{Object, Value};
-    use simd_json::ValueBuilder;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{

@@ -17,7 +17,8 @@ use crate::tremor_fn;
 use crate::EventContext;
 use rand::distributions::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use simd_json::{BorrowedValue as Value, Value as ValueTrait};
+use simd_json::prelude::*;
+use simd_json::BorrowedValue as Value;
 
 #[allow(clippy::too_many_lines)]
 pub fn load(registry: &mut Registry) {

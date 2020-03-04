@@ -30,7 +30,7 @@ pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::{BorrowedValue as Value, KnownKey, ValueBuilder};
+use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;

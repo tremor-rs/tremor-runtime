@@ -36,6 +36,7 @@ use crate::postprocessor::Postprocessors;
 use crossbeam_channel::bounded;
 use elastic::prelude::*;
 use halfbrown::HashMap;
+use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
 use std::time::Instant;

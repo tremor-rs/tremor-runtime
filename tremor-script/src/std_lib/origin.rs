@@ -15,7 +15,7 @@
 use crate::registry::Registry;
 use crate::tremor_fn;
 use halfbrown::hashmap;
-use simd_json::ValueBuilder;
+use simd_json::prelude::*;
 
 pub fn load(registry: &mut Registry) {
     registry

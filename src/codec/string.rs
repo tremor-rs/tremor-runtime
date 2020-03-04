@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Codec;
-use crate::errors::*;
+use super::prelude::*;
 use serde_json;
-use simd_json::{self, BorrowedValue as Value, Value as ValueTrait};
-use tremor_script::LineValue;
+use simd_json::{self, BorrowedValue as Value};
 
 #[derive(Clone)]
 pub struct String {}

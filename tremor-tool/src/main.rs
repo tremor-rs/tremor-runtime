@@ -39,7 +39,7 @@ use dirs;
 use halfbrown::HashMap;
 use http::status::StatusCode;
 use simd_json::borrowed::{Object, Value};
-use simd_json::value::ValueBuilder;
+use simd_json::prelude::*;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;

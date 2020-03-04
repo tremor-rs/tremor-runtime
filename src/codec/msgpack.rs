@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Codec;
-use crate::errors::*;
+use super::prelude::*;
 use rmp_serde as rmps;
-use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct MsgPack {}

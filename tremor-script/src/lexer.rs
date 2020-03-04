@@ -23,7 +23,7 @@ use crate::errors::*;
 use crate::parser::g::__ToTriple;
 pub use crate::pos::*;
 use lalrpop_util;
-use simd_json::WritableValue;
+use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fmt;

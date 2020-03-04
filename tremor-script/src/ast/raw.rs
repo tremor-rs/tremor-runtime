@@ -28,8 +28,8 @@ pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::value::{borrowed, Value as ValueTrait};
-use simd_json::{BorrowedValue as Value, KnownKey};
+use simd_json::value::borrowed;
+use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public

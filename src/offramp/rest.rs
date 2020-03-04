@@ -15,6 +15,7 @@
 use crate::offramp::prelude::*;
 use crossbeam_channel::bounded;
 use halfbrown::HashMap;
+use simd_json::borrowed::Object;
 use std::str;
 use std::time::Instant;
 use tremor_script::prelude::*;
