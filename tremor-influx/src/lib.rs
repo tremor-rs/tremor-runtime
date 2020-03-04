@@ -13,6 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(warnings)]
+#![deny(missing_docs)]
+#![allow(missing_docs)]
+#![recursion_limit = "1024"]
+#![deny(
+    clippy::all,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
+)]
+#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
+
 mod decoder;
 mod encoder;
 pub(crate) mod enumerate;
