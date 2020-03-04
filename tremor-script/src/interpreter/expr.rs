@@ -19,10 +19,9 @@ use super::{
 use crate::ast::*;
 use crate::errors::*;
 use crate::stry;
-use simd_json::value::{
-    borrowed::{Object, Value},
-    MutableValue, Value as ValueTrait,
-};
+use simd_json::prelude::*;
+use simd_json::value::borrowed::{Object, Value};
+
 use std::borrow::{Borrow, Cow};
 
 #[derive(Debug)]

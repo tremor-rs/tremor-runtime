@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
+use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::ValueBuilder;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;

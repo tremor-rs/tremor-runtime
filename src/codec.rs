@@ -24,6 +24,13 @@ pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod yaml;
 
+mod prelude {
+    pub use super::Codec;
+    pub use crate::errors::*;
+    pub use simd_json::prelude::*;
+    pub use tremor_script::prelude::*;
+}
+
 /// The codec trait, to encode and decode data
 pub trait Codec: Send + Sync {
     /// Decode a binary, into an Value

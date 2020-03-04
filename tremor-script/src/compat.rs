@@ -17,7 +17,7 @@ use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
 use crate::{registry, EventContext};
 use simd_json::borrowed::Object;
-use simd_json::{BorrowedValue as Value, ValueBuilder, WritableValue};
+use simd_json::{prelude::*, BorrowedValue as Value};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;

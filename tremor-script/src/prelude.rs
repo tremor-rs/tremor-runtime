@@ -17,5 +17,5 @@ pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::Return;
 pub use crate::{FALSE, NULL, TRUE};
+pub use simd_json::prelude::*;
 pub use simd_json::value::borrowed::{Object, Value};
-pub use simd_json::{MutableValue, Value as ValueTrait, ValueBuilder};

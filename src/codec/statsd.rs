@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Codec;
-use crate::errors::*;
+use super::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::Value as ValueTrait;
-use simd_json::value::WritableValue;
 use std::str;
-use tremor_script::prelude::*;
 
 #[derive(Clone)]
 pub struct StatsD {}

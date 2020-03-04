@@ -29,7 +29,7 @@ use op::trickle::{
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
-use simd_json::{Value as ValueTrait, ValueBuilder};
+use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;

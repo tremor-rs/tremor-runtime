@@ -25,7 +25,7 @@ use chrono::prelude::*;
 use postgres::{Client, NoTls};
 use serde_json;
 use serde_yaml::Value;
-use simd_json::value::{MutableValue, ValueBuilder};
+use simd_json::prelude::*;
 use std::time::Duration;
 use tokio_postgres::error::SqlState;
 

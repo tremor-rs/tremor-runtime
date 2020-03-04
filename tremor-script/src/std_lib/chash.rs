@@ -16,7 +16,7 @@
 use crate::registry::Registry;
 use crate::{tremor_const_fn, utils::sorsorted_serialize};
 use jumphash;
-use simd_json::Value as ValueTrait;
+use simd_json::prelude::*;
 
 pub fn load(registry: &mut Registry) {
     registry.insert(

@@ -23,7 +23,7 @@ use crate::datetime::*;
 use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn};
 use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
-use simd_json::Value as ValueTrait;
+use simd_json::prelude::*;
 
 macro_rules! time_fn {
     ($name:ident, $fn:ident) => {

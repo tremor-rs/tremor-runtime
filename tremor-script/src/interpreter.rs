@@ -39,7 +39,7 @@ use crate::errors::*;
 use crate::stry;
 use crate::EventContext;
 use simd_json::borrowed::{Object, Value};
-use simd_json::value::{MutableValue, Value as ValueTrait};
+use simd_json::prelude::*;
 use simd_json::StaticNode;
 use std::borrow::Borrow;
 use std::borrow::Cow;

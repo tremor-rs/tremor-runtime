@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::{BorrowedValue as Value, Value as ValueTrait};
+use simd_json::{prelude::*, BorrowedValue as Value};
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -109,7 +109,8 @@ fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, ValueBuilder};
+    use simd_json::prelude::*;
+    use simd_json::BorrowedValue as Value;
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {
             assert_eq!($e, Ok(Value::from($r)))

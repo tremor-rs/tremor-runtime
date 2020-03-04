@@ -15,7 +15,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::Value as ValueTrait;
+use simd_json::prelude::*;
 use std::cmp::{max, min};
 
 macro_rules! math_fn {

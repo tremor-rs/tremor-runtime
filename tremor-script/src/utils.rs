@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::errors::*;
-use simd_json::{BorrowedValue as Value, WritableValue};
+use simd_json::prelude::*;
+use simd_json::BorrowedValue as Value;
 use std::io::prelude::*;
 
 /// Fetches a hostname with `tremor-host.local` being the default

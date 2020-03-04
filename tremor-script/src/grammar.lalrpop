@@ -17,7 +17,8 @@ use crate::ast::query::raw::*;
 use crate::ast::{BinOpKind, UnaryOpKind};
 use crate::lexer::Token;
 use crate::pos::Location;
-use simd_json::{BorrowedValue as Value, ValueBuilder};
+use simd_json::{BorrowedValue as Value};
+use simd_json::prelude::*;
 use std::borrow::Cow;
 
 grammar<'input>;

@@ -15,10 +15,8 @@
 
 use crate::enumerate::Enumerate;
 use crate::{DecoderError as Error, DecoderResult as Result};
-//use simd_json::value::borrowed::{Object, Value};
-use simd_json::value::{MutableValue, Value, ValueBuilder};
+use simd_json::prelude::*;
 use std::borrow::Cow;
-use std::hash::Hash;
 use std::str::Chars;
 
 macro_rules! cant_error {
@@ -32,8 +30,8 @@ macro_rules! cant_error {
 /// Tries to parse a striung as an influx line protocl message
 pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
-    <V as MutableValue>::Key: From<Cow<'input, str>> + From<&'input str> + Hash + Eq,
+    V: ValueTrait + Mutable + Builder<'input> + 'input,
+    <V as ValueTrait>::Key: From<Cow<'input, str>> + From<&'input str>,
 {
     let data = data.trim();
 
@@ -70,7 +68,7 @@ where
 
 fn parse_string<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
 {
     let val = parse_to_char(chars, '"')?;
     let idx = chars.current_count();
@@ -83,7 +81,7 @@ where
 
 fn float_or_bool<'input, V>(idx: usize, s: &str) -> Result<V>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
 {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
@@ -96,8 +94,7 @@ where
 }
 fn parse_value<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
-    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
+    V: ValueTrait + Mutable + Builder<'input> + 'input,
 {
     let mut res = String::new();
     let idx = chars.current_count();
@@ -146,8 +143,8 @@ where
 
 fn parse_fields<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
-    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
+    V: ValueTrait + Mutable + Builder<'input> + 'input,
+    <V as ValueTrait>::Key: From<Cow<'input, str>>,
 {
     let mut res = V::object();
     loop {
@@ -169,9 +166,8 @@ where
 
 fn parse_tags<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
 where
-    V: Value + MutableValue + ValueBuilder<'input> + 'input,
-    <V as MutableValue>::Key: From<Cow<'input, str>> + Hash + Eq,
-    V: From<Cow<'input, str>>,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
+    <V as ValueTrait>::Key: From<Cow<'input, str>>,
 {
     let mut res = V::object();
     loop {

@@ -15,7 +15,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::Value as ValueTrait;
+use simd_json::prelude::*;
 
 // ALLOW: Until we have u64 support in clippy
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]

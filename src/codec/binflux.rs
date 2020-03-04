@@ -13,14 +13,13 @@
 // limitations under the License.
 
 use super::influx::RentalSnot;
-use super::Codec;
-use crate::errors::*;
+use super::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use simd_json::borrowed::Object;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::io::{Cursor, Write};
 use std::str;
-use tremor_script::prelude::*;
 
 const TYPE_I64: u8 = 0;
 const TYPE_F64: u8 = 1;

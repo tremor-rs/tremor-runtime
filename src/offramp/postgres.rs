@@ -24,7 +24,6 @@ use crate::offramp::prelude::*;
 use crate::ramp::postgres::{json_to_record, Record};
 use halfbrown::HashMap;
 use postgres::{Client, NoTls};
-use simd_json::value::Value;
 
 pub struct Postgres {
     pub config: Config,

@@ -14,7 +14,9 @@
 
 use crate::registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 
-use simd_json::{BorrowedValue as Value, ValueBuilder};
+use simd_json::prelude::*;
+use simd_json::BorrowedValue as Value;
+
 use std::ops::RangeInclusive;
 
 #[derive(Clone, Debug, Default)]
