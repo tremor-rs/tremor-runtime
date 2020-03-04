@@ -63,7 +63,7 @@ where
     cant_error!(m.insert("tags", tags));
     cant_error!(m.insert("fields", fields));
     cant_error!(m.insert("timestamp", V::from(timestamp)));
-    Ok(Some(V::from(m)))
+    Ok(Some(m))
 }
 
 fn parse_string<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
@@ -159,7 +159,7 @@ where
                 cant_error!(res.insert(key, val));
                 return Ok(res);
             }
-            _ => return Err(Error::InvalidFields(idx).into()),
+            _ => return Err(Error::InvalidFields(idx)),
         };
     }
 }

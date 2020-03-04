@@ -396,7 +396,7 @@ impl Extractor {
                         if !result_needed {
                             return Ok(Value::null());
                         }
-                        Ok(Value::from(r).into_static())
+                        Ok(r.into_static())
                     } else {
                         Err(ExtractorError {
                             msg: "Failed to split kv list".into(),
