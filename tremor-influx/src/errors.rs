@@ -30,13 +30,14 @@ pub enum EncoderError {
 impl PartialEq for EncoderError {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (EncoderError::InvalidField(v1), EncoderError::InvalidField(v2)) => v1 == v2,
+            (EncoderError::InvalidField(v1), EncoderError::InvalidField(v2))
+            | (EncoderError::MissingField(v1), EncoderError::MissingField(v2)) => v1 == v2,
             (EncoderError::InvalidTimestamp(v1), EncoderError::InvalidTimestamp(v2)) => v1 == v2,
             (EncoderError::InvalidValue(k1, v1), EncoderError::InvalidValue(k2, v2)) => {
                 k1 == k2 && v1 == v2
             }
             (EncoderError::Io(_), EncoderError::Io(_)) => true,
-            (EncoderError::MissingField(v1), EncoderError::MissingField(v2)) => v1 == v2,
+
             (_, _) => false,
         }
     }

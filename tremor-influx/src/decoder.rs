@@ -22,6 +22,7 @@ use std::str::Chars;
 macro_rules! cant_error {
     ($e:expr) => {
         if $e.is_err() {
+            // ALLOW: this errors can never happen
             unreachable!()
         }
     };
@@ -171,13 +172,13 @@ where
 {
     let mut res = V::object();
     loop {
-        let (key, c_key, idx) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        let (key, c_key, idx1) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
         if c_key != '=' {
-            return Err(Error::MissingTagValue(idx));
+            return Err(Error::MissingTagValue(idx1));
         };
-        let (val, c_val, idx) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        let (val, c_val, idx2) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
         if c_val == '=' {
-            return Err(Error::EqInTagValue(idx));
+            return Err(Error::EqInTagValue(idx2));
         }
         cant_error!(res.insert(key, V::from(val)));
         if c_val == ' ' {
