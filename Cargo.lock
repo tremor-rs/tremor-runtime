@@ -839,9 +839,9 @@ dependencies = [
 
 [[package]]
 name = "dissect"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d28fa9396cb6494269dc4f293dc41932d924a048e131e5c5011771b059d22dde"
+checksum = "10640ccc9885ae2371120ad2b1f0db4fe805b60654c93a8d17e130c4651a73e6"
 dependencies = [
  "halfbrown",
  "simd-json",
@@ -4022,9 +4022,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-kv"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c02913ac0b864a85d5b22bac672e745f62e1057b178b08698f350d28001d5b1"
+checksum = "4b3a702a97b05880e71d8380b886fe244bd09ca30f775ea2157bdc2d363487cf"
 dependencies = [
  "serde",
  "simd-json",
