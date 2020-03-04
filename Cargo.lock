@@ -746,9 +746,9 @@ dependencies = [
 
 [[package]]
 name = "curl-sys"
-version = "0.4.27"
+version = "0.4.28+curl-7.69.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e97059be9b77dbac729368208bb5430cf9baf4c050ae8782a28010136cd906d"
+checksum = "e2c6b7fa5d36aa192e410788b77af65f339af24c8786419e8b48173689a484bf"
 dependencies = [
  "cc",
  "libc",
@@ -839,8 +839,9 @@ dependencies = [
 
 [[package]]
 name = "dissect"
-version = "0.1.0"
-source = "git+https://github.com/wayfair-tremor/dissect?branch=simdjson-3#ca6fec8b279f3aeb54bc095a834364dc6fc6d617"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d28fa9396cb6494269dc4f293dc41932d924a048e131e5c5011771b059d22dde"
 dependencies = [
  "halfbrown",
  "simd-json",
@@ -3330,7 +3331,8 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 [[package]]
 name = "simd-json"
 version = "0.3.0"
-source = "git+https://github.com/simd-lite/simdjson-rs?branch=trait-improvements#bb7ef95061622572e43c467261966906ba8df166"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "deaad717781bbdb92e5454c31872728edd383fb410e04b7e47cd67ad26741f62"
 dependencies = [
  "float-cmp",
  "halfbrown",
@@ -4020,8 +4022,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-kv"
-version = "0.1.0"
-source = "git+https://github.com/wayfair-tremor/kv?branch=simdjson-3#b05d2c51175d7746165f2938943f9da373ce8917"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c02913ac0b864a85d5b22bac672e745f62e1057b178b08698f350d28001d5b1"
 dependencies = [
  "serde",
  "simd-json",
@@ -4081,7 +4084,7 @@ dependencies = [
  "cron",
  "crossbeam-channel 0.4.2",
  "elastic",
- "env_logger 0.6.2",
+ "env_logger 0.7.1",
  "error-chain 0.12.2",
  "futures 0.3.4",
  "google-pubsub1",
@@ -4397,9 +4400,9 @@ dependencies = [
 
 [[package]]
 name = "value-trait"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "595972624f90eac122760dddc450aa79edaf3cfd9f375a7f4f82628a512c7425"
+checksum = "544b9af6304dc225943db8b2843aadac183339f6c9727b6ec703d2d07daad528"
 dependencies = [
  "float-cmp",
  "halfbrown",

@@ -33,7 +33,6 @@ mod datetime;
 mod errors;
 mod grok;
 mod highlighter;
-mod influx;
 mod interpreter;
 mod lexer;
 mod parser;

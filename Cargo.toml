@@ -108,7 +108,7 @@ matches = "0.1"
 # criterion = "0.2"
 pretty_assertions = "0.6.1"
 regex = "1"
-env_logger = "0.6"
+env_logger = "0.7"
 
 [features]
 default = [ "snmalloc" ]
@@ -118,6 +118,3 @@ snmalloc = [ "snmalloc-rs" ]
 #  waiting for https://github.com/http-rs/tide/pull/408
 tide = { git = "https://github.com/Licenser/tide", branch = "result-into-response" }
 surf = { git = "https://github.com/http-rs/surf", rev = "8368e88f6545e950b06e36e874c098f800a2ca47" }
-simd-json = { git = "https://github.com/simd-lite/simdjson-rs", branch = "trait-improvements" }
-tremor-kv = { git = "https://github.com/wayfair-tremor/kv", branch = "simdjson-3" }
-dissect = { git = "https://github.com/wayfair-tremor/dissect", branch = "simdjson-3" }
