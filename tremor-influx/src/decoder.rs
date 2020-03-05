@@ -224,10 +224,48 @@ fn parse_to_char2<'input>(
     end1: char,
     end2: char,
 ) -> Result<(Cow<'input, str>, char, usize)> {
-    parse_to_char3(chars, end1, Some(end2), None)
+    let mut res = String::with_capacity(256);
+    let mut idx = chars.current_count();
+    while let Some((i, c)) = chars.next() {
+        idx = i;
+        match c {
+            c if c == end1 => return Ok((res.into(), end1, i)),
+            c if c == end2 => return Ok((res.into(), end2, i)),
+            '\\' => match chars.next() {
+                Some((_, c)) if c == '\\' || c == end1 || c == end2 => res.push(c),
+                Some((_, c)) => {
+                    res.push('\\');
+                    res.push(c)
+                }
+                None => {
+                    return Err(Error::InvalidEscape(i));
+                }
+            },
+            _ => res.push(c),
+        }
+    }
+    Err(Error::Expected(idx, end1, Some(end2), None))
 }
 
 fn parse_to_char<'input>(chars: &mut Enumerate<Chars>, end: char) -> Result<Cow<'input, str>> {
-    let (res, _, _) = parse_to_char3(chars, end, None, None)?;
-    Ok(res)
+    let mut res = String::with_capacity(256);
+    let mut idx = chars.current_count();
+    while let Some((i, c)) = chars.next() {
+        idx = i;
+        match c {
+            c if c == end => return Ok(res.into()),
+            '\\' => match chars.next() {
+                Some((_, c)) if c == '\\' || c == end => res.push(c),
+                Some((_, c)) => {
+                    res.push('\\');
+                    res.push(c)
+                }
+                None => {
+                    return Err(Error::InvalidEscape(i));
+                }
+            },
+            _ => res.push(c),
+        }
+    }
+    Err(Error::Expected(idx, end, None, None))
 }
