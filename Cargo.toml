@@ -98,6 +98,10 @@ grok = "1"
 
 snmalloc-rs = { version = "0.2", optional = true }
 
+# Pin quote crate to resolve https://github.com/rust-lang-nursery/failure/issues/342
+# This impacts failure-derive v1.0.6 and manifests in vscode dev container
+quote = "=1.0.2"
+
 [dependencies.tungstenite]
 version = "0.10"
 default-features = false
