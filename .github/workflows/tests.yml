@@ -3,12 +3,45 @@ name: Tests
 on: [push]
 
 jobs:
-  tests:
+  tests-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Install deps
+      - name: Install deps [Linux]
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      # - uses: actions/cache@v1
+      #   id: cache-build
+      #   with:
+      #     path: ~/.cache/sccache
+      #     key: sccache-cache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      #     restore-keys: |
+      #       sccache-cache-${{ runner.os }}-
+      # - uses: actions/cache@v1
+      #   id: cache-sccache
+      #   with:
+      #     path: ~/sccache
+      #     key: sccache-${{ runner.os }}
+      # - name: restore sccache
+      #   if: steps.cache-sccache.outputs.cache-hit == 'true'
+      #   run: cp ~/sccache/* ~/.cargo/bin
+      # - name: install sccache
+      #   if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #   run: cargo install sccache
+      # - name: Prepare sccache command bin for cache
+      #   if: steps.cache-sccache.outputs.cache-hit != 'true'
+      #   run: mkdir ~/sccache; cp ~/.cargo/bin/sccache ~/sccache
+      - name: Run tests
+        # env:
+        #   RUSTC_WRAPPER: sccache
+        run: cargo test --all
+  tests-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v1
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
