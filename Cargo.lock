@@ -4016,6 +4016,7 @@ dependencies = [
 name = "tremor-influx"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "pretty_assertions",
  "simd-json",
 ]
@@ -4109,6 +4110,7 @@ dependencies = [
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
+ "quote 1.0.2",
  "rand 0.7.3",
  "rdkafka",
  "regex",
