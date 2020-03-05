@@ -131,7 +131,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v1
-      - run: brew install erlang@21
+      - run: brew install erlang@21 rebar3
         name: Install Erlang 21
       - run: rebar3 eunit
       - name: Install coyote
