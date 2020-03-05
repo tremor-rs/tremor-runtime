@@ -4019,6 +4019,7 @@ dependencies = [
  "criterion",
  "pretty_assertions",
  "simd-json",
+ "snmalloc-rs",
 ]
 
 [[package]]
