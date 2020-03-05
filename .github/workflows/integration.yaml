@@ -74,6 +74,11 @@ jobs:
   api-tests-linux:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v1.0.0
+      - uses: gleam-lang/setup-erlang@v1.0.0
+        with:
+          otp-version: 22.1
+      - run: rebar3 eunit
       - uses: actions/checkout@v1
       - name: Install deps
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
