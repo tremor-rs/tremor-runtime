@@ -47,7 +47,7 @@ impl PartialEq for EncoderError {
 #[derive(Debug, PartialEq)]
 pub enum DecoderError {
     EqInTagValue(usize),
-    Expected(usize, char, Option<char>, Option<char>),
+    Unexpected(usize),
     Generic(usize, String),
     InvalidFields(usize),
     MissingTagValue(usize),
