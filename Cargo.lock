@@ -1787,6 +1787,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
+name = "lexical"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a28ff8a57641758c89a37b2d28556a68978b3ea3f709f39953e153acea3dbacf"
+dependencies = [
+ "cfg-if",
+ "lexical-core 0.7.4",
+]
+
+[[package]]
 name = "lexical-core"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1796,7 +1806,20 @@ dependencies = [
  "cfg-if",
  "rustc_version",
  "ryu",
- "static_assertions",
+ "static_assertions 0.3.4",
+]
+
+[[package]]
+name = "lexical-core"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db65c6da02e61f55dae90a0ae427b2a5f6b3e8db09f58d10efab23af92592616"
+dependencies = [
+ "arrayvec 0.5.1",
+ "bitflags",
+ "cfg-if",
+ "ryu",
+ "static_assertions 1.1.0",
 ]
 
 [[package]]
@@ -2170,7 +2193,7 @@ version = "5.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b471253da97532da4b61552249c521e01e736071f71c1a4f7ebbfbf0a06aad6"
 dependencies = [
- "lexical-core",
+ "lexical-core 0.6.2",
  "memchr",
  "version_check 0.9.1",
 ]
@@ -3460,6 +3483,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f3eb36b47e512f8f1c9e3d10c2c1965bc992bd9cdb024fa581e2194501c83d3"
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "string"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4017,6 +4046,7 @@ name = "tremor-influx"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "lexical",
  "pretty_assertions",
  "simd-json",
  "snmalloc-rs",

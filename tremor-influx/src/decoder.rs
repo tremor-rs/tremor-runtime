@@ -54,9 +54,7 @@ where
     let timestamp = if timestamp_str.is_empty() {
         ingest_ns
     } else {
-        timestamp_str
-            .parse()
-            .map_err(|e| Error::ParseIntError(idx, e))?
+        lexical::parse::<u64, _>(timestamp_str).map_err(|e| Error::ParseIntError(idx, e))?
     };
 
     let mut m = V::object_with_capacity(4);
@@ -88,8 +86,7 @@ where
         "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(V::from(false)),
         _ => Ok(V::from(
-            s.parse::<f64>()
-                .map_err(|e| Error::ParseFloatError(idx, e))?,
+            lexical::parse::<f64, _>(s).map_err(|e| Error::ParseFloatError(idx, e))?,
         )),
     }
 }
@@ -114,14 +111,20 @@ where
             Some((i, 'i')) => match chars.next() {
                 Some((_, c @ ' ')) | Some((_, c @ ',')) => {
                     return Ok((
-                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
+                        V::from(
+                            lexical::parse::<i64, _>(res)
+                                .map_err(|e| Error::ParseIntError(i, e))?,
+                        ),
                         Some(c),
                         idx,
                     ))
                 }
                 None => {
                     return Ok((
-                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
+                        V::from(
+                            lexical::parse::<i64, _>(res)
+                                .map_err(|e| Error::ParseIntError(i, e))?,
+                        ),
                         None,
                         idx,
                     ))
@@ -172,11 +175,11 @@ where
 {
     let mut res = V::object();
     loop {
-        let (key, c_key, idx1) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        let (key, c_key, idx1) = parse_to_char3(chars, '=', ' ', ',')?;
         if c_key != '=' {
             return Err(Error::MissingTagValue(idx1));
         };
-        let (val, c_val, idx2) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
+        let (val, c_val, idx2) = parse_to_char3(chars, '=', ' ', ',')?;
         if c_val == '=' {
             return Err(Error::EqInTagValue(idx2));
         }
@@ -190,21 +193,19 @@ where
 fn parse_to_char3<'input>(
     chars: &mut Enumerate<Chars>,
     end1: char,
-    end2: Option<char>,
-    end3: Option<char>,
+    end2: char,
+    end3: char,
 ) -> Result<(Cow<'input, str>, char, usize)> {
     let mut res = String::with_capacity(256);
     let mut idx = chars.current_count();
     while let Some((i, c)) = chars.next() {
         idx = i;
         match c {
-            c if c == end1 => return Ok((res.into(), end1, i)),
-            c if Some(c) == end2 => return Ok((res.into(), c, i)),
-            c if Some(c) == end3 => return Ok((res.into(), c, i)),
+            c if c == end1 => return Ok((res.into(), c, i)),
+            c if c == end2 => return Ok((res.into(), c, i)),
+            c if c == end3 => return Ok((res.into(), c, i)),
             '\\' => match chars.next() {
-                Some((_, c)) if c == '\\' || c == end1 || Some(c) == end2 || Some(c) == end3 => {
-                    res.push(c)
-                }
+                Some((_, c)) if c == '\\' || c == end1 || c == end2 || c == end3 => res.push(c),
                 Some((_, c)) => {
                     res.push('\\');
                     res.push(c)
@@ -216,7 +217,7 @@ fn parse_to_char3<'input>(
             _ => res.push(c),
         }
     }
-    Err(Error::Expected(idx, end1, end2, end3))
+    Err(Error::Expected(idx, end1, Some(end2), Some(end3)))
 }
 
 fn parse_to_char2<'input>(
@@ -229,8 +230,8 @@ fn parse_to_char2<'input>(
     while let Some((i, c)) = chars.next() {
         idx = i;
         match c {
-            c if c == end1 => return Ok((res.into(), end1, i)),
-            c if c == end2 => return Ok((res.into(), end2, i)),
+            c if c == end1 => return Ok((res.into(), c, i)),
+            c if c == end2 => return Ok((res.into(), c, i)),
             '\\' => match chars.next() {
                 Some((_, c)) if c == '\\' || c == end1 || c == end2 => res.push(c),
                 Some((_, c)) => {
