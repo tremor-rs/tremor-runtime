@@ -97,7 +97,7 @@ fn parse_value<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<cha
 where
     V: ValueTrait + Mutable + Builder<'input> + 'input,
 {
-    let mut res = String::new();
+    let mut res = String::with_capacity(256);
     let idx = chars.current_count();
     match chars.next() {
         Some((_, '"')) => return parse_string(chars),
@@ -193,7 +193,7 @@ fn parse_to_char3<'input>(
     end2: Option<char>,
     end3: Option<char>,
 ) -> Result<(Cow<'input, str>, char, usize)> {
-    let mut res = String::new();
+    let mut res = String::with_capacity(256);
     let mut idx = chars.current_count();
     while let Some((i, c)) = chars.next() {
         idx = i;

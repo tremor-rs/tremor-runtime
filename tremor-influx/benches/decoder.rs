@@ -1,3 +1,6 @@
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tremor_influx::decode;
 
