@@ -256,7 +256,7 @@ where
             input = &input[1..];
             parse_to_complex(res, input, idx + 2, p)
         } else {
-            return Ok((data.into(), idx));
+            Ok((data.into(), idx))
         }
     } else {
         Err(Error::Unexpected(0))
