@@ -13,11 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::enumerate::Enumerate;
 use crate::{DecoderError as Error, DecoderResult as Result};
 use simd_json::prelude::*;
 use std::borrow::Cow;
-use std::str::Chars;
 
 macro_rules! cant_error {
     ($e:expr) => {
@@ -31,32 +29,38 @@ macro_rules! cant_error {
 /// Tries to parse a striung as an influx line protocl message
 pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
     <V as ValueTrait>::Key: From<Cow<'input, str>> + From<&'input str>,
 {
-    let data = data.trim();
+    let mut data = data.trim();
 
     if data.is_empty() || data.starts_with('#') {
         return Ok(None);
     };
+    let mut total_idx = 0;
 
-    let mut chars = Enumerate::new(data.chars());
-    let (measurement, c, _) = parse_to_char2(&mut chars, ',', ' ')?;
-    let tags = if c == ',' {
-        parse_tags(&mut chars)?
+    let (measurement, idx1) = parse_to(total_idx, &data, |c| c == ',' || c == ' ')?;
+    total_idx += idx1;
+    data = &data[idx1..];
+    let (tags, idx2) = if data.starts_with(',') {
+        total_idx += 1;
+        data = &data[1..];
+        parse_tags(total_idx, data)?
     } else {
-        V::object()
+        (V::object(), 0)
     };
-
-    let fields: V = parse_fields(&mut chars)?;
-    let (idx, timestamp_str) = chars.parts();
-    let timestamp_str = timestamp_str.as_str();
-    let timestamp = if timestamp_str.is_empty() {
+    data = &data[idx2..];
+    if !data.is_empty() {
+        total_idx += 1;
+        data = &data[1..];
+    };
+    let (fields, idx): (V, usize) = parse_fields(total_idx, data)?;
+    total_idx += idx;
+    data = &data[idx..];
+    let timestamp = if data.is_empty() {
         ingest_ns
     } else {
-        timestamp_str
-            .parse()
-            .map_err(|e| Error::ParseIntError(idx, e))?
+        lexical::parse::<u64, _>(data).map_err(|e| Error::ParseIntError(total_idx, e))?
     };
 
     let mut m = V::object_with_capacity(4);
@@ -67,167 +71,253 @@ where
     Ok(Some(m))
 }
 
-fn parse_string<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
+fn parse_string<'input, V>(
+    total_index: usize,
+    mut input: &'input str,
+) -> Result<(V, Option<char>, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
 {
-    let val = parse_to_char(chars, '"')?;
-    let idx = chars.current_count();
-    match chars.next() {
-        Some((i, c @ ',')) | Some((i, c @ ' ')) => Ok((V::from(val), Some(c), i)),
-        None => Ok((V::from(val), None, idx)),
-        Some((i, _)) => Err(Error::TrailingCharacter(i)),
+    let (val, idx) = parse_to(total_index, input, |c| c == '"')?;
+    input = &input[idx + 1..];
+    if input.starts_with(' ') {
+        Ok((V::from(val), Some(' '), idx + 2))
+    } else if input.starts_with(',') {
+        Ok((V::from(val), Some(','), idx + 2))
+    } else if input.is_empty() {
+        Ok((V::from(val), None, idx + 1))
+    } else {
+        Err(Error::TrailingCharacter(total_index + idx))
     }
 }
 
-fn float_or_bool<'input, V>(idx: usize, s: &str) -> Result<V>
+fn to_value<'input, V>(total_idx: usize, s: &str) -> Result<V>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
 {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(V::from(false)),
-        _ => Ok(V::from(
-            s.parse::<f64>()
-                .map_err(|e| Error::ParseFloatError(idx, e))?,
-        )),
-    }
-}
-fn parse_value<'input, V>(chars: &mut Enumerate<Chars>) -> Result<(V, Option<char>, usize)>
-where
-    V: ValueTrait + Mutable + Builder<'input> + 'input,
-{
-    let mut res = String::new();
-    let idx = chars.current_count();
-    match chars.next() {
-        Some((_, '"')) => return parse_string(chars),
-        Some((i, ' ')) | Some((i, ',')) => return Err(Error::UnexpectedEnd(i)),
-        None => return Err(Error::UnexpectedEnd(idx)),
-        Some((_, c)) => res.push(c),
-    }
-    loop {
-        match chars.next() {
-            Some((_, c @ ',')) | Some((_, c @ ' ')) => {
-                return Ok((float_or_bool(idx, &res)?, Some(c), idx))
+        _ => {
+            if s.ends_with('i') && s.starts_with('-') {
+                Ok(V::from(
+                    lexical::parse::<i64, _>(&s[..s.len() - 1])
+                        .map_err(|e| Error::ParseIntError(total_idx, e))?,
+                ))
+            } else if s.ends_with('i') {
+                Ok(V::from(
+                    lexical::parse::<u64, _>(&s[..s.len() - 1])
+                        .map_err(|e| Error::ParseIntError(total_idx, e))?,
+                ))
+            } else {
+                Ok(V::from(
+                    lexical::parse::<f64, _>(s)
+                        .map_err(|e| Error::ParseFloatError(total_idx, e))?,
+                ))
             }
-            None => return Ok((float_or_bool(idx, &res)?, None, idx)),
-            Some((i, 'i')) => match chars.next() {
-                Some((_, c @ ' ')) | Some((_, c @ ',')) => {
-                    return Ok((
-                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
-                        Some(c),
-                        idx,
-                    ))
-                }
-                None => {
-                    return Ok((
-                        V::from(res.parse::<i64>().map_err(|e| Error::ParseIntError(i, e))?),
-                        None,
-                        idx,
-                    ))
-                }
-                Some((i, _)) => {
-                    return Err(Error::Expected(i, ' ', Some(','), None));
-                }
-            },
-            Some((i, '\\')) => {
-                if let Some((_, c)) = chars.next() {
-                    res.push(c);
-                } else {
-                    return Err(Error::InvalidEscape(i));
-                }
-            }
-            Some((_, c)) => res.push(c),
         }
     }
 }
 
-fn parse_fields<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
+fn parse_value<'input, V>(
+    total_index: usize,
+    mut input: &'input str,
+) -> Result<(V, Option<char>, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+{
+    let mut offset = 0;
+    if input.starts_with('"') {
+        parse_string(total_index, &input[1..])
+    } else if input.starts_with(' ') || input.is_empty() {
+        Err(Error::UnexpectedEnd(total_index))
+    } else if let Some(idx) = input.find(|c| c == ',' || c == ' ' || c == '\\') {
+        offset += idx;
+        let data = &input[..idx];
+        input = &input[idx..];
+        if input.starts_with('\\') {
+            let mut res = String::with_capacity(256);
+            res.push_str(data);
+            parse_value_complex(total_index + offset, res, &input[1..])
+        } else if input.starts_with(',') {
+            Ok((to_value(total_index + offset, data)?, Some(','), offset))
+        } else if input.starts_with(' ') {
+            Ok((to_value(total_index + offset, data)?, Some(' '), offset))
+        } else if input.is_empty() {
+            Ok((to_value(total_index + offset, data)?, None, offset))
+        } else {
+            Err(Error::UnexpectedEnd(total_index + offset))
+        }
+    } else {
+        Ok((
+            to_value(total_index + offset, input)?,
+            None,
+            input.len() - 1,
+        ))
+    }
+}
+
+fn parse_value_complex<'input, V>(
+    total_index: usize,
+    mut res: String,
+    mut input: &'input str,
+) -> Result<(V, Option<char>, usize)>
+where
+    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+{
+    let mut offset = 0;
+    loop {
+        if let Some(idx) = input.find(|c| c == ',' || c == ' ' || c == '\\') {
+            offset += idx;
+            res.push_str(&input[..idx]);
+            input = &input[idx..];
+            if input.starts_with('\\') {
+                input = &input[1..];
+                let d = &input[..1];
+                res.push_str(&d);
+                offset += 1;
+            } else if input.starts_with(',') {
+                return Ok((to_value(total_index + offset, &res)?, Some(','), offset));
+            } else if input.starts_with(' ') {
+                return Ok((to_value(total_index + offset, &res)?, Some(' '), offset));
+            } else if input.is_empty() {
+                return Ok((to_value(total_index + offset, &res)?, None, offset));
+            } else {
+                return Err(Error::UnexpectedEnd(total_index + offset));
+            }
+        } else {
+            res.push_str(input);
+            return Ok((to_value(total_index, &res)?, None, input.len() - 1));
+        }
+    }
+}
+
+fn parse_fields<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
+where
+    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
     <V as ValueTrait>::Key: From<Cow<'input, str>>,
 {
-    let mut res = V::object();
+    let mut offset = 0;
+    let mut res = V::object_with_capacity(16);
     loop {
-        let key = parse_to_char(chars, '=')?;
+        let (key, idx1) = parse_to(total_idx + offset, input, |c| c == '=')?;
+        input = &input[idx1 + 1..];
+        offset += idx1 + 1;
+        let (val, c, idx2): (V, _, _) = parse_value(total_idx + offset, input)?;
+        input = &input[idx2 + 1..];
+        offset += idx2 + 1;
 
-        let (val, c, idx): (V, _, _) = parse_value(chars)?;
         match c {
             Some(',') => {
                 cant_error!(res.insert(key, val));
             }
             Some(' ') | None => {
                 cant_error!(res.insert(key, val));
-                return Ok(res);
+                return Ok((res, offset));
             }
-            _ => return Err(Error::InvalidFields(idx)),
+            _ => return Err(Error::InvalidFields(total_idx + offset)),
         };
     }
 }
 
-fn parse_tags<'input, V>(chars: &mut Enumerate<Chars>) -> Result<V>
+fn parse_tags<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>>,
+    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
     <V as ValueTrait>::Key: From<Cow<'input, str>>,
 {
-    let mut res = V::object();
+    let mut res = V::object_with_capacity(16);
+    let mut offset = 0;
     loop {
-        let (key, c_key, idx1) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c_key != '=' {
-            return Err(Error::MissingTagValue(idx1));
-        };
-        let (val, c_val, idx2) = parse_to_char3(chars, '=', Some(' '), Some(','))?;
-        if c_val == '=' {
-            return Err(Error::EqInTagValue(idx2));
+        let (key, idx) = parse_to(total_idx + offset, input, |c| {
+            c == '=' || c == ' ' || c == ','
+        })?;
+        offset += idx + 1;
+        input = &input[idx..];
+        if !input.starts_with('=') {
+            return Err(Error::MissingTagValue(total_idx + offset));
         }
+        input = &input[1..];
+        let (val, idx2) = parse_to(total_idx + offset, input, |c| {
+            c == '=' || c == ' ' || c == ','
+        })?;
+        offset += idx2;
+        input = &input[idx2..];
         cant_error!(res.insert(key, V::from(val)));
-        if c_val == ' ' {
-            return Ok(res);
+        if input.starts_with(' ') {
+            return Ok((res, offset));
+        } else if input.starts_with(',') {
+            input = &input[1..];
+            offset += 1;
+        } else if input.starts_with('=') {
+            return Err(Error::MissingTagValue(total_idx + offset));
         }
     }
 }
 
-fn parse_to_char3<'input>(
-    chars: &mut Enumerate<Chars>,
-    end1: char,
-    end2: Option<char>,
-    end3: Option<char>,
-) -> Result<(Cow<'input, str>, char, usize)> {
-    let mut res = String::new();
-    let mut idx = chars.current_count();
-    while let Some((i, c)) = chars.next() {
-        idx = i;
-        match c {
-            c if c == end1 => return Ok((res.into(), end1, i)),
-            c if Some(c) == end2 => return Ok((res.into(), c, i)),
-            c if Some(c) == end3 => return Ok((res.into(), c, i)),
-            '\\' => match chars.next() {
-                Some((_, c)) if c == '\\' || c == end1 || Some(c) == end2 || Some(c) == end3 => {
-                    res.push(c)
-                }
-                Some((_, c)) => {
+fn parse_to<'input, F>(
+    total_idx: usize,
+    mut input: &'input str,
+    p: F,
+) -> Result<(Cow<'input, str>, usize)>
+where
+    F: Fn(char) -> bool,
+{
+    let search = |c| p(c) || c == '\\';
+    if let Some(idx) = input.find(search) {
+        let data = &input[..idx];
+        input = &input[idx..];
+        if input.starts_with('\\') {
+            let mut res = String::with_capacity(256);
+            res.push_str(data);
+            input = &input[1..];
+            // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_reference/#special-characters
+            if !input.starts_with(search) {
+                res.push('\\');
+            }
+            res.push_str(&input[..1]);
+
+            input = &input[1..];
+            parse_to_complex(total_idx, res, idx + 2, input, p)
+        } else {
+            Ok((data.into(), idx))
+        }
+    } else {
+        Err(Error::Unexpected(total_idx))
+    }
+}
+
+fn parse_to_complex<'input, F>(
+    total_idx: usize,
+    mut res: String,
+    mut offset: usize,
+    mut input: &'input str,
+    p: F,
+) -> Result<(Cow<'input, str>, usize)>
+where
+    F: Fn(char) -> bool,
+{
+    let search = |c| p(c) || c == '\\';
+    loop {
+        if let Some(idx) = input.find(&search) {
+            let data = &input[..idx];
+            input = &input[idx..];
+            offset += idx;
+            if input.starts_with('\\') {
+                res.push_str(data);
+                input = &input[1..];
+                // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_reference/#special-characters
+                if !input.starts_with(search) {
                     res.push('\\');
-                    res.push(c)
                 }
-                None => {
-                    return Err(Error::InvalidEscape(i));
-                }
-            },
-            _ => res.push(c),
+                res.push_str(&input[..1]);
+                input = &input[1..];
+                offset += 2;
+            } else {
+                res.push_str(&data);
+                return Ok((res.into(), offset));
+            }
+        } else {
+            return Err(Error::Unexpected(total_idx + offset));
         }
     }
-    Err(Error::Expected(idx, end1, end2, end3))
-}
-
-fn parse_to_char2<'input>(
-    chars: &mut Enumerate<Chars>,
-    end1: char,
-    end2: char,
-) -> Result<(Cow<'input, str>, char, usize)> {
-    parse_to_char3(chars, end1, Some(end2), None)
-}
-
-fn parse_to_char<'input>(chars: &mut Enumerate<Chars>, end: char) -> Result<Cow<'input, str>> {
-    let (res, _, _) = parse_to_char3(chars, end, None, None)?;
-    Ok(res)
 }

@@ -28,7 +28,6 @@
 
 mod decoder;
 mod encoder;
-pub(crate) mod enumerate;
 mod errors;
 
 pub use decoder::decode;
@@ -149,7 +148,7 @@ mod tests {
                 "bug_concentration": 98.0,
 
             },
-            "timestamp": 1_465_839_830_100_400_200i64,
+            "timestamp": 1_465_839_830_100_400_200u64,
         })
         .into();
         assert_eq!(Ok(Some(r)), decode(s, 0))
@@ -266,7 +265,7 @@ mod tests {
         }
     }
     #[test]
-    fn parse_escape1() {
+    fn parse_escape01() {
         let s = "weather,location=us\\,midwest temperature=82 1465839830100400200";
         let r: Value = json!({
             "measurement": "weather",
@@ -283,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape2() {
+    fn parse_escape02() {
         let s = "weather,location=us-midwest temp\\=rature=82 1465839830100400200";
         let r: Value = json!({
             "measurement": "weather",
@@ -299,7 +298,7 @@ mod tests {
         assert_eq!(Ok(Some(r)), decode(s, 0))
     }
     #[test]
-    fn parse_escape3() {
+    fn parse_escape03() {
         let s = "weather,location\\ place=us-midwest temperature=82 1465839830100400200";
         let r: Value = json!({
             "measurement": "weather",
@@ -316,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape4() {
+    fn parse_escape04() {
         let s = "wea\\,ther,location=us-midwest temperature=82 1465839830100400200";
         let r: Value = json!({
             "measurement": "wea,ther",
@@ -332,7 +331,7 @@ mod tests {
         assert_eq!(Ok(Some(r)), decode(s, 0))
     }
     #[test]
-    fn parse_escape5() {
+    fn parse_escape05() {
         let s = "wea\\ ther,location=us-midwest temperature=82 1465839830100400200";
         let r: Value = json!({
             "measurement": "wea ther",
@@ -349,15 +348,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape6() {
-        let s = "weather,location=us-midwest temperature=\"too\\\"hot\\\"\" 1465839830100400200";
+    fn parse_escape06() {
+        let s = r#"weather,location=us-midwest temperature="too\"hot\"" 1465839830100400200"#;
         let r: Value = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
             },
             "fields": {
-                "temperature": "too\"hot\""
+                "temperature": r#"too"hot""#
             },
             "timestamp": 1_465_839_830_100_400_200i64,
         })
@@ -366,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape7() {
+    fn parse_escape07() {
         let s = "weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400201";
         let r: Value = json!({
             "measurement": "weather",
@@ -383,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape8() {
+    fn parse_escape08() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\cold\" 1465839830100400202";
         let r: Value = json!({
             "measurement": "weather",
@@ -400,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_escape9() {
+    fn parse_escape09() {
         let s =
             "weather,location=us-midwest temperature_str=\"too hot\\\\cold\" 1465839830100400203";
         let r: Value = json!({

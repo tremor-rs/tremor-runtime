@@ -8,6 +8,14 @@ edition = "2018"
 
 [dependencies]
 simd-json = "0.3"
+lexical = "5.2.0"
+
 
 [dev-dependencies]
 pretty_assertions = "0.6"
+criterion = "0.3"
+snmalloc-rs = "0.2"
+
+[[bench]]
+name = "decoder"
+harness = false

@@ -47,12 +47,12 @@ impl PartialEq for EncoderError {
 #[derive(Debug, PartialEq)]
 pub enum DecoderError {
     EqInTagValue(usize),
-    Expected(usize, char, Option<char>, Option<char>),
+    Unexpected(usize),
     Generic(usize, String),
     InvalidFields(usize),
     MissingTagValue(usize),
-    ParseFloatError(usize, std::num::ParseFloatError),
-    ParseIntError(usize, std::num::ParseIntError),
+    ParseFloatError(usize, lexical::Error),
+    ParseIntError(usize, lexical::Error),
     TrailingCharacter(usize),
     InvalidEscape(usize),
     UnexpectedEnd(usize),
