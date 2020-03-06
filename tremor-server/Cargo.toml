@@ -22,4 +22,5 @@ tide = "0.6"
 snmalloc-rs = { version = "0.2", optional = true }
 
 [features]
-default = []
+default = ["snmalloc"]
+snmalloc = ["snmalloc-rs"]
