@@ -23,6 +23,7 @@ COPY src ./src
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
 COPY tremor-api ./tremor-api
+COPY tremor-influx ./tremor-influx
 # Binaries
 COPY tremor-query ./tremor-query
 COPY tremor-server ./tremor-server
