@@ -17,9 +17,14 @@ ARG USER_GID=$USER_UID
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Configure apt and install packages
-RUN apt-get update \
+RUN apt-get update -y \
     && apt-get -y install --no-install-recommends apt-utils dialog 2>&1 \
     #
+    # Install linux perf
+    && apt-get install -y linux-perf linux-base \
+    # Install valgrind
+    && apt-get install -y valgrind google-perftools python3-pip \
+    && pip3 install gprof2dot \
     # Verify git, needed tools installed
     && apt-get -y install git iproute2 procps lsb-release \
     #
@@ -47,3 +52,15 @@ RUN apt-get update \
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
+
+# Make sure container and native targets do not clash/overlap
+ENV CARGO_TARGET_DIR=/workspaces/tremor-runtime/target.vsc
+
+# State we're running in a dev container / vscode as a flag for scripts
+ENV TREMOR_DEV_ENV=devcontainer
+
+# Default to release mode benchmark runs
+ENV TREMOR_MODE=release
+
+# Install flamegraph support
+RUN cargo install flamegraph
