@@ -75,7 +75,7 @@ xz2 = "0.1"
 hdrhistogram = "7"
 
 # postgres
-postgres = { version = "0.17.1", features = ["with-serde_json-1", "with-chrono-0_4"] }
+postgres = { version = "0.17.2", features = ["with-serde_json-1", "with-chrono-0_4"] }
 postgres-protocol = "0.5" 
 tokio-postgres = "0.5"
 
@@ -100,7 +100,7 @@ snmalloc-rs = { version = "0.2", optional = true }
 
 # Pin quote crate to resolve https://github.com/rust-lang-nursery/failure/issues/342
 # This impacts failure-derive v1.0.6 and manifests in vscode dev container
-quote = "<=1.0.2"
+quote = "<=1.0.4"
 
 [dependencies.tungstenite]
 version = "0.10"
