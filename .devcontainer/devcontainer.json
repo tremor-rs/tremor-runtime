@@ -3,11 +3,6 @@
 {
 	"name": "Rust",
 	"dockerFile": "Dockerfile",
-	"runArgs": [
-		"--cap-add=SYS_PTRACE",
-		"--security-opt",
-		"seccomp=unconfined"
-	],
 	// Use 'settings' to set *default* container specific settings.json values on container create. 
 	// You can edit these settings after create using File > Preferences > Settings > Remote.
 	"settings": {
@@ -28,5 +23,15 @@
 		"rust-lang.rust",
 		"bungcip.better-toml",
 		"vadimcn.vscode-lldb"
+	],
+	"runArgs": [
+		"--cap-add=SYS_PTRACE",
+		"--cap-add=CAP_SYS_ADMIN",
+		"-m",
+		"12g",
+		"--memory-reservation",
+		"12g",
+		"--security-opt",
+		"seccomp=${localWorkspaceFolder}/.devcontainer/seccomp_perf.json"
 	]
 }

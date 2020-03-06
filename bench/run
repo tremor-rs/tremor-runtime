@@ -4,10 +4,26 @@ set -x
 
 . $(dirname $0)/common.inc
 
+BENCH_EXTRA?=""
+
 file=$1
 if [ ! -f $file ]
 then
   file="./bench/$file.yaml"
+fi
+
+if [ "${TREMOR_DEV_ENV}" = "devcontainer" ]
+then
+  TARGET_ROOT=target.vsc
+else
+  TARGET_ROOT=target
+fi
+
+if [ "${TREMOR_MODE}" = "debug" ]
+then
+  TARGET_MODE=debug
+else
+  TARGET_MODE=release
 fi
 
 if [ ! -f $file ]
@@ -18,9 +34,11 @@ fi
 
 echo "######## $1"
 
+echo "TARGET_ROOT: ${TARGET_ROOT}"
+
 if [ -d ./bench/$1 ]
 then
-  target/release/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+  ${BENCH_EXTRA} ${TARGET_ROOT}/${TREMOR_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
 else
-  target/release/tremor-server --no-api -c $file bench/link.yaml
+  ${BENCH_EXTRA} ${TARGET_ROOT}/${TREMOR_MODE}/tremor-server --no-api -c $file bench/link.yaml
 fi
