@@ -58,7 +58,7 @@ libmath = "0.2"
 tremor-influx = { path = "../tremor-influx" }
 
 [build-dependencies]
-lalrpop = "0.17"
+lalrpop = "0.18"
 matches = "0.1.8"
 
 [dev-dependencies]
