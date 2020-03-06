@@ -4148,7 +4148,7 @@ dependencies = [
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
- "quote 0.6.13",
+ "quote 1.0.3",
  "rand 0.7.3",
  "rdkafka",
  "regex",
