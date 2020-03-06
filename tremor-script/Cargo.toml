@@ -47,7 +47,7 @@ distance = "0.4"
 chrono = "0.4"
 clap = "2.33.0"
 grok = "1"
-cidr-utils = "0.3"
+cidr-utils = "0.4"
 jumphash = "0.1"
 rand = { version = "0.7", features = ["small_rng"] }
 hdrhistogram = "7"
