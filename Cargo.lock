@@ -4060,6 +4060,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-influx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "478fd817afe86e2a7f8694b53f078ce882eb48c2e496279c0b46f834515384c0"
+dependencies = [
+ "lexical",
+ "simd-json",
+]
+
+[[package]]
 name = "tremor-kv"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4089,7 +4099,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "simd-json",
- "tremor-influx",
+ "tremor-influx 0.1.0",
  "tremor-script",
  "window",
  "xz2",
@@ -4104,7 +4114,7 @@ dependencies = [
  "halfbrown",
  "serde_json",
  "simd-json",
- "tremor-influx",
+ "tremor-influx 0.1.0",
  "tremor-pipeline",
  "tremor-script",
 ]
@@ -4165,7 +4175,7 @@ dependencies = [
  "tempfile",
  "threadpool",
  "tokio-postgres",
- "tremor-influx",
+ "tremor-influx 0.1.0",
  "tremor-pipeline",
  "tremor-script",
  "tungstenite",
@@ -4176,7 +4186,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "base64 0.11.0",
  "chrono",
@@ -4209,7 +4219,7 @@ dependencies = [
  "simd-json",
  "sketches-ddsketch",
  "termcolor",
- "tremor-influx",
+ "tremor-influx 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tremor-kv",
  "unicode-xid 0.2.0",
  "url 2.1.1",

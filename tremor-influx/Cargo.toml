@@ -1,8 +1,17 @@
 [package]
 name = "tremor-influx"
+description = "Tremor Influx Parser"
 version = "0.1.0"
 authors = ["The Tremor Team"]
 edition = "2018"
+license = "Apache-2.0"
+readme = "README.md"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
+
+# Additional `RUSTFLAGS` to set (default: none)
+rustc-args = [ "-C target-cpu=native" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
