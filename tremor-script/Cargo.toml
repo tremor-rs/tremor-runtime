@@ -1,6 +1,6 @@
 [package]
 name = "tremor-script"
-version = "0.7.6"
+version = "0.7.7"
 description = "Tremor Script Interpreter"
 authors = ["The Tremor Team"]
 edition = "2018"
@@ -55,7 +55,7 @@ sketches-ddsketch = "0.1.1"
 xz2 = "0.1"
 url = "2"
 libmath = "0.2"
-tremor-influx = { path = "../tremor-influx" }
+tremor-influx = { version = "0.1" }
 
 [build-dependencies]
 lalrpop = "0.18"
