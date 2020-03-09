@@ -5307,6 +5307,7 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.8.0"
 dependencies = [
+ "async-compression",
  "async-std",
  "async-trait",
  "async-tungstenite",

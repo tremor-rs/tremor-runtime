@@ -189,18 +189,28 @@ async fn onramp_loop(
     // We do this twice so we don't consume a message from kafka and then wait
     // as this could lead to timeouts
     loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+        match task::block_on(handle_pipelines(
+            false,
+            &rx,
+            &mut pipelines,
+            &mut metrics_reporter,
+        ))? {
             PipeHandlerResult::Retry => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => break,
+            _ => break, // fixme .unwrap()
         }
     }
     while let Some(m) = stream.next().await {
         loop {
-            match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+            match task::block_on(handle_pipelines(
+                false,
+                &rx,
+                &mut pipelines,
+                &mut metrics_reporter,
+            ))? {
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
-                PipeHandlerResult::Normal => break,
+                _ => break, // fixme .unwrap()
             }
         }
         if let Ok(m) = m {
@@ -234,8 +244,9 @@ async fn onramp_loop(
     Ok(())
 }
 
+#[async_trait::async_trait]
 impl Onramp for Kafka {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],

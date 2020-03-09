@@ -117,10 +117,15 @@ fn onramp_loop(
     let mut stmt: Option<postgres::Statement> = None;
 
     loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+        match task::block_on(handle_pipelines(
+            false,
+            &rx,
+            &mut pipelines,
+            &mut metrics_reporter,
+        ))? {
             PipeHandlerResult::Retry => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => (),
+            _ => (), // fixme .unwrap()
         }
         if cli.is_none() {
             cli = loop {
@@ -308,8 +313,9 @@ fn onramp_loop(
     }
 }
 
+#[async_trait::async_trait]
 impl Onramp for Postgres {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],

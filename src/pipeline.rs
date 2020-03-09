@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::errors::{Error, Result};
-use crate::offramp;
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorURL;
+use crate::{offramp, onramp};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::{bounded, Sender as CbSender};
+use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::thread;
@@ -46,8 +47,10 @@ pub(crate) enum Msg {
         input: Cow<'static, str>,
     },
     ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
+    ConnectOnramp(TremorURL, onramp::Addr),
     ConnectPipeline(Cow<'static, str>, TremorURL, Addr),
-    Disconnect(Cow<'static, str>, TremorURL),
+    DisconnectOutput(Cow<'static, str>, TremorURL),
+    DisconnectInput(TremorURL),
     #[allow(dead_code)]
     Signal(Event),
     Insight(Event),
@@ -151,6 +154,7 @@ impl Manager {
         let id = req.id.clone();
         let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>> =
             halfbrown::HashMap::new();
+        let mut onramps: halfbrown::HashMap<TremorURL, onramp::Addr> = halfbrown::HashMap::new();
         let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
         let (tx, rx) = bounded::<Msg>(self.qsize);
         let mut pipeline = config.to_executable_graph(tremor_pipeline::buildin_ops)?;
@@ -174,7 +178,29 @@ impl Manager {
                             }
                         }
                         Msg::Insight(insight) => {
-                            pipeline.contraflow(insight);
+                            let insight = pipeline.contraflow(insight);
+                            let (e, _m) = insight.data.parts();
+                            if e.get("trigger")
+                                .and_then(ValueTrait::as_bool)
+                                .unwrap_or_default()
+                            {
+                                for (_k, o) in &onramps {
+                                    task::block_on(o.send(onramp::Msg::Trigger))
+                                }
+                                //this is a trigger event
+                            }
+                            if e.get("restore")
+                                .and_then(ValueTrait::as_bool)
+                                .unwrap_or_default()
+                            {
+                                for (_k, o) in &onramps {
+                                    task::block_on(o.send(onramp::Msg::Restore))
+                                }
+
+                            //this is a trigger event
+                            } else {
+                                // this is no special event
+                            }
                         }
                         Msg::Signal(signal) => match pipeline.enqueue_signal(signal, &mut eventset)
                         {
@@ -185,7 +211,6 @@ impl Manager {
                             }
                             Err(e) => error!("error: {:?}", e),
                         },
-
                         Msg::ConnectOfframp(output, offramp_id, offramp) => {
                             info!(
                                 "[Pipeline:{}] connecting {} to offramp {}",
@@ -208,7 +233,11 @@ impl Manager {
                                 dests.insert(output, vec![(pipeline_id, Dest::Pipeline(pipeline))]);
                             }
                         }
-                        Msg::Disconnect(output, to_delete) => {
+                        Msg::ConnectOnramp(onramp_id, onramp) => {
+                            println!("connecting onramp: {}", onramp_id);
+                            onramps.insert(onramp_id, onramp);
+                        }
+                        Msg::DisconnectOutput(output, to_delete) => {
                             let mut remove = false;
                             if let Some(offramp_vec) = dests.get_mut(&output) {
                                 offramp_vec.retain(|(this_id, _)| this_id != &to_delete);
@@ -217,6 +246,10 @@ impl Manager {
                             if remove {
                                 dests.remove(&output);
                             }
+                        }
+                        Msg::DisconnectInput(onramp_id) => {
+                            println!("disconnecting onramp: {}", onramp_id);
+                            onramps.remove(&onramp_id);
                         }
                     };
                 }

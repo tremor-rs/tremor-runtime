@@ -14,11 +14,17 @@
 
 use crate::errors::Result;
 use crate::metrics::RampReporter;
+use crate::onramp::prelude::*;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::url::TremorURL;
+use async_std::sync::{self, channel};
+use async_std::task::{self, JoinHandle};
+use crossbeam_channel::Sender as CbSender;
 use serde_yaml::Value;
 use std::fmt;
+use tremor_pipeline::EventOriginUri;
+
 mod blaster;
 mod crononome;
 mod file;
@@ -30,9 +36,6 @@ mod postgres;
 mod prelude;
 pub mod tcp;
 mod udp;
-use async_std::sync::{self, channel};
-use async_std::task::{self, JoinHandle};
-use crossbeam_channel::Sender as CbSender;
 // mod rest;
 mod ws;
 
@@ -46,18 +49,165 @@ pub(crate) trait Impl {
 pub enum Msg {
     Connect(Vec<(TremorURL, pipeline::Addr)>),
     Disconnect { id: TremorURL, tx: CbSender<bool> },
+    Trigger,
+    Restore,
 }
 
 pub type Addr = sync::Sender<Msg>;
 
+#[async_trait::async_trait]
 pub(crate) trait Onramp: Send {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
+}
+
+pub(crate) enum SourceState {
+    Connected,
+    Disconnected,
+}
+pub(crate) enum SourceReply {
+    Data {
+        origin_uri: EventOriginUri,
+        data: Vec<u8>,
+        stream: usize,
+    },
+    StartStream(usize),
+    EndStream(usize),
+    StateChange(SourceState),
+    Empty,
+}
+#[async_trait::async_trait]
+pub(crate) trait Source {
+    async fn read(&mut self) -> Result<SourceReply>;
+    async fn init(&mut self) -> Result<SourceState>;
+    fn trigger_breaker(&mut self);
+    fn restore_breaker(&mut self);
+}
+
+pub(crate) struct SourceManager<T>
+where
+    T: Source,
+{
+    id: TremorURL,
+    source: T,
+    rx: Receiver<onramp::Msg>,
+    tx: sync::Sender<onramp::Msg>,
+    pp_template: Vec<String>,
+    preprocessors: Vec<Option<Preprocessors>>,
+    codec: Box<dyn Codec>,
+    metrics_reporter: RampReporter,
+    triggered: bool,
+}
+
+impl<T> SourceManager<T>
+where
+    T: Source,
+{
+    async fn new(
+        mut source: T,
+        preprocessors: &[String],
+        codec: &str,
+        metrics_reporter: RampReporter,
+    ) -> Result<(Self, sync::Sender<onramp::Msg>)> {
+        let (tx, rx) = channel(1);
+        let codec = codec::lookup(&codec)?;
+        let pp_template = preprocessors.to_vec();
+        let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
+        source.init().await?;
+        Ok((
+            Self {
+                id: TremorURL::parse("onramp/id/01/out").unwrap(),
+                pp_template,
+                source,
+                rx,
+                tx: tx.clone(),
+                preprocessors,
+                codec,
+                metrics_reporter,
+                triggered: false,
+            },
+            tx,
+        ))
+    }
+    pub(crate) async fn run(mut self) -> Result<()> {
+        let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
+
+        let mut id = 0;
+        loop {
+            match handle_pipelines2(
+                &self.id,
+                &self.tx,
+                &self.rx,
+                &mut pipelines,
+                &mut self.metrics_reporter,
+                self.triggered,
+            )
+            .await?
+            {
+                PipeHandlerResult::Retry => continue,
+                PipeHandlerResult::Terminate => return Ok(()),
+                PipeHandlerResult::Normal => (),
+                PipeHandlerResult::Trigger => {
+                    self.source.trigger_breaker();
+                    self.triggered = true
+                }
+                PipeHandlerResult::Restore => {
+                    self.source.restore_breaker();
+                    self.triggered = false
+                }
+            }
+            if !self.triggered && !pipelines.is_empty() {
+                match self.source.read().await? {
+                    SourceReply::StartStream(id) => {
+                        while self.preprocessors.len() <= id {
+                            self.preprocessors.push(None)
+                        }
+
+                        self.preprocessors
+                            .push(Some(make_preprocessors(&self.pp_template)?));
+                    }
+                    SourceReply::EndStream(id) => {
+                        if let Some(v) = self.preprocessors.get_mut(id) {
+                            *v = None
+                        }
+
+                        while let Some(None) = self.preprocessors.last() {
+                            self.preprocessors.pop();
+                        }
+                    }
+                    SourceReply::Data {
+                        origin_uri,
+                        data,
+                        stream,
+                    } => {
+                        if let Some(Some(ref mut preprocessors)) =
+                            self.preprocessors.get_mut(stream)
+                        {
+                            let mut ingest_ns = nanotime();
+                            send_event(
+                                &pipelines,
+                                preprocessors,
+                                &mut self.codec,
+                                &mut self.metrics_reporter,
+                                &mut ingest_ns,
+                                &origin_uri,
+                                id,
+                                data,
+                            );
+                            id += 1;
+                        }
+                    }
+                    SourceReply::StateChange(SourceState::Disconnected) => return Ok(()),
+                    SourceReply::StateChange(SourceState::Connected) | SourceReply::Empty => (),
+                }
+            }
+        }
+    }
 }
 
 // just a lookup
@@ -130,7 +280,7 @@ impl Manager {
                             metrics_reporter,
                             id,
                         },
-                    )) => match stream.start(&codec, &preprocessors, metrics_reporter) {
+                    )) => match stream.start(&codec, &preprocessors, metrics_reporter).await {
                         Ok(addr) => {
                             info!("Onramp {} started.", id);
                             r.send(Ok(addr)).await

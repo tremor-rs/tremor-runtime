@@ -125,10 +125,10 @@ async fn onramp_loop(
 
     loop {
         loop {
-            match handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter).await? {
+            match handle_pipelines(false, &rx, &mut pipelines, &mut metrics_reporter).await? {
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
-                PipeHandlerResult::Normal => break,
+                _ => break, // fixme .unwrap()
             }
         }
 
@@ -156,6 +156,7 @@ async fn onramp_loop(
                 match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
                     PipeHandlerResult::Retry | PipeHandlerResult::Normal => continue,
                     PipeHandlerResult::Terminate => break,
+                    _ => continue, // fixme .unwrap()
                 }
             }
         }
@@ -163,8 +164,9 @@ async fn onramp_loop(
     Ok(())
 }
 
+#[async_trait::async_trait]
 impl Onramp for Ws {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],
