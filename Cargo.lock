@@ -101,7 +101,7 @@ dependencies = [
  "kv-log-macro",
  "log 0.4.8",
  "memchr",
- "mio",
+ "mio 0.6.21",
  "mio-uds",
  "num_cpus",
  "once_cell",
@@ -2107,10 +2107,24 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log 0.4.8",
- "miow",
+ "miow 0.2.1",
  "net2",
  "slab",
  "winapi 0.2.8",
+]
+
+[[package]]
+name = "mio"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e9971bc8349a361217a8f2a41f5d011274686bd4436465ba51730921039d7fb"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "log 0.4.8",
+ "miow 0.3.3",
+ "ntapi",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -2121,7 +2135,7 @@ checksum = "966257a94e196b11bb43aca423754d87429960a768de9414f3691d6957abf125"
 dependencies = [
  "iovec",
  "libc",
- "mio",
+ "mio 0.6.21",
 ]
 
 [[package]]
@@ -2134,6 +2148,16 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
+]
+
+[[package]]
+name = "miow"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "396aa0f2003d7df8395cb93e09871561ccc3e785f0acb369170e8cc74ddf9226"
+dependencies = [
+ "socket2",
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -2202,6 +2226,15 @@ dependencies = [
  "lexical-core 0.6.2",
  "memchr",
  "version_check 0.9.1",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f26e041cd983acbc087e30fcba770380cfa352d0e392e175b2344ebaf7ea0602"
+dependencies = [
+ "winapi 0.3.8",
 ]
 
 [[package]]
@@ -3780,7 +3813,7 @@ checksum = "5a09c0b5bb588872ab2f09afa13ee6e9dac11e10a0ec9e8e3ba39a5a5d530af6"
 dependencies = [
  "bytes 0.4.12",
  "futures 0.1.29",
- "mio",
+ "mio 0.6.21",
  "num_cpus",
  "tokio-codec",
  "tokio-current-thread",
@@ -3808,7 +3841,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "memchr",
- "mio",
+ "mio 0.6.21",
  "mio-uds",
  "pin-project-lite",
  "slab",
@@ -3910,7 +3943,7 @@ dependencies = [
  "futures 0.1.29",
  "lazy_static",
  "log 0.4.8",
- "mio",
+ "mio 0.6.21",
  "num_cpus",
  "parking_lot 0.9.0",
  "slab",
@@ -3938,7 +3971,7 @@ dependencies = [
  "bytes 0.4.12",
  "futures 0.1.29",
  "iovec",
- "mio",
+ "mio 0.6.21",
  "tokio-io",
  "tokio-reactor",
 ]
@@ -3981,7 +4014,7 @@ dependencies = [
  "bytes 0.4.12",
  "futures 0.1.29",
  "log 0.4.8",
- "mio",
+ "mio 0.6.21",
  "tokio-codec",
  "tokio-io",
  "tokio-reactor",
@@ -3998,7 +4031,7 @@ dependencies = [
  "iovec",
  "libc",
  "log 0.4.8",
- "mio",
+ "mio 0.6.21",
  "mio-uds",
  "tokio-codec",
  "tokio-io",
@@ -4155,7 +4188,7 @@ dependencies = [
  "lz4",
  "matches",
  "memmap",
- "mio",
+ "mio 0.7.0",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
