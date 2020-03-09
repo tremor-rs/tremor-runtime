@@ -28,6 +28,7 @@ opt-level = 3
 [dependencies]
 async-std = {version = "1.6", features = ["unstable"]}
 async-trait = "0.1"
+async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"

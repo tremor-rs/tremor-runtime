@@ -15,13 +15,13 @@
 pub(crate) use crate::codec::{self, Codec};
 pub(crate) use crate::errors::*;
 pub(crate) use crate::metrics::RampReporter;
-pub(crate) use crate::onramp::{self, Onramp};
+pub(crate) use crate::onramp::{self, Onramp, Source, SourceManager, SourceReply, SourceState};
 pub(crate) use crate::pipeline;
 pub(crate) use crate::preprocessor::{self, Preprocessors};
 pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
-pub(crate) use async_std::sync::{channel, Receiver};
+pub(crate) use async_std::sync::{channel, Receiver, Sender};
 pub(crate) use async_std::task;
 pub(crate) use simd_json::json;
 pub(crate) use tremor_pipeline::EventOriginUri;
@@ -133,15 +133,18 @@ pub(crate) enum PipeHandlerResult {
     Terminate,
     Retry,
     Normal,
+    Trigger,
+    Restore,
 }
 
 // Handles pipeline connections for an onramp
 pub(crate) async fn handle_pipelines(
+    triggered: bool,
     rx: &Receiver<onramp::Msg>,
     pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
     metrics_reporter: &mut RampReporter,
 ) -> Result<PipeHandlerResult> {
-    if pipelines.is_empty() {
+    if pipelines.is_empty() || triggered {
         let msg = rx.recv().await?;
         handle_pipelines_msg(msg, pipelines, metrics_reporter)
     } else if rx.is_empty() {
@@ -149,6 +152,25 @@ pub(crate) async fn handle_pipelines(
     } else {
         let msg = rx.recv().await?;
         handle_pipelines_msg(msg, pipelines, metrics_reporter)
+    }
+}
+// Handles pipeline connections for an onramp
+pub(crate) async fn handle_pipelines2(
+    id: &TremorURL,
+    tx: &Sender<onramp::Msg>,
+    rx: &Receiver<onramp::Msg>,
+    pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
+    metrics_reporter: &mut RampReporter,
+    triggered: bool,
+) -> Result<PipeHandlerResult> {
+    if pipelines.is_empty() || triggered {
+        let msg = rx.recv().await?;
+        handle_pipelines_msg2(id, tx, msg, pipelines, metrics_reporter)
+    } else if rx.is_empty() {
+        Ok(PipeHandlerResult::Normal)
+    } else {
+        let msg = rx.recv().await?;
+        handle_pipelines_msg2(id, tx, msg, pipelines, metrics_reporter)
     }
 }
 
@@ -173,6 +195,8 @@ pub(crate) fn handle_pipelines_msg(
                 tx.send(true)?;
                 Ok(PipeHandlerResult::Terminate)
             }
+            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
         }
     } else {
         match msg {
@@ -186,6 +210,66 @@ pub(crate) fn handle_pipelines_msg(
                     tx.send(false)?;
                 }
             }
+            onramp::Msg::Trigger => return Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => return Ok(PipeHandlerResult::Restore),
+        };
+        Ok(PipeHandlerResult::Normal)
+    }
+}
+
+pub(crate) fn handle_pipelines_msg2(
+    id: &TremorURL,
+    tx: &Sender<onramp::Msg>,
+    msg: onramp::Msg,
+    pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
+    metrics_reporter: &mut RampReporter,
+) -> Result<PipeHandlerResult> {
+    if pipelines.is_empty() {
+        match msg {
+            onramp::Msg::Connect(ps) => {
+                for p in &ps {
+                    if p.0 == *METRICS_PIPELINE {
+                        metrics_reporter.set_metrics_pipeline(p.clone());
+                    } else {
+                        p.1.addr
+                            .send(pipeline::Msg::ConnectOnramp(id.clone(), tx.clone()))?;
+                        pipelines.push(p.clone());
+                    }
+                }
+                Ok(PipeHandlerResult::Retry)
+            }
+            onramp::Msg::Disconnect { tx, .. } => {
+                tx.send(true)?;
+                Ok(PipeHandlerResult::Terminate)
+            }
+            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
+        }
+    } else {
+        match msg {
+            onramp::Msg::Connect(mut ps) => {
+                for p in &ps {
+                    p.1.addr
+                        .send(pipeline::Msg::ConnectOnramp(id.clone(), tx.clone()))?;
+                }
+                pipelines.append(&mut ps)
+            }
+            onramp::Msg::Disconnect { id, tx } => {
+                for (pid, p) in pipelines.iter() {
+                    if pid == &id {
+                        p.addr.send(pipeline::Msg::DisconnectInput(id.clone()))?;
+                    }
+                }
+                pipelines.retain(|(pipeline, _)| pipeline != &id);
+                if pipelines.is_empty() {
+                    tx.send(true)?;
+                    return Ok(PipeHandlerResult::Terminate);
+                } else {
+                    tx.send(false)?;
+                }
+            }
+            onramp::Msg::Trigger => return Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => return Ok(PipeHandlerResult::Restore),
         };
         Ok(PipeHandlerResult::Normal)
     }

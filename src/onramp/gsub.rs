@@ -78,7 +78,12 @@ fn onramp_loop(
     let projects = hub.projects();
 
     loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+        match task::block_on(handle_pipelines(
+            false,
+            &rx,
+            &mut pipelines,
+            &mut metrics_reporter,
+        ))? {
             PipeHandlerResult::Retry => continue,
             PipeHandlerResult::Terminate => return Ok(()),
             PipeHandlerResult::Normal => (),

@@ -60,10 +60,15 @@ fn onramp_loop(
     };
 
     loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+        match task::block_on(handle_pipelines(
+            false,
+            &rx,
+            &mut pipelines,
+            &mut metrics_reporter,
+        ))? {
             PipeHandlerResult::Retry => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => (),
+            _ => (), // fixme .unwrap()
         }
 
         thread::sleep(Duration::from_millis(config.interval));
@@ -86,8 +91,9 @@ fn onramp_loop(
     }
 }
 
+#[async_trait::async_trait]
 impl Onramp for Metronome {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],

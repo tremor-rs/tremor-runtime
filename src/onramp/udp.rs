@@ -76,10 +76,15 @@ fn onramp_loop(
 
     let mut events = Events::with_capacity(1024);
     loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
+        match task::block_on(handle_pipelines(
+            false,
+            &rx,
+            &mut pipelines,
+            &mut metrics_reporter,
+        ))? {
             PipeHandlerResult::Retry => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => (),
+            _ => (), // fixme .unwrap()
         }
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
@@ -91,11 +96,15 @@ fn onramp_loop(
                 // get a new poll event if we run out of buffers and it would block.
                 // This has one important side effect, this loop might NEVER finish
                 // if the buffer stays full enough to never block.
-                match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))?
-                {
+                match task::block_on(handle_pipelines(
+                    false,
+                    &rx,
+                    &mut pipelines,
+                    &mut metrics_reporter,
+                ))? {
                     PipeHandlerResult::Retry => continue,
                     PipeHandlerResult::Terminate => return Ok(()),
-                    PipeHandlerResult::Normal => (),
+                    _ => (), // fixme .unwrap()
                 }
 
                 let mut ingest_ns = nanotime();
@@ -129,9 +138,9 @@ fn onramp_loop(
         }
     }
 }
-
+#[async_trait::async_trait]
 impl Onramp for Udp {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],

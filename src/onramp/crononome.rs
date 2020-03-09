@@ -79,15 +79,31 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
+#[derive(Clone)]
 pub struct Crononome {
     pub config: Config,
+    origin_uri: tremor_pipeline::EventOriginUri,
+    cq: ChronomicQueue,
+    id: u64,
 }
 
 impl onramp::Impl for Crononome {
     fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self { config }))
+            let origin_uri = tremor_pipeline::EventOriginUri {
+                scheme: "tremor-crononome".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            };
+
+            Ok(Box::new(Self {
+                origin_uri,
+                config,
+                id: 0,
+                cq: ChronomicQueue::default(),
+            }))
         } else {
             Err("Missing config for crononome onramp".into())
         }
@@ -150,7 +166,7 @@ impl<I> Ord for TemporalItem<I> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TemporalPriorityQueue<I> {
     q: BinaryHeap<Reverse<TemporalItem<I>>>,
 }
@@ -165,6 +181,20 @@ impl<I> TemporalPriorityQueue<I> {
 
     pub fn enqueue(&mut self, at: TemporalItem<I>) {
         self.q.push(Reverse(at))
+    }
+
+    pub fn pop(&mut self) -> Option<TemporalItem<I>> {
+        if let Some(Reverse(x)) = self.q.peek() {
+            let now = Utc::now().timestamp();
+            let event = x.at.timestamp();
+            if event <= now {
+                self.q.pop().map(|Reverse(x)| x)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn drain(&mut self) -> Vec<TemporalItem<I>> {
@@ -196,7 +226,7 @@ impl<I> TemporalPriorityQueue<I> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ChronomicQueue {
     tpq: TemporalPriorityQueue<CronEntry>,
 }
@@ -244,75 +274,62 @@ impl ChronomicQueue {
         }
         trigger
     }
+    pub fn next(&mut self) -> Option<(String, Option<Value>)> {
+        if let Some(ti) = self.tpq.pop() {
+            self.enqueue(&ti.what);
+            Some((ti.what.name, ti.what.payload))
+        } else {
+            None
+        }
+    }
 }
 
-fn onramp_loop(
-    rx: &Receiver<onramp::Msg>,
-    config: &Config,
-    mut preprocessors: Preprocessors,
-    mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampReporter,
-) -> Result<()> {
-    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
-    let mut id = 0;
-    let mut cq = ChronomicQueue::default();
-
-    for entry in &config.entries {
-        cq.enqueue(&entry);
-    }
-
-    let origin_uri = tremor_pipeline::EventOriginUri {
-        scheme: "tremor-crononome".to_string(),
-        host: hostname(),
-        port: None,
-        path: vec![],
-    };
-
-    loop {
-        match task::block_on(handle_pipelines(&rx, &mut pipelines, &mut metrics_reporter))? {
-            PipeHandlerResult::Retry => continue,
-            PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => (),
-        }
-        thread::sleep(Duration::from_millis(100));
-
-        let mut ingest_ns = nanotime();
-        let sched = cq.drain();
-        for trigger in sched {
+#[async_trait::async_trait()]
+impl Source for Crononome {
+    async fn read(&mut self) -> Result<SourceReply> {
+        let ingest_ns = nanotime();
+        if let Some(trigger) = self.cq.next() {
             let data = simd_json::to_vec(
-                &json!({"onramp": "crononome", "ingest_ns": ingest_ns, "id": id, "trigger": {
+                &json!({"onramp": "crononome", "ingest_ns": ingest_ns, "id": self.id, "trigger": {
                         "name": trigger.0,
                         "payload": trigger.1
                     },
                 }),
-            );
-            if let Ok(data) = data {
-                send_event(
-                    &pipelines,
-                    &mut preprocessors,
-                    &mut codec,
-                    &mut metrics_reporter,
-                    &mut ingest_ns,
-                    &origin_uri,
-                    id,
-                    data,
-                );
-            }
-            id += 1;
+            )?;
+            self.id += 1;
+            Ok(SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
+                data,
+                stream: 0,
+            })
+        } else {
+            task::sleep(Duration::from_millis(100)).await;
+            Ok(SourceReply::Empty)
         }
     }
+
+    async fn init(&mut self) -> Result<SourceState> {
+        for entry in &self.config.entries {
+            self.cq.enqueue(&entry);
+        }
+        Ok(SourceState::Connected)
+    }
+
+    fn trigger_breaker(&mut self) {}
+    fn restore_breaker(&mut self) {}
 }
 
+#[async_trait::async_trait]
 impl Onramp for Crononome {
-    fn start(
+    async fn start(
         &mut self,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let mut config = self.config.clone();
+        let source = self.clone();
 
-        for entry in &mut config.entries {
+        for entry in &mut self.config.entries {
             if entry.parse().ok().is_none() {
                 return Err(format!(
                     "Bad configuration in crononome - expression {} is illegal",
@@ -321,12 +338,12 @@ impl Onramp for Crononome {
                 .into());
             }
         }
-        let (tx, rx) = channel(1);
-        let codec = codec::lookup(codec)?;
-        let preprocessors = make_preprocessors(&preprocessors)?;
+
+        let (manager, tx) =
+            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
             .name(format!("onramp-crononome-{}", "???"))
-            .spawn(move || onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter))?;
+            .spawn(move || task::block_on(manager.run()))?;
         Ok(tx)
     }
 
@@ -401,6 +418,46 @@ mod tests {
     }
 
     #[test]
+    pub fn test_tpq_fill_pop() -> Result<()> {
+        use chrono::prelude::Utc;
+        let mut tpq = TemporalPriorityQueue::default();
+        let mut n1 = TemporalItem {
+            at: DateTime::from(std::time::SystemTime::UNIX_EPOCH), // Epoch
+            what: CronEntry {
+                name: "a".to_string(),
+                expr: "* * * * * * 1970".to_string(),
+                sched: None,
+                payload: None,
+            },
+        };
+        let mut n2 = TemporalItem {
+            at: Utc::now(),
+            what: CronEntry {
+                name: "b".to_string(),
+                expr: "* * * * * * *".to_string(),
+                sched: None,
+                payload: None,
+            },
+        };
+
+        n1.what.parse().ok();
+        n2.what.parse().ok();
+
+        tpq.enqueue(n1.clone());
+        tpq.enqueue(n2.clone());
+
+        assert_eq!(Some(n1), tpq.pop());
+        assert_eq!(Some(n2), tpq.pop());
+
+        std::thread::sleep(Duration::from_millis(1000));
+        assert!(tpq.pop().is_none());
+        std::thread::sleep(Duration::from_millis(1000));
+        assert!(tpq.pop().is_none());
+
+        Ok(())
+    }
+
+    #[test]
     pub fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
@@ -438,6 +495,47 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(1000));
         assert_eq!(1, cq.drain().len());
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_cq_fill_pop_refill() -> Result<()> {
+        let mut cq = ChronomicQueue::default();
+        // Dates before Jan 1st 1970 are invalid
+        let mut n1 = CronEntry {
+            name: "a".to_string(),
+            expr: "* * * * * * 1970".to_string(), // Dates before UNIX epoch start invalid
+            sched: None,
+            payload: None,
+        };
+        let mut n2 = CronEntry {
+            name: "b".to_string(),
+            expr: "* * * * * * *".to_string(),
+            sched: None,
+            payload: None,
+        };
+        let mut n3 = CronEntry {
+            name: "c".to_string(),
+            expr: "* * * * * * 2038".to_string(), // limit is 2038 due to the 2038 problem ( we'll be retired so letting this hang wait! )
+            sched: None,
+            payload: None,
+        };
+
+        n1.parse().ok();
+        n2.parse().ok();
+        n3.parse().ok();
+
+        cq.enqueue(&n1);
+        cq.enqueue(&n2);
+        cq.enqueue(&n3);
+        assert!(cq.next().is_none());
+
+        std::thread::sleep(Duration::from_millis(1000));
+        assert!(cq.next().is_some());
+        assert!(cq.next().is_none());
+        std::thread::sleep(Duration::from_millis(1000));
+        assert!(cq.next().is_some());
 
         Ok(())
     }
