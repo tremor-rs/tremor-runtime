@@ -28,4 +28,4 @@ regex = "1"
 [dev-dependencies]
 criterion = "0.3"
 xz2 = "0.1"
-base64 = "0.11"
+base64 = "0.12"

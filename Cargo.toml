@@ -26,7 +26,7 @@ opt-level = 3
 [dependencies]
 async-std = {version = "1.5", features = ["unstable"]}
 async-trait = "0.1"
-base64 = "0.11"
+base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"
 chrono = "0.4"
