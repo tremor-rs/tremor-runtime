@@ -29,7 +29,7 @@ downcast-rs = "1.1"
 rental = "0.5"
 simd-json = {version = "0.3", features = ["known-key"]}
 error-chain="0.12"
-lalrpop-util = "0.17"
+lalrpop-util = "0.18"
 regex = "1"
 serde_json = "1"
 serde_derive = "1.0"
