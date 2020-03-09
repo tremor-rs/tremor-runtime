@@ -14,7 +14,7 @@
 
 use crate::onramp::prelude::*;
 use mio::net::UdpSocket;
-use mio::{Events, Poll, PollOpt, Ready, Token};
+use mio::{Events, Interest, Poll, Token};
 use serde_yaml::Value;
 use std::io::ErrorKind;
 use std::thread;
@@ -67,10 +67,12 @@ fn onramp_loop(
     };
 
     info!("[UDP Onramp] listening on {}:{}", config.host, config.port);
-    let poll = Poll::new()?;
+    let mut poll = Poll::new()?;
 
-    let socket = UdpSocket::bind(&format!("{}:{}", config.host, config.port).parse()?)?;
-    poll.register(&socket, ONRAMP, Ready::readable(), PollOpt::edge())?;
+    let addr = format!("{}:{}", config.host, config.port).parse()?;
+    let mut socket = UdpSocket::bind(addr)?;
+    poll.registry()
+        .register(&mut socket, ONRAMP, Interest::READABLE)?;
 
     let mut events = Events::with_capacity(1024);
     loop {
