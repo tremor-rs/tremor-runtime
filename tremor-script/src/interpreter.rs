@@ -14,7 +14,6 @@
 
 // NOTE: we use a lot of arguments here, we are aware of that but tough luck
 // FIXME: investigate if re-writing would make code better
-#![allow(clippy::too_many_arguments)]
 // FIXME possible optimisations:
 // * P001 [x] re-write `let x = merge x of ... end` to a mutable merge that does not require cloing `x`
 // * P002 [x] don't construct data for expressions that return value is never used
@@ -27,6 +26,7 @@
 // * 101 [ ] `%{x > 3}` and other comparisons
 // * 102 [x] Remove the need for `()` around when clauses that contain binary ops
 
+#![allow(clippy::too_many_arguments)]
 // NOTE: For env / end
 #![allow(clippy::similar_names)]
 
@@ -85,7 +85,7 @@ where
 /// Local variable stack
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {
-    values: Vec<Option<Value<'stack>>>,
+    pub(crate) values: Vec<Option<Value<'stack>>>,
 }
 
 impl<'stack> LocalStack<'stack> {
