@@ -336,7 +336,7 @@ pub trait Highlighter {
                 } else {
                     1
                 };
-                let prefix = String::from(" ").repeat(start.column - 1);
+                let prefix = String::from(" ").repeat(start.column.saturating_sub(1));
                 let underline = String::from("^").repeat(len);
                 if let Some(token) = token {
                     write!(self.get_writer(), "{}", token)?;

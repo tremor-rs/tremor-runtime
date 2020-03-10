@@ -22,7 +22,9 @@ use crate::errors::*;
 use crate::impl_expr2;
 use crate::interpreter::*;
 use crate::pos::{Location, Range};
-use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
+use crate::registry::{
+    Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
+};
 use crate::script::Return;
 use crate::stry;
 use crate::tilde::Extractor;
@@ -102,6 +104,13 @@ pub struct Warning {
     pub msg: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct Function<'script> {
+    is_const: bool,
+    argc: usize,
+    name: Cow<'script, str>,
+}
+
 pub(crate) struct Helper<'script, 'registry>
 where
     'script: 'registry,
@@ -115,7 +124,9 @@ where
     aggregates: Vec<InvokeAggrFn<'script>>,
     warnings: Vec<Warning>,
     shadowed_vars: Vec<String>,
+    func_vec: Vec<CustomFn<'script>>,
     pub locals: HashMap<String, usize>,
+    pub functions: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
     pub meta: NodeMetas<'script>,
 }
@@ -155,16 +166,30 @@ where
         Helper {
             reg,
             aggr_reg,
-            is_in_aggr: false,
             can_emit: true,
+            is_in_aggr: false,
             operators: Vec::new(),
             scripts: Vec::new(),
             aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
             consts: HashMap::new(),
+            functions: HashMap::new(),
+            func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
             meta: NodeMetas::default(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
+        let i = self.func_vec.len();
+
+        if self.functions.insert(f.name.clone().into(), i).is_none() {
+            self.func_vec.push(f);
+            Ok(i)
+        } else {
+            Err(format!("function {} already defined.", f.name).into())
         }
     }
 
@@ -227,6 +252,7 @@ pub struct Script<'script> {
     /// Constants defined in this script
     pub consts: Vec<Value<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
+    functions: Vec<CustomFn<'script>>,
     locals: usize,
     node_meta: NodeMetas<'script>,
 }
@@ -483,10 +509,40 @@ pub(crate) struct Invoke<'script> {
     pub module: String,
     pub fun: String,
     #[serde(skip)]
-    pub invocable: TremorFnWrapper,
+    pub invocable: Invocable<'script>,
     pub args: ImutExprs<'script>,
 }
 impl_expr2!(Invoke);
+
+#[derive(Clone)]
+pub(crate) enum Invocable<'script> {
+    Intrinsic(TremorFnWrapper),
+    Tremor(CustomFn<'script>),
+}
+
+use crate::{registry::FResult, EventContext};
+
+impl<'script> Invocable<'script> {
+    fn is_const(&self) -> bool {
+        match self {
+            Invocable::Intrinsic(f) => f.is_const(),
+            Invocable::Tremor(f) => f.is_const(), // FIXME .unwrap()
+        }
+    }
+    pub fn invoke<'event>(
+        &self,
+        context: &EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>>
+    where
+        'script: 'event,
+    {
+        match self {
+            Invocable::Intrinsic(f) => f.invoke(context, args),
+            Invocable::Tremor(f) => f.invoke(context, args), // FIXME .unwrap()
+        }
+    }
+}
 
 #[derive(Clone, Serialize)]
 pub(crate) struct InvokeAggr {

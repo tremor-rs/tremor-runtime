@@ -21,6 +21,7 @@ use crate::errors::*;
 use crate::impl_expr;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
+use crate::registry::CustomFn;
 use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::tilde::Extractor;
 use crate::EventContext;
@@ -85,8 +86,17 @@ impl<'script> ScriptRaw<'script> {
                 }
                 #[allow(unreachable_code, unused_variables)]
                 #[cfg_attr(tarpaulin, skip)]
-                ExprRaw::FnDecl(_f) => {
-                    return Err("Functions are not supported outside of modules.".into());
+                ExprRaw::FnDecl(f) => {
+                    let f = f.up(&mut helper)?;
+                    let f = CustomFn {
+                        name: f.name.id,
+                        args: f.args.iter().map(|i| i.id.to_string()).collect(),
+                        locals: f.locals,
+                        body: f.body,
+                        is_const: false, // FIXME .unwrap()
+                    };
+
+                    helper.register_fun(f)?;
                 }
                 other => exprs.push(other.up(&mut helper)?),
             }
@@ -115,8 +125,6 @@ impl<'script> ScriptRaw<'script> {
             return Err(ErrorKind::EmptyScript.into());
         }
 
-        // let aggregates  = Vec::new();
-        // mem::swap(&mut aggregates, &mut helper.aggregates);
         Ok((
             Script {
                 exprs,
@@ -124,51 +132,10 @@ impl<'script> ScriptRaw<'script> {
                 aggregates: helper.aggregates,
                 locals: helper.locals.len(),
                 node_meta: helper.meta,
+                functions: helper.func_vec,
             },
             helper.warnings,
         ))
-    }
-
-    #[cfg(feature = "fns")]
-    #[cfg_attr(tarpaulin, skip)]
-    pub(crate) fn load_module<'registry>(
-        self,
-        name: &str,
-        module: &mut HashMap<String, TremorFnWrapper>,
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-    ) -> Result<Vec<Warning>> {
-        use crate::registry::CustomFn;
-        let mut helper = Helper::new(reg, aggr_reg);
-
-        for e in self.exprs {
-            match e {
-                ExprRaw::FnDecl(f) => {
-                    unsafe {
-                        let f = f.up(&mut helper)?;
-                        module.insert(
-                            f.name.id.to_string(),
-                            TremorFnWrapper {
-                                module: name.to_string(),
-                                name: f.name.id.to_string(),
-                                fun: Box::new(CustomFn {
-                                    args: f.args.iter().map(|i| i.id.to_string()).collect(),
-                                    locals: f.locals,
-                                    // This should only ever be called from the registry which will make sure
-                                    // the source will stay loaded
-                                    body: mem::transmute(f.body),
-                                }),
-                            },
-                        );
-                    }
-                }
-                _other => return Err("Only functions are allowed in modules".into()),
-            }
-        }
-
-        // let aggregates  = Vec::new();
-        // mem::swap(&mut aggregates, &mut helper.aggregates);
-        Ok(helper.warnings)
     }
 }
 
@@ -1673,20 +1640,45 @@ impl_expr!(InvokeRaw);
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let invocable = helper
-            .reg
-            .find(&self.module, &self.fun)
-            .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
-
-        let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
-
-        Ok(Invoke {
-            mid: helper.add_meta(self.start, self.end),
-            module: self.module,
-            fun: self.fun,
-            invocable: invocable.clone(),
-            args,
-        })
+        if self.module == "local" {
+            if let Some(f) = helper.functions.get(&self.fun) {
+                if let Some(f) = helper.func_vec.get(*f) {
+                    let invocable = Invocable::Tremor(f.clone());
+                    let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+                    Ok(Invoke {
+                        mid: helper.add_meta(self.start, self.end),
+                        module: self.module,
+                        fun: self.fun,
+                        invocable,
+                        args,
+                    })
+                } else {
+                    let inner: Range = (self.start, self.end).into();
+                    let outer: Range = inner.expand_lines(3);
+                    Err(
+                        ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None)
+                            .into(),
+                    )
+                }
+            } else {
+                let inner: Range = (self.start, self.end).into();
+                let outer: Range = inner.expand_lines(3);
+                Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
+            }
+        } else {
+            let invocable = helper
+                .reg
+                .find(&self.module, &self.fun)
+                .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
+            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+            Ok(Invoke {
+                mid: helper.add_meta(self.start, self.end),
+                module: self.module,
+                fun: self.fun,
+                invocable: Invocable::Intrinsic(invocable.clone()),
+                args,
+            })
+        }
     }
 }
 
