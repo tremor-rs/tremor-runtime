@@ -38,7 +38,7 @@ echo "TARGET_ROOT: ${TARGET_ROOT}"
 
 if [ -d ./bench/$1 ]
 then
-  ${BENCH_EXTRA} ${TARGET_ROOT}/${TREMOR_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+  ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
 else
-  ${BENCH_EXTRA} ${TARGET_ROOT}/${TREMOR_MODE}/tremor-server --no-api -c $file bench/link.yaml
+  ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml
 fi
