@@ -14,7 +14,7 @@
 
 use crate::onramp::prelude::*;
 use mio::net::{TcpListener, TcpStream};
-use mio::{Events, Poll, PollOpt, Ready, Token};
+use mio::{Events, Interest, Poll, Token};
 use serde_yaml::Value;
 use std::io::{ErrorKind, Read};
 use std::thread;
@@ -55,9 +55,10 @@ struct TremorTcpConnection {
 }
 
 impl TremorTcpConnection {
-    fn register(&self, poll: &Poll, token: Token) -> std::io::Result<()> {
+    fn register(&mut self, poll: &Poll, token: Token) -> std::io::Result<()> {
         // register the socket w/ poll
-        poll.register(&self.stream, token, Ready::readable(), PollOpt::edge())
+        poll.registry()
+            .register(&mut self.stream, token, Interest::READABLE)
     }
 }
 
@@ -79,12 +80,13 @@ fn onramp_loop(
     let mut id = 0;
 
     info!("[TCP Onramp] listening on {}:{}", config.host, config.port);
-    let poll = Poll::new()?;
+    let mut poll = Poll::new()?;
 
     // Start listening for incoming connections
     let server_addr = format!("{}:{}", config.host, config.port).parse()?;
-    let listener = TcpListener::bind(&server_addr)?;
-    poll.register(&listener, ONRAMP, Ready::readable(), PollOpt::edge())?;
+    let mut listener = TcpListener::bind(server_addr)?;
+    poll.registry()
+        .register(&mut listener, ONRAMP, Interest::READABLE)?;
 
     // temporary buffer to keep data read from the tcp socket
     let mut buffer = [0; BUFFER_SIZE_BYTES];
@@ -121,7 +123,7 @@ fn onramp_loop(
                                 path: vec![config.port.to_string()], // captures server port
                             };
 
-                            let tcp_connection = TremorTcpConnection {
+                            let mut tcp_connection = TremorTcpConnection {
                                 stream,
                                 origin_uri,
                                 preprocessors: make_preprocessors(&preprocessors)?,
