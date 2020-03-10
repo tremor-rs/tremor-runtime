@@ -18,45 +18,52 @@
 use super::*;
 use crate::ast::Exprs;
 use crate::EventContext;
+use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
+use std::borrow::Cow;
 use std::mem;
-use std::ops::RangeInclusive;
 
-#[derive(Debug, Clone)]
-pub struct CustomFn {
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct CustomFn<'script> {
     //module: Arc<Script>,
-    pub body: Exprs<'static>,
+    pub name: Cow<'script, str>,
+    pub body: Exprs<'script>,
     pub args: Vec<String>,
     pub locals: usize,
+    pub is_const: bool,
 }
 
-impl TremorFn for CustomFn {
+impl<'script> CustomFn<'script> {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn invoke<'event>(
+    pub(crate) fn invoke<'event>(
         &self,
         ctx: &EventContext,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
         use crate::ast::InvokeAggrFn;
-        use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack, LocalValue};
+        use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
         const NO_CONSTS: [Value<'static>; 0] = [];
         let mut this_local = LocalStack::with_size(self.locals);
         for (i, arg) in args.iter().enumerate() {
-            this_local.values[i] = Some(LocalValue { v: (*arg).clone() });
+            this_local.values[i] = Some((*arg).clone());
         }
         let opts = ExecOpts {
             result_needed: false,
             aggr: AggrType::Tick,
         };
         let mut exprs = self.body.iter().peekable();
+        // FIXME .unwrap()
+        let meta = NodeMetas::default();
         let env = Env {
             context: ctx,
             consts: &NO_CONSTS,
             aggrs: &NO_AGGRS,
+            meta: &meta,
         };
         let mut no_event = Value::null();
         let mut no_meta = Value::null();
+        let mut state = Value::null().into_static();
         unsafe {
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {
@@ -64,18 +71,20 @@ impl TremorFn for CustomFn {
                         opts.with_result(),
                         &env,
                         mem::transmute(&mut no_event),
+                        &mut state,
                         mem::transmute(&mut no_meta),
                         &mut this_local,
                     )? {
-                        Ok(mem::transmute(v.into_owned()));
+                        Ok(mem::transmute(v.into_owned()))
                     } else {
-                        Err("can't emit here".into());
+                        Err(FunctionError::Error("can't emit here".into()))
                     };
                 } else {
                     expr.run(
                         opts,
                         &env,
                         mem::transmute(&mut no_event),
+                        &mut state,
                         mem::transmute(&mut no_meta),
                         &mut this_local,
                     )?;
@@ -85,13 +94,7 @@ impl TremorFn for CustomFn {
 
         Ok(Value::null())
     }
-    fn snot_clone(&self) -> Box<dyn TremorFn> {
-        Box::new(self.clone())
-    }
-    fn arity(&self) -> RangeInclusive<usize> {
-        RangeInclusive::new(self.args.len(), self.args.len())
-    }
-    fn is_const(&self) -> bool {
-        false
+    pub(crate) fn is_const(&self) -> bool {
+        self.is_const
     }
 }

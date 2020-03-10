@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "fns")]
 mod custom_fn;
-#[cfg(feature = "fns")]
-use crate::ast::Warning;
-#[cfg(feature = "fns")]
-pub use custom_fn::*;
+pub(crate) use custom_fn::*;
 
 use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::*;
@@ -599,39 +595,6 @@ impl Registry {
             self.functions.insert(module_name, module);
         }
         self
-    }
-
-    /// Loads a module with function definitions
-    #[cfg(feature = "fns")]
-    pub fn load_module(&mut self, name: &str, code: &str) -> Result<Vec<Warning>> {
-        use crate::lexer::{self};
-        use crate::parser::grammar;
-        if self.functions.contains_key(name) {
-            return Err(format!("Module {} already exists.", name).into());
-        }
-        let mut source = code.to_string();
-        source.push(' ');
-
-        let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(&source).collect();
-        let mut filtered_tokens = Vec::new();
-
-        for t in lexemes? {
-            let keep = !t.value.is_ignorable();
-            if keep {
-                filtered_tokens.push(Ok(t));
-            }
-        }
-
-        let mut module = HashMap::new();
-
-        let fake_aggr_reg = Aggr::default();
-        let warnings = grammar::ScriptParser::new()
-            .parse(filtered_tokens)?
-            .load_module(name, &mut module, &self, &fake_aggr_reg)?;
-        let module_name = name.to_string();
-        self.functions.insert(module_name, module);
-        self.modules.push(source);
-        Ok(warnings)
     }
 
     /// Finds a module in the registry
