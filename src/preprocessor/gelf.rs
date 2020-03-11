@@ -89,7 +89,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
             // If we are less then 12 byte we can not be a proper Package
             if bin.len() < 12 {
                 if bin.len() >= 2 {
-                    Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([bin[0], bin[1]])).into())
+                    Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([0x1e, 0x0f])).into())
                 } else {
                     Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
                 }
@@ -116,7 +116,14 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
             count: 1,
             data: bin.to_vec(),
         }),
-        _ => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([bin[0], bin[1]])).into()),
+        Some(&[a, b]) => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
+        _ => {
+            if bin.len() == 1 {
+                Err(ErrorKind::InvalidGELFHeader(1, bin.get(0).map(|v| [*v, 0])).into())
+            } else {
+                Err(ErrorKind::InvalidGELFHeader(0, None).into())
+            }
+        }
     }
 }
 
@@ -252,4 +259,18 @@ fn assemble(key: u64, m: GELFMsgs) -> Option<Vec<u8>> {
         }
     }
     Some(result)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn bad_len() {
+        let d = Vec::new();
+        assert!(decode_gelf(&d).is_err());
+        let d = vec![b'{'];
+        assert!(decode_gelf(&d).is_err());
+        let d = vec![b'{', b'}'];
+        assert!(decode_gelf(&d).is_ok());
+    }
 }
