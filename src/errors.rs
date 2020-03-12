@@ -124,7 +124,7 @@ error_chain! {
         YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);
         SerdeError(serde_json::Error);
-        Io(std::io::Error) #[cfg(unix)];
+        Io(std::io::Error);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
         FromUTF8Error(std::string::FromUtf8Error);
