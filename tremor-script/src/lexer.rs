@@ -226,7 +226,7 @@ pub enum Token<'input> {
     Mul,
     /// Divide `/`
     Div,
-    /// Moduly `%~
+    /// Moduly `%`
     Mod,
 
     // Symbols
@@ -238,6 +238,8 @@ pub enum Token<'input> {
     EqArrow,
     /// Semicolon `;`
     Semi,
+    /// Left Paren `%(`
+    LPatParen,
     /// Left Paren `(`
     LParen,
     /// Right Paren `)`
@@ -562,6 +564,7 @@ impl<'input> fmt::Display for Token<'input> {
             // Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),
             Token::Semi => write!(f, ";"),
+            Token::LPatParen => write!(f, "%("),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::LPatBrace => write!(f, "%{{"),
@@ -847,6 +850,10 @@ impl<'input> Lexer<'input> {
             Some((end, '[')) => {
                 self.bump();
                 Ok(spanned2(start, end, Token::LPatBracket))
+            }
+            Some((end, '(')) => {
+                self.bump();
+                Ok(spanned2(start, end, Token::LPatParen))
             }
             Some((end, '{')) => {
                 self.bump();
@@ -1716,7 +1723,8 @@ mod tests {
         // Starts with '%'
         lex_ok! { " % ", " ~ " => Token::Mod, }
         lex_ok! { " %{ ", " ~~ " => Token::LPatBrace, }
-
+        lex_ok! { " %[ ", " ~~ " => Token::LPatBracket, }
+        lex_ok! { " %( ", " ~~ " => Token::LPatParen, }
         // Starts with '.'
         lex_ok! { " . ", " ~ " => Token::Dot, }
     }
