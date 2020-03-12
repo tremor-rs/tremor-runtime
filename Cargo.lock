@@ -1938,11 +1938,10 @@ checksum = "a94d21414c1f4a51209ad204c1776a3d0765002c76c6abcb602a6f09f1e881c7"
 
 [[package]]
 name = "log4rs"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "853db99624c59798ddcf027dbe486541dd5cb5008ac6a6aaf217cc6fa044ee71"
+checksum = "b47ba5437ccdf01e4addd4d2347ef561911d57f908f4db1e1b192d5c25a92715"
 dependencies = [
- "antidote",
  "arc-swap",
  "chrono",
  "flate2",
@@ -1951,6 +1950,7 @@ dependencies = [
  "libc",
  "log 0.4.8",
  "log-mdc",
+ "parking_lot 0.10.0",
  "serde",
  "serde-value",
  "serde_derive",
