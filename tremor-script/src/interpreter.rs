@@ -798,6 +798,25 @@ where
     'event: 'run,
 {
     match pattern {
+        Pattern::Tuple(ref tp) => {
+            if stry!(match_tp_expr(
+                outer,
+                opts.without_result(),
+                env,
+                event,
+                state,
+                meta,
+                local,
+                &target,
+                &tp,
+            ))
+            .is_some()
+            {
+                test_guard(outer, opts, env, event, state, meta, local, guard)
+            } else {
+                Ok(false)
+            }
+        }
         Pattern::Record(ref rp) => {
             if stry!(match_rp_expr(
                 outer,
@@ -808,7 +827,7 @@ where
                 meta,
                 local,
                 &target,
-                &rp
+                &rp,
             ))
             .is_some()
             {
@@ -827,7 +846,7 @@ where
                 meta,
                 local,
                 &target,
-                &ap
+                &ap,
             ))
             .is_some()
             {
@@ -903,7 +922,28 @@ where
                         Ok(false)
                     }
                 }
-                _ => error_oops(outer, "Unimplemented pattern", &env.meta),
+                Pattern::Tuple(ref tp) => {
+                    if let Some(v) = stry!(match_tp_expr(
+                        outer,
+                        opts.with_result(),
+                        env,
+                        event,
+                        state,
+                        meta,
+                        local,
+                        &target,
+                        &tp,
+                    )) {
+                        // we need to assign prior to the guard so we can cehck
+                        // against the pattern expressions
+                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        test_guard(outer, opts, env, event, state, meta, local, guard)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                Pattern::Assign(_) => error_oops(outer, "nested assign pattern", &env.meta),
+                Pattern::Default => error_oops(outer, "default in assign", &env.meta),
             }
         }
         Pattern::Default => Ok(true),
@@ -972,7 +1012,7 @@ where
                     return Ok(None);
                 }
             }
-            PredicatePattern::Eq { rhs, not, .. } => {
+            PredicatePattern::Bin { rhs, kind, .. } => {
                 let testee = if let Some(v) = known_key.lookup(target) {
                     v
                 } else {
@@ -981,10 +1021,9 @@ where
 
                 let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
                 let vb: &Value = rhs.borrow();
-                let r = val_eq(testee, vb);
-                let m = if *not { !r } else { r };
+                let r = exec_binary(outer, outer, &env.meta, *kind, testee, vb)?;
 
-                if m {
+                if r.as_bool().unwrap_or_default() {
                     continue;
                 } else {
                     return Ok(None);
@@ -1108,6 +1147,76 @@ where
 }
 
 #[inline]
+fn match_tp_expr<'run, 'event, 'script, Expr>(
+    outer: &'script Expr,
+    opts: ExecOpts,
+    env: &'run Env<'run, 'event, 'script>,
+    event: &'run Value<'event>,
+    state: &'run Value<'static>,
+    meta: &'run Value<'event>,
+    local: &'run LocalStack<'event>,
+    target: &'run Value<'event>,
+    tp: &'script TuplePattern,
+) -> Result<Option<Value<'event>>>
+where
+    Expr: BaseExpr,
+
+    'script: 'event,
+    'event: 'run,
+{
+    if let Some(a) = target.as_array() {
+        if a.len() != tp.exprs.len() {
+            return Ok(None);
+        }
+        let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
+        let cases = tp.exprs.iter().zip(a.iter());
+        for (case, candidate) in cases {
+            match case {
+                ArrayPredicatePattern::Expr(e) => {
+                    let r = stry!(e.run(opts, env, event, state, meta, local));
+                    let vb: &Value = r.borrow();
+
+                    // NOTE: We are creating a new value here so we have to clone
+                    if val_eq(candidate, vb) {
+                        if opts.result_needed {
+                            acc.push(r.into_owned());
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                ArrayPredicatePattern::Tilde(test) => {
+                    if let Ok(r) =
+                        test.extractor
+                            .extract(opts.result_needed, &candidate, &env.context)
+                    {
+                        if opts.result_needed {
+                            acc.push(r);
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                ArrayPredicatePattern::Record(rp) => {
+                    if let Some(r) = stry!(match_rp_expr(
+                        outer, opts, env, event, state, meta, local, candidate, rp,
+                    )) {
+                        if opts.result_needed {
+                            acc.push(r)
+                        };
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+        Ok(Some(Value::Array(acc)))
+    } else {
+        Ok(None)
+    }
+}
+
+#[inline]
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
 fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
@@ -1129,7 +1238,11 @@ where
         *d = Some(v);
         Ok(())
     } else {
-        error_oops(outer, "Unknown local variable", &node_meta)
+        error_oops(
+            outer,
+            "Unknown local variable in set_local_shadow",
+            &node_meta,
+        )
     }
 }
 

@@ -170,7 +170,14 @@ where
                     )
                 }
 
-                _ => error_oops(self, "Unknown local variable", &env.meta),
+                _ => error_oops(
+                    self,
+                    &format!(
+                        "Unknown local variable in ImutExprInt::Local: '{}'",
+                        env.meta.name_dflt(*mid)
+                    ),
+                    &env.meta,
+                ),
             },
             ImutExprInt::Local {
                 idx,
@@ -372,7 +379,7 @@ where
             Path::Local(path) => match local.values.get(path.idx) {
                 Some(Some(l)) => l,
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
-                _ => return error_oops(self, "Unknown local variable", &env.meta),
+                _ => return error_oops(self, "Unknown local variable in present", &env.meta),
             },
             Path::Const(path) => match env.consts.get(path.idx) {
                 Some(v) => v,

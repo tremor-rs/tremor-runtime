@@ -470,10 +470,18 @@ where
                     if let Some(v) = opt {
                         v
                     } else {
-                        return error_oops(self, "Unknown local variable", &env.meta);
+                        return error_oops(
+                            self,
+                            "Unknown local variable in Expr::AssignMoveLocal",
+                            &env.meta,
+                        );
                     }
                 } else {
-                    return error_oops(self, "Unknown local variable", &env.meta);
+                    return error_oops(
+                        self,
+                        "Unknown local variable in Expr::AssignMoveLocal",
+                        &env.meta,
+                    );
                 };
                 self.assign(opts, env, event, state, meta, local, &path, value)
                     .map(Cont::Cont)

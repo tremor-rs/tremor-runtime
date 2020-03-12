@@ -318,7 +318,7 @@ pub enum ExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Emit(Box<EmitExprRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    FnDecl(FnDeclRaw<'script>),
+    FnDecl(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
 }
@@ -428,6 +428,153 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.can_emit = false;
         helper.swap(&mut aggrs, &mut consts, &mut locals);
         let body = self.body.up(helper)?;
+        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.can_emit = can_emit;
+
+        Ok(FnDecl {
+            mid: helper.add_meta(self.start, self.end),
+            name: self.name.up(helper)?,
+            args: self.args.up(helper)?,
+            body,
+            locals: locals.len(),
+        })
+    }
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum AnyFnRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    Match(MatchFnDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Normal(FnDeclRaw<'script>),
+}
+
+impl<'script> Upable<'script> for AnyFnRaw<'script> {
+    type Target = FnDecl<'script>;
+    #[cfg_attr(tarpaulin, skip)]
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        match self {
+            AnyFnRaw::Normal(f) => f.up(helper),
+            AnyFnRaw::Match(f) => f.up(helper),
+        }
+    }
+}
+
+impl<'script> BaseExpr for AnyFnRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            AnyFnRaw::Match(m) => m.start,
+            AnyFnRaw::Normal(m) => m.start,
+        }
+    }
+
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            AnyFnRaw::Match(m) => m.end,
+            AnyFnRaw::Normal(m) => m.end,
+        }
+    }
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct MatchFnDeclRaw<'script> {
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) name: IdentRaw<'script>,
+    pub(crate) args: Vec<IdentRaw<'script>>,
+    pub(crate) cases: Vec<PredicateClauseRaw<'script>>,
+}
+impl_expr!(MatchFnDeclRaw);
+
+impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
+    type Target = FnDecl<'script>;
+    #[cfg_attr(tarpaulin, skip)]
+    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let can_emit = helper.can_emit;
+        let mut aggrs = Vec::new();
+        let mut locals = HashMap::new();
+        let mut consts = HashMap::new();
+
+        for (i, a) in self.args.iter().enumerate() {
+            locals.insert(a.id.to_string(), i);
+        }
+
+        helper.can_emit = false;
+        helper.swap(&mut aggrs, &mut consts, &mut locals);
+
+        let target = self
+            .args
+            .iter()
+            .map(|a| {
+                ImutExprRaw::Path(PathRaw::Local(LocalPathRaw {
+                    start: a.start,
+                    end: a.end,
+                    segments: vec![SegmentRaw::from_id(a.clone())],
+                }))
+            })
+            .collect();
+
+        let mut patterns = Vec::new();
+
+        std::mem::swap(&mut self.cases, &mut patterns);
+
+        let patterns = patterns
+            .into_iter()
+            .map(|mut c: PredicateClauseRaw| {
+                if c.pattern == PatternRaw::Default {
+                    c
+                } else {
+                    let mut exprs: ExprsRaw<'script> = self
+                        .args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| {
+                            ExprRaw::Assign(Box::new(AssignRaw {
+                                start: c.start,
+                                end: c.end,
+                                path: PathRaw::Local(LocalPathRaw {
+                                    start: a.start,
+                                    end: a.end,
+                                    segments: vec![SegmentRaw::from_id(a.clone())],
+                                }),
+                                expr: ExprRaw::Imut(ImutExprRaw::Path(PathRaw::Local(
+                                    LocalPathRaw {
+                                        start: a.start,
+                                        end: a.end,
+                                        segments: vec![
+                                            SegmentRaw::from_str(FN_RES_NAME, a.start, a.end),
+                                            SegmentRaw::from_usize(i, a.start, a.end),
+                                        ],
+                                    },
+                                ))),
+                            }))
+                        })
+                        .collect();
+                    exprs.append(&mut c.exprs);
+                    c.exprs = exprs;
+                    c
+                }
+            })
+            .collect();
+
+        let body = ExprRaw::MatchExpr(Box::new(MatchRaw {
+            start: self.start,
+            end: self.end,
+            target: ImutExprRaw::List(Box::new(ListRaw {
+                start: self.start,
+                end: self.end,
+                exprs: target,
+            })),
+            patterns,
+        }));
+        let body = vec![body.up(helper)?];
+
         helper.swap(&mut aggrs, &mut consts, &mut locals);
         helper.can_emit = can_emit;
 
@@ -1016,6 +1163,8 @@ pub enum PatternRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Array(ArrayPatternRaw<'script>),
     /// we're forced to make this pub because of lalrpop
+    Tuple(TuplePatternRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Expr(ImutExprRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Assign(AssignPatternRaw<'script>),
@@ -1031,6 +1180,7 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
             Record(rp) => Pattern::Record(rp.up(helper)?),
             Array(ap) => Pattern::Array(ap.up(helper)?),
+            Tuple(tp) => Pattern::Tuple(tp.up(helper)?),
             Expr(expr) => Pattern::Expr(expr.up(helper)?),
             Assign(ap) => Pattern::Assign(ap.up(helper)?),
             Default => Pattern::Default,
@@ -1051,13 +1201,13 @@ pub enum PredicatePatternRaw<'script> {
         test: TestExprRaw,
     },
     /// we're forced to make this pub because of lalrpop
-    Eq {
+    Bin {
         /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
         /// we're forced to make this pub because of lalrpop
         rhs: ImutExprRaw<'script>,
         /// we're forced to make this pub because of lalrpop
-        not: bool,
+        kind: BinOpKind,
     },
     /// we're forced to make this pub because of lalrpop
     RecordPatternEq {
@@ -1096,11 +1246,11 @@ impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
                 lhs,
                 test: Box::new(test.up(helper)?),
             },
-            Eq { lhs, rhs, not } => PredicatePattern::Eq {
+            Bin { lhs, rhs, kind } => PredicatePattern::Bin {
                 key: KnownKey::from(lhs.clone()),
                 lhs,
                 rhs: rhs.up(helper)?,
-                not,
+                kind,
             },
             RecordPatternEq { lhs, pattern } => PredicatePattern::RecordPatternEq {
                 key: KnownKey::from(lhs.clone()),
@@ -1241,6 +1391,27 @@ impl<'script> Upable<'script> for ArrayPatternRaw<'script> {
         })
     }
 }
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TuplePatternRaw<'script> {
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) exprs: ArrayPredicatePatternsRaw<'script>,
+}
+
+impl<'script> Upable<'script> for TuplePatternRaw<'script> {
+    type Target = TuplePattern<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let exprs = self.exprs.up(helper)?;
+        Ok(TuplePattern {
+            mid: helper.add_meta(self.start, self.end),
+            exprs,
+        })
+    }
+}
+
+pub(crate) const FN_RES_NAME: &str = "__fn_assign_this_is_ugly";
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1408,7 +1579,18 @@ impl<'script> SegmentRaw<'script> {
             expr: ImutExprRaw::Literal(LiteralRaw {
                 start,
                 end,
-                value: Value::String(id.into()),
+                value: Value::from(id),
+            }),
+        }
+    }
+    pub fn from_usize(id: usize, start: Location, end: Location) -> Self {
+        SegmentRaw::Element {
+            start,
+            end,
+            expr: ImutExprRaw::Literal(LiteralRaw {
+                start,
+                end,
+                value: Value::from(id),
             }),
         }
     }

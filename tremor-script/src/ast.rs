@@ -757,6 +757,7 @@ pub(crate) struct ImutComprehensionCase<'script> {
 }
 impl_expr2!(ImutComprehensionCase);
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) enum Pattern<'script> {
     //Predicate(PredicatePattern<'script>),
@@ -764,6 +765,7 @@ pub(crate) enum Pattern<'script> {
     Array(ArrayPattern<'script>),
     Expr(ImutExprInt<'script>),
     Assign(AssignPattern<'script>),
+    Tuple(TuplePattern<'script>),
     Default,
 }
 impl<'script> Pattern<'script> {
@@ -792,12 +794,12 @@ pub(crate) enum PredicatePattern<'script> {
         key: KnownKey<'script>,
         test: Box<TestExpr>,
     },
-    Eq {
+    Bin {
         lhs: Cow<'script, str>,
         #[serde(skip)]
         key: KnownKey<'script>,
         rhs: ImutExprInt<'script>,
-        not: bool,
+        kind: BinOpKind,
     },
     RecordPatternEq {
         lhs: Cow<'script, str>,
@@ -828,7 +830,7 @@ impl<'script> PredicatePattern<'script> {
         use PredicatePattern::*;
         match self {
             TildeEq { key, .. }
-            | Eq { key, .. }
+            | Bin { key, .. }
             | RecordPatternEq { key, .. }
             | ArrayPatternEq { key, .. }
             | FieldPresent { key, .. }
@@ -840,7 +842,7 @@ impl<'script> PredicatePattern<'script> {
         use PredicatePattern::*;
         match self {
             TildeEq { lhs, .. }
-            | Eq { lhs, .. }
+            | Bin { lhs, .. }
             | RecordPatternEq { lhs, .. }
             | ArrayPatternEq { lhs, .. }
             | FieldPresent { lhs, .. }
@@ -868,7 +870,6 @@ pub(crate) struct ArrayPattern<'script> {
     pub mid: usize,
     pub exprs: ArrayPredicatePatterns<'script>,
 }
-
 impl_expr2!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -877,6 +878,13 @@ pub(crate) struct AssignPattern<'script> {
     pub idx: usize,
     pub pattern: Box<Pattern<'script>>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct TuplePattern<'script> {
+    pub mid: usize,
+    pub exprs: ArrayPredicatePatterns<'script>,
+}
+impl_expr2!(TuplePattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) enum Path<'script> {
