@@ -949,7 +949,7 @@ mod test {
     fn test_sum() -> Result<()> {
         let mut op = parse_query(
             "test.trickle".to_string(),
-            "select stats::sum(event.h2g2) from in into out;",
+            "select aggr::stats::sum(event.h2g2) from in into out;",
         )?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
@@ -965,7 +965,7 @@ mod test {
     fn test_count() -> Result<()> {
         let mut op = parse_query(
             "test.trickle".to_string(),
-            "select stats::count() from in into out;",
+            "select aggr::stats::count() from in into out;",
         )?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
@@ -981,7 +981,7 @@ mod test {
         // Windows are 15s and 30s
         let mut op = parse_query(
             "test.trickle".to_string(),
-            "select stats::count() from in into out;",
+            "select aggr::stats::count() from in into out;",
         )?;
         // Insert two events prior to 15
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());

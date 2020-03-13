@@ -240,7 +240,7 @@ impl FunctionError {
                 } else {
                     None
                 };
-                ErrorKind::MissingFunction(outer, inner, m, f, suggestion).into()
+                ErrorKind::MissingFunction(outer, inner, vec![m], f, suggestion).into()
             }
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
             Error(e) => e,
