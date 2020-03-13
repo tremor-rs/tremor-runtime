@@ -1867,9 +1867,9 @@ dependencies = [
 
 [[package]]
 name = "libmimalloc-sys"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de00092fc3cd1d1f212487fc4f321728911cd7a0acddab85497429e2b1077459"
+checksum = "b87ffa7aa24a1b71beebc6be14ad552d4314ec5be3b3bb3e1159c61a8b01a0bd"
 dependencies = [
  "cmake",
 ]
@@ -2053,9 +2053,9 @@ dependencies = [
 
 [[package]]
 name = "mimalloc"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "363fa5a634523c1809e1c076c7818f461f6c61223e5253d1b0c3279db71f7fd7"
+checksum = "94b16eee4eb86e92abf8ad6910fd3219549ba344d5d77194a6def2119173f2de"
 dependencies = [
  "libmimalloc-sys",
 ]
