@@ -20,7 +20,7 @@ use crate::errors::*;
     feature = "cargo-clippy",
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
-use crate::parser::g::__ToTriple;
+use crate::parser::g::___ToTriple;
 pub use crate::pos::*;
 use lalrpop_util;
 use simd_json::prelude::*;
@@ -91,6 +91,8 @@ pub enum Token<'input> {
     NewLine,
     /// a singe line comment
     SingleLineComment(&'input str),
+    /// a mod comment
+    ModComment(&'input str),
     /// a doc comment
     DocComment(&'input str),
     /// a BAD TOKEN
@@ -309,10 +311,7 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
-            Token::DocComment(_)
-            | Token::SingleLineComment(_)
-            | Token::Whitespace(_)
-            | Token::NewLine => true,
+            Token::SingleLineComment(_) | Token::Whitespace(_) | Token::NewLine => true,
             _ => false,
         }
     }
@@ -453,7 +452,7 @@ impl<'input> Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
+impl<'input> ___ToTriple<'input> for Result<Spanned<Token<'input>>> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<
@@ -484,6 +483,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::NewLine => writeln!(f),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
+            Token::ModComment(ref comment) => write!(f, "##! {}", comment),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
@@ -787,7 +787,10 @@ impl<'input> Lexer<'input> {
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
-        if lexeme.starts_with("##") {
+        if lexeme.starts_with("##!") {
+            let doc = Token::ModComment(&lexeme[3..]);
+            Ok(spanned2(start, end, doc))
+        } else if lexeme.starts_with("##") {
             let doc = Token::DocComment(&lexeme[2..]);
             Ok(spanned2(start, end, doc))
         } else {

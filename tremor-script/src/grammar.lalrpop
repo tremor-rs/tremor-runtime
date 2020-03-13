@@ -121,7 +121,7 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
 }
 
 EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
-    ("script" <ExprImut>)? => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>?)])),
+    ("script" <ExprImut>)? => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>?)], None)),
 }
 
 WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
@@ -157,14 +157,27 @@ OperatorKind: OperatorKindRaw = {
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs),
+    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs, None),
 }
 
 ///////////////////////////////////////
 
 pub(crate) Script : ScriptRaw<'input> = {
-    <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs),
+    <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
 }
+
+ModComment: Option<Vec<Cow<'input, str>>> = {
+    (<ModComment_>)? => <>
+}
+ModComment_: Vec<Cow<'input, str>> = {
+    <c:"<mod-comment>"> => vec![c.into()],
+    <v:ModComment_> <c:"<mod-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+
 
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {
@@ -184,7 +197,19 @@ MayBeConstExpr: ExprRaw<'input> = {
 
 /// A const expressions (this gets compiled out during the 2nd phjase)
 Const: ExprRaw<'input> = {
-    <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end},
+    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end, comment},
+}
+
+DocComment: Option<Vec<Cow<'input, str>>> = {
+    (<DocComment_>)? => <>
+}
+DocComment_: Vec<Cow<'input, str>> = {
+    <c:"<doc-comment>"> => vec![c.into()],
+    <v:DocComment_> <c:"<doc-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
 }
 
 ////////////////////////////// Expr (mutable) //////////////////////////////
@@ -331,8 +356,8 @@ ComplexExprImut: ImutExprRaw<'input> = {
 }
 
 FnDecl: AnyFnRaw<'input> = {
-  <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end}),
-  <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc}),
 }
 
 FnCases: Vec<PredicateClauseRaw<'input>> = {
@@ -608,9 +633,31 @@ Selector: SegmentRaw<'input> = {
 
 /// Function invocation
 Invoke: InvokeRaw<'input> = {
-    <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: module.id.to_string(), fun: fun.id.to_string(), args, start, end },
-    <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => InvokeRaw { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![], start, end },
+    <start:@L> <fun:FunctionName> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: fun.0.iter().map(|m| m.id.to_string()).collect(), fun: fun.1.id.to_string(), args, start, end },
+    <start:@L> <fun:FunctionName> "(" ")" <end:@L> => InvokeRaw { module: fun.0.iter().map(|m| m.id.to_string()).collect(), fun: fun.1.id.to_string(), args: vec![], start, end },
 }
+
+FunctionName: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
+    <fun:Ident> => (vec![], fun),
+    <p:Ident> "::" <fun:Ident> => (vec![p], fun),
+    <path1:Ident> "::" <path2:Ident> "::" <fun:Ident> => (vec![path1, path2], fun)
+}
+
+// ModPath: Option<Vec<IdentRaw<'input>>> = {
+//     (<Ident> "::")? => <>.map(|v| vec![v])
+// }
+
+// ModPath_: Vec<IdentRaw<'input>> = {
+//     <fields:ModPath__> => {
+//         let mut fields = fields;
+//         fields.reverse();
+//         fields
+//     },
+// }
+
+// ModPath__: Vec<IdentRaw<'input>> = {
+//     <Sep<ModPath__, Ident, "::">> => <>,
+// }
 
 InvokeArgs: ImutExprsRaw<'input> = {
     <fields:InvokeArgs_> => {
@@ -1006,6 +1053,7 @@ extern {
     type Location = Location;
     type Error = crate::errors::Error;
     enum Token<'input> {
+        "<mod-comment>" => Token::ModComment(<&'input str>),
         "<doc-comment>" => Token::DocComment(<&'input str>),
         "<single-line-comment>" => Token::SingleLineComment(<&'input str>),
         "let" => Token::Let,

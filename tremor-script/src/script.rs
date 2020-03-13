@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Warning;
+use crate::ast::{Docs, Warning};
 use crate::ctx::EventContext;
 use crate::errors::*;
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
@@ -142,6 +142,11 @@ where
             source,
             warnings,
         })
+    }
+
+    /// Returns the documentation for the script
+    pub fn docs(&self) -> &Docs<'_> {
+        &self.script.suffix().docs
     }
 
     /// Highlights a script with a given highlighter.

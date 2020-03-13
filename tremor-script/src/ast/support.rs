@@ -124,7 +124,7 @@ impl<'script> PartialEq for Invoke<'script> {
 
 impl<'script> fmt::Debug for Invoke<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn {}::{}", self.module, self.fun)
+        write!(f, "fn {}::{}", self.module.join("::"), self.fun)
     }
 }
 

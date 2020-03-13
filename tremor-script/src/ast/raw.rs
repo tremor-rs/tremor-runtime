@@ -37,11 +37,12 @@ use std::borrow::{Borrow, Cow};
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
     exprs: ExprsRaw<'script>,
+    doc: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> ScriptRaw<'script> {
-    pub(crate) fn new(exprs: ExprsRaw<'script>) -> Self {
-        Self { exprs }
+    pub(crate) fn new(exprs: ExprsRaw<'script>, doc: Option<Vec<Cow<'script, str>>>) -> Self {
+        Self { exprs, doc }
     }
     pub(crate) fn up_script<'registry>(
         self,
@@ -63,6 +64,7 @@ impl<'script> ScriptRaw<'script> {
                     expr,
                     start,
                     end,
+                    comment,
                 } => {
                     if helper.consts.contains_key(&name.to_string()) {
                         return Err(ErrorKind::DoubleConst(
@@ -72,21 +74,30 @@ impl<'script> ScriptRaw<'script> {
                         )
                         .into());
                     }
+
                     helper.consts.insert(name.to_string(), consts.len());
                     let expr = expr.up(&mut helper)?;
                     if i == len - 1 {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
                             idx: consts.len(),
-                            mid: helper.add_meta_w_name(start, end, name),
+                            mid: helper.add_meta_w_name(start, end, name.clone()),
                         }))
                     }
-
-                    consts.push(reduce2(expr, &helper)?);
+                    let v = reduce2(expr, &helper)?;
+                    let value_type = v.value_type();
+                    consts.push(v);
+                    helper.docs.consts.push(ConstDoc {
+                        name: name,
+                        doc: comment
+                            .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+                        value_type,
+                    });
                 }
                 #[allow(unreachable_code, unused_variables)]
                 #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
+                    helper.docs.fns.push(f.doc());
                     let f = f.up(&mut helper)?;
                     let f = CustomFn {
                         name: f.name.id,
@@ -125,6 +136,12 @@ impl<'script> ScriptRaw<'script> {
             return Err(ErrorKind::EmptyScript.into());
         }
 
+        helper.docs.module = Some(ModDoc {
+            name: "self".into(),
+            doc: self
+                .doc
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+        });
         Ok((
             Script {
                 exprs,
@@ -133,6 +150,7 @@ impl<'script> ScriptRaw<'script> {
                 locals: helper.locals.len(),
                 node_meta: helper.meta,
                 functions: helper.func_vec,
+                docs: helper.docs,
             },
             helper.warnings,
         ))
@@ -300,6 +318,8 @@ pub enum ExprRaw<'script> {
         start: Location,
         /// we're forced to make this pub because of lalrpop
         end: Location,
+        /// we're forced to make this pub because of lalrpop
+        comment: Option<Vec<Cow<'script, str>>>,
     },
     /// we're forced to make this pub because of lalrpop
     MatchExpr(Box<MatchRaw<'script>>),
@@ -406,8 +426,22 @@ pub struct FnDeclRaw<'script> {
     pub(crate) name: IdentRaw<'script>,
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) body: ExprsRaw<'script>,
+    pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(FnDeclRaw);
+
+impl<'script> FnDeclRaw<'script> {
+    pub(crate) fn doc(&self) -> FnDoc<'script> {
+        FnDoc {
+            name: self.name.id.clone(),
+            args: self.args.iter().map(|a| a.id.clone()).collect(),
+            doc: self
+                .doc
+                .clone()
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+        }
+    }
+}
 
 impl<'script> Upable<'script> for FnDeclRaw<'script> {
     type Target = FnDecl<'script>;
@@ -445,6 +479,14 @@ pub enum AnyFnRaw<'script> {
     Match(MatchFnDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Normal(FnDeclRaw<'script>),
+}
+impl<'script> AnyFnRaw<'script> {
+    pub(crate) fn doc(&self) -> FnDoc<'script> {
+        match self {
+            AnyFnRaw::Match(f) => f.doc(),
+            AnyFnRaw::Normal(f) => f.doc(),
+        }
+    }
 }
 
 impl<'script> Upable<'script> for AnyFnRaw<'script> {
@@ -486,8 +528,22 @@ pub struct MatchFnDeclRaw<'script> {
     pub(crate) name: IdentRaw<'script>,
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) cases: Vec<PredicateClauseRaw<'script>>,
+    pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(MatchFnDeclRaw);
+
+impl<'script> MatchFnDeclRaw<'script> {
+    pub(crate) fn doc(&self) -> FnDoc<'script> {
+        FnDoc {
+            name: self.name.id.clone(),
+            args: self.args.iter().map(|a| a.id.clone()).collect(),
+            doc: self
+                .doc
+                .clone()
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+        }
+    }
+}
 
 impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
     type Target = FnDecl<'script>;
@@ -686,7 +742,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     ImutExprRaw::Invoke(InvokeRaw {
                         start: s.start,
                         end: s.end,
-                        module: "string".into(),
+                        module: vec!["core".into(), "string".into()],
                         fun: "format".into(),
                         args,
                     })
@@ -1813,7 +1869,7 @@ impl<'script> Upable<'script> for ImutMatchRaw<'script> {
 pub struct InvokeRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
-    pub(crate) module: String,
+    pub(crate) module: Vec<String>,
     pub(crate) fun: String,
     pub(crate) args: ImutExprsRaw<'script>,
 }
@@ -1822,7 +1878,7 @@ impl_expr!(InvokeRaw);
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        if self.module == "local" {
+        if self.module.is_empty() {
             if let Some(f) = helper.functions.get(&self.fun) {
                 if let Some(f) = helper.func_vec.get(*f) {
                     let invocable = Invocable::Tremor(f.clone());
@@ -1847,10 +1903,13 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 let outer: Range = inner.expand_lines(3);
                 Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
             }
-        } else {
+        } else if self.module.get(0) == Some(&String::from("core")) && self.module.len() == 2 {
+            // we know a second module exists
+            let module = self.module.get(1).cloned().unwrap_or_default();
+
             let invocable = helper
                 .reg
-                .find(&self.module, &self.fun)
+                .find(&module, &self.fun)
                 .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
             let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
             Ok(Invoke {
@@ -1860,20 +1919,31 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 invocable: Invocable::Intrinsic(invocable.clone()),
                 args,
             })
+        } else {
+            let inner: Range = (self.start, self.end).into();
+            let outer: Range = inner.expand_lines(3);
+
+            Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
         }
     }
 }
 
 impl<'script> InvokeRaw<'script> {
     fn is_aggregate<'registry>(&self, helper: &mut Helper<'script, 'registry>) -> bool {
-        helper.aggr_reg.find(&self.module, &self.fun).is_ok()
+        if self.module.get(0) == Some(&String::from("aggr")) && self.module.len() == 2 {
+            let module = self.module.get(1).cloned().unwrap_or_default();
+            helper.aggr_reg.find(&module, &self.fun).is_ok()
+        } else {
+            false
+        }
     }
 
     fn into_aggregate(self) -> InvokeAggrRaw<'script> {
+        let module = self.module.get(1).cloned().unwrap_or_default();
         InvokeAggrRaw {
             start: self.start,
             end: self.end,
-            module: self.module,
+            module: module,
             fun: self.fun,
             args: self.args,
         }

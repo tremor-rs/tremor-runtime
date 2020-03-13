@@ -111,6 +111,97 @@ struct Function<'script> {
     name: Cow<'script, str>,
 }
 
+/// Documentaiton from constant
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstDoc<'script> {
+    name: Cow<'script, str>,
+    doc: Option<String>,
+    value_type: ValueType,
+}
+
+impl<'script> ToString for ConstDoc<'script> {
+    fn to_string(&self) -> String {
+        format!(
+            r#"
+### {}
+
+*type*: {:?}
+
+{}
+        "#,
+            self.name,
+            self.value_type,
+            &self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
+/// Documentaiton from function
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnDoc<'script> {
+    name: Cow<'script, str>,
+    args: Vec<Cow<'script, str>>,
+    doc: Option<String>,
+}
+
+/// Documentaiton from a module
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ModDoc<'script> {
+    name: Cow<'script, str>,
+    doc: Option<String>,
+}
+
+impl<'script> ToString for ModDoc<'script> {
+    fn to_string(&self) -> String {
+        format!(
+            r#"
+# {}
+
+
+{}
+        "#,
+            self.name,
+            &self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
+impl<'script> ToString for FnDoc<'script> {
+    fn to_string(&self) -> String {
+        format!(
+            r#"
+### {}({})
+
+{}
+        "#,
+            self.name,
+            self.args.join(", "),
+            self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
+/// Documentaiton from a module
+#[derive(Debug, Clone, PartialEq)]
+pub struct Docs<'script> {
+    /// Constatns
+    pub consts: Vec<ConstDoc<'script>>,
+    /// Functions
+    pub fns: Vec<FnDoc<'script>>,
+    /// Module level documentation
+    pub module: Option<ModDoc<'script>>,
+}
+
+impl<'script> Default for Docs<'script> {
+    fn default() -> Self {
+        Self {
+            consts: Vec::new(),
+            fns: Vec::new(),
+            module: None,
+        }
+    }
+}
+
 pub(crate) struct Helper<'script, 'registry>
 where
     'script: 'registry,
@@ -129,6 +220,7 @@ where
     pub functions: HashMap<String, usize>,
     pub consts: HashMap<String, usize>,
     pub meta: NodeMetas<'script>,
+    docs: Docs<'script>,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -178,6 +270,7 @@ where
             func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
             meta: NodeMetas::default(),
+            docs: Docs::default(),
         }
     }
 
@@ -255,6 +348,9 @@ pub struct Script<'script> {
     functions: Vec<CustomFn<'script>>,
     locals: usize,
     node_meta: NodeMetas<'script>,
+    #[serde(skip)]
+    /// Documentaiton from the script
+    pub docs: Docs<'script>,
 }
 
 impl<'run, 'script, 'event> Script<'script>
@@ -312,6 +408,7 @@ where
                 }
             }
         }
+
         // We know that we never get here, sadly rust doesn't
         #[cfg_attr(tarpaulin, skip)]
         Ok(Return::Emit {
@@ -506,7 +603,7 @@ impl_expr2!(EmitExpr);
 #[derive(Clone, Serialize)]
 pub(crate) struct Invoke<'script> {
     pub mid: usize,
-    pub module: String,
+    pub module: Vec<String>,
     pub fun: String,
     #[serde(skip)]
     pub invocable: Invocable<'script>,
