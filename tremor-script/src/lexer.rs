@@ -92,6 +92,8 @@ pub enum Token<'input> {
     NewLine,
     /// a singe line comment
     SingleLineComment(&'input str),
+    /// a mod comment
+    ModComment(&'input str),
     /// a doc comment
     DocComment(&'input str),
     /// a BAD TOKEN
@@ -316,10 +318,7 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
-            Token::DocComment(_)
-            | Token::SingleLineComment(_)
-            | Token::Whitespace(_)
-            | Token::NewLine => true,
+            Token::SingleLineComment(_) | Token::Whitespace(_) | Token::NewLine => true,
             _ => false,
         }
     }
@@ -485,6 +484,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::NewLine => writeln!(f),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
+            Token::ModComment(ref comment) => write!(f, "##! {}", comment),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
@@ -1167,7 +1167,10 @@ impl<'input> Lexer<'input> {
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
-        if lexeme.starts_with("##") {
+        if lexeme.starts_with("##!") {
+            let doc = Token::ModComment(&lexeme[3..]);
+            Ok(spanned2(start, end, doc))
+        } else if lexeme.starts_with("##") {
             let doc = Token::DocComment(&lexeme[2..]);
             Ok(spanned2(start, end, doc))
         } else if lexeme.starts_with("#!line") {

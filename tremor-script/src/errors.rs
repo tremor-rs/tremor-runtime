@@ -357,9 +357,9 @@ error_chain! {
             description("Call to undefined module")
                 display("Call to undefined module {}", m)
         }
-        MissingFunction(expr: Range, inner: Range, m: String, f: String, suggestion: Option<(usize, String)>) {
+        MissingFunction(expr: Range, inner: Range, m: Vec<String>, f: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined function")
-                display("Call to undefined function {}::{}", m, f)
+                display("Call to undefined function {}::{}", m.join("::"), f)
         }
         AggrInAggr(expr: Range, inner: Range) {
             description("Aggregates can not be called inside of aggregates")

@@ -78,13 +78,6 @@ fn main() -> Result<()> {
                 .index(1),
         )
         .arg(
-            Arg::with_name("modules")
-                .short("m")
-                .takes_value(true)
-                .multiple(true)
-                .help("The event to load."),
-        )
-        .arg(
             Arg::with_name("event")
                 .short("e")
                 .takes_value(true)
@@ -138,6 +131,13 @@ fn main() -> Result<()> {
                 .takes_value(false)
                 .help("Replays a file containing influx line protocol."),
         )
+        .arg(
+            Arg::with_name("docs")
+                .short("d")
+                .long("docs")
+                .takes_value(false)
+                .help("Prints docs for a script."),
+        )
         .get_matches();
 
     let script_file = matches
@@ -151,32 +151,36 @@ fn main() -> Result<()> {
     #[allow(unused_mut)]
     let mut reg: Registry = registry::registry();
 
-    #[cfg(feature = "fns")]
-    {
-        if let Some(modules) = matches.values_of("modules") {
-            use std::ffi::OsStr;
-            use std::path::Path;
-            for module in modules {
-                if let Some(name) = Path::new(module)
-                    .file_stem()
-                    .and_then(OsStr::to_str)
-                    .map(ToString::to_string)
-                {
-                    let mut code = String::new();
-                    let mut input = File::open(&module)?;
-                    input.read_to_string(&mut code)?;
-
-                    reg.load_module(&name, &code)?;
-                }
-            }
-        }
-    }
-
-    match Script::parse(&module_path, raw.clone(), &reg) {
+    match Script::parse(&raw, &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;
 
+            if matches.is_present("docs") {
+                let docs = runnable.docs();
+                let consts = &docs.consts;
+                let fns = &docs.fns;
+
+                if let Some(m) = &docs.module {
+                    println!("{}", m.to_string());
+                }
+                if !consts.is_empty() {
+                    println!("## Constants");
+                    for c in consts {
+                        println!("{}", c.to_string())
+                    }
+                }
+
+                if !fns.is_empty() {
+                    println!("## Functions");
+                    for f in fns {
+                        println!("{}", f.to_string())
+                    }
+                }
+
+                // ALLOW: main.rs
+                std::process::exit(0);
+            }
             if matches.is_present("highlight-source") {
                 println!();
                 let mut h = TermHighlighter::new();
