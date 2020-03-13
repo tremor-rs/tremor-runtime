@@ -138,7 +138,7 @@ impl<'a> TremorApp<'a> {
             .get_matches();
         let format = match cmd.value_of("format") {
             Some("json") => FormatKind::Json,
-            Some("yaml") | _ => FormatKind::Yaml,
+            _ => FormatKind::Yaml,
         };
         Ok(Self {
             app: cmd,
@@ -463,7 +463,7 @@ async fn conductor_version_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_>) -> Res
         "{}",
         match cmd.value_of("format") {
             Some("yaml") => serde_yaml::to_string(&version)?,
-            Some("json") | _ => serde_json::to_string(&version)?,
+            _ => serde_json::to_string(&version)?,
         }
     );
     Ok(())
