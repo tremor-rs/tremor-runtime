@@ -68,7 +68,7 @@ impl SliceTrim for [u8] {
 
         if let Some(first) = self.iter().position(is_not_whitespace) {
             if let Some(last) = self.iter().rposition(is_not_whitespace) {
-                &self[first..last + 1]
+                &self[first..=last]
             } else {
                 &self[first..]
             }
