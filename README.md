@@ -1,4 +1,6 @@
-# Tremor &emsp; [![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
+# Tremor
+
+[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
 
 [Build Status]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Tests/badge.svg
 [actions-Tests]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3ATests
@@ -15,7 +17,7 @@
 
 ---
 
-In short, tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language. 
+In short, Tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language.
 
 More about the [history](https://docs.tremor.rs/history/) and [architecture](dochttps://docs.tremor.rs/overview/) can be found in [the documentation](https://docs.tremor.rs/).
 
@@ -61,9 +63,11 @@ Note that sice the image is building tremor in release mode it requires some ser
 
 ### Local builds
 
-If you are not comfortable with managing library packages on your system or don't have experience with , please use the Docker image provided above. Local builds are not supported and purely at your own risk.
+If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. For centos the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required, for different distributions or operating systems, please install packages accordingly.
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for centos, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
+
+For a more detailed guide on local builds, please refer to the [tremor development docs](https://docs.tremor.rs/development/quick-start/).
 
 ## Running locally
 
@@ -187,10 +191,4 @@ To execute a benchmark, build tremor in **release** mode and run the examples fr
 
 ```bash
 ./bench/run <name>
-```
-
-### Ubuntu
-
-```bash
-sudo apt install git libssl-dev llvm-9-dev libclang-dev cmake
 ```

@@ -125,7 +125,7 @@ pub fn accept(req: &Request) -> ResourceType {
     // TODO implement correctly / RFC compliance
     match req.header("Accept") {
         Some("application/yaml") => ResourceType::Yaml,
-        Some("application/json") | _ => ResourceType::Json,
+        _ => ResourceType::Json,
     }
 }
 

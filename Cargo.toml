@@ -79,8 +79,8 @@ postgres = { version = "0.17.2", features = ["with-serde_json-1", "with-chrono-0
 postgres-protocol = "0.5" 
 tokio-postgres = "0.5"
 
-# kafka
-rdkafka = "0.23"
+# kafka. cmake is the encouraged way to build this and also the one that works on windows.
+rdkafka = { version = "0.23", features = ["cmake-build"] }
 
 # crononome
 cron = "0.6.0"
