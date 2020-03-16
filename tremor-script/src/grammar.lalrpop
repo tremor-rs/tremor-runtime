@@ -192,6 +192,7 @@ Exprs: ExprsRaw<'input> = {
 MayBeConstExpr: ExprRaw<'input> = {
      Const => <>,
      FnDecl => ExprRaw::FnDecl(<>),
+     Intrinsic => ExprRaw::FnDecl(<>),
      Expr => <>
 }
 
@@ -354,6 +355,27 @@ ComplexExprImut: ImutExprRaw<'input> = {
     <comprehension:ForImut> => ImutExprRaw::Comprehension(Box::new(comprehension)),
     ExprImut => <>
 }
+
+Intrinsic: AnyFnRaw<'input> = {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+        let invoce_args = args.iter().map(|a|           
+            ImutExprRaw::Path(
+                PathRaw::Local(
+                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                ))).collect();
+        let invoke = InvokeRaw{
+            start,
+            end,
+            module: vec!["core".into(), imod.id.to_string()],
+            fun: ifn.id.to_string(),
+            args: invoce_args
+        };
+        let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
+        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc})
+    }
+}
+
+
 
 FnDecl: AnyFnRaw<'input> = {
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc}),
@@ -651,19 +673,6 @@ ModPath: Vec<IdentRaw<'input>> = {
         v
     },
 }
-
-
-//  ModPath: Vec<IdentRaw<'input>> = {
-//      <fields:ModPath_> => {
-//          let mut fields = fields;
-//          fields.reverse();
-//          fields
-//      },
-//  }
-
-//  ModPath_: Vec<IdentRaw<'input>> = {
-//      <Sep<ModPath_, Ident, "::">> => <>,
-//  }
 
 InvokeArgs: ImutExprsRaw<'input> = {
     <fields:InvokeArgs_> => {
@@ -1091,6 +1100,7 @@ extern {
         "present" => Token::Present,
         "absent" => Token::Absent,
         "fn" => Token::Fun,
+        "intrinsic" => Token::Intrinsic,
         "." => Token::Dot,
         "\"" => Token::DQuote,
         ";" => Token::Semi,

@@ -37,7 +37,6 @@ impl<'script> CustomFn<'script> {
     pub(crate) fn is_const(&self) -> bool {
         self.is_const
     }
-
     pub(crate) fn can_inline(&self) -> bool {
         if self.body.len() != 1 {
             return false;
