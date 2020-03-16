@@ -319,6 +319,126 @@ pub(crate) fn reduce2<'script>(
     }
 }
 
+impl<'script> ImutExprInt<'script> {
+    pub(crate) fn reduce(self, helper: &Helper) -> Result<Self> {
+        match self {
+            ImutExprInt::Unary(u) => match *u {
+                u1
+                @
+                UnaryExpr {
+                    expr: ImutExprInt::Literal(_),
+                    ..
+                } => {
+                    let expr = reduce2(u1.expr.clone(), &helper)?;
+                    let value = if let Some(v) = exec_unary(u1.kind, &expr) {
+                        v.into_owned()
+                    } else {
+                        let ex = u1.extent(&helper.meta);
+                        return Err(ErrorKind::InvalidUnary(
+                            ex.expand_lines(2),
+                            ex,
+                            u1.kind,
+                            expr.value_type(),
+                        )
+                        .into());
+                    };
+
+                    let lit = Literal { mid: u1.mid, value };
+                    Ok(ImutExprInt::Literal(lit))
+                }
+                u1 => Ok(ImutExprInt::Unary(Box::new(u1))),
+            },
+
+            ImutExprInt::Binary(b) => {
+                match *b {
+                    b1
+                    @
+                    BinExpr {
+                        lhs: ImutExprInt::Literal(_),
+                        rhs: ImutExprInt::Literal(_),
+                        ..
+                    } => {
+                        let lhs = reduce2(b1.lhs.clone(), &helper)?;
+                        let rhs = reduce2(b1.rhs.clone(), &helper)?;
+                        // TODO remove duplicate params?
+                        let value =
+                            exec_binary(&b1, &b1, &helper.meta, b1.kind, &lhs, &rhs)?.into_owned();
+                        let lit = Literal { mid: b1.mid, value };
+                        Ok(ImutExprInt::Literal(lit))
+                    }
+                    b1 => Ok(ImutExprInt::Binary(Box::new(b1))),
+                }
+            }
+            ImutExprInt::List(l) => {
+                if l.exprs.iter().map(|v| &v.0).all(is_lit) {
+                    let elements: Result<Vec<Value>> =
+                        l.exprs.into_iter().map(|v| reduce2(v.0, &helper)).collect();
+                    Ok(ImutExprInt::Literal(Literal {
+                        mid: l.mid,
+                        value: Value::Array(elements?),
+                    }))
+                } else {
+                    Ok(ImutExprInt::List(l))
+                }
+            }
+            ImutExprInt::Record(r) => {
+                if r.fields.iter().all(|f| is_lit(&f.name) && is_lit(&f.value)) {
+                    let obj: Result<borrowed::Object> = r
+                        .fields
+                        .into_iter()
+                        .map(|f| {
+                            reduce2(f.name.clone(), &helper).and_then(|n| {
+                                // ALLOW: The grammer guarantees the key of a record is always a string
+                                let n = n.as_str().unwrap_or_else(|| unreachable!());
+                                reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
+                            })
+                        })
+                        .collect();
+                    Ok(ImutExprInt::Literal(Literal {
+                        mid: r.mid,
+                        value: Value::from(obj?),
+                    }))
+                } else {
+                    Ok(ImutExprInt::Record(r))
+                }
+            }
+            ImutExprInt::Invoke1(i)
+            | ImutExprInt::Invoke2(i)
+            | ImutExprInt::Invoke3(i)
+            | ImutExprInt::Invoke(i) => {
+                if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f.0)) {
+                    let ex = i.extent(&helper.meta);
+                    let args: Result<Vec<Value<'script>>> =
+                        i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
+                    let args = args?;
+                    let mut args2: Vec<&Value<'script>> = Vec::new();
+                    unsafe {
+                        for i in 0..args.len() {
+                            args2.push(args.get_unchecked(i));
+                        }
+                    }
+                    let v = i
+                        .invocable
+                        .invoke(&EventContext::default(), &args2)
+                        .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?;
+                    Ok(ImutExprInt::Literal(Literal {
+                        value: v,
+                        mid: i.mid,
+                    }))
+                } else {
+                    Ok(match i.args.len() {
+                        1 => ImutExprInt::Invoke1(i),
+                        2 => ImutExprInt::Invoke2(i),
+                        3 => ImutExprInt::Invoke3(i),
+                        _ => ImutExprInt::Invoke(i),
+                    })
+                }
+            }
+            other => Ok(other),
+        }
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -700,50 +820,10 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
     #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ImutExprRaw::Binary(b) => match b.up(helper)? {
-                b1
-                @
-                BinExpr {
-                    lhs: ImutExprInt::Literal(_),
-                    rhs: ImutExprInt::Literal(_),
-                    ..
-                } => {
-                    let lhs = reduce2(b1.lhs.clone(), &helper)?;
-                    let rhs = reduce2(b1.rhs.clone(), &helper)?;
-                    // TODO remove duplicate params?
-                    let value =
-                        exec_binary(&b1, &b1, &helper.meta, b1.kind, &lhs, &rhs)?.into_owned();
-                    let lit = Literal { mid: b1.mid, value };
-                    ImutExprInt::Literal(lit)
-                }
-                b1 => ImutExprInt::Binary(Box::new(b1)),
-            },
-            ImutExprRaw::Unary(u) => match u.up(helper)? {
-                u1
-                @
-                UnaryExpr {
-                    expr: ImutExprInt::Literal(_),
-                    ..
-                } => {
-                    let expr = reduce2(u1.expr.clone(), &helper)?;
-                    let value = if let Some(v) = exec_unary(u1.kind, &expr) {
-                        v.into_owned()
-                    } else {
-                        let ex = u1.extent(&helper.meta);
-                        return Err(ErrorKind::InvalidUnary(
-                            ex.expand_lines(2),
-                            ex,
-                            u1.kind,
-                            expr.value_type(),
-                        )
-                        .into());
-                    };
-
-                    let lit = Literal { mid: u1.mid, value };
-                    ImutExprInt::Literal(lit)
-                }
-                u1 => ImutExprInt::Unary(Box::new(u1)),
-            },
+            ImutExprRaw::Binary(b) => {
+                ImutExprInt::Binary(Box::new(b.up(helper)?)).reduce(helper)?
+            }
+            ImutExprRaw::Unary(u) => ImutExprInt::Unary(Box::new(u.up(helper)?)).reduce(helper)?,
             ImutExprRaw::String(mut s) => {
                 let lit = ImutExprRaw::Literal(LiteralRaw {
                     start: s.start,
@@ -763,49 +843,18 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                         args,
                     })
                     .up(helper)?
+                    .reduce(helper)?
                 }
             }
-            ImutExprRaw::Record(r) => {
-                let r = r.up(helper)?;
-                if r.fields.iter().all(|f| is_lit(&f.name) && is_lit(&f.value)) {
-                    let obj: Result<borrowed::Object> = r
-                        .fields
-                        .into_iter()
-                        .map(|f| {
-                            reduce2(f.name.clone(), &helper).and_then(|n| {
-                                // ALLOW: The grammer guarantees the key of a record is always a string
-                                let n = n.as_str().unwrap_or_else(|| unreachable!());
-                                reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
-                            })
-                        })
-                        .collect();
-                    ImutExprInt::Literal(Literal {
-                        mid: r.mid,
-                        value: Value::from(obj?),
-                    })
-                } else {
-                    ImutExprInt::Record(r)
-                }
-            }
-            ImutExprRaw::List(l) => {
-                let l = l.up(helper)?;
-                if l.exprs.iter().map(|v| &v.0).all(is_lit) {
-                    let elements: Result<Vec<Value>> =
-                        l.exprs.into_iter().map(|v| reduce2(v.0, &helper)).collect();
-                    ImutExprInt::Literal(Literal {
-                        mid: l.mid,
-                        value: Value::Array(elements?),
-                    })
-                } else {
-                    ImutExprInt::List(l)
-                }
-            }
-            ImutExprRaw::Patch(p) => ImutExprInt::Patch(Box::new(p.up(helper)?)),
-            ImutExprRaw::Merge(m) => ImutExprInt::Merge(Box::new(m.up(helper)?)),
+            ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).reduce(helper)?,
+            ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).reduce(helper)?,
+            ImutExprRaw::Patch(p) => ImutExprInt::Patch(Box::new(p.up(helper)?)).reduce(helper)?,
+            ImutExprRaw::Merge(m) => ImutExprInt::Merge(Box::new(m.up(helper)?)).reduce(helper)?,
             ImutExprRaw::Present { path, start, end } => ImutExprInt::Present {
                 path: path.up(helper)?,
                 mid: helper.add_meta(start, end),
-            },
+            }
+            .reduce(helper)?,
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
                     is_const,
@@ -814,41 +863,25 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     ref segments,
                 }) if segments.is_empty() => ImutExprInt::Local { mid, idx, is_const },
                 p => ImutExprInt::Path(p),
-            },
-            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?),
+            }
+            .reduce(helper)?,
+            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?).reduce(helper)?,
             ImutExprRaw::Invoke(i) => {
                 if i.is_aggregate(helper) {
                     ImutExprInt::InvokeAggr(i.into_aggregate().up(helper)?)
                 } else {
-                    let ex = i.extent(&helper.meta);
                     let i = i.up(helper)?;
-                    if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f.0)) {
-                        let args: Result<Vec<Value<'script>>> =
-                            i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
-                        let args = args?;
-
-                        // Construct a view into `args`, since `invoke` expects a slice of references.
-                        let args2: Vec<&Value<'script>> = args.iter().collect();
-                        let v = i
-                            .invocable
-                            .invoke(&EventContext::default(), &args2)
-                            .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?;
-                        ImutExprInt::Literal(Literal {
-                            value: v,
-                            mid: i.mid,
-                        })
+                    let i = if i.can_inline() {
+                        i.inline()?
                     } else {
-                        if i.can_inline() {
-                            i.inline()?
-                        } else {
-                            match i.args.len() {
-                                1 => ImutExprInt::Invoke1(i),
-                                2 => ImutExprInt::Invoke2(i),
-                                3 => ImutExprInt::Invoke3(i),
-                                _ => ImutExprInt::Invoke(i),
-                            }
+                        match i.args.len() {
+                            1 => ImutExprInt::Invoke1(i),
+                            2 => ImutExprInt::Invoke2(i),
+                            3 => ImutExprInt::Invoke3(i),
+                            _ => ImutExprInt::Invoke(i),
                         }
-                    }
+                    };
+                    i.reduce(helper)?
                 }
             }
             ImutExprRaw::Match(m) => ImutExprInt::Match(Box::new(m.up(helper)?)),
