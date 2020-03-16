@@ -20,7 +20,7 @@ use crate::errors::*;
     feature = "cargo-clippy",
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
-use crate::parser::g::___ToTriple;
+use crate::parser::g::__ToTriple;
 pub use crate::pos::*;
 use lalrpop_util;
 use simd_json::prelude::*;
@@ -452,7 +452,7 @@ impl<'input> Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> ___ToTriple<'input> for Result<Spanned<Token<'input>>> {
+impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<

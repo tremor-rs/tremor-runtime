@@ -16,7 +16,7 @@
 #![cfg_attr(tarpaulin, skip)]
 
 use super::*;
-use crate::ast::Exprs;
+use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs};
 use crate::EventContext;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
@@ -34,6 +34,65 @@ pub(crate) struct CustomFn<'script> {
 }
 
 impl<'script> CustomFn<'script> {
+    pub(crate) fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub(crate) fn can_inline(&self) -> bool {
+        if self.body.len() != 1 {
+            return false;
+        }
+        let i = match self.body.get(0) {
+            Some(Expr::Imut(ImutExprInt::Invoke1(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke2(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke3(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            _ => return false,
+        };
+        let mut a_idx = 0;
+        for a in &i.args {
+            if let ImutExpr(ImutExprInt::Local { idx, .. }) = a {
+                if *idx != a_idx {
+                    return false;
+                }
+                a_idx += 1;
+            } else {
+                return false;
+            }
+        }
+
+        true
+    }
+    pub(crate) fn inline(&self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
+        if self.body.len() != 1 {
+            return Err(format!("can't inline {}: too large body", self.name).into());
+        }
+
+        let i = match self.body.get(0) {
+            Some(Expr::Imut(ImutExprInt::Invoke1(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke2(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke3(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            Some(e) => {
+                return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
+            }
+            None => return Err(format!("can't inline {}: no body", self.name).into()),
+        };
+
+        if i.args.len() != self.args.len() {
+            return Err(format!("can't inline {}: different argc", self.name).into());
+        }
+
+        let mut i = i.clone();
+        i.args = args;
+
+        Ok(match i.args.len() {
+            1 => ImutExprInt::Invoke1(i),
+            2 => ImutExprInt::Invoke2(i),
+            3 => ImutExprInt::Invoke3(i),
+            _ => ImutExprInt::Invoke(i),
+        })
+    }
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub(crate) fn invoke<'event>(
         &self,
@@ -93,8 +152,5 @@ impl<'script> CustomFn<'script> {
         }
 
         Ok(Value::null())
-    }
-    pub(crate) fn is_const(&self) -> bool {
-        self.is_const
     }
 }
