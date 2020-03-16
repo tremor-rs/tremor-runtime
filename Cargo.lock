@@ -3482,9 +3482,9 @@ checksum = "f7fb9b0bb877b35a1cc1474a3b43d9c226a2625311760cdda2cbccbc0c7a8376"
 
 [[package]]
 name = "snmalloc-rs"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "112c11b9deeb16c277edba697cc7345e771ca75a476644e89dfeb06292b3fd74"
+checksum = "a29c2ffa648ff20b35b87937e24ea881b6aab2bcfeb4fb90b0643ce5f2b50af6"
 dependencies = [
  "snmalloc-sys",
 ]
