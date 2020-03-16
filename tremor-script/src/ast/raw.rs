@@ -196,7 +196,8 @@ impl<'script> ModuleRaw<'script> {
                     end,
                     comment,
                 } => {
-                    let name_v = vec![name.to_string()];
+                    let mut name_v = helper.module.clone();
+                    name_v.push(name.to_string());
                     if helper.consts.contains_key(&name_v) {
                         return Err(ErrorKind::DoubleConst(
                             Range::from((start, end)).expand_lines(2),
@@ -1629,6 +1630,8 @@ pub enum PathRaw<'script> {
     State(StatePathRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Meta(MetadataPathRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Const(ConstPathRaw<'script>),
 }
 
 impl<'script> Upable<'script> for PathRaw<'script> {
@@ -1644,6 +1647,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
                     Path::Local(p)
                 }
             }
+            Const(p) => Path::Const(p.up(helper)?),
             Event(p) => Path::Event(p.up(helper)?),
             State(p) => Path::State(p.up(helper)?),
             Meta(p) => Path::Meta(p.up(helper)?),
@@ -1783,6 +1787,49 @@ impl<'script> From<ImutExprRaw<'script>> for ExprRaw<'script> {
     }
 }
 
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ConstPathRaw<'script> {
+    pub(crate) module: Vec<IdentRaw<'script>>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) segments: SegmentsRaw<'script>,
+}
+impl_expr!(ConstPathRaw);
+
+impl<'script> Upable<'script> for ConstPathRaw<'script> {
+    type Target = LocalPath<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let segments = self.segments.up(helper)?;
+        let mut segments = segments.into_iter();
+        if let Some(Segment::Id { mid, .. }) = segments.next() {
+            let segments = segments.collect();
+            let id = helper.meta.name_dflt(mid).clone();
+            let mid = helper.add_meta_w_name(self.start, self.end, id.clone());
+            let mut module: Vec<String> = self.module.iter().map(|m| m.id.to_string()).collect();
+            module.push(id.to_string());
+            if let Some(idx) = helper.is_const(&module) {
+                Ok(LocalPath {
+                    is_const: true,
+                    idx: *idx,
+                    mid,
+                    segments,
+                })
+            } else {
+                dbg!(&module);
+                dbg!(&helper.consts);
+                error_oops(
+                    &(self.start, self.end),
+                    "Only consts can be addressed inside of modules",
+                    &helper.meta,
+                )
+            }
+        } else {
+            // We should never encounter this
+            error_oops(&(self.start, self.end), "Empty local path", &helper.meta)
+        }
+    }
+}
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LocalPathRaw<'script> {
