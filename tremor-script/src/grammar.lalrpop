@@ -669,31 +669,37 @@ Selector: SegmentRaw<'input> = {
 
 /// Function invocation
 Invoke: InvokeRaw<'input> = {
-    <start:@L> <fun:FunctionName> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: fun.0.iter().map(|m| m.id.to_string()).collect(), fun: fun.1.id.to_string(), args, start, end },
-    <start:@L> <fun:FunctionName> "(" ")" <end:@L> => InvokeRaw { module: fun.0.iter().map(|m| m.id.to_string()).collect(), fun: fun.1.id.to_string(), args: vec![], start, end },
+    <start:@L> <fun:FunctionName> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args, start, end },
+    <start:@L> <fun:FunctionName> "(" ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args: vec![], start, end },
 }
 
-FunctionName: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
-    <fun:Ident> => (vec![], fun),
-    <p:Ident> "::" <fun:Ident> => (vec![p], fun),
-    <path1:Ident> "::" <path2:Ident> "::" <fun:Ident> => (vec![path1, path2], fun)
+FunctionName: (Vec<String>, String) = {
+    <fun:Ident> => (vec![], fun.id.to_string()),
+    <p:ModPath> "::" <fun:Ident> => (p.iter().map(|i| i.id.to_string()).collect(), fun.id.to_string()),
 }
 
-// ModPath: Option<Vec<IdentRaw<'input>>> = {
-//     (<Ident> "::")? => <>.map(|v| vec![v])
-// }
 
-// ModPath_: Vec<IdentRaw<'input>> = {
-//     <fields:ModPath__> => {
-//         let mut fields = fields;
-//         fields.reverse();
-//         fields
-//     },
-// }
+ModPath: Vec<IdentRaw<'input>> = {
+    <e:Ident> => vec![e],
+    <v:ModPath> "::" <e:Ident> => {
+        let mut v = v;
+        v.push(e);
+        v
+    },
+}
 
-// ModPath__: Vec<IdentRaw<'input>> = {
-//     <Sep<ModPath__, Ident, "::">> => <>,
-// }
+
+//  ModPath: Vec<IdentRaw<'input>> = {
+//      <fields:ModPath_> => {
+//          let mut fields = fields;
+//          fields.reverse();
+//          fields
+//      },
+//  }
+
+//  ModPath_: Vec<IdentRaw<'input>> = {
+//      <Sep<ModPath_, Ident, "::">> => <>,
+//  }
 
 InvokeArgs: ImutExprsRaw<'input> = {
     <fields:InvokeArgs_> => {

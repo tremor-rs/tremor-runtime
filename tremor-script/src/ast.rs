@@ -670,6 +670,15 @@ pub(crate) struct Invoke<'script> {
 }
 impl_expr2!(Invoke);
 
+impl<'script> Invoke<'script> {
+    fn inline(self) -> Result<ImutExprInt<'script>> {
+        self.invocable.inline(self.args)
+    }
+    fn can_inline(&self) -> bool {
+        self.invocable.can_inline()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum Invocable<'script> {
     Intrinsic(TremorFnWrapper),
@@ -679,10 +688,23 @@ pub(crate) enum Invocable<'script> {
 use crate::{registry::FResult, EventContext};
 
 impl<'script> Invocable<'script> {
+    fn inline(self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
+        match self {
+            Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
+            Invocable::Tremor(f) => f.inline(args), // FIXME .unwrap()
+        }
+    }
+    fn can_inline(&self) -> bool {
+        match self {
+            Invocable::Intrinsic(_f) => false,
+            Invocable::Tremor(f) => f.can_inline(), // FIXME .unwrap()
+        }
+    }
+
     fn is_const(&self) -> bool {
         match self {
             Invocable::Intrinsic(f) => f.is_const(),
-            Invocable::Tremor(f) => f.is_const(), // FIXME .unwrap()
+            Invocable::Tremor(f) => f.is_const(),
         }
     }
     pub fn invoke<'event>(
