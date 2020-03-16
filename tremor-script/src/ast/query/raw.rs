@@ -304,9 +304,13 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             return error_no_consts(&(self.start, self.end), &self.target, &helper.meta);
         }
         // reserve const ids for builtin const
-        helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
-        helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
-        helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
+        helper
+            .consts
+            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
+        helper
+            .consts
+            .insert(vec!["group".to_owned()], GROUP_CONST_ID);
+        helper.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
         let target = self.target.up(helper)?;
 
         if helper.has_locals() {
@@ -319,9 +323,9 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
                 return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
             }
         };
-        if helper.consts.remove("window") != Some(WINDOW_CONST_ID)
-            || helper.consts.remove("group") != Some(GROUP_CONST_ID)
-            || helper.consts.remove("args") != Some(ARGS_CONST_ID)
+        if helper.consts.remove(&vec!["window".to_owned()]) != Some(WINDOW_CONST_ID)
+            || helper.consts.remove(&vec!["group".to_owned()]) != Some(GROUP_CONST_ID)
+            || helper.consts.remove(&vec!["args".to_owned()]) != Some(ARGS_CONST_ID)
             || !helper.consts.is_empty()
         {
             return error_no_consts(&(self.start, self.end), &target, &helper.meta);

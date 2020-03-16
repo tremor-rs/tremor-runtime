@@ -193,6 +193,7 @@ MayBeConstExpr: ExprRaw<'input> = {
      Const => <>,
      FnDecl => ExprRaw::FnDecl(<>),
      Intrinsic => ExprRaw::FnDecl(<>),
+     Module => ExprRaw::Module(<>),
      Expr => <>
 }
 
@@ -375,7 +376,26 @@ Intrinsic: AnyFnRaw<'input> = {
     }
 }
 
+Module: ModuleRaw<'input> = {
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc}
+}
 
+/// List of expressions at the root of the script
+ModuleExprs: ExprsRaw<'input> = {
+    <expr:ModuleExpr> ";" <list:ModuleExprs> => {
+       let mut list = list;
+       list.insert(0,expr);
+       list
+    },
+    <item:ModuleExpr> ";"? => vec![item],
+}
+
+ModuleExpr: ExprRaw<'input> = {
+    Const => <>,
+    FnDecl => ExprRaw::FnDecl(<>),
+    Intrinsic => ExprRaw::FnDecl(<>),
+    Module => ExprRaw::Module(<>)
+}
 
 FnDecl: AnyFnRaw<'input> = {
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc}),
@@ -1101,6 +1121,7 @@ extern {
         "absent" => Token::Absent,
         "fn" => Token::Fun,
         "intrinsic" => Token::Intrinsic,
+        "mod" => Token::Module,
         "." => Token::Dot,
         "\"" => Token::DQuote,
         ";" => Token::Semi,

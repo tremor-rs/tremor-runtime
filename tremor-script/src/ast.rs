@@ -217,10 +217,11 @@ where
     shadowed_vars: Vec<String>,
     func_vec: Vec<CustomFn<'script>>,
     pub locals: HashMap<String, usize>,
-    pub functions: HashMap<String, usize>,
-    pub consts: HashMap<String, usize>,
+    pub functions: HashMap<Vec<String>, usize>,
+    pub consts: HashMap<Vec<String>, usize>,
     pub meta: NodeMetas<'script>,
     docs: Docs<'script>,
+    module: Vec<String>,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -246,7 +247,7 @@ where
     pub fn swap(
         &mut self,
         aggregates: &mut Vec<InvokeAggrFn<'script>>,
-        consts: &mut HashMap<String, usize>,
+        consts: &mut HashMap<Vec<String>, usize>,
         locals: &mut HashMap<String, usize>,
     ) {
         mem::swap(&mut self.aggregates, aggregates);
@@ -271,14 +272,17 @@ where
             shadowed_vars: Vec::new(),
             meta: NodeMetas::default(),
             docs: Docs::default(),
+            module: Vec::new(),
         }
     }
 
     #[allow(dead_code)]
     fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
         let i = self.func_vec.len();
+        let mut mf = self.module.clone();
+        mf.push(f.name.clone().to_string());
 
-        if self.functions.insert(f.name.clone().into(), i).is_none() {
+        if self.functions.insert(mf, i).is_none() {
             self.func_vec.push(f);
             Ok(i)
         } else {
@@ -332,7 +336,7 @@ where
             self.locals.len() - 1
         }
     }
-    fn is_const(&self, id: &str) -> Option<&usize> {
+    fn is_const(&self, id: &[String]) -> Option<&usize> {
         self.consts.get(id)
     }
 }
