@@ -173,6 +173,8 @@ pub enum Token<'input> {
     Absent,
     /// the `fun` keyword
     Fun,
+    /// the `intrinsic` keyword
+    Intrinsic,
 
     // Symbols
     /// the `\` backslash
@@ -327,52 +329,53 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_keyword(&self) -> bool {
         match *self {
-            Token::Match
-            | Token::End
-            | Token::Fun
-            | Token::Let
-            | Token::Const
-            | Token::Case
-            | Token::Of
-            | Token::When
-            | Token::Drop
-            | Token::Emit
-            | Token::Default
-            | Token::Patch
-            | Token::Insert
-            | Token::Upsert
-            | Token::Update
-            | Token::Erase
-            | Token::Move
-            | Token::Copy
-            | Token::Merge
-            | Token::For
-            | Token::Event
-            | Token::State
-            | Token::Present
-            | Token::Absent
-            | Token::Stream
-            | Token::Select
-            | Token::From
-            | Token::Where
-            | Token::With
-            | Token::Order
-            | Token::Group
-            | Token::By
-            | Token::Having
-            | Token::Into
-            | Token::Create
-            | Token::Tumbling
-            | Token::Sliding
-            | Token::Window
-            | Token::Script
-            | Token::Set
-            | Token::Each
-            | Token::Define
+            Token::Absent
             | Token::Args
+            | Token::By
+            | Token::Case
+            | Token::Const
+            | Token::Copy
+            | Token::Create
+            | Token::Default
+            | Token::Define
+            | Token::Drop
+            | Token::Each
+            | Token::Emit
+            | Token::End
+            | Token::Erase
+            | Token::Event
+            | Token::For
+            | Token::From
+            | Token::Fun
+            | Token::Group
+            | Token::Having
+            | Token::Insert
+            | Token::Into
+            | Token::Intrinsic
+            | Token::Let
+            | Token::Match
+            | Token::Merge
+            | Token::Move
+            | Token::Of
+            | Token::Operator
+            | Token::Order
+            | Token::Patch
+            | Token::Present
+            | Token::Script
+            | Token::Select
+            | Token::Set
             | Token::Use
             | Token::As
-            | Token::Operator => true,
+            | Token::Sliding
+            | Token::State
+            | Token::Stream
+            | Token::Tumbling
+            | Token::Update
+            | Token::Upsert
+            | Token::When
+            | Token::Where
+            | Token::Window
+            | Token::With => true,
             _ => false,
         }
     }
@@ -549,6 +552,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Of => write!(f, "of"),
             Token::When => write!(f, "when"),
             Token::Default => write!(f, "default"),
+            Token::Intrinsic => write!(f, "intrinsic"),
             Token::BSlash => write!(f, "\\"),
             Token::Colon => write!(f, ":"),
             Token::ColonColon => write!(f, "::"),
@@ -1278,6 +1282,7 @@ impl<'input> Lexer<'input> {
         let (end, ident) = self.take_while(start, is_ident_continue);
 
         let token = match ident {
+            "intrinsic" => Token::Intrinsic,
             "const" => Token::Const,
             "let" => Token::Let,
             "match" => Token::Match,
@@ -2064,7 +2069,7 @@ mod tests {
         lex_ok! { " state ", " ~~~~~~ " => Token::State, };
         lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
         lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
-        Ok(())
+        lex_ok! { " intrinsic ", " ~~~~~~~~~ " => Token::Intrinsic, };
     }
 
     #[test]
