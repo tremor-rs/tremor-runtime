@@ -838,11 +838,15 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                             mid: i.mid,
                         })
                     } else {
-                        match i.args.len() {
-                            1 => ImutExprInt::Invoke1(i),
-                            2 => ImutExprInt::Invoke2(i),
-                            3 => ImutExprInt::Invoke3(i),
-                            _ => ImutExprInt::Invoke(i),
+                        if i.can_inline() {
+                            i.inline()?
+                        } else {
+                            match i.args.len() {
+                                1 => ImutExprInt::Invoke1(i),
+                                2 => ImutExprInt::Invoke2(i),
+                                3 => ImutExprInt::Invoke3(i),
+                                _ => ImutExprInt::Invoke(i),
+                            }
                         }
                     }
                 }
