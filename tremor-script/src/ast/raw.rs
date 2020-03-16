@@ -62,9 +62,13 @@ impl<'script> ScriptRaw<'script> {
         const COMPILATION_UNIT_PART: u64 = 0; // FIXME include preprocessing
 
         let mut helper = Helper::new(reg, aggr_reg);
-        helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
-        helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
-        helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
+        helper
+            .consts
+            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
+        helper
+            .consts
+            .insert(vec!["group".to_owned()], GROUP_CONST_ID);
+        helper.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
 
         // TODO: Document why three `null` values are put in the constants vector.
         let mut consts: Vec<Value> = vec![Value::null(); 3];
@@ -72,6 +76,9 @@ impl<'script> ScriptRaw<'script> {
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
+                ExprRaw::Module(m) => {
+                    m.define(reg, aggr_reg, &mut consts, &mut helper)?;
+                }
                 ExprRaw::Const {
                     name,
                     expr,
@@ -79,7 +86,8 @@ impl<'script> ScriptRaw<'script> {
                     end,
                     comment,
                 } => {
-                    if let Some(_prev) = helper.consts.insert(name.to_string(), consts.len()) {
+                    let name_v = vec![name.to_string()];
+                    if helper.consts.insert(name_v.clone(), consts.len()).is_some() {
                         return Err(ErrorKind::DoubleConst(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -88,7 +96,6 @@ impl<'script> ScriptRaw<'script> {
                         .into());
                     }
 
-                    helper.consts.insert(name.to_string(), consts.len());
                     let expr = expr.up(&mut helper)?;
                     if i == last_idx {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
@@ -169,6 +176,82 @@ impl<'script> ScriptRaw<'script> {
             },
             helper.warnings,
         ))
+    }
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Debug, PartialEq, Serialize, Clone)]
+pub struct ModuleRaw<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub name: IdentRaw<'script>,
+    pub exprs: ExprsRaw<'script>,
+    pub doc: Option<Vec<Cow<'script, str>>>,
+}
+
+impl<'script> ModuleRaw<'script> {
+    pub(crate) fn define<'registry>(
+        self,
+        reg: &'registry Registry,
+        aggr_reg: &'registry AggrRegistry,
+        consts: &mut Vec<Value<'script>>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        helper.module.push(self.name.id.to_string());
+        for e in self.exprs.into_iter() {
+            match e {
+                ExprRaw::Module(m) => {
+                    m.define(reg, aggr_reg, consts, helper)?;
+                }
+                ExprRaw::Const {
+                    name,
+                    expr,
+                    start,
+                    end,
+                    comment,
+                } => {
+                    let name_v = vec![name.to_string()];
+                    if helper.consts.contains_key(&name_v) {
+                        return Err(ErrorKind::DoubleConst(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            name.to_string(),
+                        )
+                        .into());
+                    }
+
+                    helper.consts.insert(name_v.clone(), consts.len());
+                    let expr = expr.up(helper)?;
+                    let v = reduce2(expr, &helper)?;
+                    let value_type = v.value_type();
+                    consts.push(v);
+                    helper.docs.consts.push(ConstDoc {
+                        name: name,
+                        doc: comment
+                            .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+                        value_type,
+                    });
+                }
+                #[allow(unreachable_code, unused_variables)]
+                #[cfg_attr(tarpaulin, skip)]
+                ExprRaw::FnDecl(f) => {
+                    helper.docs.fns.push(f.doc());
+                    let f = f.up(helper)?;
+                    let f = CustomFn {
+                        name: f.name.id,
+                        args: f.args.iter().map(|i| i.id.to_string()).collect(),
+                        locals: f.locals,
+                        body: f.body,
+                        is_const: false, // FIXME .unwrap()
+                    };
+
+                    helper.register_fun(f)?;
+                }
+                _ => return Err("Can't have expressions inside of modules".into()),
+            }
+        }
+        helper.module.pop();
+        Ok(())
     }
 }
 
@@ -457,6 +540,8 @@ pub enum ExprRaw<'script> {
         comment: Option<Vec<Cow<'script, str>>>,
     },
     /// we're forced to make this pub because of lalrpop
+    Module(ModuleRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     MatchExpr(Box<MatchRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     Assign(Box<AssignRaw<'script>>),
@@ -480,6 +565,17 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
+            ExprRaw::Module(ModuleRaw { start, end, .. }) => {
+                // There is no code path that leads here,
+                // we still rather have an error in case we made
+                // an error then unreachable
+                #[cfg_attr(tarpaulin, skip)]
+                return Err(ErrorKind::InvalidConst(
+                    Range::from((start, end)).expand_lines(2),
+                    Range::from((start, end)),
+                )
+                .into());
+            }
             ExprRaw::Const { start, end, .. } => {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
@@ -1728,7 +1824,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             let id = helper.meta.name_dflt(mid).clone();
             let mid =
                 helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
-            if let Some(idx) = helper.is_const(&id) {
+            if let Some(idx) = helper.is_const(&vec![id.to_string()]) {
                 Ok(LocalPath {
                     is_const: true,
                     idx: *idx,
@@ -1936,8 +2032,26 @@ impl_expr!(InvokeRaw);
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        if self.module.is_empty() {
-            if let Some(f) = helper.functions.get(&self.fun) {
+        if self.module.get(0) == Some(&String::from("core")) && self.module.len() == 2 {
+            // we know a second module exists
+            let module = self.module.get(1).cloned().unwrap_or_default();
+
+            let invocable = helper
+                .reg
+                .find(&module, &self.fun)
+                .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
+            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+            Ok(Invoke {
+                mid: helper.add_meta(self.start, self.end),
+                module: self.module,
+                fun: self.fun,
+                invocable: Invocable::Intrinsic(invocable.clone()),
+                args,
+            })
+        } else {
+            let mut module = self.module.clone();
+            module.push(self.fun.clone());
+            if let Some(f) = helper.functions.get(&module) {
                 if let Some(f) = helper.func_vec.get(*f) {
                     let invocable = Invocable::Tremor(f.clone());
                     let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
@@ -1961,27 +2075,6 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 let outer: Range = inner.expand_lines(3);
                 Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
             }
-        } else if self.module.get(0) == Some(&String::from("core")) && self.module.len() == 2 {
-            // we know a second module exists
-            let module = self.module.get(1).cloned().unwrap_or_default();
-
-            let invocable = helper
-                .reg
-                .find(&module, &self.fun)
-                .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
-            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
-            Ok(Invoke {
-                mid: helper.add_meta(self.start, self.end),
-                module: self.module,
-                fun: self.fun,
-                invocable: Invocable::Intrinsic(invocable.clone()),
-                args,
-            })
-        } else {
-            let inner: Range = (self.start, self.end).into();
-            let outer: Range = inner.expand_lines(3);
-
-            Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
         }
     }
 }

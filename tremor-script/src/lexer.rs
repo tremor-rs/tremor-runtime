@@ -175,6 +175,8 @@ pub enum Token<'input> {
     Fun,
     /// the `intrinsic` keyword
     Intrinsic,
+    /// the `mod` keyword
+    Module,
 
     // Symbols
     /// the `\` backslash
@@ -355,6 +357,7 @@ impl<'input> Token<'input> {
             | Token::Let
             | Token::Match
             | Token::Merge
+            | Token::Module
             | Token::Move
             | Token::Of
             | Token::Operator
@@ -553,6 +556,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::When => write!(f, "when"),
             Token::Default => write!(f, "default"),
             Token::Intrinsic => write!(f, "intrinsic"),
+            Token::Module => write!(f, "mod"),
             Token::BSlash => write!(f, "\\"),
             Token::Colon => write!(f, ":"),
             Token::ColonColon => write!(f, "::"),
@@ -1283,6 +1287,7 @@ impl<'input> Lexer<'input> {
 
         let token = match ident {
             "intrinsic" => Token::Intrinsic,
+            "mod" => Token::Module,
             "const" => Token::Const,
             "let" => Token::Let,
             "match" => Token::Match,
