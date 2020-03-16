@@ -609,6 +609,7 @@ Path: PathRaw<'input> = {
     EventPath => <>,
     StatePath => <>,
     LocalPath => <>,
+    ConstPath => <>,
     AggrPath => <>,
     ArgsPath => <>,
 }
@@ -664,6 +665,19 @@ LocalPath: PathRaw<'input> = {
         PathRaw::Local(LocalPathRaw { segments:  vec![segment], start, end })
     },
 }
+
+/// Local path
+ConstPath: PathRaw<'input> = {
+    <start:@L> <module:ModPath> "::" <path:LocalPath> <end:@L> => {
+        if let PathRaw::Local(LocalPathRaw { segments, .. }) = path {
+
+            PathRaw::Const(ConstPathRaw { module, segments, start, end })
+        } else {
+            unreachable!()
+        }
+    },
+}
+
 
 /// State path
 StatePath: PathRaw<'input> = {

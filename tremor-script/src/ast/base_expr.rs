@@ -182,6 +182,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             PathRaw::Local(e) => e.s(meta),
+            PathRaw::Const(e) => e.s(meta),
             PathRaw::Meta(e) => e.start,
             PathRaw::Event(e) => e.start,
             PathRaw::State(e) => e.start,
@@ -190,6 +191,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             PathRaw::Local(e) => e.e(meta),
+            PathRaw::Const(e) => e.e(meta),
             PathRaw::Meta(e) => e.end,
             PathRaw::Event(e) => e.end,
             PathRaw::State(e) => e.end,
