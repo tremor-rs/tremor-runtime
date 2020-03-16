@@ -391,11 +391,6 @@ impl<'script> ImutExprInt<'script> {
             | ImutExprInt::Invoke2(i)
             | ImutExprInt::Invoke3(i)
             | ImutExprInt::Invoke(i) => {
-                dbg!(
-                    &i,
-                    i.invocable.is_const(),
-                    i.args.iter().all(|f| is_lit(&f.0))
-                );
                 if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f.0)) {
                     let ex = i.extent(&helper.meta);
                     let args: Result<Vec<Value<'script>>> =
