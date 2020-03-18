@@ -419,7 +419,7 @@ FnCase: PredicateClauseRaw<'input> = {
     <start:@L> "case" <pstart:@L> "(" <pattern:ArrayPredicatePatterns>  ")" <guard:WhenClause> <pend:@L> <exprs:Effectors> <end:@L> => PredicateClauseRaw {
         pattern: PatternRaw::Assign(AssignPatternRaw {
             id: FN_RES_NAME.into(),
-            pattern: Box::new(PatternRaw::Tuple(TuplePatternRaw{exprs: pattern, start: pstart, end: pend}))
+            pattern: Box::new(PatternRaw::Tuple(TuplePatternRaw{exprs: pattern, start: pstart, end: pend, open: false}))
         }),
         exprs,
         guard,
@@ -700,12 +700,12 @@ FunctionName: (Vec<String>, String) = {
 
 
 ModPath: Vec<IdentRaw<'input>> = {
-    <e:Ident> => vec![e],
     <v:ModPath> "::" <e:Ident> => {
         let mut v = v;
         v.push(e);
         v
     },
+    <e:Ident> => vec![e],
 }
 
 InvokeArgs: ImutExprsRaw<'input> = {
@@ -973,8 +973,13 @@ ArrayPattern: ArrayPatternRaw<'input> = {
 }
 
 TuplePattern: TuplePatternRaw<'input> = {
-    <start:@L> "%(" <exprs:ArrayPredicatePatterns> ")" <end:@L> => TuplePatternRaw { exprs, start, end },
-    <start:@L> "%(" ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end },
+    <start:@L> "%(" <exprs:ArrayPredicatePatterns> <open:OpenTuple> ")" <end:@L> => TuplePatternRaw { exprs, start, end, open },
+    <start:@L> "%(" ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: false },
+    <start:@L> "%(" "." "." ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: true },
+}
+
+OpenTuple: bool = {
+    ("," "." ".")? => <>.is_some()
 }
 
 ArrayPredicatePattern: ArrayPredicatePatternRaw<'input> = {

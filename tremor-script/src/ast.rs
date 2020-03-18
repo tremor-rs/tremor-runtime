@@ -947,6 +947,7 @@ pub(crate) struct AssignPattern<'script> {
 pub(crate) struct TuplePattern<'script> {
     pub mid: usize,
     pub exprs: ArrayPredicatePatterns<'script>,
+    pub open: bool,
 }
 impl_expr2!(TuplePattern);
 
