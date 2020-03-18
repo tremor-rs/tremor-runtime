@@ -1,0 +1,12 @@
+##! The system namespace contains functions that provide information about the tremor runtime system.
+
+
+## Returns the name of the host where tremor is running.
+##
+## Returns a `string`
+intrinsic fn hostname() as system::hostname;
+
+## Returns the ingest time into tremor of the current event.
+##
+## Returns a `string`
+intrinsic fn ingest_ns() as system::ingest_ns;

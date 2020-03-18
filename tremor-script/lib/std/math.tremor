@@ -1,0 +1,57 @@
+##! The math module contains functions for common mathematical operations.
+
+## Returns the smallest integer value less than or equal to n.
+##
+## ```
+## math::floor(42.9) == 42
+## ```
+##
+## Returns an `int`
+intrinsic fn floor(n) as math::floor;
+
+## Returns the largest integer value greater than or equal to n.
+##
+## ```
+## math::ceil(41.1) == 42
+## ```
+##
+## Returns an `int`
+intrinsic fn ceil(n) as math::ceil;
+
+## Returns the integer nearest to.
+##
+## ```
+## math::round(41.4) == 41
+## math::round(41.5) == 42
+## ```
+##
+## Returns an `int`
+intrinsic fn round(n) as math::round;
+
+## Returns the integer part of `n`.
+##
+## ```
+## math::trunc(41.4) == 41
+## math::trunc(41.5) == 41
+## ```
+##
+## Returns an `int`
+intrinsic fn trunc(n) as math::trunc;
+
+## Returns the maximum of two numbers.
+##
+## ```
+## math::max(41, 42) == 42
+## ```
+##
+## Returns a `number` (`int` or `float`)
+intrinsic fn max(n1, n2) as math::max;
+
+## Returns the minimum of two numbers.
+##
+## ```
+## math::min(41, 42) == 41
+## ```
+##
+## Returns a `number` (`int` or `float`)
+intrinsic fn min(n1, n2) as math::min;
