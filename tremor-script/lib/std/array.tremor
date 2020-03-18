@@ -64,7 +64,8 @@ intrinsic fn flatten(array) for array::flatten;
 ## Returns an `array`.
 intrinsic fn coalesce(array) for array::coalesce;
 
-## Joins the elements of an array (turing them into Strings) for a given separator.
+## Joins the elements of an array (turing them into Strings) for a given
+## separator.
 ##
 ## ```tremor
 ## array:join(["this", "is", "a", "cake"], " ") => "this is a cake"
