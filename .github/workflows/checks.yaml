@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install deps
-        run: sudo snap install remarshal rg
+        run: sudo snap install remarshal
+      - name: Install rg
+        run: sudo apt install -y ripgrep
       - uses: actions/checkout@v1
       - name: Check for unused dependencies
         run: ./.github/checks/deps.sh .
