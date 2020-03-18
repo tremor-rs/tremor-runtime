@@ -1601,6 +1601,7 @@ pub struct TuplePatternRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) exprs: ArrayPredicatePatternsRaw<'script>,
+    pub(crate) open: bool,
 }
 
 impl<'script> Upable<'script> for TuplePatternRaw<'script> {
@@ -1610,6 +1611,7 @@ impl<'script> Upable<'script> for TuplePatternRaw<'script> {
         Ok(TuplePattern {
             mid: helper.add_meta(self.start, self.end),
             exprs,
+            open: self.open,
         })
     }
 }
