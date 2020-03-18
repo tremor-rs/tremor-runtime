@@ -1,0 +1,56 @@
+## The type module contains functions that help inspecting types of values.
+
+
+## Returns a string representation for the value type:
+##
+## * "null"
+## * "bool"
+## * "integer"
+## * "float"
+## * "string"
+## * "array"
+## * "record"
+##
+## Returns a `string`
+intrinsic fn as_string(value) as type::as_string
+
+## Returns if the value is null.
+##
+## Returns a `bool`
+intrinsic fn is_null(value) as type::is_null;
+
+## Returns if the value is a boolean.
+##
+## Returns a `bool`
+intrinsic fn is_bool(value) as type::is_bool;
+
+## Returns if the value is an integer.
+##
+## Returns a `bool`
+intrinsic fn is_integer(value) as type::is_integer;
+
+## Returns if the value is a float.
+##
+## Returns a `bool`
+intrinsic fn is_float(value) as type::is_float;
+
+## Returns if the value is either a float or an integer.
+##
+## Returns a `bool`
+intrinsic fn is_number(value) as type::is_number;
+
+## Returns if the value is a string.
+##
+## Returns a `bool`
+intrinsic fn is_string(value) as type::is_string;
+
+## Returns if the value is an array.
+##
+## Returns a `bool`
+intrinsic fn is_array(value) as type::is_array;
+
+## Returns if the value is a record.
+##
+## Returns a `bool`
+intrinsic fn is_record(value) as type::is_record;
+

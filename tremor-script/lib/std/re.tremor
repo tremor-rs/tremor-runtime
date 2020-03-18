@@ -1,0 +1,33 @@
+##! The re module contains functions for regular expression handing. Please note
+## that if applicable literal regular expressions are faster.
+
+## Replaces the first occurrence of regex in the input string with to.
+##
+## References to match groups can be done using `$`` as either numbered
+## references like `$1` inserting the first capture or named using `$foo`
+## inserting the capture named foo.
+##
+## Returns a `string`
+intrinsic fn replace(regex, input, to) as re::replace;
+
+## Replaces all occurrences of regex in the input string with to.
+##
+## References to match groups can be done using `$` as either numbered
+## references like `$1` inserting the first capture or named using `$foo`
+## inserting the capture named foo.
+##
+## Returns a `string`
+intrinsic fn replace_all(regex, input, to) as re::replace_all;
+
+## Returns if the regex machines input.
+##
+## Returns a `bool`
+intrinsic fn is_match(regex, input) as re::is_match;
+
+## Splits the input string using the provided regular expression regex as
+## separator.
+##
+## re::split(" ", "this is a test") == ["this", "is", "a", "string"].
+##
+## Returns a `[string]`
+intrinsic fn split(regex, input) as re::split;

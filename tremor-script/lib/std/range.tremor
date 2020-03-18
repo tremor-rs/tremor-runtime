@@ -1,0 +1,26 @@
+##! The range module contains functions for common range generator operations.
+use std::array;
+
+## Returns an array from a min-inclusive to b max-inclusive.
+##
+## ```tremor
+## range::range(0, 3) == [0, 1, 2]
+## ```
+##
+## Returns `[int]`
+intrinsic fn range(a, b) as range::range;
+
+## Checks if an element is within a range.
+##
+## ```tremor
+## range::contains(range::range(0, 3), 2) == true
+## ```
+##
+## Returns `[int]`
+fn contains(r, n) with
+  let len = array::len();
+  match len of
+    case 0 => false
+    default => r[0] <= n && r[len - 1] >= n
+  end
+end;
