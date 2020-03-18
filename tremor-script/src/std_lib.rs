@@ -28,6 +28,7 @@ mod record;
 mod stats;
 mod string;
 mod system;
+mod test;
 mod r#type;
 mod win;
 
@@ -44,12 +45,13 @@ pub fn load(registry: &mut Registry) {
     math::load(registry);
     origin::load(registry);
     random::load(registry);
+    range::load(registry);
     re::load(registry);
     record::load(registry);
     string::load(registry);
     system::load(registry);
+    test::load(registry);
     r#type::load(registry);
-    range::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {

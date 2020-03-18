@@ -1165,7 +1165,7 @@ where
     'event: 'run,
 {
     if let Some(a) = target.as_array() {
-        if a.len() != tp.exprs.len() {
+        if (tp.open && a.len() < tp.exprs.len()) || (!tp.open && a.len() != tp.exprs.len()) {
             return Ok(None);
         }
         let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
