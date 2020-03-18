@@ -1,0 +1,91 @@
+##! The string module contains functions that primarily work with strings.
+
+## The placeholder {} is replaced by the arguments in the list in order.
+##
+## ```tremor
+## string::format("the {} is {}.", "meaning of life", 42)
+## ```
+##
+## would result in the string 
+##
+## ```tremor
+## "the meaning of life is 42"
+## ```
+## 
+## To use `{` or `}` as string literals in your format string, it needs to be
+## escapedby adding another parenthesis of the same type.
+##
+## ```tremor
+## string::format("{{ this is a string format in parenthesis }}")
+## ```
+## 
+## this will output:
+##
+## ```tremor
+## "{ this is a string format in parenthesis }"
+## ```
+##
+## Returns a `string`
+## string::format(format, arg, …) -> string FIXME!
+
+## Returns if the input string is empty or not.
+##
+## Returns a `bool`
+intrinsic fn is_empty(input) as string::is_empty;
+
+## Returns the length of the input string (counted as utf8 characters not
+## bytes!).
+##
+## Retrusn an `int`
+intrinsic fn len(input) as string::len;
+
+## Returns the number of bytes composing the input string (may not be equivalent
+## to the number of characters!).
+##
+## Returns an `int`
+intrinsic fn bytes(input) as string::bytes;
+
+## Replaces all occurrences of from in Input to to.
+##
+## Returns a `string`
+intrinsic fn replace(input, from, to) as string::replace;
+
+## Trims whitespaces both at the start and end of the input string.
+##
+## Returns a `string`
+intrinsic fn trim(input) as string::trim;
+
+## Trims whitespaces at the start of the input string.
+##
+## Returns a `string`
+intrinsic fn trim_start(input) as string::trim_start;
+
+## Trims whitespaces at the end of the input string.
+##
+## Returns a `string`
+intrinsic fn trim_end(input) as string::trim_end;
+
+## Turns all characters in the input string to lower case.
+##
+## Returns a `string`
+intrinsic fn lowercase(input) as string::lowercase;
+
+## Turns all characters in the input string to upper case.
+##
+## Returns a `string`
+intrinsic fn uppercase(input) as string::uppercase;
+
+## Turns the first character in the input string to upper case. This does not ignore leading non letters!
+##
+## Returns a `string`
+intrinsic fn capitalize(input) as string::capitalize;
+
+## Get all characters from index start to end-1.
+##
+## Returns a `string`
+intrinsic fn substr(input, start, end) as string::substr;
+
+## Splits the input string at every occurrence of the separator string and turns the result in an array.
+##
+## Returns a `string`
+intrinsic fn split(input, separator) as string::split;

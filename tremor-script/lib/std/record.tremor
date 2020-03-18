@@ -1,0 +1,81 @@
+##! The record module contains functions to work with records.
+
+## Returns the length of an record (number of key value pairs).
+##
+## Returns an `integer`
+intrinsic fn len(record) as record::len;
+
+## Returns if an record is empty.
+##
+## Returns a `bool`
+intrinsic fn is_empty(record) as record::is_empty;
+
+## Returns if an record contains a given key.
+##
+## Returns a `bool`
+intrinsic fn contains(record, key) as record::contains;
+
+## Returns an array of record keys.
+##
+## ```tremor
+## record::keys({"a": 1, "b": 2}) == ["a", "b"]
+## ```
+##
+## Returns a `[string]`
+intrinsic fn keys(record) as record::keys;
+
+## Returns an array of record values.
+##
+## ```tremor
+## record::values({"a": 1, "b": 2}) == [1, 2]
+## ```
+##
+## Returns a `[any]`
+intrinsic fn values(record) as record::values;
+
+## Turns the record into an array of key value pairs.
+##
+## ```tremor
+## record::to_array({"a": 1, "b": 2}) == [["a", 1], ["b", 2]]
+## ```
+##
+## Returns a `[(string, any)]`
+intrinsic fn to_array(record) as record::to_array;
+
+## Turns an array of key value pairs into an record.
+##
+## Note: array's elements need to be arrays of two elements with the first element being a string.
+##
+## ```tremor
+## record::from_array([["a", 1], ["b", 2]]) == {"a": 1, "b": 2}
+## ```
+##
+## Returns a `record`
+intrinsic fn from_array(array) as record::from_array;
+
+## 'Selects' a given set of field from an record, removing all others.
+## 
+## ```tremor
+## record::select({"a": 1, "b": 2, "c": 3}, ["a", "c"]) == {"a": 1, "c": 3}
+## ```
+##
+## Returns a `record`
+intrinsic fn select(record, array) as record::select;
+
+## Merges the two records left and right overwriting existing values in left with those provided in right
+##
+## ```tremor
+## record::merge({"a": 1, "b": 2, "c": 4}, {"c": 3, "d": 4}) == {"a": 1, "b": 2, "c": 3, "d": 4}
+## ```
+##
+## Returns a `record`
+intrinsic fn merge(left, right) as record::merge;
+
+## Renames the keys in the record target based on the key value pairs in the record changes where the key is the current name and the value is the new name.
+## 
+## ```tremor
+## record::rename({"a": 1, "b": 2, "c": 4}, {"a": "A", "b": "B"}) == {"A": 1, "B": 2, "c": 4}
+## ```
+##
+## Returns a `record`
+intrinsic fn rename(target, changes) as record::rename;

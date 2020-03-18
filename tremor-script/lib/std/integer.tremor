@@ -1,0 +1,5 @@
+##! The `integer` module contains functions to work with integers.
+
+## Parses a string as an integer.
+## Returns an `float`.
+intrinsic fn parse(string) as integer::parse;
