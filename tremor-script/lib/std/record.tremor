@@ -44,7 +44,8 @@ intrinsic fn to_array(record) as record::to_array;
 
 ## Turns an array of key value pairs into an record.
 ##
-## Note: array's elements need to be arrays of two elements with the first element being a string.
+## Note: array's elements need to be arrays of two elements with the first
+##       element being a string.
 ##
 ## ```tremor
 ## record::from_array([["a", 1], ["b", 2]]) == {"a": 1, "b": 2}
@@ -62,19 +63,24 @@ intrinsic fn from_array(array) as record::from_array;
 ## Returns a `record`
 intrinsic fn select(record, array) as record::select;
 
-## Merges the two records left and right overwriting existing values in left with those provided in right
+## Merges the two records left and right overwriting existing values in left
+## with those provided in right
 ##
 ## ```tremor
-## record::merge({"a": 1, "b": 2, "c": 4}, {"c": 3, "d": 4}) == {"a": 1, "b": 2, "c": 3, "d": 4}
+## record::merge({"a": 1, "b": 2, "c": 4}, {"c": 3, "d": 4}) 
+##   == {"a": 1, "b": 2, "c": 3, "d": 4}
 ## ```
 ##
 ## Returns a `record`
 intrinsic fn merge(left, right) as record::merge;
 
-## Renames the keys in the record target based on the key value pairs in the record changes where the key is the current name and the value is the new name.
+## Renames the keys in the record target based on the key value pairs in the
+## record changes where the key is the current name and the value is the new
+## name.
 ## 
 ## ```tremor
-## record::rename({"a": 1, "b": 2, "c": 4}, {"a": "A", "b": "B"}) == {"A": 1, "B": 2, "c": 4}
+## record::rename({"a": 1, "b": 2, "c": 4}, {"a": "A", "b": "B"})
+##   == {"A": 1, "B": 2, "c": 4}
 ## ```
 ##
 ## Returns a `record`
