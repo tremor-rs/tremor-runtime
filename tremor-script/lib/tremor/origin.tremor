@@ -99,4 +99,4 @@ intrinsic fn as_uri_string() as origin::as_uri_string;
 ## }
 ## ```
 ## 
-origin::as_uri_record() -> record | null¶
+intrinsic fn as_uri_record() as origin::as_uri_record;

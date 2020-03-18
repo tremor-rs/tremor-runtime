@@ -75,7 +75,8 @@ intrinsic fn lowercase(input) as string::lowercase;
 ## Returns a `string`
 intrinsic fn uppercase(input) as string::uppercase;
 
-## Turns the first character in the input string to upper case. This does not ignore leading non letters!
+## Turns the first character in the input string to upper case. This does not
+## ignore leading non letters!
 ##
 ## Returns a `string`
 intrinsic fn capitalize(input) as string::capitalize;
@@ -85,7 +86,8 @@ intrinsic fn capitalize(input) as string::capitalize;
 ## Returns a `string`
 intrinsic fn substr(input, start, end) as string::substr;
 
-## Splits the input string at every occurrence of the separator string and turns the result in an array.
+## Splits the input string at every occurrence of the separator string and turns
+## the result in an array.
 ##
 ## Returns a `string`
 intrinsic fn split(input, separator) as string::split;
