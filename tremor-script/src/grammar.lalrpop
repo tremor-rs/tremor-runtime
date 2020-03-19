@@ -372,8 +372,37 @@ Intrinsic: AnyFnRaw<'input> = {
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc})
-    }
+        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
+    },
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+        let invoce_args = args.iter().map(|a|           
+            ImutExprRaw::Path(
+                PathRaw::Local(
+                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                ))).collect();
+        let invoke = InvokeRaw{
+            start,
+            end,
+            module: vec!["core".into(), imod.id.to_string()],
+            fun: ifn.id.to_string(),
+            args: invoce_args
+        };
+        let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
+        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
+    },
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+        let args = vec![];
+        let invoce_args = vec![];
+        let invoke = InvokeRaw{
+            start,
+            end,
+            module: vec!["core".into(), imod.id.to_string()],
+            fun: ifn.id.to_string(),
+            args: invoce_args
+        };
+        let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
+        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
+    },
 }
 
 Module: ModuleRaw<'input> = {
@@ -398,8 +427,10 @@ ModuleExpr: ExprRaw<'input> = {
 }
 
 FnDecl: AnyFnRaw<'input> = {
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: true, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc, open: false, inline: false}),
 }
 
 FnCases: Vec<PredicateClauseRaw<'input>> = {
@@ -438,17 +469,13 @@ FnCases_: Vec<PredicateClauseRaw<'input>> = {
 }
 
 FnArgs: Vec<IdentRaw<'input>> = {
-    <fields:FnArgs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        fields
+    <e:Ident> => vec![e],
+    <v:FnArgs> "," <e:Ident> => {
+        let mut v = v;
+        v.push(e);
+        v
     },
 }
-
-FnArgs_: Vec<IdentRaw<'input>> = {
-    <Sep<FnArgs_, Ident, ",">> => <>
-}
-
 
 SimpleExprImut: ImutExprRaw<'input> = {
     "(" <expr:ComplexExprImut> ")" => expr,
@@ -973,13 +1000,27 @@ ArrayPattern: ArrayPatternRaw<'input> = {
 }
 
 TuplePattern: TuplePatternRaw<'input> = {
-    <start:@L> "%(" <exprs:ArrayPredicatePatterns> <open:OpenTuple> ")" <end:@L> => TuplePatternRaw { exprs, start, end, open },
+    <start:@L> "%(" <exprs:TuplePredicatePatterns> <open:OpenTuple> ")" <end:@L> => TuplePatternRaw { exprs, start, end, open },
     <start:@L> "%(" ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: false },
     <start:@L> "%(" "." "." ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: true },
 }
 
 OpenTuple: bool = {
     ("," "." ".")? => <>.is_some()
+}
+
+TuplePredicatePatterns: ArrayPredicatePatternsRaw<'input> = {
+    <list:TuplePredicatePatterns> "," <item:TuplePredicatePattern> => {
+        let mut list = list;
+        list.push(item);
+        list
+    },
+    TuplePredicatePattern => vec![<>],
+}
+
+TuplePredicatePattern: ArrayPredicatePatternRaw<'input> = {
+    ArrayPredicatePattern => <>,
+    "_" => ArrayPredicatePatternRaw::Ignore,
 }
 
 ArrayPredicatePattern: ArrayPredicatePatternRaw<'input> = {
@@ -996,7 +1037,6 @@ ArrayPredicatePatterns: ArrayPredicatePatternsRaw<'input> = {
     },
     ArrayPredicatePattern => vec![<>],
 }
-
 
 PatternFields: PatternFieldsRaw<'input> = {
     <fields:PatternFields_> => {
@@ -1148,7 +1188,7 @@ extern {
         ":" => Token::Colon,
         "," => Token::Comma,
         "=" => Token::Eq,
-//        "_" => Token::DontCare,
+        "_" => Token::DontCare,
         "==" => Token::EqEq,
         "!=" => Token::NotEq,
         "{" => Token::LBrace,

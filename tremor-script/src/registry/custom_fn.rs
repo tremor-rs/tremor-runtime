@@ -29,8 +29,10 @@ pub(crate) struct CustomFn<'script> {
     pub name: Cow<'script, str>,
     pub body: Exprs<'script>,
     pub args: Vec<String>,
+    pub open: bool,
     pub locals: usize,
     pub is_const: bool,
+    pub inline: bool,
 }
 
 impl<'script> CustomFn<'script> {
@@ -40,6 +42,9 @@ impl<'script> CustomFn<'script> {
     pub(crate) fn can_inline(&self) -> bool {
         if self.body.len() != 1 {
             return false;
+        }
+        if self.inline {
+            return true;
         }
         let i = match self.body.get(0) {
             Some(Expr::Imut(ImutExprInt::Invoke1(i))) => i,
@@ -101,9 +106,28 @@ impl<'script> CustomFn<'script> {
         use crate::ast::InvokeAggrFn;
         use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-        const NO_CONSTS: [Value<'static>; 0] = [];
+
+        let consts = if self.open {
+            vec![
+                Value::null(),
+                Value::null(),
+                Value::from(
+                    args.iter()
+                        .skip(self.locals)
+                        .map(|v| v.clone_static())
+                        .collect::<Vec<Value<'static>>>(),
+                ),
+            ]
+        } else {
+            vec![Value::null(), Value::null(), Value::null()]
+        };
+        dbg!(&self);
+        dbg!(&consts);
         let mut this_local = LocalStack::with_size(self.locals);
         for (i, arg) in args.iter().enumerate() {
+            if i == self.locals {
+                break;
+            }
             this_local.values[i] = Some((*arg).clone());
         }
         let opts = ExecOpts {
@@ -115,7 +139,7 @@ impl<'script> CustomFn<'script> {
         let meta = NodeMetas::default();
         let env = Env {
             context: ctx,
-            consts: &NO_CONSTS,
+            consts: &consts,
             aggrs: &NO_AGGRS,
             meta: &meta,
         };

@@ -176,6 +176,8 @@ pub enum Token<'input> {
     Intrinsic,
     /// the `mod` keyword
     Module,
+    /// the `_` token
+    DontCare,
 
     // Symbols
     /// the `\` backslash
@@ -378,8 +380,8 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_literal(&self) -> bool {
         match *self {
-            // Token::DontCare => true,
-            Token::Nil
+            Token::DontCare
+            | Token::Nil
             | Token::BoolLiteral(_)
             | Token::IntLiteral(_)
             | Token::FloatLiteral(_, _) => true,
@@ -569,7 +571,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Not => write!(f, "not"),
             Token::BitNot => write!(f, "!"),
             //            Token::Tilde => write!(f, "~"),
-            // Token::DontCare => write!(f, "_"),
+            Token::DontCare => write!(f, "_"),
             Token::EqArrow => write!(f, "=>"),
             Token::Semi => write!(f, ";"),
             Token::LPatParen => write!(f, "%("),
@@ -1515,7 +1517,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '$' => Some(Ok(spanned2(start, start, Token::Dollar))),
                     '.' => Some(Ok(spanned2(start, start, Token::Dot))),
                     //                        '?' => Some(Ok(spanned2(start, start, Token::Question))),
-                    //'_' => Some(Ok(spanned2(start, start, Token::DontCare))),
+                    '_' => Some(Ok(spanned2(start, start, Token::DontCare))),
                     ';' => Some(Ok(spanned2(start, start, Token::Semi))),
                     '+' => Some(Ok(spanned2(start, start, Token::Add))),
                     '*' => Some(Ok(spanned2(start, start, Token::Mul))),

@@ -1116,6 +1116,7 @@ where
         for candidate in a {
             'inner: for expr in &ap.exprs {
                 match expr {
+                    ArrayPredicatePattern::Ignore => continue 'inner,
                     ArrayPredicatePattern::Expr(e) => {
                         let r = stry!(e.run(opts, env, event, state, meta, local));
                         let vb: &Value = r.borrow();
@@ -1184,6 +1185,11 @@ where
         let cases = tp.exprs.iter().zip(a.iter());
         for (case, candidate) in cases {
             match case {
+                ArrayPredicatePattern::Ignore => {
+                    if opts.result_needed {
+                        acc.push(candidate.clone());
+                    }
+                }
                 ArrayPredicatePattern::Expr(e) => {
                     let r = stry!(e.run(opts, env, event, state, meta, local));
                     let vb: &Value = r.borrow();
