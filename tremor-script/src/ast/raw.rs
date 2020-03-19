@@ -130,6 +130,8 @@ impl<'script> ScriptRaw<'script> {
                         locals: f.locals,
                         body: f.body,
                         is_const: false, // FIXME .unwrap()
+                        open: f.open,
+                        inline: f.inline,
                     };
 
                     helper.register_fun(f)?;
@@ -244,6 +246,8 @@ impl<'script> ModuleRaw<'script> {
                         locals: f.locals,
                         body: f.body,
                         is_const: false, // FIXME .unwrap()
+                        open: f.open,
+                        inline: f.inline,
                     };
 
                     helper.register_fun(f)?;
@@ -659,6 +663,8 @@ pub struct FnDeclRaw<'script> {
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) body: ExprsRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) open: bool,
+    pub(crate) inline: bool,
 }
 impl_expr!(FnDeclRaw);
 
@@ -667,6 +673,7 @@ impl<'script> FnDeclRaw<'script> {
         FnDoc {
             name: self.name.id.clone(),
             args: self.args.iter().map(|a| a.id.clone()).collect(),
+            open: self.open,
             doc: self
                 .doc
                 .clone()
@@ -701,6 +708,8 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
             args: self.args.up(helper)?,
             body,
             locals: locals.len(),
+            open: self.open,
+            inline: self.inline,
         })
     }
 }
@@ -762,6 +771,8 @@ pub struct MatchFnDeclRaw<'script> {
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) cases: Vec<PredicateClauseRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) open: bool,
+    pub(crate) inline: bool,
 }
 impl_expr!(MatchFnDeclRaw);
 
@@ -770,6 +781,7 @@ impl<'script> MatchFnDeclRaw<'script> {
         FnDoc {
             name: self.name.id.clone(),
             args: self.args.iter().map(|a| a.id.clone()).collect(),
+            open: self.open,
             doc: self
                 .doc
                 .clone()
@@ -786,6 +798,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         let mut aggrs = Vec::new();
         let mut locals = HashMap::new();
         let mut consts = HashMap::new();
+        consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
 
         for (i, a) in self.args.iter().enumerate() {
             locals.insert(a.id.to_string(), i);
@@ -870,6 +883,8 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
             args: self.args.up(helper)?,
             body,
             locals: locals.len(),
+            open: self.open,
+            inline: self.inline,
         })
     }
 }
@@ -1562,6 +1577,8 @@ pub enum ArrayPredicatePatternRaw<'script> {
     Tilde(TestExprRaw),
     /// we're forced to make this pub because of lalrpop
     Record(RecordPatternRaw<'script>),
+    /// Ignore
+    Ignore,
 }
 impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
     type Target = ArrayPredicatePattern<'script>;
@@ -1571,6 +1588,7 @@ impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
             Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
             Tilde(te) => ArrayPredicatePattern::Tilde(te.up(helper)?),
             Record(rp) => ArrayPredicatePattern::Record(rp.up(helper)?),
+            Ignore => ArrayPredicatePattern::Ignore,
             //Array(ap) => ArrayPredicatePattern::Array(ap),
         })
     }

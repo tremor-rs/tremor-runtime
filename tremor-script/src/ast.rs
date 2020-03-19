@@ -147,6 +147,7 @@ pub struct FnDoc<'script> {
     name: Cow<'script, str>,
     args: Vec<Cow<'script, str>>,
     doc: Option<String>,
+    open: bool,
 }
 
 /// Documentaiton from a module
@@ -538,6 +539,8 @@ pub(crate) struct FnDecl<'script> {
     pub args: Vec<Ident<'script>>,
     pub body: Exprs<'script>,
     pub locals: usize,
+    pub open: bool,
+    pub inline: bool,
 }
 impl_expr2!(FnDecl);
 
@@ -986,6 +989,7 @@ pub(crate) enum ArrayPredicatePattern<'script> {
     Expr(ImutExprInt<'script>),
     Tilde(TestExpr),
     Record(RecordPattern<'script>),
+    Ignore,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
