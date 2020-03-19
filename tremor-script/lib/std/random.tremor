@@ -40,12 +40,11 @@ intrinisc fn string(length) as random::string;
 ## random::integer(0, 100)   # one of 0-99
 ## random::integer(-1, 1)    # either -1 or 0
 ## random::integer(-42, -41) # always -42
-## # FIXME - this isn't possible right now
 ## random::integer(i) -> int 
 ## random::integer(100) # one of 0-99. same as random::integer(0, 100)
 ## random::integer() -> int¶
 ## ```
-intrinisc fn integer(a, b) as random::integer;
+intrinisc fn integer(..) as random::integer;
 
 ## Generates a random float, with the functionality changing based on the
 ## number of arguments passed.
@@ -55,8 +54,7 @@ intrinisc fn integer(a, b) as random::integer;
 ## random::float(0.0, 100.0) # >= 0.0 and < 100.0
 ## random::float(-1.0, 1.0)  # >= -1.0 and < 1.0
 ## random::float(-3.0, -2.0) # >= -3.0 and < -2.0
-## # FIXME - this isn't possible right now
 ## random::float(100.0) # same as random::float(0.0, 100.0)
 ## random::float() -> float¶
 ## ```
-intrinisc fn float(a, b) as random::float;
+intrinisc fn float(..) as random::float;

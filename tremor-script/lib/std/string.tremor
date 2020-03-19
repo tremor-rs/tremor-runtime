@@ -26,7 +26,7 @@
 ## ```
 ##
 ## Returns a `string`
-## string::format(format, arg, …) -> string FIXME!
+intrinisc fn format(format, ..) as string::format;
 
 ## Returns if the input string is empty or not.
 ##
