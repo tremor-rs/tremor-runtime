@@ -121,8 +121,6 @@ impl<'script> CustomFn<'script> {
         } else {
             vec![Value::null(), Value::null(), Value::null()]
         };
-        dbg!(&self);
-        dbg!(&consts);
         let mut this_local = LocalStack::with_size(self.locals);
         for (i, arg) in args.iter().enumerate() {
             if i == self.locals {
