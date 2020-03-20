@@ -179,6 +179,8 @@ pub enum Token<'input> {
     Module,
     /// the `_` token
     DontCare,
+    /// the `recure` token
+    Recur,
 
     // Symbols
     /// the `\` backslash
@@ -631,6 +633,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Args => write!(f, "args"),
             Token::Use => write!(f, "use"),
             Token::As => write!(f, "as"),
+            Token::Recur => write!(f, "recur"),
 
             Token::LineDirective(s) => write!(f, "#!line {}", s),
         }
@@ -1343,6 +1346,7 @@ impl<'input> Lexer<'input> {
             "args" => Token::Args,
             "use" => Token::Use,
             "as" => Token::As,
+            "recur" => Token::Recur,
             src => Token::Ident(src.into(), false),
         };
 

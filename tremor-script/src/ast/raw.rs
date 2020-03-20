@@ -698,7 +698,9 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
 
         helper.can_emit = false;
         helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.possible_leaf = true;
         let body = self.body.up(helper)?;
+        helper.possible_leaf = false;
         helper.swap(&mut aggrs, &mut consts, &mut locals);
         helper.can_emit = can_emit;
 
@@ -872,7 +874,10 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
             })),
             patterns,
         }));
-        let body = vec![body.up(helper)?];
+        helper.possible_leaf = true;
+        let body = body.up(helper)?;
+        helper.possible_leaf = false;
+        let body = vec![body];
 
         helper.swap(&mut aggrs, &mut consts, &mut locals);
         helper.can_emit = can_emit;
@@ -925,13 +930,26 @@ pub enum ImutExprRaw<'script> {
     },
     /// we're forced to make this pub because of lalrpop
     String(StringLitRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Recur { start: Location, end: Location },
 }
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExprInt<'script>;
     #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(match self {
+        let was_leaf = helper.possible_leaf;
+        helper.possible_leaf = false;
+        let r = Ok(match self {
+            ImutExprRaw::Recur { start, end } => {
+                if was_leaf {
+                    ImutExprInt::Recur {
+                        mid: helper.add_meta(start, end),
+                    }
+                } else {
+                    panic!("no leaf")
+                }
+            }
             ImutExprRaw::Binary(b) => {
                 ImutExprInt::Binary(Box::new(b.up(helper)?)).reduce(helper)?
             }
@@ -996,9 +1014,15 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                     i.reduce(helper)?
                 }
             }
-            ImutExprRaw::Match(m) => ImutExprInt::Match(Box::new(m.up(helper)?)),
+            ImutExprRaw::Match(m) => {
+                helper.possible_leaf = was_leaf;
+
+                ImutExprInt::Match(Box::new(m.up(helper)?))
+            }
             ImutExprRaw::Comprehension(c) => ImutExprInt::Comprehension(Box::new(c.up(helper)?)),
-        })
+        });
+        helper.possible_leaf = was_leaf;
+        r
     }
 }
 
@@ -1050,10 +1074,14 @@ pub struct PredicateClauseRaw<'script> {
 impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
     type Target = PredicateClause<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let was_leaf = helper.possible_leaf;
+        helper.possible_leaf = false;
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs = self.exprs.up(helper)?;
         let guard = self.guard.up(helper)?;
+        helper.possible_leaf = was_leaf;
+        let exprs = self.exprs.up(helper)?;
+
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
         if pattern.is_assign() {
@@ -1387,6 +1415,8 @@ pub enum PatternRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Assign(AssignPatternRaw<'script>),
     /// we're forced to make this pub because of lalrpop
+    DoNotCare,
+    /// we're forced to make this pub because of lalrpop
     Default,
 }
 
@@ -1401,6 +1431,7 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
             Tuple(tp) => Pattern::Tuple(tp.up(helper)?),
             Expr(expr) => Pattern::Expr(expr.up(helper)?),
             Assign(ap) => Pattern::Assign(ap.up(helper)?),
+            DoNotCare => Pattern::DoNotCare,
             Default => Pattern::Default,
         })
     }
@@ -1857,8 +1888,6 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
                     segments,
                 })
             } else {
-                dbg!(&module);
-                dbg!(&helper.consts);
                 error_oops(
                     &(self.start, self.end),
                     "Only consts can be addressed inside of modules",
@@ -2022,9 +2051,18 @@ pub struct MatchRaw<'script> {
 impl<'script> Upable<'script> for MatchRaw<'script> {
     type Target = Match<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let patterns = self.patterns.up(helper)?;
+        let patterns: Predicates = self
+            .patterns
+            .into_iter()
+            .map(|v| v.up(helper))
+            .collect::<Result<_>>()?;
 
-        let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
+        let defaults = patterns
+            .iter()
+            .filter(|p| {
+                p.pattern.is_default() || (p.pattern == Pattern::Default && p.guard.is_none())
+            })
+            .count();
         match defaults {
             0 => helper.warnings.push(Warning{
                 outer: Range(self.start, self.end),
@@ -2076,12 +2114,15 @@ impl<'script> Upable<'script> for ImutMatchRaw<'script> {
 
             _ => ()
         }
-
-        Ok(ImutMatch {
+        let was_leaf = helper.possible_leaf;
+        helper.possible_leaf = false;
+        let r = Ok(ImutMatch {
             mid: helper.add_meta(self.start, self.end),
             target: self.target.up(helper)?,
             patterns,
-        })
+        });
+        helper.possible_leaf = was_leaf;
+        r
     }
 }
 

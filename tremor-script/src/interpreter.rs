@@ -798,6 +798,7 @@ where
     'event: 'run,
 {
     match pattern {
+        Pattern::DoNotCare => test_guard(outer, opts, env, event, state, meta, local, guard),
         Pattern::Tuple(ref tp) => {
             if stry!(match_tp_expr(
                 outer,
@@ -866,6 +867,9 @@ where
         }
         Pattern::Assign(ref a) => {
             match *a.pattern {
+                Pattern::DoNotCare => {
+                    test_guard(outer, opts, env, event, state, meta, local, guard)
+                }
                 Pattern::Array(ref ap) => {
                     if let Some(v) = stry!(match_ap_expr(
                         outer,
