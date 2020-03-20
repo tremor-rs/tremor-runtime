@@ -24,6 +24,7 @@ use std::borrow::Cow;
 use std::mem;
 
 pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed("recur"));
+const RECURSION_LIMIT: u32 = 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct CustomFn<'script> {
@@ -145,6 +146,7 @@ impl<'script> CustomFn<'script> {
         let mut no_event = Value::null();
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
+        let mut recursion_count = 0;
         'recur: loop {
             let mut exprs = self.body.iter().peekable();
             unsafe {
@@ -162,6 +164,12 @@ impl<'script> CustomFn<'script> {
                                 return Ok(mem::transmute(v.into_owned()));
                             }
                             Cont::Drop => {
+                                recursion_count += 1;
+                                if recursion_count == RECURSION_LIMIT {
+                                    return Err(FunctionError::Error(
+                                        "recursion limit reached".into(),
+                                    ));
+                                }
                                 //We are abusing this as a recursion hint
                                 continue 'recur;
                             }
