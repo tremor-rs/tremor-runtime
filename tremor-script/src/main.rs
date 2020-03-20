@@ -49,6 +49,7 @@ extern crate rental;
 use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::script::{AggrType, Return, Script};
+use chrono::{Timelike, Utc};
 use clap::{App, Arg};
 use ctx::{EventContext, EventOriginUri};
 use halfbrown::hashmap;
@@ -64,6 +65,16 @@ extern crate serde_derive;
 
 use crate::registry::Registry;
 
+/// Get a nanosecond timestamp
+#[allow(clippy::cast_sign_loss)]
+fn nanotime() -> u64 {
+    let now = Utc::now();
+    let seconds: u64 = now.timestamp() as u64;
+    let nanoseconds: u64 = u64::from(now.nanosecond());
+
+    (seconds * 1_000_000_000) + nanoseconds
+}
+
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let module_path = crate::path::load_module_path();
@@ -76,6 +87,18 @@ fn main() -> Result<()> {
                 .help("The script to execute")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("process")
+                .short("p")
+                .long("process")
+                .help("Processes each line on stdin through the script"),
+        )
+        .arg(
+            Arg::with_name("ENCODING")
+                .long("encoding")
+                .takes_value(true)
+                .help("The codec to decode events from stdin from"),
         )
         .arg(
             Arg::with_name("event")
@@ -156,7 +179,78 @@ fn main() -> Result<()> {
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;
 
-            if matches.is_present("docs") {
+            if matches.is_present("process") {
+                let mut state = Value::null();
+                let codec = matches.value_of("ENCODING").unwrap_or("json");
+
+                loop {
+                    let mut input = String::new();
+                    match std::io::stdin().read_line(&mut input) {
+                        Ok(0) => {
+                            // ALLOW: main.rs
+                            std::process::exit(0);
+                        }
+                        Ok(n) => {
+                            let now = nanotime();
+                            let mut event = match codec {
+                                "json" => {
+                                    match simd_json::to_borrowed_value(unsafe {
+                                        input.as_bytes_mut()
+                                    }) {
+                                        Ok(v) => v,
+                                        Err(e) => {
+                                            eprintln!("invalid event: {}", e);
+                                            continue;
+                                        }
+                                    }
+                                }
+                                "influx" => match tremor_influx::decode(input.as_str(), now) {
+                                    Ok(Some(v)) => v,
+                                    Ok(None) => continue,
+                                    Err(e) => {
+                                        eprintln!("invalid event: {}", e);
+                                        continue;
+                                    }
+                                },
+
+                                "string" => Value::from(input),
+                                _ => {
+                                    // ALLOW: main.rs
+                                    std::process::exit(1);
+                                }
+                            };
+                            let mut global_map = Value::from(Object::new());
+                            let r = runnable.run(
+                                &EventContext::new(nanotime(), Some(EventOriginUri::default())),
+                                AggrType::Tick,
+                                &mut event,
+                                &mut state,
+                                &mut global_map,
+                            );
+                            match r {
+                                Ok(Return::Drop) => (),
+                                Ok(Return::Emit { value, port }) => {
+                                    match port.unwrap_or(String::from("out")).as_str() {
+                                        "error" | "stderr" => eprintln!("{}", value.encode()),
+                                        "out" | "stdout" | _ => println!("{}", value.encode()),
+                                    }
+                                }
+                                Ok(Return::EmitEvent { port }) => {
+                                    match port.unwrap_or(String::from("out")).as_str() {
+                                        "error" | "stderr" => eprintln!("{}", event.encode()),
+                                        "out" | "stdout" | _ => println!("{}", event.encode()),
+                                    }
+                                }
+                                Err(e) => eprintln!("error processing event: {}", e),
+                            }
+                        }
+                        Err(error) => {
+                            // ALLOW: main.rs
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            } else if matches.is_present("docs") {
                 let docs = runnable.docs();
                 let consts = &docs.consts;
                 let fns = &docs.fns;
