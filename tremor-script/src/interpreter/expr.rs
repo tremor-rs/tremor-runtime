@@ -526,6 +526,8 @@ where
                     let this_ptr = v.as_str().map(|v| v.as_ptr());
                     let recur_ptr = RECUR.as_str().map(|v| v.as_ptr());
                     if this_ptr == recur_ptr {
+                        // NOTE: we abuse drop here to imply recursion - yes it
+                        // makes no sense!
                         return Ok(Cont::Drop);
                     }
                 };
