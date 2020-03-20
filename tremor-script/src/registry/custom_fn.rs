@@ -23,6 +23,8 @@ use simd_json::BorrowedValue as Value;
 use std::borrow::Cow;
 use std::mem;
 
+pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed("recur"));
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct CustomFn<'script> {
     //module: Arc<Script>,
@@ -132,7 +134,6 @@ impl<'script> CustomFn<'script> {
             result_needed: false,
             aggr: AggrType::Tick,
         };
-        let mut exprs = self.body.iter().peekable();
         // FIXME .unwrap()
         let meta = NodeMetas::default();
         let env = Env {
@@ -144,34 +145,42 @@ impl<'script> CustomFn<'script> {
         let mut no_event = Value::null();
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
-        unsafe {
-            while let Some(expr) = exprs.next() {
-                if exprs.peek().is_none() {
-                    return if let Cont::Cont(v) = expr.run(
-                        opts.with_result(),
-                        &env,
-                        mem::transmute(&mut no_event),
-                        &mut state,
-                        mem::transmute(&mut no_meta),
-                        &mut this_local,
-                    )? {
-                        Ok(mem::transmute(v.into_owned()))
+        'recur: loop {
+            let mut exprs = self.body.iter().peekable();
+            unsafe {
+                while let Some(expr) = exprs.next() {
+                    if exprs.peek().is_none() {
+                        match expr.run(
+                            opts.with_result(),
+                            &env,
+                            mem::transmute(&mut no_event),
+                            &mut state,
+                            mem::transmute(&mut no_meta),
+                            &mut this_local,
+                        )? {
+                            Cont::Cont(v) => {
+                                return Ok(mem::transmute(v.into_owned()));
+                            }
+                            Cont::Drop => {
+                                //We are abusing this as a recursion hint
+                                continue 'recur;
+                            }
+                            _ => {
+                                return Err(FunctionError::Error("can't emit here".into()));
+                            }
+                        };
                     } else {
-                        Err(FunctionError::Error("can't emit here".into()))
-                    };
-                } else {
-                    expr.run(
-                        opts,
-                        &env,
-                        mem::transmute(&mut no_event),
-                        &mut state,
-                        mem::transmute(&mut no_meta),
-                        &mut this_local,
-                    )?;
+                        expr.run(
+                            opts,
+                            &env,
+                            mem::transmute(&mut no_event),
+                            &mut state,
+                            mem::transmute(&mut no_meta),
+                            &mut this_local,
+                        )?;
+                    }
                 }
             }
         }
-
-        Ok(Value::null())
     }
 }

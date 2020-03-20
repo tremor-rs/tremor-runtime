@@ -19,7 +19,7 @@ use super::{
 
 use crate::ast::*;
 use crate::errors::*;
-use crate::registry::{Registry, TremorAggrFnWrapper};
+use crate::registry::{Registry, TremorAggrFnWrapper, RECUR};
 use crate::stry;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
@@ -77,6 +77,7 @@ where
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
+            ImutExprInt::Recur { .. } => Ok(Cow::Borrowed(&RECUR)),
             ImutExprInt::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
             ImutExprInt::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
             ImutExprInt::Present { path, .. } => {

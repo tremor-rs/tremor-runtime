@@ -18,6 +18,7 @@ use super::{
 };
 use crate::ast::*;
 use crate::errors::*;
+use crate::registry::RECUR;
 use crate::stry;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
@@ -516,12 +517,19 @@ where
             Expr::Imut(expr) => {
                 // If we don't need the result of a imutable value then we
                 // don't need to evalute it.
-                if opts.result_needed {
-                    expr.run(opts, env, event, state, meta, local)
-                        .map(Cont::Cont)
+                let r = if opts.result_needed {
+                    expr.run(opts, env, event, state, meta, local)?
                 } else {
-                    Ok(Cont::Cont(Cow::Borrowed(&NULL)))
-                }
+                    Cow::Borrowed(&NULL)
+                };
+                if let Cow::Borrowed(v) = r {
+                    let this_ptr = v.as_str().map(|v| v.as_ptr());
+                    let recur_ptr = RECUR.as_str().map(|v| v.as_ptr());
+                    if this_ptr == recur_ptr {
+                        return Ok(Cont::Drop);
+                    }
+                };
+                Ok(Cont::Cont(r))
             }
         }
     }

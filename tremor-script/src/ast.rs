@@ -42,6 +42,7 @@ struct NodeMeta<'script> {
     start: Location,
     end: Location,
     name: Option<Cow<'script, str>>,
+    terminal: bool,
 }
 
 impl From<(Location, Location)> for NodeMeta<'static> {
@@ -50,6 +51,7 @@ impl From<(Location, Location)> for NodeMeta<'static> {
             start,
             end,
             name: None,
+            terminal: false,
         }
     }
 }
@@ -74,9 +76,17 @@ impl<'script> NodeMetas<'script> {
             start,
             end,
             name: Some(name),
+            terminal: false,
         });
         mid
     }
+
+    // pub(crate) fn make_meta_terminal(&mut self, mid: usize) {
+    //     if let Some(m) = self.0.get_mut(mid) {
+    //         m.terminal = true;
+    //     }
+    // }
+
     pub(crate) fn start(&self, idx: usize) -> Option<Location> {
         self.0.get(idx).map(|v| v.start)
     }
@@ -223,6 +233,7 @@ where
     pub meta: NodeMetas<'script>,
     docs: Docs<'script>,
     module: Vec<String>,
+    possible_leaf: bool,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -274,6 +285,7 @@ where
             meta: NodeMetas::default(),
             docs: Docs::default(),
             module: Vec::new(),
+            possible_leaf: false,
         }
     }
 
@@ -590,6 +602,9 @@ pub(crate) enum ImutExprInt<'script> {
     Invoke3(Invoke<'script>),
     Invoke(Invoke<'script>),
     InvokeAggr(InvokeAggr),
+    Recur {
+        mid: usize,
+    },
 }
 
 fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
@@ -833,6 +848,7 @@ pub(crate) enum Pattern<'script> {
     Expr(ImutExprInt<'script>),
     Assign(AssignPattern<'script>),
     Tuple(TuplePattern<'script>),
+    DoNotCare,
     Default,
 }
 impl<'script> Pattern<'script> {

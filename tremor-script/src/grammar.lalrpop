@@ -243,8 +243,8 @@ AlwaysImutExpr: ImutExprRaw<'input> = {
     <path:Path> => ImutExprRaw::Path(path),
     <record:Record> => ImutExprRaw::Record(Box::new(record)),
     <list:List> => ImutExprRaw::List(Box::new(list)),
-    <s:StringLiteral> => ImutExprRaw::String(s)
-
+    <s:StringLiteral> => ImutExprRaw::String(s),
+    <start:@L> "recur" <end:@L> => ImutExprRaw::Recur{start,end},
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
@@ -879,6 +879,7 @@ PredicateClause: PredicateClauseRaw<'input> = {
     <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: ap, exprs, guard, start, end },
     <start:@L> "case" <tp:TupleCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: tp, exprs, guard, start, end },
     <start:@L> "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:Effectors> <end:@L> => PredicateClauseRaw { pattern: lhs, exprs: rhs, guard, start, end},
+    <start:@L> "case" "_" <guard:WhenClause> <rhs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::DoNotCare, exprs: rhs, guard, start, end},
     <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
 }
 
@@ -1248,6 +1249,7 @@ extern {
         "by" => Token::By,
         "define" => Token::Define,
         "args" => Token::Args,
+        "recur" => Token::Recur,
 
         "set" => Token::Set,
         "each" => Token::Each,
