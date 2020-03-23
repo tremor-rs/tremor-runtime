@@ -66,7 +66,9 @@ impl TrickleSimpleSelect {
         Ok(Self {
             id,
             select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
-                std::mem::transmute(select)
+                // This is sound since we keep an arc of the borrowed data in
+                // stmt
+                std::mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
             }),
         })
     }
@@ -79,11 +81,7 @@ impl TrickleSimpleSelect {
 }
 
 impl Operator for TrickleSimpleSelect {
-    #[allow(
-        mutable_transmutes,
-        clippy::transmute_ptr_to_ptr,
-        clippy::too_many_lines
-    )]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,
         _port: &str,
@@ -94,6 +92,7 @@ impl Operator for TrickleSimpleSelect {
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
         // NOTE We are unwrapping our rental wrapped stmt
+        // FIXME: add soundness reasoning
         let SelectStmt {
             stmt,
             locals,

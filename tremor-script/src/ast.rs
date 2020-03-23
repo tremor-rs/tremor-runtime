@@ -729,13 +729,14 @@ impl<'script> Invocable<'script> {
             Invocable::Tremor(f) => f.is_const(),
         }
     }
-    pub fn invoke<'event>(
-        &self,
+    pub fn invoke<'event, 'run>(
+        &'script self,
         context: &EventContext,
-        args: &[&Value<'event>],
+        args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
     where
         'script: 'event,
+        'event: 'run,
     {
         match self {
             Invocable::Intrinsic(f) => f.invoke(context, args),

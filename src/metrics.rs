@@ -111,10 +111,7 @@ impl RampReporter {
                 let metrics_event = tremor_pipeline::Event {
                     is_batch: false,
                     id: 0,
-                    data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta {
-                        value,
-                        meta: Value::from(Object::default()),
-                    }),
+                    data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                     ingest_ns: timestamp,
                     origin_uri: None, // TODO update
                     kind: None,

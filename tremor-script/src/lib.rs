@@ -87,17 +87,44 @@ pub use simd_json::value::borrowed::Value;
 /// Combined struct for an event value and metadata
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ValueAndMeta<'event> {
+    data: (Value<'event>, Value<'event>),
+}
+
+impl<'event> ValueAndMeta<'event> {
+    /// A value from it's parts
+    pub fn from_parts(v: Value<'event>, m: Value<'event>) -> Self {
+        Self { data: (v, m) }
+    }
     /// Event value
-    pub value: Value<'event>,
+    pub fn value(&self) -> &Value<'event> {
+        &self.data.0
+    }
+    /// Event value forced to borrowd mutable (uses mem::transmute)
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    pub unsafe fn force_value_mut(&self) -> &mut Value<'event> {
+        std::mem::transmute(&self.data.0)
+    }
+    /// Event value
+    pub fn value_mut(&mut self) -> &mut Value<'event> {
+        &mut self.data.0
+    }
     /// Event metadata
-    pub meta: Value<'event>,
+    pub fn meta(&self) -> &Value<'event> {
+        &self.data.1
+    }
+    /// Deconstruicts the value into it's parts
+    pub fn into_parts(self) -> (Value<'event>, Value<'event>) {
+        self.data
+    }
 }
 
 impl<'event> Default for ValueAndMeta<'event> {
     fn default() -> Self {
         ValueAndMeta {
-            value: Value::from(Object::default()),
-            meta: Value::from(Object::default()),
+            data: (
+                Value::from(Object::default()),
+                Value::from(Object::default()),
+            ),
         }
     }
 }
@@ -105,8 +132,7 @@ impl<'event> Default for ValueAndMeta<'event> {
 impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
     fn from(value: Value<'v>) -> ValueAndMeta<'v> {
         ValueAndMeta {
-            value,
-            meta: Value::from(Object::default()),
+            data: (value, Value::from(Object::default())),
         }
     }
 }
@@ -121,7 +147,7 @@ rental! {
 
         /// Rental wrapped value with the data it was parsed
         /// from from
-        #[rental_mut(covariant,debug)]
+        #[rental_mut(covariant, debug)]
         pub struct Value {
             raw: Vec<Vec<u8>>,
             parsed: ValueAndMeta<'raw>
@@ -135,11 +161,16 @@ impl rentals::Value {
     /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    pub fn parts(&self) -> (&mut Value, &mut Value) {
+    pub fn parts<'value, 'borrow>(
+        &'borrow self,
+    ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
+    where
+        'borrow: 'value,
+    {
         unsafe {
             let data = self.suffix();
-            let unwind_event: &mut Value<'_> = std::mem::transmute(&data.value);
-            let event_meta: &mut Value<'_> = std::mem::transmute(&data.meta);
+            let unwind_event: &'borrow mut Value<'value> = std::mem::transmute(data.value());
+            let event_meta: &'borrow mut Value<'value> = std::mem::transmute(data.meta());
             (unwind_event, event_meta)
         }
     }
@@ -164,7 +195,7 @@ impl rentals::Value {
     /// to modify its content by adding the owned parts of
     /// `other` into the owned part `self` and the running
     /// a merge function on the borrowed parts
-    pub fn consume<E, F>(&mut self, other: Self, join_f: F) -> Result<(), E>
+    pub fn consume<'run, E, F>(&'run mut self, other: Self, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
@@ -176,7 +207,7 @@ impl rentals::Value {
         #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
             use std::mem::transmute;
-            let self_unrent: &mut ScrewRental = transmute(self);
+            let self_unrent: &'run mut ScrewRental = transmute(self);
             let mut other_unrent: ScrewRental = transmute(other);
             self_unrent.raw.append(&mut other_unrent.raw);
             join_f(&mut self_unrent.parsed, other_unrent.parsed)?;
@@ -187,10 +218,7 @@ impl rentals::Value {
 
 impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     fn from(v: simd_json::BorrowedValue<'static>) -> Self {
-        Self::new(vec![], |_| ValueAndMeta {
-            value: v,
-            meta: Value::from(Object::new()),
-        })
+        Self::new(vec![], |_| ValueAndMeta::from(v))
     }
 }
 
@@ -206,10 +234,7 @@ impl
             simd_json::BorrowedValue<'static>,
         ),
     ) -> Self {
-        Self::new(vec![], |_| ValueAndMeta {
-            value: v.0,
-            meta: v.1,
-        })
+        Self::new(vec![], |_| ValueAndMeta { data: v })
     }
 }
 
@@ -226,8 +251,7 @@ impl
         ),
     ) -> Self {
         Self::new(vec![], |_| ValueAndMeta {
-            value: v.0,
-            meta: Value::from(v.1),
+            data: (v.0, Value::from(v.1)),
         })
     }
 }
@@ -243,10 +267,7 @@ impl Clone for LineValue {
         // instead of a Box.
         Self::new(vec![], |_| {
             let v = self.suffix();
-            ValueAndMeta {
-                value: v.value.clone_static(),
-                meta: v.meta.clone_static(),
-            }
+            ValueAndMeta::from_parts(v.value().clone_static(), v.meta().clone_static())
         })
     }
 }
@@ -292,9 +313,8 @@ impl<'de> Deserialize<'de> for LineValue {
         } else {
             return Err(D::Error::custom("meta field missing"));
         };
-        Ok(Self::new(vec![], |_| ValueAndMeta {
-            value: value.clone().into(),
-            meta: meta.clone().into(),
+        Ok(Self::new(vec![], |_| {
+            ValueAndMeta::from_parts(value.clone().into(), meta.clone().into())
         }))
     }
 }
