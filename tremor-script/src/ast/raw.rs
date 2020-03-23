@@ -494,7 +494,8 @@ impl<'script> ImutExprInt<'script> {
                     let v = i
                         .invocable
                         .invoke(&EventContext::default(), &args2)
-                        .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?;
+                        .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
+                        .into_static();
                     Ok(ImutExprInt::Literal(Literal {
                         value: v,
                         mid: i.mid,

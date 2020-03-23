@@ -100,9 +100,8 @@ impl<'script> CustomFn<'script> {
             _ => ImutExprInt::Invoke(i),
         })
     }
-    //#[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub(crate) fn invoke<'event, 'run>(
-        &'run self,
+        &'script self,
         ctx: &'run EventContext,
         args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
@@ -153,44 +152,40 @@ impl<'script> CustomFn<'script> {
             let mut no_event = Value::null();
             let mut no_meta = Value::null();
             let mut state = Value::null().into_static();
-            unsafe {
-                while let Some(expr) = exprs.next() {
-                    if exprs.peek().is_none() {
-                        match expr.run(
-                            opts.with_result(),
-                            &env,
-                            &mut no_event,
-                            &mut state,
-                            &mut no_meta,
-                            &mut this_local,
-                        )? {
-                            Cont::Cont(v) => {
-                                return Ok(std::mem::transmute(v.into_owned()));
+            while let Some(expr) = exprs.next() {
+                if exprs.peek().is_none() {
+                    match expr.run(
+                        opts.with_result(),
+                        &env,
+                        &mut no_event,
+                        &mut state,
+                        &mut no_meta,
+                        &mut this_local,
+                    )? {
+                        Cont::Cont(v) => {
+                            return Ok(v.into_owned());
+                        }
+                        Cont::Drop => {
+                            recursion_count += 1;
+                            if recursion_count == RECURSION_LIMIT {
+                                return Err(FunctionError::Error("recursion limit reached".into()));
                             }
-                            Cont::Drop => {
-                                recursion_count += 1;
-                                if recursion_count == RECURSION_LIMIT {
-                                    return Err(FunctionError::Error(
-                                        "recursion limit reached".into(),
-                                    ));
-                                }
-                                //We are abusing this as a recursion hint
-                                continue 'recur;
-                            }
-                            _ => {
-                                return Err(FunctionError::Error("can't emit here".into()));
-                            }
-                        };
-                    } else {
-                        expr.run(
-                            opts,
-                            &env,
-                            &mut no_event,
-                            &mut state,
-                            &mut no_meta,
-                            &mut this_local,
-                        )?;
-                    }
+                            //We are abusing this as a recursion hint
+                            continue 'recur;
+                        }
+                        _ => {
+                            return Err(FunctionError::Error("can't emit here".into()));
+                        }
+                    };
+                } else {
+                    expr.run(
+                        opts,
+                        &env,
+                        &mut no_event,
+                        &mut state,
+                        &mut no_meta,
+                        &mut this_local,
+                    )?;
                 }
             }
         }
