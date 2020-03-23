@@ -15,13 +15,17 @@ RUN apt-get update \
 ENV DEBIAN_FRONTEND=dialog
 
 COPY Cargo.* ./
+
+# needed to build as cpu-target=native (intent of this dockerfile)
 COPY .cargo ./.cargo
+
 # Main library
 COPY src ./src
 # supporting libraries
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
 COPY tremor-api ./tremor-api
+COPY tremor-influx ./tremor-influx
 # Binaries
 COPY tremor-query ./tremor-query
 COPY tremor-server ./tremor-server
@@ -32,7 +36,7 @@ RUN cargo build --release --all
 FROM debian:buster-slim
 
 RUN apt-get update \
-    && apt-get install -y libssl1.1 \
+    && apt-get install -y libssl1.1 libcurl4 libatomic1 \
     #
     # Clean up
     && apt-get autoremove -y \
