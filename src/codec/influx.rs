@@ -59,6 +59,9 @@ impl From<std::str::Utf8Error> for RentalSnot {
 impl Codec for Influx {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
+            // This is safe as from_utf8 does not change the memory locaiton
+            // of the bytes, simply validatges that it's UTF8 and if so
+            // change the type.
             let s: &'static str = unsafe { mem::transmute(str::from_utf8(&raw[0])?) };
             match influx::decode::<'static, Value<'static>>(s, ingest_ns) {
                 Ok(None) => Err(RentalSnot::Skip),
@@ -147,7 +150,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value, e)
+        assert_eq!(decoded.suffix().value(), &e)
     }
 
     fn get_data_for_tests() -> [(Vec<u8>, Value<'static>, &'static str); 13] {
@@ -323,9 +326,9 @@ mod tests {
 
             let decoded = codec.decode(encoded.clone(), 0)?.expect("failed to decode");
             let expected: Value = case.1.clone();
-            let got = &decoded.suffix().value;
+            let got = &decoded.suffix().value();
             let bin = BInflux::encode(&expected)?;
-            if got != &expected {
+            if *got != &expected {
                 println!("{} fails while decoding", &case.2);
                 assert_eq!(got.encode(), expected.encode());
             }
@@ -356,7 +359,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value, e)
+        assert_eq!(decoded.suffix().value(), &e)
     }
 
     #[test]
@@ -376,7 +379,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value, e)
+        assert_eq!(decoded.suffix().value(), &e)
     }
 
     #[test]
@@ -411,10 +414,10 @@ mod tests {
             .expect("failed to decode")
             .expect("failed to decode");
         let encoded = codec
-            .encode(&decoded.suffix().value)
+            .encode(&decoded.suffix().value())
             .expect("failed to encode");
 
-        assert_eq!(decoded.suffix().value, e);
+        assert_eq!(decoded.suffix().value(), &e);
         unsafe {
             assert_eq!(
                 str::from_utf8_unchecked(&encoded),

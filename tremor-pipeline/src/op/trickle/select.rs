@@ -199,7 +199,11 @@ impl TumblingWindowOnTime {
         stmt: &StmtRentalWrapper,
     ) -> Self {
         let script = script.map(|s| {
-            rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
+            rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
+                // This is sound since stmt.stmt is an arc that holds
+                // the borrwed data
+                mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
+            })
         });
         Self {
             next_window: None,
@@ -277,7 +281,13 @@ impl TumblingWindowOnNumber {
         stmt: &StmtRentalWrapper,
     ) -> Self {
         let script = script.map(|s| {
-            rentals::Window::new(stmt.stmt.clone(), |_| unsafe { mem::transmute(s.clone()) })
+            rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
+                // This is safe since `stmt.stmt` is an Arc that
+                // hods the referenced data and we clone it into the rental.
+                // This ensures refferenced data isn't dropped until the rental
+                // is dropped.
+                mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
+            })
         });
         Self {
             count: 0,
@@ -367,7 +377,11 @@ impl TrickleSelect {
             id,
             windows,
             select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
-                std::mem::transmute(select)
+                // This is safe since `stmt_rentwrapped.stmt` is an Arc that
+                // hods the referenced data and we clone it into the rental.
+                // This ensures refferenced data isn't dropped until the rental
+                // is dropped.
+                mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
             }),
         })
     }
@@ -395,13 +409,15 @@ impl Operator for TrickleSelect {
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
         // NOTE We are unwrapping our rental wrapped stmt
+
+        // FIXME: reason about soundness
         let SelectStmt {
             stmt,
             aggregates,
             consts,
             locals,
             node_meta,
-        }: &mut SelectStmt = unsafe { std::mem::transmute(self.select.suffix()) };
+        }: &mut SelectStmt = unsafe { mem::transmute(self.select.suffix()) };
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
         consts[WINDOW_CONST_ID] = Value::null();
         consts[GROUP_CONST_ID] = Value::null();
@@ -437,10 +453,8 @@ impl Operator for TrickleSelect {
 
         let mut group_values = {
             let data = event.data.suffix();
-            let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
-            let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
             if let Some(group_by) = &stmt.maybe_group_by {
-                group_by.generate_groups(&ctx, &unwind_event, state, &node_meta, &event_meta)?
+                group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta())?
             } else {
                 vec![]
             }
@@ -451,10 +465,11 @@ impl Operator for TrickleSelect {
             let group_str = sorsorted_serialize(&group_value)?;
 
             let data = event.data.suffix();
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+            // This is sound since we're transmuting imutable to mutable
+            // We can't specify the 'lifetime' of the envetn or it would be
+            // `&'run mut Value<'event>`
+            let unwind_event = unsafe { data.force_value_mut() };
+            let event_meta = data.meta();
             consts[GROUP_CONST_ID] = group_value.clone_static();
             consts[GROUP_CONST_ID].push(group_str).ok();
 
@@ -485,6 +500,9 @@ impl Operator for TrickleSelect {
                 }
             }
             *unwind_event = result;
+            // We manually drop this here to inform rust that we no longer
+            // borrow values from event
+            drop(group_values);
             return Ok(vec![("out".into(), event)]);
         }
         if group_values.is_empty() {
@@ -497,12 +515,15 @@ impl Operator for TrickleSelect {
             if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                 if window.next_swap < event.ingest_ns {
                     window.next_swap = event.ingest_ns + eviction_ns;
-                    let this_groups: &mut Groups =
-                        unsafe { std::mem::transmute(window.dims.suffix()) };
-                    let last_groups: &mut Groups =
-                        unsafe { std::mem::transmute(window.last_dims.suffix()) };
-                    last_groups.clear();
-                    std::mem::swap(this_groups, last_groups);
+                    unsafe {
+                        // Windows are never added or deleted, we can argue that no
+                        // data allocated in one window will be accessed after
+                        // any other window is dropped
+                        let this_groups: &mut Groups = mem::transmute(window.dims.suffix());
+                        let last_groups: &mut Groups = mem::transmute(window.last_dims.suffix());
+                        last_groups.clear();
+                        std::mem::swap(this_groups, last_groups);
+                    }
                 }
             }
         }
@@ -515,13 +536,15 @@ impl Operator for TrickleSelect {
 
             // We first iterate through the windows and emit as far as we would have to emit.
             while let Some(this) = windows.next() {
-                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                // This is sound since we only add mutability to groups
+                let this_groups: &mut Groups = unsafe { mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
+                        // This is sound since we only add mutability to groups
                         let last_groups: &mut Groups =
-                            unsafe { std::mem::transmute(this.last_dims.suffix()) };
+                            unsafe { mem::transmute(this.last_dims.suffix()) };
                         (
                             group_str.clone(),
                             last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
@@ -563,10 +586,8 @@ impl Operator for TrickleSelect {
                     // Then emit the window itself
                     consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
                     let data = event.data.suffix();
-                    #[allow(clippy::transmute_ptr_to_ptr)]
-                    let unwind_event: &Value<'_> = unsafe { std::mem::transmute(&data.value) };
-                    #[allow(clippy::transmute_ptr_to_ptr)]
-                    let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                    let unwind_event = data.value();
+                    let event_meta = data.meta();
                     consts[GROUP_CONST_ID] = group_value.clone_static();
                     consts[GROUP_CONST_ID].push(group_str.clone()).ok();
 
@@ -576,7 +597,7 @@ impl Operator for TrickleSelect {
                         aggrs: &this_group.aggrs,
                         meta: &node_meta,
                     };
-                    let value = stmt.target.run(
+                    let result = stmt.target.run(
                         opts,
                         &env,
                         unwind_event,
@@ -585,7 +606,6 @@ impl Operator for TrickleSelect {
                         &local_stack,
                     )?;
 
-                    let result = value.into_owned();
                     if let Some(guard) = &stmt.maybe_having {
                         let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                         if let Some(test) = test.as_bool() {
@@ -601,6 +621,7 @@ impl Operator for TrickleSelect {
                             )?;
                         }
                     }
+                    let result = result.into_owned();
                     events.push((
                         "out".into(),
                         Event {
@@ -610,7 +631,7 @@ impl Operator for TrickleSelect {
                             origin_uri: event.origin_uri.clone(),
                             is_batch: event.is_batch,
                             kind: event.kind,
-                            data: (result, event_meta.clone()).into(),
+                            data: (result.into_static(), event_meta.clone_static()).into(),
                         },
                     ));
                 } else {
@@ -643,11 +664,14 @@ impl Operator for TrickleSelect {
 
             while let Some(this) = windows.next() {
                 // First start with getting our group
+
+                // FIXME: reason about soundness
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
+                        // FIXME: reason about soundness
                         let last_groups: &mut Groups =
                             unsafe { std::mem::transmute(this.last_dims.suffix()) };
                         (
@@ -664,6 +688,7 @@ impl Operator for TrickleSelect {
                 // this is false for a non terminal widest window
                 if clear_all {
                     for aggr in &this_group.aggrs {
+                        // FIXME: reason about soundness
                         let aggr_static: &mut InvokeAggrFn<'static> =
                             unsafe { std::mem::transmute(aggr) };
                         aggr_static.invocable.init();
@@ -679,12 +704,14 @@ impl Operator for TrickleSelect {
                 // This ensures that in the next iteration of the leep we can clear
                 // the previous window since we already pulled all needed data out here.
                 if let Some(prev) = windows.peek() {
+                    // FIXME: reason about soundness
                     let prev_groups: &mut Groups =
                         unsafe { std::mem::transmute(prev.dims.suffix()) };
                     let (_, prev_group) = prev_groups
                         .raw_entry_mut()
                         .from_key(&group_str)
                         .or_insert_with(|| {
+                            // FIXME: reason about soundness
                             let last_groups: &mut Groups =
                                 unsafe { std::mem::transmute(prev.last_dims.suffix()) };
                             (
@@ -697,6 +724,7 @@ impl Operator for TrickleSelect {
                             )
                         });
                     for (i, aggr) in prev_group.aggrs.iter().enumerate() {
+                        // FIXME: reason about soundness
                         let aggr_static: &InvokeAggrFn<'static> =
                             unsafe { std::mem::transmute(aggr) };
                         this_group.aggrs[i]
@@ -715,7 +743,7 @@ impl Operator for TrickleSelect {
             if let Some(this) = self.windows.first() {
                 let (unwind_event, event_meta) = event.data.parts();
                 consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
-
+                // FIXME: reason about soundness
                 let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
@@ -762,10 +790,8 @@ impl Operator for TrickleSelect {
             } else {
                 // otherwise we just pass it through the select portion of the statement
                 let data = event.data.suffix();
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                let unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                let event_meta: &Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+                let unwind_event = unsafe { data.force_value_mut() };
+                let event_meta = data.meta();
                 consts[GROUP_CONST_ID] = group_value.clone_static();
                 consts[GROUP_CONST_ID].push(group_str.clone()).ok();
 
@@ -804,7 +830,7 @@ impl Operator for TrickleSelect {
                         origin_uri: event.origin_uri.clone(),
                         is_batch: event.is_batch,
                         kind: event.kind,
-                        data: (result.into_static(), event_meta.clone()).into(),
+                        data: (result.into_static(), event_meta.clone_static()).into(),
                     },
                 ));
             }
@@ -949,7 +975,7 @@ mod test {
             try_enqueue(&mut op, test_event(15))?.expect("no event emitted after aggregation");
         assert_eq!("out", out);
 
-        assert_eq!(event.data.suffix().value, 84.0);
+        assert_eq!(*event.data.suffix().value(), 84.0);
         Ok(())
     }
 
@@ -961,7 +987,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        assert_eq!(event.data.suffix().value, 2);
+        assert_eq!(*event.data.suffix().value(), 2);
         Ok(())
     }
 
@@ -977,7 +1003,7 @@ mod test {
         // starts at 15.
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event 1");
         assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
+        assert_eq!(*event.data.suffix().value(), 2);
         // Add another event prior to 30
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
         // This emits only the initial event since the rollup
@@ -985,7 +1011,7 @@ mod test {
         // if the next window
         let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
         assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
+        assert_eq!(*event.data.suffix().value(), 2);
         // Add another event prior to 45 to the first window
         assert!(try_enqueue(&mut op, test_event(31))?.is_none());
 
@@ -995,14 +1021,14 @@ mod test {
 
         assert_eq!("out", out1);
         assert_eq!("out", out2);
-        assert_eq!(event1.data.suffix().value, 2);
-        assert_eq!(event2.data.suffix().value, 4);
+        assert_eq!(*event1.data.suffix().value(), 2);
+        assert_eq!(*event2.data.suffix().value(), 4);
         assert!(try_enqueue(&mut op, test_event(46))?.is_none());
 
         // Add 60 only the 15s window emits
         let (out, event) = try_enqueue(&mut op, test_event(60))?.expect("no event 4");
         assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 2);
+        assert_eq!(*event.data.suffix().value(), 2);
         Ok(())
     }
 
@@ -1038,7 +1064,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        assert_eq!(event.data.suffix().value, 42);
+        assert_eq!(*event.data.suffix().value(), 42);
         Ok(())
     }
 
@@ -1080,7 +1106,7 @@ mod test {
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
         assert_eq!("out", out);
 
-        assert_eq!(event.data.suffix().value, 42);
+        assert_eq!(*event.data.suffix().value(), 42);
         Ok(())
     }
 
@@ -1200,7 +1226,7 @@ mod test {
         let event = test_event(15);
         let (out, event) = try_enqueue(&mut op, event)?.expect("no event");
         assert_eq!("out", out);
-        assert_eq!(event.data.suffix().value, 42);
+        assert_eq!(*event.data.suffix().value(), 42);
         Ok(())
     }
 

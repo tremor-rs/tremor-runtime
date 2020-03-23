@@ -222,10 +222,7 @@ fn main() -> Result<()> {
     loop {
         for event in &events {
             let value = LineValue::new(vec![], |_| unsafe {
-                std::mem::transmute(ValueAndMeta {
-                    value: event.clone(),
-                    ..ValueAndMeta::default()
-                })
+                std::mem::transmute(ValueAndMeta::from(event.clone()))
             });
             continuation.clear();
             let ingest_ns = nanotime();
@@ -259,7 +256,7 @@ fn main() -> Result<()> {
             )?;
 
             for (output, event) in continuation.drain(..) {
-                let event = &event.data.suffix().value;
+                let event = event.data.suffix().value();
                 if matches.is_present("quiet") {
                 } else if matches.is_present("print-result-raw") {
                     println!("{}", serde_json::to_string_pretty(event)?);

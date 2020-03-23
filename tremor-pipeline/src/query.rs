@@ -170,7 +170,10 @@ impl Query {
 
         for stmt in &script.stmts {
             let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
-                mem::transmute(stmt.clone())
+                // This is sound since self.0 includes an ARC of the data we
+                // so we hold on to any referenced data by including a clone
+                // of that arc inthe rental source.
+                mem::transmute::<Stmt<'_>, Stmt<'static>>(stmt.clone())
             });
 
             let that = tremor_script::query::StmtRentalWrapper {
@@ -317,7 +320,10 @@ impl Query {
                         .ok_or_else(|| Error::from("operator not found"))?
                         .clone();
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
-                        mem::transmute(inner_stmt)
+                        // This is sound since self.0 includes an ARC of the data we
+                        // so we hold on to any referenced data by including a clone
+                        // of that arc inthe rental source.
+                        mem::transmute::<Stmt<'_>, Stmt<'static>>(inner_stmt)
                     });
 
                     let that = StmtRentalWrapper {
@@ -339,7 +345,10 @@ impl Query {
                         .ok_or_else(|| Error::from("script not found"))?
                         .clone();
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
-                        mem::transmute(inner_stmt)
+                        // This is sound since self.0 includes an ARC of the data we
+                        // so we hold on to any referenced data by including a clone
+                        // of that arc inthe rental source.
+                        mem::transmute::<Stmt<'_>, Stmt<'static>>(inner_stmt)
                     });
 
                     let that_defn = tremor_script::query::StmtRentalWrapper {

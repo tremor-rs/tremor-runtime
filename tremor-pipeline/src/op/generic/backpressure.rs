@@ -158,7 +158,7 @@ impl Operator for Backpressure {
     }
 
     fn on_contraflow(&mut self, insight: &mut Event) {
-        let meta = &insight.data.suffix().meta;
+        let meta = &insight.data.suffix().meta();
         if let Some(output) = meta.get("backpressure-output").and_then(Value::as_str) {
             for (i, o) in self.outputs.iter().enumerate() {
                 if o.output == output {

@@ -1255,7 +1255,7 @@ where
     use std::mem;
     // This is icky do we want it?
     // it is only used
-    let local: &mut LocalStack = unsafe { mem::transmute(local) };
+    let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
     if let Some(d) = local.values.get_mut(idx) {
         *d = Some(v);
         Ok(())

@@ -21,7 +21,7 @@ use crate::EventContext;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 use std::borrow::Cow;
-use std::mem;
+//use std::mem;
 
 pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed("recur"));
 const RECURSION_LIMIT: u32 = 1024;
@@ -100,17 +100,21 @@ impl<'script> CustomFn<'script> {
             _ => ImutExprInt::Invoke(i),
         })
     }
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    pub(crate) fn invoke<'event>(
-        &self,
-        ctx: &EventContext,
-        args: &[&Value<'event>],
-    ) -> FResult<Value<'event>> {
+    //#[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    pub(crate) fn invoke<'event, 'run>(
+        &'run self,
+        ctx: &'run EventContext,
+        args: &'run [&'run Value<'event>],
+    ) -> FResult<Value<'event>>
+    where
+        'script: 'event,
+        'event: 'run,
+    {
         use crate::ast::InvokeAggrFn;
         use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
-        let consts = if self.open {
+        let consts: Vec<Value<'static>> = if self.open {
             vec![
                 Value::null(),
                 Value::null(),
@@ -129,7 +133,7 @@ impl<'script> CustomFn<'script> {
             if i == self.locals {
                 break;
             }
-            this_local.values[i] = Some((*arg).clone());
+            this_local.values[i] = Some((*arg).clone_static());
         }
         let opts = ExecOpts {
             result_needed: false,
@@ -143,25 +147,25 @@ impl<'script> CustomFn<'script> {
             aggrs: &NO_AGGRS,
             meta: &meta,
         };
-        let mut no_event = Value::null();
-        let mut no_meta = Value::null();
-        let mut state = Value::null().into_static();
         let mut recursion_count = 0;
         'recur: loop {
             let mut exprs = self.body.iter().peekable();
+            let mut no_event = Value::null();
+            let mut no_meta = Value::null();
+            let mut state = Value::null().into_static();
             unsafe {
                 while let Some(expr) = exprs.next() {
                     if exprs.peek().is_none() {
                         match expr.run(
                             opts.with_result(),
                             &env,
-                            mem::transmute(&mut no_event),
+                            &mut no_event,
                             &mut state,
-                            mem::transmute(&mut no_meta),
+                            &mut no_meta,
                             &mut this_local,
                         )? {
                             Cont::Cont(v) => {
-                                return Ok(mem::transmute(v.into_owned()));
+                                return Ok(std::mem::transmute(v.into_owned()));
                             }
                             Cont::Drop => {
                                 recursion_count += 1;
@@ -181,9 +185,9 @@ impl<'script> CustomFn<'script> {
                         expr.run(
                             opts,
                             &env,
-                            mem::transmute(&mut no_event),
+                            &mut no_event,
                             &mut state,
-                            mem::transmute(&mut no_meta),
+                            &mut no_meta,
                             &mut this_local,
                         )?;
                     }

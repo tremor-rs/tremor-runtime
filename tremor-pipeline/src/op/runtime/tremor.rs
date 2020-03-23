@@ -67,16 +67,19 @@ impl Operator for Tremor {
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
         let data = event.data.suffix();
-        let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-        let mut event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
+        // This lifetimes will be `&'run mut Value<'event>` as that is the
+        // requirement of the `self.runtime.run` we can not declare them
+        // as the trait function for the operator doesn't allow that
+        let unwind_event: &'_ mut Value<'_> = unsafe { std::mem::transmute(data.value()) };
+        let event_meta: &'_ mut Value<'_> = unsafe { std::mem::transmute(data.meta()) };
         // unwind_event => the event
         // event_meta => meta
         let value = self.runtime.run(
             &context,
             AggrType::Emit,
-            &mut unwind_event, // event
-            state,             // state
-            &mut event_meta,   // $
+            unwind_event, // event
+            state,        // state
+            event_meta,   // $
         );
         // move origin_uri back to event again
         event.origin_uri = context.origin_uri;
@@ -143,7 +146,7 @@ mod test {
         assert_eq!("out", out);
 
         assert_eq!(
-            event.data.suffix().value,
+            *event.data.suffix().value(),
             Value::from(json!({"snot": "badger", "a": 1}))
         )
     }

@@ -43,7 +43,6 @@ use petgraph::graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use serde::Serialize;
-use simd_json::borrowed::Object;
 use simd_json::prelude::*;
 use simd_json::{json, BorrowedValue};
 use std::borrow::Cow;
@@ -184,7 +183,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
                 .event
                 .data
                 .suffix()
-                .value
+                .value()
                 .as_array()
                 .and_then(|arr| arr.get(self.idx))
                 .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)));
@@ -193,7 +192,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
         } else if self.idx == 0 {
             let v = self.event.data.suffix();
             self.idx += 1;
-            Some((&v.value, &v.meta))
+            Some((&v.value(), &v.meta()))
         } else {
             None
         }
@@ -227,14 +226,14 @@ impl<'value> Iterator for ValueIter<'value> {
                 .event
                 .data
                 .suffix()
-                .value
+                .value()
                 .as_array()
                 .and_then(|arr| arr.get(self.idx))
                 .and_then(|e| e.get("data")?.get("value"));
             self.idx += 1;
             r
         } else if self.idx == 0 {
-            let v = &self.event.data.suffix().value;
+            let v = &self.event.data.suffix().value();
             self.idx += 1;
             Some(v)
         } else {
@@ -803,10 +802,7 @@ impl ExecutableGraph {
                         "in".into(),
                         Event {
                             id: 0,
-                            data: LineValue::new(vec![], |_| ValueAndMeta {
-                                value,
-                                meta: Value::from(Object::default()),
-                            }),
+                            data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                             ingest_ns: timestamp,
                             // TODO update this to point to tremor instance producing the metrics?
                             origin_uri: None,
@@ -823,10 +819,7 @@ impl ExecutableGraph {
                         "in".into(),
                         Event {
                             id: 0,
-                            data: LineValue::new(vec![], |_| ValueAndMeta {
-                                value,
-                                meta: Value::from(Object::default()),
-                            }),
+                            data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                             ingest_ns: timestamp,
                             // TODO update this to point to tremor instance producing the metrics?
                             origin_uri: None,
@@ -1018,7 +1011,7 @@ mod test {
         dbg!(&results);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
-        assert_eq!(results[0].1.data.suffix().meta["class"], "default");
+        assert_eq!(results[0].1.data.suffix().meta()["class"], "default");
         dbg!(&e.metrics);
         // We ignore the first, and the last three nodes because:
         // * The first one is the input, handled seperately
@@ -1097,11 +1090,11 @@ mod test {
             assert_eq!(r.1.id, 1);
         }
         assert_eq!(
-            results[0].1.data.suffix().meta["debug::history"],
+            results[0].1.data.suffix().meta()["debug::history"],
             Value::from(json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[1].1.data.suffix().meta["debug::history"],
+            results[1].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
@@ -1110,7 +1103,7 @@ mod test {
             ]))
         );
         assert_eq!(
-            results[2].1.data.suffix().meta["debug::history"],
+            results[2].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
                 "evt: branch(1)",
                 "evt: m1(1)",
@@ -1120,11 +1113,11 @@ mod test {
             ]))
         );
         assert_eq!(
-            results[3].1.data.suffix().meta["debug::history"],
+            results[3].1.data.suffix().meta()["debug::history"],
             Value::from(json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"]))
         );
         assert_eq!(
-            results[4].1.data.suffix().meta["debug::history"],
+            results[4].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
                 "evt: branch(1)",
                 "evt: m2(1)",
@@ -1133,7 +1126,7 @@ mod test {
             ]))
         );
         assert_eq!(
-            results[5].1.data.suffix().meta["debug::history"],
+            results[5].1.data.suffix().meta()["debug::history"],
             Value::from(json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"]))
         );
 
@@ -1146,15 +1139,15 @@ mod test {
             assert_eq!(r.1.id, 2);
         }
         assert_eq!(
-            results[0].1.data.suffix().meta["debug::history"],
+            results[0].1.data.suffix().meta()["debug::history"],
             Value::from(json!(["evt: m1(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[1].1.data.suffix().meta["debug::history"],
+            results[1].1.data.suffix().meta()["debug::history"],
             Value::from(json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"]))
         );
         assert_eq!(
-            results[2].1.data.suffix().meta["debug::history"],
+            results[2].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
                 "evt: m1(2)",
                 "evt: m2(2)",
