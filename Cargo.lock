@@ -3768,7 +3768,7 @@ dependencies = [
 [[package]]
 name = "tide"
 version = "0.6.0"
-source = "git+https://github.com/Licenser/tide?branch=result-into-response#c6c12b97b70a8be41d1e4153609f2bf1ee71bb8b"
+source = "git+https://github.com/Licenser/tide?branch=result-into-response#cd9d9e3f5ec2a35fa4b6da925d85b717f3ab45a5"
 dependencies = [
  "async-std",
  "cookie",
@@ -3778,7 +3778,6 @@ dependencies = [
  "http-service-hyper",
  "log 0.4.8",
  "mime 0.3.16",
- "pin-project-lite",
  "route-recognizer",
  "serde",
  "serde_json",
