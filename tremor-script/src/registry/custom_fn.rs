@@ -100,6 +100,7 @@ impl<'script> CustomFn<'script> {
             _ => ImutExprInt::Invoke(i),
         })
     }
+
     pub(crate) fn invoke<'event, 'run>(
         &'script self,
         ctx: &'run EventContext,

@@ -70,6 +70,10 @@ impl SelectDims {
     pub fn from_query(stmt: Arc<StmtRental>) -> Self {
         Self::new(stmt, |_| HashMap::new())
     }
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    unsafe fn mut_suffix(&self) -> &mut Groups<'static> {
+        std::mem::transmute(self.suffix())
+    }
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -93,8 +97,6 @@ pub struct Window {
     last_dims: SelectDims,
     next_swap: u64,
 }
-
-impl Window {}
 
 // We allow this since No is barely ever used.
 #[allow(clippy::large_enum_variant)]
@@ -519,8 +521,8 @@ impl Operator for TrickleSelect {
                         // Windows are never added or deleted, we can argue that no
                         // data allocated in one window will be accessed after
                         // any other window is dropped
-                        let this_groups: &mut Groups = mem::transmute(window.dims.suffix());
-                        let last_groups: &mut Groups = mem::transmute(window.last_dims.suffix());
+                        let this_groups = window.dims.mut_suffix();
+                        let last_groups = window.last_dims.mut_suffix();
                         last_groups.clear();
                         std::mem::swap(this_groups, last_groups);
                     }
@@ -537,14 +539,13 @@ impl Operator for TrickleSelect {
             // We first iterate through the windows and emit as far as we would have to emit.
             while let Some(this) = windows.next() {
                 // This is sound since we only add mutability to groups
-                let this_groups: &mut Groups = unsafe { mem::transmute(this.dims.suffix()) };
+                let this_groups = unsafe { this.dims.mut_suffix() };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
                         // This is sound since we only add mutability to groups
-                        let last_groups: &mut Groups =
-                            unsafe { mem::transmute(this.last_dims.suffix()) };
+                        let last_groups = unsafe { this.last_dims.mut_suffix() };
                         (
                             group_str.clone(),
                             last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
@@ -666,14 +667,13 @@ impl Operator for TrickleSelect {
                 // First start with getting our group
 
                 // FIXME: reason about soundness
-                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                let this_groups = unsafe { this.dims.mut_suffix() };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
                         // FIXME: reason about soundness
-                        let last_groups: &mut Groups =
-                            unsafe { std::mem::transmute(this.last_dims.suffix()) };
+                        let last_groups = unsafe { this.last_dims.mut_suffix() };
                         (
                             group_str.clone(),
                             last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
@@ -705,15 +705,13 @@ impl Operator for TrickleSelect {
                 // the previous window since we already pulled all needed data out here.
                 if let Some(prev) = windows.peek() {
                     // FIXME: reason about soundness
-                    let prev_groups: &mut Groups =
-                        unsafe { std::mem::transmute(prev.dims.suffix()) };
+                    let prev_groups = unsafe { prev.dims.mut_suffix() };
                     let (_, prev_group) = prev_groups
                         .raw_entry_mut()
                         .from_key(&group_str)
                         .or_insert_with(|| {
                             // FIXME: reason about soundness
-                            let last_groups: &mut Groups =
-                                unsafe { std::mem::transmute(prev.last_dims.suffix()) };
+                            let last_groups = unsafe { prev.last_dims.mut_suffix() };
                             (
                                 group_str.clone(),
                                 last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
@@ -744,7 +742,7 @@ impl Operator for TrickleSelect {
                 let (unwind_event, event_meta) = event.data.parts();
                 consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
                 // FIXME: reason about soundness
-                let this_groups: &mut Groups = unsafe { std::mem::transmute(this.dims.suffix()) };
+                let this_groups = unsafe { this.dims.mut_suffix() };
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
