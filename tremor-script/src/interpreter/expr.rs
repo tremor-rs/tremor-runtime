@@ -131,12 +131,12 @@ where
         use std::mem;
         // NOTE: Is this good? I don't like it.
         let value = stry!(expr.target.run(opts, env, event, state, meta, local));
-        let v: &Value = value.borrow();
-        let v: &mut Value = unsafe { mem::transmute(v) };
+        let v: &Value<'event> = value.borrow();
+        let v: &mut Value<'event> = unsafe { mem::transmute(v) };
         stry!(patch_value(
             self, opts, env, event, state, meta, local, v, expr
         ));
-        Ok(Cow::Borrowed(v))
+        Ok(value)
     }
 
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
@@ -153,15 +153,15 @@ where
         use std::mem;
         // NOTE: Is this good? I don't like it.
         let value_cow = stry!(expr.target.run(opts, env, event, state, meta, local));
-        let value: &Value = value_cow.borrow();
-        let value: &mut Value = unsafe { mem::transmute(value) };
+        let value: &Value<'event> = value_cow.borrow();
+        let value: &mut Value<'event> = unsafe { mem::transmute(value) };
 
         if value.is_object() {
             let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local,));
 
             if replacement.is_object() {
                 stry!(merge_values(self, &expr.expr, value, &replacement));
-                Ok(Cow::Borrowed(value))
+                Ok(value_cow)
             } else {
                 error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
             }
@@ -314,7 +314,7 @@ where
                 }
                 Path::Local(lpath) => match local.values.get(lpath.idx) {
                     Some(Some(l)) => {
-                        let l: &mut Value = mem::transmute(l);
+                        let l: &mut Value<'event> = mem::transmute(l);
                         if segments.is_empty() {
                             *l = value;
                             return Ok(Cow::Borrowed(l));
@@ -322,7 +322,7 @@ where
                         l
                     }
                     Some(d) => {
-                        let d: &mut Option<Value> = mem::transmute(d);
+                        let d: &mut Option<Value<'event>> = mem::transmute(d);
                         if segments.is_empty() {
                             *d = Some(value);
                             if let Some(l) = d {
@@ -388,7 +388,7 @@ where
                     }
                     Segment::Element { expr, .. } => {
                         let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
-                        let v: &mut Value = mem::transmute(current);
+                        let v: &mut Value<'event> = mem::transmute(current);
                         if let Some(map) = v.as_object_mut() {
                             current = if let Some(v) = map.get_mut(&id) {
                                 v
@@ -407,7 +407,7 @@ where
             }
         }
         unsafe {
-            *mem::transmute::<&Value, &mut Value>(current) = value;
+            *mem::transmute::<&Value<'event>, &mut Value<'event>>(current) = value;
         }
         if opts.result_needed {
             //Ok(Cow::Borrowed(current))

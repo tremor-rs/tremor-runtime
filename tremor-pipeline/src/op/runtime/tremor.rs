@@ -61,48 +61,51 @@ pub struct Tremor {
 }
 
 impl Operator for Tremor {
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,
         _port: &str,
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        let context = EventContext::new(event.ingest_ns, event.origin_uri);
-        let data = event.data.suffix();
-        let mut unwind_event: &mut Value<'_> = unsafe { std::mem::transmute(&data.value) };
-        let mut event_meta: &mut Value<'_> = unsafe { std::mem::transmute(&data.meta) };
-        // unwind_event => the event
-        // event_meta => meta
-        let value = self.runtime.run(
-            &context,
-            AggrType::Emit,
-            &mut unwind_event, // event
-            state,             // state
-            &mut event_meta,   // $
-        );
-        // move origin_uri back to event again
-        event.origin_uri = context.origin_uri;
-        match value {
-            Ok(Return::EmitEvent { port }) => {
-                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
+        let port = {
+            let context = EventContext::new(event.ingest_ns, event.origin_uri);
+            // This lifetimes will be `&'run mut Value<'event>` as that is the
+            // requirement of the `self.runtime.run` we can not declare them
+            // as the trait function for the operator doesn't allow that
+            let (unwind_event, event_meta) = event.data.parts();
+            // unwind_event => the event
+            // event_meta => meta
+            let value = self.runtime.run(
+                &context,
+                AggrType::Emit,
+                unwind_event, // event
+                state,        // state
+                event_meta,   // $
+            );
+            // move origin_uri back to event again
+            event.origin_uri = context.origin_uri;
+            match value {
+                Ok(Return::EmitEvent { port }) => port.map_or_else(|| "out".into(), Cow::Owned),
+                Ok(Return::Emit { value, port }) => {
+                    *unwind_event = value;
+                    port.map_or_else(|| "out".into(), Cow::Owned)
+                }
+                Ok(Return::Drop) => return Ok(vec![]),
+                Err(ref e) => {
+                    let mut o = Value::from(hashmap! {
+                        "error".into() => Value::String(self.runtime.format_error(&e).into()),
+                    });
+                    std::mem::swap(&mut o, unwind_event);
+                    if let Some(error) = unwind_event.as_object_mut() {
+                        error.insert("event".into(), o);
+                    } else {
+                        unreachable!();
+                    };
+                    "error".into()
+                }
             }
-            Ok(Return::Emit { value, port }) => {
-                *unwind_event = value;
-                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
-            }
-            Ok(Return::Drop) => Ok(vec![]),
-            Err(e) => {
-                let mut o = Value::from(hashmap! {
-                    "error".into() => Value::String(self.runtime.format_error(&e).into()),
-                });
-                std::mem::swap(&mut o, unwind_event);
-                if let Some(error) = unwind_event.as_object_mut() {
-                    error.insert("event".into(), o);
-                };
-                Ok(vec![("error".into(), event)])
-            }
-        }
+        };
+        Ok(vec![(port, event)])
     }
 }
 
@@ -148,7 +151,7 @@ mod test {
         assert_eq!("out", out);
 
         assert_eq!(
-            event.data.suffix().value,
+            *event.data.suffix().value(),
             Value::from(json!({"snot": "badger", "a": 1}))
         )
     }

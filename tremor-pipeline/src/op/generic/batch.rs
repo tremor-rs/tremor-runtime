@@ -39,10 +39,7 @@ pub struct Batch {
 }
 
 pub fn empty() -> LineValue {
-    LineValue::new(vec![], |_| ValueAndMeta {
-        value: Value::Array(vec![]),
-        meta: Value::from(Object::default()),
-    })
+    LineValue::new(vec![], |_| ValueAndMeta::from(Value::Array(vec![])))
 }
 
 op!(BatchFactory(node) {
@@ -85,7 +82,7 @@ impl Operator for Batch {
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
-                if let Some(ref mut a) = this.value.as_array_mut() {
+                if let Some(ref mut a) = this.value_mut().as_array_mut() {
                     let mut e = Object::with_capacity(7);
                     // {"id":1,
                     e.insert_nocheck("id".into(), id.into());
@@ -93,8 +90,9 @@ impl Operator for Batch {
                     //      "value": "snot", "meta":{}
                     //  },
                     let mut data = Object::with_capacity(2);
-                    data.insert_nocheck("value".into(), other.value);
-                    data.insert_nocheck("meta".into(), other.meta);
+                    let (value, meta) = other.into_parts();
+                    data.insert_nocheck("value".into(), value);
+                    data.insert_nocheck("meta".into(), meta);
                     e.insert_nocheck("data".into(), Value::from(data));
                     //  "ingest_ns":1,
                     e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
@@ -222,7 +220,7 @@ mod test {
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
             events,
-            vec![&event1.data.suffix().value, &event2.data.suffix().value]
+            vec![event1.data.suffix().value(), event2.data.suffix().value()]
         );
 
         let event = Event {
@@ -296,7 +294,7 @@ mod test {
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
             events,
-            vec![&event1.data.suffix().value, &event2.data.suffix().value]
+            vec![event1.data.suffix().value(), event2.data.suffix().value()]
         );
 
         let event = Event {
@@ -373,7 +371,7 @@ mod test {
         assert_eq!("out", out);
 
         let events: Vec<&Value> = event.value_iter().collect();
-        assert_eq!(events, vec![&event1.data.suffix().value]);
+        assert_eq!(events, vec![event1.data.suffix().value()]);
 
         let event = Event {
             is_batch: false,

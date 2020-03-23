@@ -44,7 +44,6 @@ pub struct TrickleScript {
 }
 
 impl TrickleScript {
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub fn with_stmt(
         id: String,
         defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
@@ -109,13 +108,17 @@ impl TrickleScript {
         };
 
         let script = rentals::Script::new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
-            std::mem::transmute(script)
-        });
+            use tremor_script::ast::ScriptDecl;
+            // This is sound since defn_rentwrapped.stmt is an arc by cloning
+            // it we ensure that the referenced data remains available until
+            // the rental is dropped.
+            let mut decl = mem::transmute::<ScriptDecl<'_>, ScriptDecl<'static>>(script);
+            let args: Value<'static> = mem::transmute(args);
 
-        let script_ref: &mut tremor_script::ast::ScriptDecl =
-            unsafe { mem::transmute(script.suffix()) };
-        script_ref.script.consts = vec![Value::null(), Value::null(), Value::null()];
-        script_ref.script.consts[ARGS_CONST_ID] = args;
+            decl.script.consts = vec![Value::null(), Value::null(), Value::null()];
+            decl.script.consts[ARGS_CONST_ID] = args;
+            decl
+        });
 
         Ok(Self {
             id,
@@ -137,17 +140,20 @@ impl Operator for TrickleScript {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
         let data = event.data.suffix();
-        let mut unwind_event: &mut tremor_script::Value<'_> =
-            unsafe { std::mem::transmute(&data.value) };
-        let mut event_meta: &mut tremor_script::Value<'_> =
-            unsafe { std::mem::transmute(&data.meta) };
+        // This lifetimes will be `&'run mut Value<'event>` as that is the
+        // requirement of the `self.runtime.run` we can not declare them
+        // as the trait function for the operator doesn't allow that
+
+        let unwind_event: &'_ mut tremor_script::Value<'_> =
+            unsafe { mem::transmute(data.value()) };
+        let event_meta: &'_ mut tremor_script::Value<'_> = unsafe { mem::transmute(data.meta()) };
 
         let value = self.script.suffix().script.run(
             &context,
             AggrType::Emit,
-            &mut unwind_event, // event
-            state,             // state
-            &mut event_meta,   // $
+            unwind_event, // event
+            state,        // state
+            event_meta,   // $
         );
 
         // move origin_uri back to event again
@@ -167,7 +173,7 @@ impl Operator for TrickleScript {
                 let mut o = Value::from(hashmap! {
                     "error".into() => Value::String(self.node.head().format_error(&e).into()),
                 });
-                std::mem::swap(&mut o, unwind_event);
+                mem::swap(&mut o, unwind_event);
                 if let Some(error) = unwind_event.as_object_mut() {
                     error.insert("event".into(), o);
                 };
