@@ -38,14 +38,14 @@ use std::mem;
 use upable::Upable;
 
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
-struct NodeMeta<'script> {
+struct NodeMeta {
     start: Location,
     end: Location,
-    name: Option<Cow<'script, str>>,
+    name: Option<String>,
     terminal: bool,
 }
 
-impl From<(Location, Location)> for NodeMeta<'static> {
+impl From<(Location, Location)> for NodeMeta {
     fn from((start, end): (Location, Location)) -> Self {
         Self {
             start,
@@ -57,25 +57,23 @@ impl From<(Location, Location)> for NodeMeta<'static> {
 }
 /// Information about node metadata
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
-pub struct NodeMetas<'script>(Vec<NodeMeta<'script>>);
+pub struct NodeMetas(Vec<NodeMeta>);
 
-impl<'script> NodeMetas<'script> {
+impl<'script> NodeMetas {
     pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         let mid = self.0.len();
         self.0.push((start, end).into());
         mid
     }
-    pub(crate) fn add_meta_w_name(
-        &mut self,
-        start: Location,
-        end: Location,
-        name: Cow<'script, str>,
-    ) -> usize {
+    pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: S) -> usize
+    where
+        S: ToString,
+    {
         let mid = self.0.len();
         self.0.push(NodeMeta {
             start,
             end,
-            name: Some(name),
+            name: Some(name.to_string()),
             terminal: false,
         });
         mid
@@ -93,10 +91,10 @@ impl<'script> NodeMetas<'script> {
     pub(crate) fn end(&self, idx: usize) -> Option<Location> {
         self.0.get(idx).map(|v| v.end)
     }
-    pub(crate) fn name(&self, idx: usize) -> Option<&Cow<'script, str>> {
+    pub(crate) fn name(&self, idx: usize) -> Option<&String> {
         self.0.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
     }
-    pub(crate) fn name_dflt(&self, idx: usize) -> Cow<'script, str> {
+    pub(crate) fn name_dflt(&self, idx: usize) -> String {
         self.name(idx)
             .cloned()
             .unwrap_or_else(|| String::from("<UNKNOWN>").into())
@@ -230,10 +228,12 @@ where
     pub locals: HashMap<String, usize>,
     pub functions: HashMap<Vec<String>, usize>,
     pub consts: HashMap<Vec<String>, usize>,
-    pub meta: NodeMetas<'script>,
+    pub meta: NodeMetas,
     docs: Docs<'script>,
     module: Vec<String>,
     possible_leaf: bool,
+    fn_argc: usize,
+    is_open: bool,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -243,12 +243,10 @@ where
     pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta.add_meta(start, end)
     }
-    pub fn add_meta_w_name(
-        &mut self,
-        start: Location,
-        end: Location,
-        name: Cow<'script, str>,
-    ) -> usize {
+    pub fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: S) -> usize
+    where
+        S: ToString,
+    {
         self.meta.add_meta_w_name(start, end, name)
     }
     pub fn has_locals(&self) -> bool {
@@ -286,6 +284,8 @@ where
             docs: Docs::default(),
             module: Vec::new(),
             possible_leaf: false,
+            fn_argc: 0,
+            is_open: false,
         }
     }
 
@@ -364,7 +364,7 @@ pub struct Script<'script> {
     aggregates: Vec<InvokeAggrFn<'script>>,
     functions: Vec<CustomFn<'script>>,
     locals: usize,
-    node_meta: NodeMetas<'script>,
+    node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentaiton from the script
     pub docs: Docs<'script>,
@@ -443,6 +443,12 @@ pub struct Ident<'script> {
     pub id: Cow<'script, str>,
 }
 impl_expr2!(Ident);
+
+impl<'script> std::fmt::Display for Ident<'script> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
 
 impl<'script> From<&'script str> for Ident<'script> {
     fn from(id: &'script str) -> Self {
@@ -602,9 +608,7 @@ pub(crate) enum ImutExprInt<'script> {
     Invoke3(Invoke<'script>),
     Invoke(Invoke<'script>),
     InvokeAggr(InvokeAggr),
-    Recur {
-        mid: usize,
-    },
+    Recur(Recur<'script>),
 }
 
 fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
@@ -685,6 +689,15 @@ impl<'script> Invocable<'script> {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct Recur<'script> {
+    pub mid: usize,
+    pub argc: usize,
+    pub open: bool,
+    pub exprs: ImutExprs<'script>,
+}
+impl_expr2!(Recur);
 
 #[derive(Clone, Serialize)]
 pub(crate) struct InvokeAggr {

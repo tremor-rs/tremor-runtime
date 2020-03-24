@@ -79,7 +79,7 @@ where
     /// Aggregates
     pub aggrs: &'run [InvokeAggrFn<'script>],
     /// Node metadata
-    pub meta: &'run NodeMetas<'script>,
+    pub meta: &'run NodeMetas,
 }
 
 /// Local variable stack
@@ -1276,7 +1276,7 @@ impl<'script> GroupBy<'script> {
         ctx: &'run EventContext,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
-        node_meta: &'run NodeMetas<'script>,
+        node_meta: &'run NodeMetas,
         meta: &'run Value<'event>,
     ) -> Result<Vec<Vec<Value<'event>>>>
     where
@@ -1297,7 +1297,7 @@ impl<'script> GroupByInt<'script> {
         ctx: &'run EventContext,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
-        node_meta: &'run NodeMetas<'script>,
+        node_meta: &'run NodeMetas,
         meta: &'run Value<'event>,
         groups: &'run mut Vec<Vec<Value<'event>>>,
     ) -> Result<()>

@@ -112,7 +112,7 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
     type Target = OperatorDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDecl {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             kind: self.kind.up(helper)?,
             params: match self.params {
@@ -146,7 +146,7 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
     type Target = OperatorStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(OperatorStmt {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             target: self.target,
             params: match self.params {
@@ -182,7 +182,7 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         helper.warnings.sort();
         helper.warnings.dedup();
         let script_decl = ScriptDecl {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             params: match self.params {
                 Some(p) => {
@@ -217,7 +217,7 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
         // let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
         // helper.warnings.append(&mut warnings);
         Ok(ScriptStmt {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             params: match self.params {
                 Some(p) => {
@@ -258,7 +258,7 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
             helper.warnings.dedup();
         };
         Ok(WindowDecl {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             kind: self.kind,
             params: {
@@ -451,7 +451,11 @@ impl<'script> Upable<'script> for OperatorKindRaw {
     type Target = OperatorKind;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(OperatorKind {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(
+                self.start,
+                self.end,
+                format!("{}::{}", self.module, self.operation),
+            ),
             module: self.module,
             operation: self.operation,
         })
@@ -469,7 +473,7 @@ impl<'script> Upable<'script> for StreamStmtRaw {
     type Target = StreamStmt;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(StreamStmt {
-            mid: helper.add_meta(self.start, self.end),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
         })
     }

@@ -107,9 +107,10 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::InvokeAggr(e) => e.s(meta),
             ImutExprInt::List(e) => e.s(meta),
             ImutExprInt::Literal(e) => e.s(meta),
-            ImutExprInt::Recur { mid }
-            | ImutExprInt::Local { mid, .. }
-            | ImutExprInt::Present { mid, .. } => meta.start(*mid).unwrap_or_default(),
+            ImutExprInt::Recur(e) => e.s(meta),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => {
+                meta.start(*mid).unwrap_or_default()
+            }
             ImutExprInt::Match(e) => e.s(meta),
             ImutExprInt::Merge(e) => e.s(meta),
             ImutExprInt::Patch(e) => e.s(meta),
@@ -133,9 +134,10 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Merge(e) => e.e(meta),
             ImutExprInt::Patch(e) => e.e(meta),
             ImutExprInt::Path(e) => e.e(meta),
-            ImutExprInt::Recur { mid }
-            | ImutExprInt::Local { mid, .. }
-            | ImutExprInt::Present { mid, .. } => meta.end(*mid).unwrap_or_default(),
+            ImutExprInt::Recur(e) => e.e(meta),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => {
+                meta.end(*mid).unwrap_or_default()
+            }
             ImutExprInt::Record(e) => e.e(meta),
             ImutExprInt::Unary(e) => e.e(meta),
         }
@@ -155,9 +157,8 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Merge(e) => e.mid(),
             ImutExprInt::Patch(e) => e.mid(),
             ImutExprInt::Path(e) => e.mid(),
-            ImutExprInt::Recur { mid }
-            | ImutExprInt::Local { mid, .. }
-            | ImutExprInt::Present { mid, .. } => *mid,
+            ImutExprInt::Recur(e) => e.mid(),
+            ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => *mid,
             ImutExprInt::Record(e) => e.mid(),
             ImutExprInt::Unary(e) => e.mid(),
         }
@@ -243,7 +244,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Path(e) => e.s(meta),
             ImutExprRaw::Present { start, .. } => *start,
             ImutExprRaw::Record(e) => e.s(meta),
-            ImutExprRaw::Recur { start, .. } => *start,
+            ImutExprRaw::Recur(e) => e.s(meta),
             ImutExprRaw::String(e) => e.start,
             ImutExprRaw::Unary(e) => e.start,
         }
@@ -261,7 +262,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Path(e) => e.e(meta),
             ImutExprRaw::Present { end, .. } => *end,
             ImutExprRaw::Record(e) => e.e(meta),
-            ImutExprRaw::Recur { end, .. } => *end,
+            ImutExprRaw::Recur(e) => e.e(meta),
             ImutExprRaw::String(e) => e.end,
             ImutExprRaw::Unary(e) => e.end,
         }

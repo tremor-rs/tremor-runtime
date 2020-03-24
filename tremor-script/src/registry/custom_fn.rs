@@ -171,6 +171,11 @@ impl<'script> CustomFn<'script> {
                             if recursion_count == RECURSION_LIMIT {
                                 return Err(FunctionError::Error("recursion limit reached".into()));
                             }
+                            // clear the local variables (that are not the
+                            // arguments)
+                            for local in this_local.values.iter_mut().skip(args.len()) {
+                                *local = None;
+                            }
                             //We are abusing this as a recursion hint
                             continue 'recur;
                         }
