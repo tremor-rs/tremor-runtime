@@ -96,8 +96,6 @@ hyper = "0.10"  # chan't update this because of google
 # logstash grok patterns
 grok = "1"
 
-snmalloc-rs = { version = "0.2", optional = true }
-
 [dependencies.tungstenite]
 version = "0.10"
 default-features = false
@@ -111,8 +109,7 @@ regex = "1"
 env_logger = "0.7"
 
 [features]
-default = [ "snmalloc" ]
-snmalloc = [ "snmalloc-rs" ]
+default = [ ]
 
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
