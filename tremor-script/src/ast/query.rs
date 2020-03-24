@@ -31,7 +31,7 @@ pub struct Query<'script> {
     /// Statements
     pub stmts: Stmts<'script>,
     /// Query Node Metadata
-    pub node_meta: NodeMetas<'script>,
+    pub node_meta: NodeMetas,
 }
 
 /// Query statement
@@ -65,7 +65,7 @@ pub struct SelectStmt<'script> {
     /// Number of locals
     pub locals: usize,
     /// Node metadata nodes
-    pub node_meta: NodeMetas<'script>,
+    pub node_meta: NodeMetas,
 }
 
 /// The type of a select statment

@@ -106,7 +106,17 @@ where
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
-            ImutExprInt::Recur { .. } => Ok(Cow::Borrowed(&RECUR)),
+            ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
+                #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+                let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
+                for (i, e) in exprs.iter().enumerate() {
+                    let r = e.run(opts, env, event, state, meta, local)?;
+                    if i <= *argc {
+                        local.values[i] = Some(r.into_owned());
+                    }
+                }
+                Ok(Cow::Borrowed(&RECUR))
+            }
             ImutExprInt::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
             ImutExprInt::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
             ImutExprInt::Present { path, .. } => {

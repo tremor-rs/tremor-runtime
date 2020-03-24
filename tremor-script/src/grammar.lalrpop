@@ -280,7 +280,12 @@ AlwaysImutExpr: ImutExprRaw<'input> = {
     <record:Record> => ImutExprRaw::Record(Box::new(record)),
     <list:List> => ImutExprRaw::List(Box::new(list)),
     <s:StringLiteral> => ImutExprRaw::String(s),
-    <start:@L> "recur" <end:@L> => ImutExprRaw::Recur{start,end},
+    <r:Recur> => ImutExprRaw::Recur(r),
+}
+
+Recur: RecurRaw<'input> = {
+    <start:@L> "recur" "(" ")" <end:@L> => RecurRaw{start,end, exprs: vec![]},
+    <start:@L> "recur" "(" <args:InvokeArgs> ")" <end:@L> => RecurRaw{start, end, exprs: args},
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
@@ -465,7 +470,11 @@ ModuleExpr: ExprRaw<'input> = {
 FnDecl: AnyFnRaw<'input> = {
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: true, inline: false}),
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: false}),
+
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: false}),
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: false}),
+  
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args: vec![], start, end, cases, doc, open: false, inline: false}),
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc, open: false, inline: false}),
 }
 

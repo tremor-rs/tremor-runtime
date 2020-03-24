@@ -184,6 +184,7 @@ impl ErrorKind {
             | UpdateKeyMissing(outer, inner, _)
             | UnterminatedHereDoc(outer, inner, _)
             | TailingHereDoc(outer, inner, _, _)
+            | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
             | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
@@ -326,6 +327,11 @@ error_chain! {
         /*
          * Generic
          */
+        Generic(expr: Range, inner: Range, msg: String) {
+            description("Generic error")
+                display("{}", msg)
+        }
+
         EmptyScript {
             description("No expressions were found in the script")
                 display("No expressions were found in the script")
@@ -647,6 +653,15 @@ pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
         "snot at error type conflict".to_string(),
     )
     .into())
+}
+
+pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
+    outer: &O,
+    inner: &I,
+    error: S,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::Generic(outer.extent(meta), inner.extent(meta), error.to_string()).into())
 }
 
 pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
