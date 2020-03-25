@@ -515,6 +515,13 @@ mod tests {
     }
 
     #[test]
+    fn test_arith_expr() {
+        eval!("1 + 1;", Value::from(2));
+        eval!("2 - 1;", Value::from(1));
+        eval!("1 - 2;", Value::from(-1));
+    }
+
+    #[test]
     fn test_assign_local() {
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
