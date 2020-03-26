@@ -49,7 +49,7 @@ simd-json = {version = "0.3", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "2.1"
-async-tungstenite = { version = "0.4.0", features = ["async-std-runtime"] }
+async-tungstenite = { version = "0.4.2", features = ["async-std-runtime"] }
 
 
 log = "0.4"
