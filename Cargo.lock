@@ -3408,9 +3408,9 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "simd-json"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92829df4921ce041345162797d9b6f6844920d933af950f3626bc9f954470e9d"
+checksum = "7f31008665c0fbfb633702c5b828db898f9c6a07cd7278226262e57fa6030f1a"
 dependencies = [
  "float-cmp",
  "halfbrown",
