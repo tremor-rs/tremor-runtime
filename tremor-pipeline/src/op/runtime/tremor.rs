@@ -15,6 +15,7 @@ use crate::op::prelude::*;
 use crate::FN_REGISTRY;
 use simd_json::borrowed::Value;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
+use tremor_script::path::load_module_path;
 use tremor_script::prelude::*;
 use tremor_script::{self, AggrType, EventContext, Return, Script};
 
@@ -22,7 +23,9 @@ op!(TremorFactory(node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
 
-        match tremor_script::Script::parse(&config.script, &*FN_REGISTRY.lock()?) {
+        match tremor_script::Script::parse(
+               &load_module_path(),
+               config.script.clone(), &*FN_REGISTRY.lock()?) {
             Ok(runtime) =>
                 Ok(Box::new(Tremor {
                     runtime,
@@ -108,6 +111,7 @@ mod test {
     use super::*;
     use crate::FN_REGISTRY;
     use simd_json::json;
+    use tremor_script::path::ModulePath;
 
     #[test]
     fn mutate() {
@@ -116,7 +120,8 @@ mod test {
                 .to_string(),
         };
         let runtime = Script::parse(
-            &config.script,
+            &ModulePath { mounts: vec![] }, // FIXME config cpp
+            config.script.clone(),
             &*FN_REGISTRY.lock().expect("could not claim lock"),
         )
         .expect("failed to parse script");
@@ -154,7 +159,8 @@ mod test {
             script: r#"match this is invalid code so no match case"#.to_string(),
         };
         let _runtime = Script::parse(
-            &config.script,
+            &ModulePath { mounts: vec![] }, // FIXME config cpp
+            config.script,
             &*FN_REGISTRY.lock().expect("could not claim lock"),
         );
     }

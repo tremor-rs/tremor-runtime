@@ -18,6 +18,7 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::path::ModulePath;
 use tremor_script::Script;
 
 macro_rules! test_cases {
@@ -27,6 +28,7 @@ macro_rules! test_cases {
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
+                let script_dir = concat!("tests/script_warnings/", stringify!($file), "/").to_string();
                 let script_file = concat!("tests/script_warnings/", stringify!($file), "/script.tremor");
                 let err_file = concat!("tests/script_warnings/", stringify!($file), "/warning.txt");
 
@@ -34,12 +36,13 @@ macro_rules! test_cases {
                 let mut file = File::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
+                let contents2 = contents.clone();
 
                 let mut file = File::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
-                let s = Script::parse(&contents, &*FN_REGISTRY.lock()?)?;
+                let s = Script::parse(&ModulePath { mounts: vec![script_dir] }, contents2, &*FN_REGISTRY.lock()?)?;
                 let mut h = Dumb::new();
                 s.format_warnings_with(&mut h)?;
                 h.finalize()?;

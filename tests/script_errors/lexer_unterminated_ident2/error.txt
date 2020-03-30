@@ -1,3 +1,4 @@
 Error: 
     1 | let event.`42 = 42;
       |           ^^^^^^^^^ It looks like you forgot to terminate an ident with a closing '`'
+    2 | event

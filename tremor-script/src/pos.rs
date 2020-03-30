@@ -24,6 +24,8 @@ pub use codespan::{
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
 pub struct Location {
+    /// The compilation unit id
+    pub unit_id: u64, // mapping of id -> file ( str )
     /// The Line
     pub line: usize,
     /// The Column
@@ -98,6 +100,17 @@ impl Location {
             line,
             column,
             absolute,
+            unit_id: 0_u64, // FIXME unit_id cpp
+        }
+    }
+
+    /// Location for line directives
+    pub fn for_line_directive() -> Self {
+        Self {
+            line: 0,
+            column: 0,
+            absolute: 0,
+            unit_id: 0,
         }
     }
 

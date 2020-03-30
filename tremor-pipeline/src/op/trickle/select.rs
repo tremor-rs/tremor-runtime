@@ -926,10 +926,15 @@ mod test {
         }
     }
 
-    fn parse_query(query: &str) -> Result<crate::op::trickle::select::TrickleSelect> {
+    fn parse_query(
+        file_name: String,
+        query: &str,
+    ) -> Result<crate::op::trickle::select::TrickleSelect> {
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
-        let query = tremor_script::query::Query::parse(query, &reg, &aggr_reg)?;
+        let module_path = tremor_script::path::load_module_path();
+        let query =
+            tremor_script::query::Query::parse(&module_path, file_name, query, &reg, &aggr_reg)?;
 
         let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
             q.suffix().stmts[0].clone()
@@ -942,7 +947,10 @@ mod test {
 
     #[test]
     fn test_sum() -> Result<()> {
-        let mut op = parse_query("select stats::sum(event.h2g2) from in into out;")?;
+        let mut op = parse_query(
+            "test.trickle".to_string(),
+            "select stats::sum(event.h2g2) from in into out;",
+        )?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
         let (out, event) =
@@ -955,7 +963,10 @@ mod test {
 
     #[test]
     fn test_count() -> Result<()> {
-        let mut op = parse_query("select stats::count() from in into out;")?;
+        let mut op = parse_query(
+            "test.trickle".to_string(),
+            "select stats::count() from in into out;",
+        )?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -968,7 +979,10 @@ mod test {
     #[test]
     fn count_tilt() -> Result<()> {
         // Windows are 15s and 30s
-        let mut op = parse_query("select stats::count() from in into out;")?;
+        let mut op = parse_query(
+            "test.trickle".to_string(),
+            "select stats::count() from in into out;",
+        )?;
         // Insert two events prior to 15
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());

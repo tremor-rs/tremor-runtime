@@ -1,0 +1,7 @@
+Error: 
+    1 | define script snot
+    2 | script
+    3 |   use foo::bar as use;
+      |                   ^^^ Found the token `use` but expected `<ident>`
+    4 |   event
+    5 | end;

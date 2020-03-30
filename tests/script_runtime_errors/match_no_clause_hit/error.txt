@@ -4,4 +4,3 @@ Error:
     3 | end
       | ^^^ A match expression executed but no clause matched
       |     NOTE: Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.
-    4 |

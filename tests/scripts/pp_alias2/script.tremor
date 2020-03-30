@@ -1,0 +1,6 @@
+use foo::bar::baz    as    baz;
+
+match event of
+  case {} => "snot {snot}"
+  default => "ko"
+end;

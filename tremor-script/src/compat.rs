@@ -26,7 +26,7 @@ use std::ptr;
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
     // let aggr_reg: AggrRegistry = registry::aggr_registry();
-    let script = Script::parse(src, &reg)?;
+    let script = Script::parse(&crate::path::load_module_path(), src.to_string(), &reg)?;
 
     let mut event = Value::from(Object::new());
     let mut meta = Value::from(Object::new());
@@ -49,7 +49,11 @@ fn eval(src: &str) -> Result<String> {
 #[cfg_attr(tarpaulin, skip)]
 pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len: usize) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
-    match cstr.to_str().map_err(Error::from).and_then(|s| eval(s)) {
+    match cstr
+        .to_str()
+        .map_err(Error::from)
+        .and_then(|ref mut s| eval(s))
+    {
         Ok(result) => {
             if result.len() < len {
                 unsafe {

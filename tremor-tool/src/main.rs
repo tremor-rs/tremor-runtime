@@ -55,6 +55,7 @@ use tremor_runtime::functions as tr_fun;
 use tremor_runtime::utils;
 use tremor_script::grok;
 use tremor_script::interpreter::AggrType;
+use tremor_script::path::ModulePath;
 use tremor_script::EventContext as Context;
 
 enum FormatKind {
@@ -206,7 +207,11 @@ fn script_run_cmd(cmd: &ArgMatches<'_>) -> Result<()> {
     };
 
     let context = Context::new(666, None);
-    let s = tremor_script::Script::parse(&script, &*tremor_pipeline::FN_REGISTRY.lock()?)?;
+    let s = tremor_script::Script::parse(
+        &ModulePath { mounts: vec![] },
+        script,
+        &*tremor_pipeline::FN_REGISTRY.lock()?,
+    )?;
     let mut state = Value::null();
     for (num, line) in input.lines().enumerate() {
         let l = line?;

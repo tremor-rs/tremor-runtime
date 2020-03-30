@@ -20,10 +20,13 @@ pub use crate::interpreter::AggrType;
 use crate::interpreter::Cont;
 use crate::lexer::{self};
 use crate::parser::g as grammar;
+use crate::path::ModulePath;
 use crate::pos::Range;
 use crate::registry::{Aggr as AggrRegistry, Registry};
+//use lexer::TokenSpan;
 use serde::Serialize;
 use simd_json::borrowed::Value;
+//use std::fs::File;
 use std::io::Write;
 
 /// Return of a script execution
@@ -93,7 +96,7 @@ rental! {
 
         #[rental_mut(covariant,debug)]
         pub(crate) struct Script{
-            script: Box<String>,
+            script: Box<String>, // Fake
             parsed: ast::Script<'script>
         }
     }
@@ -106,33 +109,34 @@ where
 {
     /// Parses a string and turns it into a script
     pub fn parse(
-        script: &'script str,
+        module_path: &ModulePath,
+        script: String,
         reg: &Registry,
         // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
     ) -> Result<Self> {
-        let mut source = script.to_string();
-
         let mut warnings = vec![];
 
-        // FIXME make lexer EOS tolerant to avoid this kludge
-        source.push(' ');
+        let rented_script =
+            rentals::Script::try_new(Box::new(script.clone()), |script: &mut String| {
+                let lexemes: Vec<_> =
+                    lexer::Preprocessor::preprocess(module_path, "<top>".to_string(), script)?;
+                let filtered_tokens = lexemes
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|t| !t.value.is_ignorable());
 
-        let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
-            let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(src.as_str()).collect();
-            let filtered_tokens = lexemes?.into_iter().filter(|t| !t.value.is_ignorable());
+                let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
+                let fake_aggr_reg = AggrRegistry::default();
+                let (screw_rust, ws) = script_raw.up_script(reg, &fake_aggr_reg)?;
 
-            let fake_aggr_reg = AggrRegistry::default();
-            let (script, ws) = grammar::ScriptParser::new()
-                .parse(filtered_tokens)?
-                .up_script(reg, &fake_aggr_reg)?;
-            warnings = ws;
-            Ok(script)
-        })
-        .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
+                warnings = ws;
+                Ok(screw_rust)
+            })
+            .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
 
         Ok(Self {
-            script,
-            source,
+            script: rented_script,
+            source: script,
             warnings,
         })
     }
@@ -141,7 +145,21 @@ where
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
-        h.highlight(tokens)
+        h.highlight(&tokens)
+    }
+
+    /// Preprocessesa and highlights a script with a given highlighter.
+    #[cfg_attr(tarpaulin, skip)]
+    pub fn highlight_preprocess_script_with<H: Highlighter>(
+        file_name: String,
+        script: &'script str,
+        h: &mut H,
+    ) -> std::io::Result<()> {
+        let mut s = script.clone().to_string();
+        let tokens: Vec<_> =
+            lexer::Preprocessor::preprocess(&crate::path::load_module_path(), file_name, &mut s)
+                .expect("Did not preprocess ok");
+        h.highlight(&tokens)
     }
 
     /// Format an error given a script source.
@@ -152,7 +170,7 @@ where
     ) -> std::io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
         if let (Some(Range(start, end)), _) = e.context() {
-            h.highlight_runtime_error(tokens, start, end, Some(e.into()))?;
+            h.highlight_runtime_error(&tokens, start, end, Some(e.into()))?;
         } else {
             write!(h.get_writer(), "Error: {}", e)?;
         }
@@ -166,7 +184,7 @@ where
         warnings.dedup();
         for w in &warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source).collect();
-            h.highlight_runtime_error(tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            h.highlight_runtime_error(&tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
         h.finalize()
     }

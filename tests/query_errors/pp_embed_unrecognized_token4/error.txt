@@ -1,0 +1,7 @@
+Error: 
+    1 | define script snot
+    2 | script
+    3 |   use foo :: :; bar;
+      |              ^ Found the token `:` but expected `<ident>`
+    4 | end;
+    5 |

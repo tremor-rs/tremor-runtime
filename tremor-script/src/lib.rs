@@ -46,6 +46,8 @@ pub mod lexer;
 // We need this because of lalrpop
 #[allow(unused)]
 pub(crate) mod parser;
+/// Support for module paths
+pub mod path;
 /// Tremor Script Position
 pub mod pos;
 /// Prelude module with important exports
@@ -311,14 +313,15 @@ mod tests {
     use crate::errors::*;
     use crate::interpreter::AggrType;
     use crate::lexer::TokenSpan;
+    use crate::path::ModulePath;
     use halfbrown::hashmap;
     use simd_json::borrowed::{Object, Value};
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            let src = format!("{} ", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&src).collect();
+            let mut src: String = format!("{} ", $src.to_string());
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -329,7 +332,8 @@ mod tests {
                 }
             }
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script =
+                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
             let mut event = Value::from(Object::new());
             let mut state = Value::null();
             let mut global_map = Value::from(Object::new());
@@ -353,8 +357,8 @@ mod tests {
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            //let src = format!("{}", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new($src).collect();
+            let mut src = format!("{} ", $src).to_string();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -365,7 +369,8 @@ mod tests {
                 }
             }
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script =
+                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
@@ -383,8 +388,8 @@ mod tests {
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            //let src = format!("{}", $src);
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new($src).collect();
+            let mut src = format!("{} ", $src).to_string();
+            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
 
@@ -395,7 +400,8 @@ mod tests {
                 }
             }
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
+            let runnable: Script =
+                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});

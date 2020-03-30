@@ -1,0 +1,4 @@
+Error: 
+    1 | use foo :: :; bar;
+      |            ^ Found the token `:` but expected `<ident>`
+    2 |
