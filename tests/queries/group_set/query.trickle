@@ -5,7 +5,7 @@ end;
 
 select {
   "g": group[0],
-  "c": stats::sum(event.c),
+  "c": aggr::stats::sum(event.c),
 }
 from in[by_2]
 group by set(event.g) into out;

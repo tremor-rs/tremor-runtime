@@ -2081,6 +2081,7 @@ mod tests {
         lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
         lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
         lex_ok! { " intrinsic ", " ~~~~~~~~~ " => Token::Intrinsic, };
+        Ok(())
     }
 
     #[test]

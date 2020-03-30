@@ -1,1 +1,1 @@
-string::format(7, "snot", "badger", "cake")
+core::string::format(7, "snot", "badger", "cake")

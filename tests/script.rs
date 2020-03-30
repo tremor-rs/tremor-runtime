@@ -140,4 +140,7 @@ test_cases!(
     pp_alias3,
     // regression
     empty_array_pattern,
+    //INSERT
+    module,
+    fn_fib,
 );

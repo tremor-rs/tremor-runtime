@@ -35,13 +35,13 @@ nodes:
         end;
 
         match index_type of
-            case class = "applog_app6" => let $dimension = event.logger_name , let rate = 4500
+            case class = "applog_app6" => let $dimension = event.logger_name, let rate = 4500
             default => null
         end;
 
         match index_type of
             case class = "syslog_app1" => let rate = 2500
-            case array::contains(event.tags,"tag1") => let class = "syslog_app2" , let rate = 125
+            case core::array::contains(event.tags,"tag1") => let class = "syslog_app2" , let rate = 125
             case class = "syslog_app3" => let rate = 1750
             case class = "syslog_app4" => let rate = 1750
             case class = "syslog_app5" => let rate = 7500
@@ -49,7 +49,7 @@ nodes:
             default => null
         end;
 
-        match type::is_string(class) of
+        match core::type::is_string(class) of
             case true => let dimension = event.syslog_hostname
             default => let class = "default" , let rate = 250
         end;

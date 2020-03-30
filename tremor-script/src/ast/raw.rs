@@ -34,6 +34,8 @@ use simd_json::value::borrowed;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::Cow;
 
+pub(crate) const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp .unwrap()
+
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
@@ -59,8 +61,6 @@ impl<'script> ScriptRaw<'script> {
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
-        const COMPILATION_UNIT_PART: u64 = 0; // FIXME include preprocessing
-
         let mut helper = Helper::new(reg, aggr_reg);
         helper
             .consts
@@ -223,7 +223,7 @@ impl<'script> ModuleRaw<'script> {
                         )
                         .into());
                     }
-
+                    dbg!(&name_v);
                     helper.consts.insert(name_v.clone(), consts.len());
                     let expr = expr.up(helper)?;
                     let v = reduce2(expr, &helper)?;
@@ -281,7 +281,7 @@ impl<'script> Upable<'script> for IdentRaw<'script> {
     type Target = Ident<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Self::Target {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: helper.add_meta_w_name(self.start, self.end, &self.id, COMPILATION_UNIT_PART),
             id: self.id,
         })
     }
@@ -514,9 +514,18 @@ impl<'script> ImutExprInt<'script> {
                             args2.push(args.get_unchecked(i));
                         }
                     }
+                    const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+                    const NO_CONSTS: Vec<Value<'static>> = Vec::new();
+                    let env = Env {
+                        context: &EventContext::default(),
+                        consts: &NO_CONSTS,
+                        aggrs: &NO_AGGRS,
+                        meta: &helper.meta,
+                    };
+
                     let v = i
                         .invocable
-                        .invoke(&EventContext::default(), &args2)
+                        .invoke(&env, &args2)
                         .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
                         .into_static();
                     Ok(ImutExprInt::Literal(Literal {
@@ -731,7 +740,6 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
-        let mut consts = HashMap::new();
         let mut locals: HashMap<_, _> = self
             .args
             .iter()
@@ -743,15 +751,15 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.is_open = self.open;
         helper.fn_argc = self.args.len();
 
-        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.swap2(&mut aggrs, &mut locals);
         helper.possible_leaf = true;
         let body = self.body.up(helper)?;
         helper.possible_leaf = false;
-        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.swap2(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &name.id),
+            mid: helper.add_meta_w_name(self.start, self.end, &name.id, COMPILATION_UNIT_PART),
             name,
             args: self.args.up(helper)?,
             body,
@@ -932,7 +940,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &name),
+            mid: helper.add_meta_w_name(self.start, self.end, &name, COMPILATION_UNIT_PART),
             name,
             args: self.args.up(helper)?,
             body,
@@ -1848,7 +1856,6 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
     type Target = Segment<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use SegmentRaw::*;
-        const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp
         Ok(match self {
             Element { expr, start, end } => {
                 let expr = expr.up(helper)?;
@@ -1962,14 +1969,21 @@ impl_expr!(ConstPathRaw);
 impl<'script> Upable<'script> for ConstPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        dbg!(&self);
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
             let id = helper.meta.name_dflt(mid).clone();
-            let mid = helper.add_meta_w_name(self.start, self.end, id.clone());
-            let mut module: Vec<String> = self.module.iter().map(|m| m.id.to_string()).collect();
+            let mid =
+                helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
+            let mut module_direct: Vec<String> =
+                self.module.iter().map(|m| m.id.to_string()).collect();
+            let mut module = helper.module.clone();
+            module.append(&mut module_direct);
             module.push(id.to_string());
+            dbg!(&module);
+            dbg!(&helper.consts);
             if let Some(idx) = helper.is_const(&module) {
                 Ok(LocalPath {
                     is_const: true,
@@ -2002,7 +2016,6 @@ impl_expr!(LocalPathRaw);
 impl<'script> Upable<'script> for LocalPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
@@ -2242,7 +2255,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
             let mf = format!("{}::{}", self.module.join("::"), self.fun);
             Ok(Invoke {
-                mid: helper.add_meta_w_name(self.start, self.end, mf),
+                mid: helper.add_meta_w_name(self.start, self.end, mf, COMPILATION_UNIT_PART),
                 module: self.module,
                 fun: self.fun,
                 invocable: Invocable::Intrinsic(invocable.clone()),
@@ -2257,7 +2270,12 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
                     let mf = format!("{}::{}", self.module.join("::"), self.fun);
                     Ok(Invoke {
-                        mid: helper.add_meta_w_name(self.start, self.end, mf),
+                        mid: helper.add_meta_w_name(
+                            self.start,
+                            self.end,
+                            mf,
+                            COMPILATION_UNIT_PART,
+                        ),
                         module: self.module,
                         fun: self.fun,
                         invocable,
@@ -2350,7 +2368,8 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
         let mf = format!("{}::{}", self.module, self.fun);
-        let invoke_meta_id = helper.add_meta_w_name(self.start, self.end, &mf);
+        let invoke_meta_id =
+            helper.add_meta_w_name(self.start, self.end, &mf, COMPILATION_UNIT_PART);
 
         helper.aggregates.push(InvokeAggrFn {
             mid: invoke_meta_id,
@@ -2360,7 +2379,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             fun: self.fun.clone(),
         });
         helper.is_in_aggr = false;
-        let aggr_meta_id = helper.add_meta_w_name(self.start, self.end, mf);
+        let aggr_meta_id = helper.add_meta_w_name(self.start, self.end, mf, COMPILATION_UNIT_PART);
         Ok(InvokeAggr {
             mid: aggr_meta_id,
             module: self.module,

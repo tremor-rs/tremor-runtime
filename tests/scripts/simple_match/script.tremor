@@ -3,5 +3,5 @@ match event of
   case rp = %{ meta ~= re|bad(?P<snot>.*)|, `event` != null } => rp.meta
   case ap = %[ "cookie", "armadillo" ] => "snot badger"
   case `$snot$sum` = ((1 + 2) == 3) when true => 3
-  default => string::format("With target: {}", event)
+  default => core::string::format("With target: {}", event)
 end;

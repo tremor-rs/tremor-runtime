@@ -109,11 +109,17 @@ where
             ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
                 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
                 let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
+                // We need to pre calculate that to ensure that we don't overwrite
+                // local variables that are not used
+                let mut next = Vec::with_capacity(*argc);
                 for (i, e) in exprs.iter().enumerate() {
                     let r = e.run(opts, env, event, state, meta, local)?;
-                    if i <= *argc {
-                        local.values[i] = Some(r.into_owned());
+                    if i < *argc {
+                        next.push((i, r.into_owned()));
                     }
+                }
+                for (i, v) in next.drain(..) {
+                    local.values[i] = Some(v);
                 }
                 Ok(Cow::Borrowed(&RECUR))
             }
@@ -517,7 +523,7 @@ where
                 .get_unchecked(0)
                 .run(opts, env, event, state, meta, local));
             expr.invocable
-                .invoke(&env.context, &[v.borrow()])
+                .invoke(env, &[v.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -546,7 +552,7 @@ where
                 .get_unchecked(1)
                 .run(opts, env, event, state, meta, local));
             expr.invocable
-                .invoke(&env.context, &[v1.borrow(), v2.borrow()])
+                .invoke(env, &[v1.borrow(), v2.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -579,7 +585,7 @@ where
                 .get_unchecked(2)
                 .run(opts, env, event, state, meta, local));
             expr.invocable
-                .invoke(&env.context, &[v1.borrow(), v2.borrow(), v3.borrow()])
+                .invoke(env, &[v1.borrow(), v2.borrow(), v3.borrow()])
                 .map(Cow::Owned)
                 .map_err(|e| {
                     let r: Option<&Registry> = None;
@@ -608,7 +614,7 @@ where
         let argv1: Vec<&Value> = argv.iter().map(Cow::borrow).collect();
 
         expr.invocable
-            .invoke(&env.context, &argv1)
+            .invoke(env, &argv1)
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;

@@ -1,3 +1,11 @@
+mod chash with
+  intrinsic fn jump(key, slot_count) for chash::jump;
+end;
+
+mod array with
+  intrinsic fn len(array) for array::len;
+end;
+
 let hosts = ["host1", "host2", "host3", "host4", "host5"];
 
 {

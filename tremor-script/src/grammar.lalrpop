@@ -399,6 +399,18 @@ ComplexExprImut: ImutExprRaw<'input> = {
 }
 
 Intrinsic: AnyFnRaw<'input> = {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+        let invoce_args = vec![];
+        let invoke = InvokeRaw{
+            start,
+            end,
+            module: vec!["core".into(), imod.id.to_string()],
+            fun: ifn.id.to_string(),
+            args: invoce_args
+        };
+        let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
+        AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
+    },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
         let invoce_args = args.iter().map(|a|           
             ImutExprRaw::Path(

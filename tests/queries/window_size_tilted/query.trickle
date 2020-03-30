@@ -8,4 +8,4 @@ with
   size = 2
 end;
 
-select win::collect_flattened(event) from in[by_two, by_three] into out;
+select aggr::win::collect_flattened(event) from in[by_two, by_three] into out;

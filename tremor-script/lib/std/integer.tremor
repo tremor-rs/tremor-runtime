@@ -1,11 +1,11 @@
-##! The `integer` module contains functions to work with integers.
+### The `integer` module contains functions to work with integers.
 
 ## Parses a string as an integer.
 ## Returns an `float`.
 intrinsic fn parse(string) as integer::parse;
 
 mod signed with
-  ##! Signed integer constatns
+  ### Signed integer constatns
 
   ## Max signed value
   const max = 9223372036854775807;

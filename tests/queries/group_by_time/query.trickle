@@ -6,4 +6,4 @@ with
   interval = 20
 end;
 
-select {"g": group, "c": stats::sum(event.c)} from in[`20ns`] group by set(event.g) into out;
+select {"g": group, "c": aggr::stats::sum(event.c)} from in[`20ns`] group by set(event.g) into out;

@@ -14,7 +14,7 @@
 ## Generates a random boolean.
 ##
 ## Returns an `bool`;
-intrinisc fn bool() as random::bool;
+intrinsic fn bool() as random::bool;
 
 
 ## Generates a random string of given length with ASCII letters and numbers:
@@ -27,7 +27,7 @@ intrinisc fn bool() as random::bool;
 ## ```
 ##
 ## Returns an `string`
-intrinisc fn string(length) as random::string;
+intrinsic fn string(length) as random::string;
 
 
 ## Generates a random integer, with the functionality changing based on the
@@ -44,7 +44,7 @@ intrinisc fn string(length) as random::string;
 ## random::integer(100) # one of 0-99. same as random::integer(0, 100)
 ## random::integer() -> int¶
 ## ```
-intrinisc fn integer(..) as random::integer;
+intrinsic fn integer(..) as random::integer;
 
 ## Generates a random float, with the functionality changing based on the
 ## number of arguments passed.
@@ -57,4 +57,4 @@ intrinisc fn integer(..) as random::integer;
 ## random::float(100.0) # same as random::float(0.0, 100.0)
 ## random::float() -> float¶
 ## ```
-intrinisc fn float(..) as random::float;
+intrinsic fn float(..) as random::float;

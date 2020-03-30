@@ -1,4 +1,4 @@
 Error: 
     1 | a -- b
-      |   ^^ Found the token `--` but expected one of `!=`, `%`, `&`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `::`, `;`, `<`, `<<`, `<=`, `<end-of-stream>`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `default`, `end`, `of`, `or`, `when`, `xor`, `|`, `}`
+      |   ^^ Found the token `--` but expected one of `!=`, `%`, `&`, `(`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `::`, `;`, `<`, `<<`, `<=`, `<end-of-stream>`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `default`, `end`, `of`, `or`, `when`, `xor`, `|`, `}`
       |      NOTE: Did you mean to use `-`?
