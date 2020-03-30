@@ -194,7 +194,6 @@ ImportDirective: LexicalUnit<'input> = {
 }
 
 PreprocessorDirective: LexicalUnit<'input> = {
-    // ALLOW: unwrap()
     <d:"#!line"> => LexicalUnit::LineDirective(d)
 }
 
@@ -459,11 +458,15 @@ Intrinsic: AnyFnRaw<'input> = {
 }
 
 Module: ModuleRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc}
+    <start:@L> "mod" <name:Ident> "with" PreprocessorDirective <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc},
 }
 
 /// List of expressions at the root of the script
 ModuleExprs: ExprsRaw<'input> = {
+    PreprocessorDirective <list:ModuleExprs> => {
+       list
+    },
     <expr:ModuleExpr> ";" <list:ModuleExprs> => {
        let mut list = list;
        list.insert(0,expr);
@@ -476,7 +479,7 @@ ModuleExpr: ExprRaw<'input> = {
     Const => <>,
     FnDecl => ExprRaw::FnDecl(<>),
     Intrinsic => ExprRaw::FnDecl(<>),
-    Module => ExprRaw::Module(<>)
+    Module => ExprRaw::Module(<>),
 }
 
 FnDecl: AnyFnRaw<'input> = {

@@ -48,6 +48,7 @@ extern crate rental;
 
 use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
+use crate::path::load_module_path;
 use crate::script::{AggrType, Return, Script};
 use chrono::{Timelike, Utc};
 use clap::{App, Arg};
@@ -90,7 +91,6 @@ fn main() -> Result<()> {
         )
         .arg(
             Arg::with_name("process")
-                .short("p")
                 .long("process")
                 .help("Processes each line on stdin through the script"),
         )
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
         )
         .arg(
             Arg::with_name("highlight-preprocess-source")
-                .short("p")
+                .long("pre-process")
                 .takes_value(false)
                 .help("Prints the highlighted preprocessed script."),
         )
@@ -174,7 +174,8 @@ fn main() -> Result<()> {
     #[allow(unused_mut)]
     let mut reg: Registry = registry::registry();
 
-    match Script::parse(&raw, &reg) {
+    let mp = load_module_path();
+    match Script::parse(&mp, raw.clone(), &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;

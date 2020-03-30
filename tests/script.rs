@@ -132,6 +132,7 @@ test_cases!(
     // preprocessor
     pp_nest0,
     pp_nest1,
+    pp_inline_nest1,
     pp_nest2,
     pp_nest3,
     pp_alias0,
