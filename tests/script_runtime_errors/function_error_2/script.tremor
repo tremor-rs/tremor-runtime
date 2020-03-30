@@ -1,2 +1,2 @@
 let a = 7;
-math::max("snot", a)
+core::math::max("snot", a)

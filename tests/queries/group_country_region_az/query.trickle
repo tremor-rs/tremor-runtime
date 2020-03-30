@@ -6,7 +6,7 @@ select {
    "azs": event.regions[group[0]],
 }
 from in
-group by each(record::keys(event.regions))
+group by each(core::record::keys(event.regions))
 into by_co_re;
 
 select {

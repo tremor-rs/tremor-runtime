@@ -1,7 +1,7 @@
 define script s
 script
-  let event.tremor.index_key = string::format("{}-{}", event.application, event.type);
-  let event.tremor.instance = system::instance();
+  let event.tremor.index_key = core::string::format("{}-{}", event.application, event.type);
+  let event.tremor.instance = core::system::instance();
   event
 end;
 

@@ -1,4 +1,4 @@
 Error: 
     1 | !>>=
-      | ^ Found the token `!>` but expected one of `!`, `\``, `#!line`, `$`, `(`, `+`, `-`, `<ident>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `heredoc`, `int`, `let`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `state`, `use`, `window`, `{`
+      | ^ Found the token `!>` but expected one of `!`, `\``, `#!line`, `$`, `(`, `+`, `-`, `<doc-comment>`, `<ident>`, `<mod-comment>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `heredoc`, `int`, `intrinsic`, `let`, `match`, `merge`, `mod`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `use`, `window`, `{`
       |   NOTE: Did you mean to use `!`?

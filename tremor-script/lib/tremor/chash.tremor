@@ -17,13 +17,13 @@
 ## }
 ## ```
 ## Returns an `int`.
-intrinisc fn jump(key, _slot_count) as chash::jump;
+intrinsic fn jump(key, slot_count) as chash::jump;
 
 ## The same as chash::jump but uses the integers k1 and k2 to initialise the
 ## hashing instead of using default values.
 ##
 ## Returns an `int`
-intrinsic fn jump_with_keys(k1, k2, key, _slot_count) as chash::jump_with_keys;
+intrinsic fn jump_with_keys(k1, k2, key, slot_count) as chash::jump_with_keys;
 
 ## serialised the given data in a sorted and repeatable fashion no matter how
 ## data is internally stored. In comparison, the normal serialisation functions

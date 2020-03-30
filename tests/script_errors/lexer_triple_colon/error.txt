@@ -1,5 +1,5 @@
 Error: 
-    1 | ##  we can't have triple colons
+    1 | #  we can't have triple colons
     2 | a:::b()
-      |  ^^^ Found the token `:::` but expected one of `!=`, `%`, `&`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `::`, `;`, `<`, `<<`, `<=`, `<end-of-stream>`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `default`, `end`, `of`, `or`, `when`, `xor`, `|`, `}`
+      |  ^^^ Found the token `:::` but expected one of `!=`, `%`, `&`, `(`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `::`, `;`, `<`, `<<`, `<=`, `<end-of-stream>`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `default`, `end`, `of`, `or`, `when`, `xor`, `|`, `}`
       |      NOTE: Did you mean to use `::`?

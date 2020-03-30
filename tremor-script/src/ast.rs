@@ -286,6 +286,17 @@ where
         mem::swap(&mut self.locals, locals);
     }
 
+    pub fn swap2(
+        &mut self,
+        aggregates: &mut Vec<InvokeAggrFn<'script>>,
+        //consts: &mut HashMap<Vec<String>, usize>,
+        locals: &mut HashMap<String, usize>,
+    ) {
+        mem::swap(&mut self.aggregates, aggregates);
+        //mem::swap(&mut self.consts, consts);
+        mem::swap(&mut self.locals, locals);
+    }
+
     pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
@@ -721,7 +732,7 @@ pub(crate) enum Invocable<'script> {
     Tremor(CustomFn<'script>),
 }
 
-use crate::{registry::FResult, EventContext};
+use crate::registry::FResult;
 
 impl<'script> Invocable<'script> {
     fn inline(self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
@@ -745,7 +756,7 @@ impl<'script> Invocable<'script> {
     }
     pub fn invoke<'event, 'run>(
         &'script self,
-        context: &EventContext,
+        env: &'run Env<'run, 'event, 'script>,
         args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
     where
@@ -753,8 +764,8 @@ impl<'script> Invocable<'script> {
         'event: 'run,
     {
         match self {
-            Invocable::Intrinsic(f) => f.invoke(context, args),
-            Invocable::Tremor(f) => f.invoke(context, args), // FIXME .unwrap()
+            Invocable::Intrinsic(f) => f.invoke(env.context, args),
+            Invocable::Tremor(f) => f.invoke(env, args), // FIXME .unwrap()
         }
     }
 }
