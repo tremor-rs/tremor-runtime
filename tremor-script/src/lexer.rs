@@ -800,7 +800,7 @@ impl<'input> Preprocessor {
                     ..
                 })) => {
                     let mut rel_module_path = String::new();
-
+                    let mut alias = String::from("<NOMODULE>");
                     take_while!(next, Token::Whitespace(_), iter);
 
                     if let Some(Ok(Spanned {
@@ -809,7 +809,7 @@ impl<'input> Preprocessor {
                     })) = &next
                     {
                         rel_module_path.push_str(&id);
-                        let _alias = id;
+                        alias = id.to_string();
 
                         take_while!(next, Token::Whitespace(_), iter);
 
@@ -828,6 +828,7 @@ impl<'input> Preprocessor {
                                     if let Token::Ident(id, ..) = &value {
                                         rel_module_path.push('/');
                                         rel_module_path.push_str(&format!("{}", &id));
+                                        alias = id.to_string();
                                         take_while!(next, Token::Whitespace(_), iter);
 
                                         if let Some(Ok(Spanned {
@@ -953,11 +954,11 @@ impl<'input> Preprocessor {
                         {
                             take_while!(next, Token::Whitespace(_), iter);
                             if let Some(Ok(Spanned {
-                                value: Token::Ident(_s, ..),
+                                value: Token::Ident(alias_id, ..),
                                 ..
                             })) = &next
                             {
-                                // We have an ident for alias
+                                alias = alias_id.to_string();
                             } else {
                                 if let Some(Ok(Spanned {
                                     value: bad_token,
@@ -1034,7 +1035,14 @@ impl<'input> Preprocessor {
                                                     "#!line {} 0\n",
                                                     &file_path2
                                                 ));
+                                                //input.push_str(&format!("mod {} with ", &alias));
+                                                input.push_str(&format!("mod {} with\n", &alias));
+                                                input.push_str(&format!(
+                                                    "#!line {} 0\n",
+                                                    &file_path2
+                                                ));
                                                 input.push_str(&format!("{}\n", y.trim()));
+                                                input.push_str("end;\n");
                                                 input.push_str(&format!(
                                                     "#!line {} {}\n",
                                                     file_name,
@@ -1087,6 +1095,7 @@ impl<'input> Preprocessor {
         }
 
         input.push_str(" ");
+        println!(">>>>>>>>>start<<<<<<<\n{}>>>>>>>>>end<<<<<<<\n", input);
         let tokens = Tokenizer::new(input).collect();
 
         Ok(tokens)

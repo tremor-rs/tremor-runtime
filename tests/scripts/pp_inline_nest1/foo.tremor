@@ -1,0 +1,2 @@
+use foo::bar ;
+const snot = "snot";
