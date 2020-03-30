@@ -1,4 +1,4 @@
 match event of
-  case %{ msg = glob|info*l } => true
+  case %{ msg ~= glob|info*l } => true
   default => false
 end

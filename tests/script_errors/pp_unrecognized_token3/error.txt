@@ -1,0 +1,3 @@
+Error: 
+    1 | use foo :: as;
+      |            ^^ Found the token `as` but expected `<ident>`

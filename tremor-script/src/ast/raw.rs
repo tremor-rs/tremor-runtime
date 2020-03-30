@@ -25,6 +25,7 @@ use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
+use halfbrown::hashmap;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
@@ -35,18 +36,21 @@ use std::borrow::Cow;
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
-    exprs: ExprsRaw<'script>,
+    pub(crate) imports: Imports<'script>,
+    pub(crate) exprs: ExprsRaw<'script>,
 }
 
 impl<'script> ScriptRaw<'script> {
-    pub(crate) fn new(exprs: ExprsRaw<'script>) -> Self {
-        Self { exprs }
+    pub(crate) fn new(imports: Imports<'script>, exprs: ExprsRaw<'script>) -> Self {
+        Self { imports, exprs }
     }
     pub(crate) fn up_script<'registry>(
         self,
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
+        const COMPILATION_UNIT_PART: u64 = 0; // FIXME include preprocessing
+
         let mut helper = Helper::new(reg, aggr_reg);
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
@@ -78,7 +82,7 @@ impl<'script> ScriptRaw<'script> {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
                             idx: consts.len(),
-                            mid: helper.add_meta_w_name(start, end, name),
+                            mid: helper.add_meta_w_name(start, end, name, COMPILATION_UNIT_PART),
                         }))
                     }
 
@@ -113,11 +117,13 @@ impl<'script> ScriptRaw<'script> {
 
         Ok((
             Script {
+                imports: vec![], // Compiled out
                 exprs,
                 consts,
                 aggregates: helper.aggregates,
                 locals: helper.locals.len(),
                 node_meta: helper.meta,
+                compilation_units: hashmap![], // FIXME cpp
             },
             helper.warnings,
         ))
@@ -1351,6 +1357,7 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
     type Target = Segment<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use SegmentRaw::*;
+        const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp
         Ok(match self {
             Element { expr, start, end } => {
                 let expr = expr.up(helper)?;
@@ -1358,7 +1365,12 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
                 match expr {
                     ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), &helper)? {
                         Value::String(id) => {
-                            let mid = helper.add_meta_w_name(start, end, id.clone());
+                            let mid = helper.add_meta_w_name(
+                                start,
+                                end,
+                                id.clone(),
+                                COMPILATION_UNIT_PART,
+                            );
                             Segment::Id {
                                 key: KnownKey::from(id.clone()),
                                 mid,
@@ -1451,12 +1463,14 @@ impl_expr!(LocalPathRaw);
 impl<'script> Upable<'script> for LocalPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
             let id = helper.meta.name_dflt(mid).clone();
-            let mid = helper.add_meta_w_name(self.start, self.end, id.clone());
+            let mid =
+                helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
             if let Some(idx) = helper.is_const(&id) {
                 Ok(LocalPath {
                     is_const: true,

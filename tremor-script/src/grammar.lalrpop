@@ -14,7 +14,7 @@
 
 use crate::ast::raw::*;
 use crate::ast::query::raw::*;
-use crate::ast::{BinOpKind, UnaryOpKind};
+use crate::ast::{BinOpKind, UnaryOpKind, LexicalUnit, Imports};
 use crate::lexer::Token;
 use crate::pos::Location;
 use simd_json::{BorrowedValue as Value};
@@ -24,18 +24,23 @@ use std::borrow::Cow;
 grammar<'input>;
 
 ////////////////////////////// Root statements //////////////////////////////
-// These statments for the root of the language.
+// These statements for the root of the language.
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{stmts},
+    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports: vec![], stmts},
+    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports, stmts},
 }
 
 Stmts: StmtsRaw<'input> = {
-  <stmt:Stmt> ";" <list:Stmts> => {
-    let mut list = list;
-    list.insert(0,stmt);
-    list
+    <d:PreprocessorDirective> <list:Stmts> => {
+       list
+    },
+    <d:PreprocessorDirective> => vec![],
+    <stmt:Stmt> ";" <list:Stmts> => {
+      let mut list = list;
+      list.insert(0,stmt);
+      list
   },
   <item:Stmt> ";"? => vec![item],
 }
@@ -123,7 +128,12 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
 }
 
 EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
-    ("script" <ExprImut>)? => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>?)])),
+    ("script" <EmbeddedScriptContent>)? => <>?,
+}
+
+EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
+    <ExprImut> => Some(ScriptRaw::new(vec![], vec![ExprRaw::Imut(<>)])),
+    <imports:Imports> <exprs:ExprImut> => Some(ScriptRaw::new(imports, vec![ExprRaw::Imut(exprs)])),
 }
 
 WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
@@ -159,23 +169,49 @@ OperatorKind: OperatorKindRaw = {
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs),
+    "script" <exprs:Exprs> "end" => ScriptRaw::new(vec![], exprs),
+    "script" <imports:Imports> <exprs:Exprs> "end" => ScriptRaw::new(imports, exprs),
 }
 
 
 ///////////////////////////////////////
 
+
 pub(crate) Script : ScriptRaw<'input> = {
-    <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs),
+    <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(vec![], exprs),
+    <imports:Imports> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(imports, exprs),
+}
+
+Imports: Imports<'input> = {
+  <stmt:ImportDirective> <list:Imports> => {
+    let mut list = list;
+    list.insert(0,stmt);
+    list
+  },
+  <item:ImportDirective> ";" => vec![item],
+}
+
+ImportDirective: LexicalUnit<'input> = {
+    "use" <mp:ModPath> "as" <alias:Ident> => LexicalUnit::AliasedImportDecl(mp,alias),
+    "use" <mp:ModPath> => LexicalUnit::NakedImportDecl(mp),
+}
+
+PreprocessorDirective: LexicalUnit<'input> = {
+    // ALLOW: unwrap()
+    <d:"#!line"> => LexicalUnit::LineDirective(d)
 }
 
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {
+    <d:PreprocessorDirective> <list:Exprs> => {
+       list
+    },
     <expr:MayBeConstExpr> ";" <list:Exprs> => {
        let mut list = list;
        list.insert(0,expr);
        list
     },
+    <d:PreprocessorDirective> => vec![],
     <item:MayBeConstExpr> ";"? => vec![item],
 }
 
@@ -577,6 +613,15 @@ Selector: SegmentRaw<'input> = {
 Invoke: InvokeRaw<'input> = {
     <start:@L> <module:Ident> "::" <fun:Ident> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: module.id.to_string(), fun: fun.id.to_string(), args, start, end },
     <start:@L> <module:Ident> "::" <fun:Ident> "(" ")" <end:@L> => InvokeRaw { module: module.id.to_string(), fun: fun.id.to_string(), args: vec![], start, end },
+}
+
+ModPath: Vec<IdentRaw<'input>> = {
+    <v:ModPath> "::" <e:Ident> => {
+        let mut v = v;
+        v.push(e);
+        v
+    },
+    <e:Ident> => vec![e],
 }
 
 InvokeArgs: ImutExprsRaw<'input> = {
@@ -1077,6 +1122,10 @@ extern {
 
         "set" => Token::Set,
         "each" => Token::Each,
+        "use" => Token::Use,
+        "as" => Token::As,
+
+        "#!line" => Token::LineDirective(<Cow<'input, str>>),
     }
 }
 

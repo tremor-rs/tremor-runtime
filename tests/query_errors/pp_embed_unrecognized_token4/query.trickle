@@ -1,0 +1,9 @@
+define script snot
+script
+  use foo :: :; bar;
+end;
+
+create script badger;
+
+select event from in into badger;
+select event from badger into out;

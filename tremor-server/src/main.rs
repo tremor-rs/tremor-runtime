@@ -129,8 +129,14 @@ async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 
     // FIXME: We should have them constanted
     let aggr_reg = tremor_script::registry::aggr();
-
-    let query = Query::parse(&raw, &*FN_REGISTRY.lock()?, &aggr_reg)?;
+    let module_path = tremor_script::path::load_module_path();
+    let query = Query::parse(
+        &module_path,
+        &raw,
+        file_name.to_string(),
+        &*FN_REGISTRY.lock()?,
+        &aggr_reg,
+    )?;
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
     info!("Loading {} from file.", id);

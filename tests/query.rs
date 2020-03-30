@@ -21,11 +21,18 @@ use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+use tremor_script::path::ModulePath;
 use tremor_script::utils::*;
 
-fn to_pipe(query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(module_path: &ModulePath, file_name: String, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let q = Query::parse(query, &*FN_REGISTRY.lock()?, &aggr_reg)?;
+    let q = Query::parse(
+        &module_path,
+        query,
+        file_name,
+        &*FN_REGISTRY.lock()?,
+        &aggr_reg,
+    )?;
     Ok(q.to_pipe()?)
 }
 
@@ -37,15 +44,17 @@ macro_rules! test_cases {
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
+                let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
+                let module_path = ModulePath { mounts: vec![query_dir] };
 
                 println!("Loading query: {}", query_file);
                 let mut file = File::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(&contents)?;
+                let mut pipeline = to_pipe(&module_path, query_file.to_string(), &contents)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;

@@ -1,4 +1,4 @@
 match event of
   case foo = %{test ~= base64|| } => foo
   default => "ko"
-end
+end;

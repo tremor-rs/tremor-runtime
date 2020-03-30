@@ -32,6 +32,7 @@ pub use query::*;
 use serde::Serialize;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
+// use std::fs::File;
 use std::mem;
 use upable::Upable;
 
@@ -40,6 +41,7 @@ struct NodeMeta<'script> {
     start: Location,
     end: Location,
     name: Option<Cow<'script, str>>,
+    compilation_unit_part: u64, // id of current compilation unit part
 }
 
 impl From<(Location, Location)> for NodeMeta<'static> {
@@ -48,6 +50,7 @@ impl From<(Location, Location)> for NodeMeta<'static> {
             start,
             end,
             name: None,
+            compilation_unit_part: 0, // TODO FIXME
         }
     }
 }
@@ -66,12 +69,14 @@ impl<'script> NodeMetas<'script> {
         start: Location,
         end: Location,
         name: Cow<'script, str>,
+        compilation_unit_part: u64,
     ) -> usize {
         let mid = self.0.len();
         self.0.push(NodeMeta {
             start,
             end,
             name: Some(name),
+            compilation_unit_part,
         });
         mid
     }
@@ -136,8 +141,10 @@ where
         start: Location,
         end: Location,
         name: Cow<'script, str>,
+        compilation_unit_part: u64,
     ) -> usize {
-        self.meta.add_meta_w_name(start, end, name)
+        self.meta
+            .add_meta_w_name(start, end, name, compilation_unit_part)
     }
     pub fn has_locals(&self) -> bool {
         self.locals
@@ -226,20 +233,56 @@ where
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
+    /// Import definitions
+    imports: Imports<'script>,
     /// Expressions of the script
-    exprs: Exprs<'script>,
+    pub(crate) exprs: Exprs<'script>,
     /// Constants defined in this script
     pub consts: Vec<Value<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     locals: usize,
     node_meta: NodeMetas<'script>,
+    compilation_units: HashMap<u64, String>, // CPP
 }
 
-impl<'run, 'script, 'event> Script<'script>
+impl<'input, 'run, 'script, 'event> Script<'script>
 where
+    'input: 'script,
     'script: 'event,
     'event: 'run,
 {
+    // pub(crate) fn include(&mut self, other: &mut Self) -> Result<()> {
+    //     self.exprs.append(&mut other.exprs);
+    //     Ok(())
+    // }
+
+    /*
+    pub(crate) fn parse_import(
+        src: &'script str,
+        _reg: &Registry,
+    ) -> Result<crate::ast::raw::ScriptRaw<'script>> {
+        use crate::lexer;
+        use crate::parser::g;
+
+        let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(&src).collect();
+        let mut filtered_tokens = Vec::new();
+
+        for t in lexemes? {
+            let keep = !t.value.is_ignorable();
+            if keep {
+                filtered_tokens.push(Ok(t));
+            }
+        }
+
+        //let mut warnings = vec![];
+
+        // let _fake_aggr_reg = AggrRegistry::default();
+        let script = g::ScriptParser::new().parse(filtered_tokens)?;
+        //        warnings = ws;
+        Ok(script)
+    }
+    */
+
     /// Runs the script and evaluates to a resulting event
     pub fn run(
         &'script self,
@@ -298,6 +341,18 @@ where
         })
     }
 }
+
+/// A lexical compilation unit
+#[derive(Debug, PartialEq, Serialize, Clone)]
+pub enum LexicalUnit<'script> {
+    /// Import declaration with no alias
+    NakedImportDecl(Vec<raw::IdentRaw<'script>>),
+    /// Import declaration with an alias
+    AliasedImportDecl(Vec<raw::IdentRaw<'script>>, raw::IdentRaw<'script>),
+    /// Line directive with embedded "<string> <num> ;"
+    LineDirective(Cow<'script, str>),
+}
+// impl_expr2!(Ident);
 
 /// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -923,6 +978,8 @@ pub(crate) struct UnaryExpr<'script> {
 impl_expr2!(UnaryExpr);
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
+/// A list of lexical compilation units
+pub type Imports<'script> = Vec<LexicalUnit<'script>>;
 /// A list of immutable expressions
 pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub(crate) type Fields<'script> = Vec<Field<'script>>;

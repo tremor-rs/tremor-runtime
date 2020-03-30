@@ -1,3 +1,4 @@
 Error: 
     1 | let s = "this is a string;
       |         ^^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate a string with a closing '"'
+    2 | event

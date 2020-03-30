@@ -35,6 +35,7 @@ use std::io::BufReader;
 use std::iter::FromIterator;
 use tremor_pipeline::errors::*;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
+use tremor_script::path::load_module_path;
 use tremor_script::*;
 
 #[allow(clippy::cast_sign_loss)]
@@ -90,6 +91,12 @@ fn main() -> Result<()> {
                 .help("Prints the highlighted script."),
         )
         .arg(
+            Arg::with_name("highlight-preprocess-source")
+                .short("p")
+                .takes_value(false)
+                .help("Prints the highlighted preprocessed script."),
+        )
+        .arg(
             Arg::with_name("print-ast")
                 .short("a")
                 .takes_value(false)
@@ -130,7 +137,9 @@ fn main() -> Result<()> {
 
     let aggr_reg = registry::aggr();
 
-    let runnable = match Query::parse(&raw, &reg, &aggr_reg) {
+    let module_path = load_module_path();
+    let runnable = match Query::parse(&module_path, script_file.to_string(), &raw, &reg, &aggr_reg)
+    {
         Ok(runnable) => runnable,
         Err(e) => {
             let mut h = TermHighlighter::new();
@@ -149,6 +158,15 @@ fn main() -> Result<()> {
         let mut h = TermHighlighter::new();
         Query::highlight_script_with(&raw, &mut h)?;
     }
+    if matches.is_present("highlight-preprocess-source") {
+        println!();
+        if matches.is_present("print-results-raw") {
+        } else {
+            let mut h = TermHighlighter::new();
+            Query::highlight_preprocess_script_with(script_file.to_string(), &raw, &mut h)?;
+        }
+    }
+
     if matches.is_present("print-ast") {
         let ast = serde_json::to_string_pretty(&runnable.0.suffix())?;
         println!();
@@ -268,7 +286,7 @@ fn main() -> Result<()> {
                     let result = format!("{} ", serde_json::to_string_pretty(event)?);
                     let lexed_tokens = Vec::from_iter(lexer::Tokenizer::new(&result));
                     let mut h = TermHighlighter::new();
-                    h.highlight(lexed_tokens)?;
+                    h.highlight(&lexed_tokens)?;
                 }
             }
         }

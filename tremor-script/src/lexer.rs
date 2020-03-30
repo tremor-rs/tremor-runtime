@@ -21,6 +21,7 @@ use crate::errors::*;
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
 )]
 use crate::parser::g::__ToTriple;
+use crate::path::ModulePath;
 pub use crate::pos::*;
 use lalrpop_util;
 use simd_json::prelude::*;
@@ -299,6 +300,12 @@ pub enum Token<'input> {
     Define,
     /// The `args` keyword
     Args,
+    /// The `use` keyword
+    Use,
+    /// The `as` keyword
+    As,
+    /// Preprocessor directives
+    LineDirective(Cow<'input, str>),
 }
 
 impl<'input> Token<'input> {
@@ -362,6 +369,8 @@ impl<'input> Token<'input> {
             | Token::Each
             | Token::Define
             | Token::Args
+            | Token::Use
+            | Token::As
             | Token::Operator => true,
             _ => false,
         }
@@ -396,6 +405,7 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_symbol(&self) -> bool {
         match *self {
+            Token::LineDirective(_) => true,
             Token::Colon
             | Token::ColonColon
             | Token::EqArrow
@@ -462,12 +472,6 @@ impl<'input> __ToTriple<'input> for Spanned<Token<'input>> {
     }
 }
 
-// fn unformat_str(s: &str) -> String {
-//     s.replace(r#"\"#, r#"\\"#)
-//         .replace('"', r#"\\""#)
-//         .replace('\n', "\\n")
-//         .replace('\t', "\\t")
-// }
 // Format a token for display
 //
 #[cfg_attr(tarpaulin, skip)]
@@ -500,18 +504,20 @@ impl<'input> fmt::Display for Token<'input> {
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
                 write!(f, "|")?;
-                for l in values {
-                    if first {
-                        write!(f, "|")?;
-                        first = false;
-                    } else {
-                        writeln!(f)?;
-                    };
-                    writeln!(f, "{}{}", " ".repeat(*indent), l)?;
+                if values.len() == 1 {
+                    write!(f, "{}", values[0])?;
+                } else {
+                    for l in values {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(f, "\\\n{}", " ".repeat(*indent))?;
+                        };
+                        write!(f, "{}", l)?;
+                    }
                 }
                 write!(f, "|")
             }
-
             Token::BoolLiteral(value) => write!(f, "{}", value),
             Token::Bad(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
@@ -610,6 +616,10 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Each => write!(f, "each"),
             Token::Define => write!(f, "define"),
             Token::Args => write!(f, "args"),
+            Token::Use => write!(f, "use"),
+            Token::As => write!(f, "as"),
+
+            Token::LineDirective(s) => write!(f, "#!line {}", s),
         }
     }
 }
@@ -629,6 +639,7 @@ impl<'input> CharLocations<'input> {
                 line: 1,
                 column: 1,
                 absolute: input.start_index().to_usize(),
+                unit_id: 0, // FIXME cpp
             },
             chars: input.src().chars().peekable(),
         }
@@ -652,7 +663,6 @@ pub struct Tokenizer<'input> {
     eos: bool,
     pos: Span,
     iter: Peekable<Lexer<'input>>,
-    //line: usize,
 }
 
 impl<'input> Tokenizer<'input> {
@@ -689,6 +699,381 @@ impl<'input> Iterator for Tokenizer<'input> {
                 Some(Ok(t))
             }
         }
+    }
+}
+
+/// A lexical preprocessor in the spirit of cpp
+///
+pub struct Preprocessor {}
+
+rental! {
+    mod rentals {
+        use super::*;
+        #[rental_mut(covariant,debug)]
+        pub(crate) struct Preprocessor {
+            pre: Box<(String, Vec<String>)>,
+            parsed: Vec<Result<TokenSpan<'pre>>>,
+        }
+    }
+}
+
+macro_rules! take_while {
+    ($let:ident, $token:pat, $iter:expr) => {
+        $let = $iter.next();
+        loop {
+            if let Some(Ok(Spanned { value: $token, .. })) = $let {
+                $let = $iter.next();
+                continue;
+            } else {
+                break;
+            }
+        }
+    };
+}
+
+impl<'input> Preprocessor {
+    pub(crate) fn resolve(module_path: &ModulePath, rel_module_path: &str) -> Option<String> {
+        use std::path::Path;
+        let trickle = &format!("{}.trickle", rel_module_path);
+        let tremor = &format!("{}.tremor", rel_module_path);
+        // FIXME consider raw JSON: let json = Path::new(format!("{}.json", rel_module_path));
+
+        let test = module_path.resolve(tremor.trim());
+        if let Some(path) = test {
+            if Path::new(&path).is_file() {
+                return Some(path);
+            }
+        }
+
+        let test = module_path.resolve(trickle.trim());
+        if let Some(path) = test {
+            if Path::new(&path).is_file() {
+                return Some(path);
+            }
+        }
+
+        return None;
+    }
+
+    pub(crate) fn preprocess(
+        module_path: &ModulePath,
+        file_name: std::string::String,
+        input: &'input mut std::string::String,
+    ) -> Result<Vec<Result<TokenSpan<'input>>>> {
+        use std::fs;
+        use std::io::Read;
+
+        input.push_str(" ");
+
+        let top = input.clone();
+        let lexemes: Vec<Result<TokenSpan>> = Tokenizer::new(top.as_str()).collect();
+        input.clear();
+
+        let mut iter = lexemes.into_iter();
+
+        let mut next;
+        loop {
+            next = iter.next();
+            match next {
+                //
+                // use <module_path> [as <alias>] ;
+                //
+                Some(Ok(Spanned {
+                    value: Token::Use,
+                    span: use_span,
+                    ..
+                })) => {
+                    let mut rel_module_path = String::new();
+
+                    take_while!(next, Token::Whitespace(_), iter);
+
+                    if let Some(Ok(Spanned {
+                        value: Token::Ident(ref id, _),
+                        ..
+                    })) = &next
+                    {
+                        rel_module_path.push_str(&id);
+                        let _alias = id;
+
+                        take_while!(next, Token::Whitespace(_), iter);
+
+                        loop {
+                            if let Some(Ok(Spanned {
+                                value: Token::ColonColon,
+                                ..
+                            })) = next
+                            {
+                                // module path of the form:
+                                // <ident> [ :: <ident> ]*;
+                                //
+                                take_while!(next, Token::Whitespace(_), iter);
+
+                                if let Some(Ok(Spanned { ref value, .. })) = next {
+                                    if let Token::Ident(id, ..) = &value {
+                                        rel_module_path.push('/');
+                                        rel_module_path.push_str(&format!("{}", &id));
+                                        take_while!(next, Token::Whitespace(_), iter);
+
+                                        if let Some(Ok(Spanned {
+                                            ref value, span, ..
+                                        })) = next
+                                        {
+                                            match value {
+                                                Token::As => (),
+                                                Token::ColonColon => continue,
+                                                Token::Semi => break,
+                                                bad_token => {
+                                                    return Err(ErrorKind::UnrecognizedToken(
+                                                        Range::from((span.start, span.end))
+                                                            .expand_lines(2),
+                                                        Range::from((span.start, span.end)),
+                                                        bad_token.to_string(),
+                                                        vec![
+                                                            "`as`".to_string(),
+                                                            "`::`".to_string(),
+                                                            "`;`".to_string(),
+                                                        ],
+                                                    )
+                                                    .into());
+                                                }
+                                            }
+                                        }
+                                    } else if let Some(Ok(Spanned {
+                                        value: Token::As, ..
+                                    })) = next
+                                    {
+                                        if let Some(Ok(Spanned {
+                                            value: bad_token,
+                                            span,
+                                            ..
+                                        })) = next
+                                        {
+                                            return Err(ErrorKind::UnrecognizedToken(
+                                                Range::from((span.start, span.end)).expand_lines(2),
+                                                Range::from((span.start, span.end)),
+                                                bad_token.to_string(),
+                                                vec!["`<ident>`".to_string()],
+                                            )
+                                            .into());
+                                        }
+                                    } else if let Some(Ok(Spanned {
+                                        value: Token::Semi, ..
+                                    })) = next
+                                    {
+                                        break;
+                                    } else {
+                                        // We expect either ';' or 'as'
+                                        // At this point we have a parse error / bad token
+                                        //
+                                        match next {
+                                            Some(Ok(Spanned { value, span, .. })) => {
+                                                let bad_token = value;
+                                                return Err(ErrorKind::UnrecognizedToken(
+                                                    Range::from((span.start, span.end))
+                                                        .expand_lines(2),
+                                                    Range::from((span.start, span.end)),
+                                                    bad_token.to_string(),
+                                                    vec!["`<ident>`".to_string()],
+                                                )
+                                                .into());
+                                            }
+                                            Some(Err(e)) => {
+                                                return Err(e);
+                                            }
+                                            None => {
+                                                return Err(ErrorKind::UnexpectedEndOfStream.into());
+                                            }
+                                        }
+                                    }
+                                } else if let Some(Ok(Spanned { span, value })) = next {
+                                    let bad_token = value;
+                                    return Err(ErrorKind::UnrecognizedToken(
+                                        Range::from((span.start, span.end)).expand_lines(2),
+                                        Range::from((span.start, span.end)),
+                                        bad_token.to_string(),
+                                        vec!["<ident>".to_string()],
+                                    )
+                                    .into());
+                                } else if let Some(Err(e)) = next {
+                                    // Capture lexical errors from the initial lexing phase and bubble back directly
+                                    //
+                                    return Err(e);
+                                }
+                            } else if let Some(Ok(Spanned {
+                                value: Token::As, ..
+                            })) = next
+                            {
+                                break;
+                            } else if let Some(Ok(Spanned {
+                                value: Token::Semi, ..
+                            })) = next
+                            {
+                                break;
+                            } else {
+                                if let Some(Ok(Spanned {
+                                    value: bad_token,
+                                    span,
+                                    ..
+                                })) = next
+                                {
+                                    return Err(ErrorKind::UnrecognizedToken(
+                                        Range::from((span.start, span.end)).expand_lines(2),
+                                        Range::from((span.start, span.end)),
+                                        bad_token.to_string(),
+                                        vec!["::".to_string(), "as".to_string(), ";".to_string()],
+                                    )
+                                    .into());
+                                }
+                            }
+                        }
+
+                        //
+                        // As <alias:ident>
+                        //
+
+                        if let Some(Ok(Spanned {
+                            value: Token::As, ..
+                        })) = next
+                        {
+                            take_while!(next, Token::Whitespace(_), iter);
+                            if let Some(Ok(Spanned {
+                                value: Token::Ident(_s, ..),
+                                ..
+                            })) = &next
+                            {
+                                // We have an ident for alias
+                            } else {
+                                if let Some(Ok(Spanned {
+                                    value: bad_token,
+                                    span,
+                                    ..
+                                })) = next
+                                {
+                                    return Err(ErrorKind::UnrecognizedToken(
+                                        Range::from((span.start, span.end)).expand_lines(2),
+                                        Range::from((span.start, span.end)),
+                                        bad_token.to_string(),
+                                        vec!["`<ident>`".to_string()],
+                                    )
+                                    .into());
+                                }
+                            }
+
+                            // ';'
+                            take_while!(next, Token::Whitespace(_), iter);
+
+                            // Semi
+                            take_while!(next, Token::Whitespace(_), iter);
+                        }
+                    } else {
+                        if let Some(Ok(Spanned {
+                            ref value, span, ..
+                        })) = next
+                        {
+                            return Err(ErrorKind::UnrecognizedToken(
+                                Range::from((span.start, span.end)).expand_lines(2),
+                                Range::from((span.start, span.end)),
+                                value.to_string(),
+                                vec!["`<ident>`".to_string()],
+                            )
+                            .into());
+                        }
+                    }
+                    if let Some(Ok(Spanned {
+                        value: Token::Semi, ..
+                    })) = next
+                    {
+                        take_while!(next, Token::Whitespace(_), iter);
+                    }
+
+                    if let Some(Ok(Spanned {
+                        value: Token::NewLine,
+                        span: span2,
+                        ..
+                    })) = next
+                    {
+                        let file_path = &rel_module_path;
+                        match Preprocessor::resolve(module_path, &rel_module_path) {
+                            Some(file_path) => {
+                                let file_path2 = file_path.clone();
+
+                                match fs::File::open(&file_path) {
+                                    Ok(mut file) => {
+                                        let mut s = String::new();
+                                        match file.read_to_string(&mut s) {
+                                            _size => {
+                                                s.push(' ');
+                                                let s = Preprocessor::preprocess(
+                                                    &module_path,
+                                                    file_path,
+                                                    &mut s,
+                                                )?;
+                                                let y = s
+                                                    .into_iter()
+                                                    .filter_map(&Result::ok)
+                                                    .map(|ref x| format!("{}", x.value))
+                                                    .collect::<Vec<String>>()
+                                                    .join("");
+                                                input.push_str(&format!(
+                                                    "#!line {} 0\n",
+                                                    &file_path2
+                                                ));
+                                                input.push_str(&format!("{}\n", y.trim()));
+                                                input.push_str(&format!(
+                                                    "#!line {} {}\n",
+                                                    file_name,
+                                                    span2.end.line + 1
+                                                ));
+                                            }
+                                        }
+                                        file.read_to_string(&mut s)?;
+                                    }
+                                    Err(e) => {
+                                        return Err(e.into());
+                                    }
+                                }
+                            }
+                            None => {
+                                return Err(ErrorKind::ModuleNotFound(
+                                    Range::from((use_span.start, use_span.end)).expand_lines(2),
+                                    Range::from((span2.start, span2.end)),
+                                    file_path.to_string(),
+                                    module_path.mounts.clone(),
+                                )
+                                .into());
+                            }
+                        }
+                    } else {
+                        if let Some(Ok(Spanned {
+                            value: bad_token,
+                            span,
+                            ..
+                        })) = next
+                        {
+                            return Err(ErrorKind::UnrecognizedToken(
+                                Range::from((span.start, span.end)).expand_lines(2),
+                                Range::from((span.start, span.end)),
+                                bad_token.to_string(),
+                                vec!["<ident>".to_string()],
+                            )
+                            .into());
+                        }
+                    }
+                }
+                Some(Ok(other)) => {
+                    input.push_str(&format!("{}", other.value));
+                }
+                Some(Err(e)) => {
+                    return Err(e.into());
+                }
+                None => break,
+            }
+        }
+
+        input.push_str(" ");
+        let tokens = Tokenizer::new(input).collect();
+
+        Ok(tokens)
     }
 }
 
@@ -782,6 +1167,11 @@ impl<'input> Lexer<'input> {
         if lexeme.starts_with("##") {
             let doc = Token::DocComment(&lexeme[2..]);
             Ok(spanned2(start, end, doc))
+        } else if lexeme.starts_with("#!line") {
+            let directive = &lexeme[6..];
+            let directive = directive.trim();
+            let line_directive = Token::LineDirective(Cow::from(directive));
+            Ok(spanned2(start, end, line_directive))
         } else {
             Ok(spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
         }
@@ -929,6 +1319,8 @@ impl<'input> Lexer<'input> {
             "each" => Token::Each,
             "define" => Token::Define,
             "args" => Token::Args,
+            "use" => Token::Use,
+            "as" => Token::As,
             src => Token::Ident(src.into(), false),
         };
 
@@ -1580,7 +1972,7 @@ mod tests {
     }
 
     #[test]
-    fn interpolat() {
+    fn interpolat() -> Result<()> {
         lex_ok! {
             r#"  "" "#,
             r#"  ~ "# => Token::DQuote,
@@ -1626,29 +2018,31 @@ mod tests {
             r#"                        ~ "# => Token::RBrace,
             r#"                         ~ "# => Token::DQuote,
         };
+        Ok(())
     }
     #[test]
-    fn paths() {
+    fn paths() -> Result<()> {
         lex_ok! {
             "  hello-hahaha8ABC ",
             "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello-hahaha8ABC".into(), false),
         };
         lex_ok! {
             "  .florp ", "  ~ " => Token::Dot, "   ~~~~~ " => Token::Ident("florp".into(), false),
-        }
+        };
         lex_ok! {
             "  $borp ", "  ~ " => Token::Dollar, "   ~~~~~ " => Token::Ident("borp".into(), false),
-        }
+        };
         lex_ok! {
             "  $`borp`", "  ~ " => Token::Dollar, "   ~~~~~~~ " => Token::Ident("borp".into(), true),
-        }
+        };
+        Ok(())
     }
 
     #[test]
     fn ignorable() {}
 
     #[test]
-    fn keywords() {
+    fn keywords() -> Result<()> {
         lex_ok! { " let ", " ~~~~~~ " => Token::Let, };
         lex_ok! { " match ", " ~~~~~~ " => Token::Match, };
         lex_ok! { " case ", " ~~~~~~ " => Token::Case, };
@@ -1660,10 +2054,11 @@ mod tests {
         lex_ok! { " state ", " ~~~~~~ " => Token::State, };
         lex_ok! { " set ", " ~~~~~~ " => Token::Set, };
         lex_ok! { " each ", " ~~~~~~ " => Token::Each, };
+        Ok(())
     }
 
     #[test]
-    fn operators() {
+    fn operators() -> Result<()> {
         lex_ok! {
         " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
@@ -1692,10 +2087,11 @@ mod tests {
         lex_ok! { " * ", " ~ " => Token::Mul, };
         lex_ok! { " / ", " ~ " => Token::Div, };
         lex_ok! { " % ", " ~ " => Token::Mod, };
+        Ok(())
     }
 
     #[test]
-    fn should_disambiguate() {
+    fn should_disambiguate() -> Result<()> {
         // Starts with ':'
         lex_ok! { " : ", " ~ " => Token::Colon, };
         lex_ok! { " :: ", " ~~ " => Token::ColonColon, };
@@ -1709,15 +2105,17 @@ mod tests {
         lex_ok! { " => ", " ~~ " => Token::EqArrow, };
 
         // Starts with '%'
-        lex_ok! { " % ", " ~ " => Token::Mod, }
-        lex_ok! { " %{ ", " ~~ " => Token::LPatBrace, }
+        lex_ok! { " % ", " ~ " => Token::Mod, };
+        lex_ok! { " %{ ", " ~~ " => Token::LPatBrace, };
 
         // Starts with '.'
-        lex_ok! { " . ", " ~ " => Token::Dot, }
+        lex_ok! { " . ", " ~ " => Token::Dot, };
+
+        Ok(())
     }
 
     #[test]
-    fn delimiters() {
+    fn delimiters() -> Result<()> {
         lex_ok! {
                     " ( ) { } [ ] ",
                     " ~           " => Token::LParen,
@@ -1726,55 +2124,56 @@ mod tests {
                     "       ~     " => Token::RBrace,
                     "         ~   " => Token::LBracket,
                     "           ~ " => Token::RBracket,
-        }
+        };
+        Ok(())
     }
 
     #[test]
-    fn string() {
+    fn string() -> Result<()> {
         lex_ok! {
             r#" "\n" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\n".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
         lex_ok! {
             r#" "\r" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\r".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
         lex_ok! {
             r#" "\t" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\t".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
         lex_ok! {
              r#" "\\" "#,
              r#" ~    "# => Token::DQuote,
              r#"  ~~  "# => Token::StringLiteral("\\".into()),
              r#"    ~ "# => Token::DQuote,
-        }
+        };
         lex_ok! {
             r#" "\"" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\"".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
 
         lex_ok! {
             r#" "\"\"" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\"\"".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
 
         lex_ok! {
             r#" "\\\"" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\\\"".into()),
             r#"    ~ "# => Token::DQuote,
-        }
+        };
 
         lex_ok! {
             r#" "\"\"""\"\"" "#,
@@ -1784,7 +2183,53 @@ mod tests {
             r#"       ~      "# => Token::DQuote,
             r#"        ~~~~  "# => Token::StringLiteral("\"\"".into()),
             r#"            ~ "# => Token::DQuote,
-        }
+        };
         //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
+        Ok(())
+    }
+
+    #[test]
+    fn test_preprocessor() -> Result<()> {
+        lex_ok! {
+            r#"use "foo.tremor" ;"#,
+            r#"~"# => Token::Use,
+            r#"    ~"# => Token::DQuote,
+            r#"      ~"# => Token::StringLiteral("foo.tremor".into()),
+            r#"               ~"# => Token::DQuote,
+            r#"                 ~"# => Token::Semi,
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_literal_format_bug_regression() -> Result<()> {
+        let mut snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
+        let mut snot2 = snot.clone();
+        let badger: Vec<_> = Tokenizer::new(&mut snot).collect();
+        let badger2 = Preprocessor::preprocess(
+            &ModulePath { mounts: vec![] },
+            "foo".to_string(),
+            &mut snot2,
+        )?;
+        let mut res = String::new();
+        for b in badger
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<TokenSpan>>()
+        {
+            res.push_str(&format!("{}", b.value));
+        }
+        assert_eq!(snot.trim(), res);
+        let mut res2 = String::new();
+        for b in badger2
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<TokenSpan>>()
+        {
+            res2.push_str(&format!("{}", b.value));
+        }
+        assert_eq!(snot, res2);
+        Ok(())
     }
 }

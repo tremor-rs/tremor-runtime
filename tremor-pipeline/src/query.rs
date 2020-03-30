@@ -36,6 +36,7 @@ use std::sync::Arc;
 use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
+use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{AggrRegistry, Registry, Value};
 
@@ -93,9 +94,19 @@ impl From<tremor_script::query::Query> for Query {
 }
 impl Query {
     /// Parse a query
-    pub fn parse(script: &str, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse(
+        module_path: &ModulePath,
+        script: &str,
+        file_name: String,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+    ) -> Result<Self> {
         Ok(Self(tremor_script::query::Query::parse(
-            script, reg, aggr_reg,
+            module_path,
+            file_name,
+            script,
+            reg,
+            aggr_reg,
         )?))
     }
 

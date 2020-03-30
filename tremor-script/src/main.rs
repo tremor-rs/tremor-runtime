@@ -36,6 +36,7 @@ mod highlighter;
 mod interpreter;
 mod lexer;
 mod parser;
+mod path;
 mod pos;
 mod registry;
 mod script;
@@ -65,6 +66,8 @@ use crate::registry::Registry;
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
+    let module_path = crate::path::load_module_path();
+
     let matches = App::new("tremor-script")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Tremor interpreter")
@@ -99,6 +102,12 @@ fn main() -> Result<()> {
                 .short("s")
                 .takes_value(false)
                 .help("Prints the highlighted script."),
+        )
+        .arg(
+            Arg::with_name("highlight-preprocess-source")
+                .short("p")
+                .takes_value(false)
+                .help("Prints the highlighted preprocessed script."),
         )
         .arg(
             Arg::with_name("print-ast")
@@ -163,7 +172,7 @@ fn main() -> Result<()> {
         }
     }
 
-    match Script::parse(&raw, &reg) {
+    match Script::parse(&module_path, raw.clone(), &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;
@@ -172,6 +181,18 @@ fn main() -> Result<()> {
                 println!();
                 let mut h = TermHighlighter::new();
                 Script::highlight_script_with(&raw, &mut h)?;
+            }
+            if matches.is_present("highlight-preprocess-source") {
+                println!();
+                if matches.is_present("print-results-raw") {
+                } else {
+                    let mut h = TermHighlighter::new();
+                    Script::highlight_preprocess_script_with(
+                        script_file.to_string(),
+                        &raw,
+                        &mut h,
+                    )?;
+                }
             }
             if matches.is_present("print-ast") {
                 let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
@@ -188,6 +209,7 @@ fn main() -> Result<()> {
             if matches.is_present("highlight-source")
                 || matches.is_present("print-ast")
                 || matches.is_present("print-ast-raw")
+                || matches.is_present("highlight-preprocess-source")
             {
                 // ALLOW: main.rs
                 std::process::exit(0);
@@ -275,7 +297,7 @@ fn main() -> Result<()> {
                         );
                         let lexed_tokens = lexer::Tokenizer::new(&result).collect();
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens)?;
+                        h.highlight(&lexed_tokens)?;
                     }
                 }
                 // Handle the other success returns
@@ -288,7 +310,7 @@ fn main() -> Result<()> {
                         let result = format!("{} ", serde_json::to_string_pretty(&result)?);
                         let lexed_tokens = lexer::Tokenizer::new(&result).collect();
                         let mut h = TermHighlighter::new();
-                        h.highlight(lexed_tokens)?;
+                        h.highlight(&lexed_tokens)?;
                     }
                 }
                 // Hande and print runtime errors.

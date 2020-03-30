@@ -1,0 +1,6 @@
+Error: 
+    1 | use foo :: bar use;
+      |                ^^^ Found the token `use` but expected one of `as`, `::`, `;`
+      |                    NOTE: Did you mean to use `;`?
+    2 | 
+    3 | "hello {snot}"

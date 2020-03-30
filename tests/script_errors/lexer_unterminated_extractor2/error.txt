@@ -1,4 +1,6 @@
 Error: 
     1 | match event of
-    2 |   case %{ msg = glob|info*l } => true
-      |                     ^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate an extractor with a closing '|'
+    2 |   case %{ msg ~= glob|info*l } => true
+      |                      ^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate an extractor with a closing '|'
+    3 |   default => false
+    4 | end
