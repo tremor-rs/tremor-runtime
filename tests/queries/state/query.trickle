@@ -3,8 +3,8 @@ with
   seed = 10,
   name = "s0",
 script
-  match type::is_null(state) of
-    case true =>
+  match state of
+    case null =>
       let state = {"count": args.seed}
     default =>
       let state.count = state.count + 1

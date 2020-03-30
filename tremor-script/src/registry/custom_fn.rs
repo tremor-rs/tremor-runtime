@@ -16,8 +16,9 @@
 #![cfg_attr(tarpaulin, skip)]
 
 use super::*;
-use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs};
-use crate::EventContext;
+use crate::ast::query::ARGS_CONST_ID;
+use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
+use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 use std::borrow::Cow;
@@ -101,33 +102,30 @@ impl<'script> CustomFn<'script> {
         })
     }
 
+    #[allow(mutable_transmutes)]
     pub(crate) fn invoke<'event, 'run>(
         &'script self,
-        ctx: &'run EventContext,
+        env: &'run Env<'run, 'event, 'script>,
         args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
     where
         'script: 'event,
         'event: 'run,
     {
-        use crate::ast::InvokeAggrFn;
-        use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
+        use std::mem;
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
-        let consts: Vec<Value<'static>> = if self.open {
-            vec![
-                Value::null(),
-                Value::null(),
-                Value::from(
-                    args.iter()
-                        .skip(self.locals)
-                        .map(|v| v.clone_static())
-                        .collect::<Vec<Value<'static>>>(),
-                ),
-            ]
-        } else {
-            vec![Value::null(), Value::null(), Value::null()]
-        };
+        let mut args_const = Value::from(
+            args.iter()
+                .skip(self.locals)
+                .map(|v| v.clone_static())
+                .collect::<Vec<Value<'static>>>(),
+        );
+
+        let consts: &'run mut [Value<'event>] = unsafe { mem::transmute(env.consts) };
+
+        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+
         let mut this_local = LocalStack::with_size(self.locals);
         for (i, arg) in args.iter().enumerate() {
             if i == self.locals {
@@ -142,8 +140,8 @@ impl<'script> CustomFn<'script> {
         // FIXME .unwrap()
         let meta = NodeMetas::default();
         let env = Env {
-            context: ctx,
-            consts: &consts,
+            context: env.context,
+            consts: env.consts,
             aggrs: &NO_AGGRS,
             meta: &meta,
         };
@@ -155,20 +153,25 @@ impl<'script> CustomFn<'script> {
             let mut state = Value::null().into_static();
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {
-                    match expr.run(
+                    let r = expr.run(
                         opts.with_result(),
                         &env,
                         &mut no_event,
                         &mut state,
                         &mut no_meta,
                         &mut this_local,
-                    )? {
+                    );
+                    if r.is_err() {
+                        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                    };
+                    match r? {
                         Cont::Cont(v) => {
                             return Ok(v.into_owned());
                         }
                         Cont::Drop => {
                             recursion_count += 1;
                             if recursion_count == RECURSION_LIMIT {
+                                mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
                                 return Err(FunctionError::Error("recursion limit reached".into()));
                             }
                             // clear the local variables (that are not the
@@ -180,18 +183,23 @@ impl<'script> CustomFn<'script> {
                             continue 'recur;
                         }
                         _ => {
+                            mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
                             return Err(FunctionError::Error("can't emit here".into()));
                         }
                     };
                 } else {
-                    expr.run(
+                    let r = expr.run(
                         opts,
                         &env,
                         &mut no_event,
                         &mut state,
                         &mut no_meta,
                         &mut this_local,
-                    )?;
+                    );
+                    if r.is_err() {
+                        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                    };
+                    r?;
                 }
             }
         }

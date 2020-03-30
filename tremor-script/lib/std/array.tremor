@@ -1,4 +1,4 @@
-##! The array module contains functions to work for arrays.
+### The array module contains functions to work for arrays.
 
 ## Returns the length of `array`.
 ##

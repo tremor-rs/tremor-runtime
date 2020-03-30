@@ -125,4 +125,7 @@ test_cases!(
     unary,
     // regression
     empty_array_pattern,
+    //INSERT
+    module,
+    fn_fib,
 );
