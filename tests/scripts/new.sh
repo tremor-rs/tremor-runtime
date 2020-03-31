@@ -16,4 +16,4 @@ fi
 
 cp -r ${BASEDIR}/_template ${TARGET}
 
-sed -e "s;//INSERT;//INSERT\n    ${NAME},;" ../script.rs > tmp && mv tmp ../script.rs
+sed -e "s;//INSERT;//INSERT\n    ${NAME},;" ${BASEDIR}/../script.rs > tmp && mv tmp ../script.rs

@@ -142,6 +142,7 @@ test_cases!(
     // regression
     empty_array_pattern,
     //INSERT
+    mod_access_const,
     module,
     fn_fib,
 );
