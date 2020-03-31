@@ -1,4 +1,4 @@
-##! The `float` module contains functions to work with floats.
+### The `float` module contains functions to work with floats.
 
 ## Parses a string as a float.
 ##

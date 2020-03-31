@@ -1,4 +1,4 @@
-##! The record module contains functions to work with records.
+### The record module contains functions to work with records.
 
 ## Returns the length of an record (number of key value pairs).
 ##

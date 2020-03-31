@@ -1,4 +1,4 @@
-##! The string module contains functions that primarily work with strings.
+### The string module contains functions that primarily work with strings.
 
 ## The placeholder {} is replaced by the arguments in the list in order.
 ##

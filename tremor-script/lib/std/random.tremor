@@ -1,14 +1,14 @@
-## The random module contains functions for generating random values of various
-## types.
-## 
-## The generated values are uniformly distributed over the specified type (and
-## range, where applicable). Useful for doing percentage drops of events, for
-## example.
-##
-## The random number generator under the hood is seeded based on tremor's event
-## ingestion time and thus the output here is deterministic. Should we choose to
-## replay a tremor data dump (something to be added in future tremor versions),
-## we will always get the same value for an event.
+### The random module contains functions for generating random values of various
+### types.
+### 
+### The generated values are uniformly distributed over the specified type (and
+### range, where applicable). Useful for doing percentage drops of events, for
+### example.
+###
+### The random number generator under the hood is seeded based on tremor's event
+### ingestion time and thus the output here is deterministic. Should we choose to
+### replay a tremor data dump (something to be added in future tremor versions),
+### we will always get the same value for an event.
 
 
 ## Generates a random boolean.
@@ -33,7 +33,6 @@ intrinsic fn string(length) as random::string;
 ## Generates a random integer, with the functionality changing based on the
 ## number of arguments passed.
 ##
-##
 ## ```tremor
 ## random::integer(0, 2)     # either 0 or 1
 ## random::integer(42, 43)   # always 42
@@ -42,7 +41,7 @@ intrinsic fn string(length) as random::string;
 ## random::integer(-42, -41) # always -42
 ## random::integer(i) -> int 
 ## random::integer(100) # one of 0-99. same as random::integer(0, 100)
-## random::integer() -> int¶
+## random::integer() -> int
 ## ```
 intrinsic fn integer(..) as random::integer;
 
@@ -55,6 +54,6 @@ intrinsic fn integer(..) as random::integer;
 ## random::float(-1.0, 1.0)  # >= -1.0 and < 1.0
 ## random::float(-3.0, -2.0) # >= -3.0 and < -2.0
 ## random::float(100.0) # same as random::float(0.0, 100.0)
-## random::float() -> float¶
+## random::float() -> float
 ## ```
 intrinsic fn float(..) as random::float;

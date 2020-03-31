@@ -66,7 +66,7 @@ pipeline:
             match event of
               case %{index_type == "applog_app6"} => let class = "applog_app6" , let rate = 4500 , let dimensions = event.logger_name
               case %{index_type == "syslog_app1"} => let class = "syslog_app1" , let rate = 2500 , let dimensions = event.syslog_hostname
-              case %{} when array::contains(event.tags, "tag1") => let class = "syslog_app2" , let rate = 125, let dimensions = event.syslog_hostname
+              case %{tags ~= %["tag1"]} => let class = "syslog_app2" , let rate = 125, let dimensions = event.syslog_hostname
               case %{index_type == "syslog_app3"} => let class = "syslog_app3" , let rate = 1750 , let dimensions = event.syslog_hostname
               case %{index_type == "syslog_app4"} => let class = "syslog_app4" , let rate = 7500 , let dimensions = event.syslog_hostname
               case %{index_type == "syslog_app5"} => let class = "syslog_app5" , let rate = 125 , let dimensions = event.syslog_hostname
