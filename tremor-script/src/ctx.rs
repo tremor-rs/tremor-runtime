@@ -114,6 +114,8 @@ pub struct EventContext {
     at: u64,
     /// URI of the origin
     pub origin_uri: Option<EventOriginUri>,
+    /// Allow panicing on asserts
+    pub panic_on_assert: bool,
 }
 
 impl EventContext {
@@ -122,6 +124,7 @@ impl EventContext {
         Self {
             at: ingest_ns,
             origin_uri,
+            panic_on_assert: false,
         }
     }
 

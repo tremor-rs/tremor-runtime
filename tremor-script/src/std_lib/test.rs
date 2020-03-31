@@ -22,11 +22,16 @@ use simd_json::BorrowedValue;
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test::assert(ctx, desc, expected, got) {
         if expected != got {
-            Err(to_runtime_error(format!(r#"
-Assertion for {} failed:
-  expected: {}
-       got: {}
-"#, desc, expected.encode(), got.encode())))
+            if ctx.panic_on_assert {
+
+                Err(to_runtime_error(format!(r#"
+    Assertion for {} failed:
+      expected: {}
+           got: {}
+    "#, desc, expected.encode(), got.encode())))
+            } else {
+                Ok(BorrowedValue::from(false))
+            }
         } else {
             Ok(BorrowedValue::from(true))
         }
