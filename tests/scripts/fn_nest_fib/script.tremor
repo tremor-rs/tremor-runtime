@@ -1,0 +1,16 @@
+mod lies with
+  mod snot with
+    fn fib_(a, b, n) of
+      case (a, b, n) when n > 0 => recur(b, a + b, n - 1)
+      default => a
+    end;
+  end;
+end;
+
+mod badger with
+  fn fib(n) with
+    lies::snot::fib_(0, 1, n)
+  end;
+end;
+
+badger::fib(event)

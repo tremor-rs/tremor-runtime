@@ -1,0 +1,3 @@
+fn f() with
+  g(1,2)
+end;
