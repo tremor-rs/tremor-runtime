@@ -1035,8 +1035,7 @@ impl<'input> Preprocessor {
                                                     "#!line {} 0\n",
                                                     &file_path2
                                                 ));
-                                                //input.push_str(&format!("mod {} with ", &alias));
-                                                input.push_str(&format!("mod {} with\n", &alias));
+                                                input.push_str(&format!("mod {} with ", &alias));
                                                 input.push_str(&format!(
                                                     "#!line {} 0\n",
                                                     &file_path2
@@ -1095,7 +1094,6 @@ impl<'input> Preprocessor {
         }
 
         input.push_str(" ");
-        println!(">>>>>>>>>start<<<<<<<\n{}>>>>>>>>>end<<<<<<<\n", input);
         let tokens = Tokenizer::new(input).collect();
 
         Ok(tokens)

@@ -398,7 +398,7 @@ ComplexExprImut: ImutExprRaw<'input> = {
 }
 
 Intrinsic: AnyFnRaw<'input> = {
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
         let invoce_args = vec![];
         let invoke = InvokeRaw{
             start,
@@ -410,7 +410,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
         let invoce_args = args.iter().map(|a|           
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -426,7 +426,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
         let invoce_args = args.iter().map(|a|           
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -442,7 +442,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "for" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
         let args = vec![];
         let invoce_args = vec![];
         let invoke = InvokeRaw{
@@ -459,7 +459,8 @@ Intrinsic: AnyFnRaw<'input> = {
 
 Module: ModuleRaw<'input> = {
     <start:@L> "mod" <name:Ident> "with" PreprocessorDirective <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc},
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
+    <start:@L> "mod" <name:Ident> "with" <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: None},
 }
 
 /// List of expressions at the root of the script
@@ -863,7 +864,6 @@ PatchOperationClause: PatchOperationRaw<'input> = {
     "erase" <ident:PatchField> => PatchOperationRaw::Erase{ ident },
     "move" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Move{ from, to },
     "copy" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Copy{ from, to },
-    // "test" <ident:Ident> "=>" <expr:Expr> => PatchOperationClause { kind: PatchOperationKind::Add, ident, Some(expr) },
     "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Merge { ident, expr },
     "merge" "=>" <expr:ComplexExprImut> => PatchOperationRaw::TupleMerge { expr },
 }

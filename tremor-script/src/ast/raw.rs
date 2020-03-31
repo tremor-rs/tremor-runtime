@@ -223,7 +223,6 @@ impl<'script> ModuleRaw<'script> {
                         )
                         .into());
                     }
-                    dbg!(&name_v);
                     helper.consts.insert(name_v.clone(), consts.len());
                     let expr = expr.up(helper)?;
                     let v = reduce2(expr, &helper)?;
@@ -1969,7 +1968,6 @@ impl_expr!(ConstPathRaw);
 impl<'script> Upable<'script> for ConstPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        dbg!(&self);
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
@@ -1982,8 +1980,6 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
             let mut module = helper.module.clone();
             module.append(&mut module_direct);
             module.push(id.to_string());
-            dbg!(&module);
-            dbg!(&helper.consts);
             if let Some(idx) = helper.is_const(&module) {
                 Ok(LocalPath {
                     is_const: true,
