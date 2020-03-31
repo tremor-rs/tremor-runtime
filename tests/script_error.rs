@@ -129,6 +129,8 @@ test_cases!(
     pp_unrecognized_token4,
     pp_unrecognized_token5,
     pp_mod_not_found,
+    unknown_function_in_function,
+    // INSERT
 );
 
 ignored_cases!(
