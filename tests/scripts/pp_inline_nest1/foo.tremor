@@ -1,2 +1,7 @@
+#
+# foo.tremor
+# foo/bar.tremor
+# should we do this as `use bar;` of `use foo::bar;`?
+
 use foo::bar ;
 const snot = "snot";
