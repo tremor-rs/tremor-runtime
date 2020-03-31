@@ -1,0 +1,7 @@
+mod my_mod with
+  const answer = 42;
+  fn add(a) with
+    a + answer
+  end;
+end;
+my_mod::add(event)

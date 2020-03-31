@@ -10,7 +10,7 @@ nodes:
     config:
       script: |
         mod record with
-          intrinsic fn contains(record, key) for record::contains;
+          intrinsic fn contains(record, key) as record::contains;
         end; 
         let $class = "default";
         let $dimensions = match record::contains(event, "application") of
@@ -26,7 +26,7 @@ nodes:
     config:
       script: |
         mod record with
-          intrinsic fn contains(record, key) for record::contains;
+          intrinsic fn contains(record, key) as record::contains;
         end; 
         match record::contains(event, "host") of
           case true => let $dimensions = event.host
