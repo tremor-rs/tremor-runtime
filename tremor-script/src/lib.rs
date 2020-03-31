@@ -35,7 +35,7 @@ mod datetime;
 pub mod docs;
 /// Errors
 pub mod errors;
-/// GROK implementaiton
+/// Grok implementaiton
 pub mod grok;
 /// Tremor Script highlighter
 pub mod highlighter;
