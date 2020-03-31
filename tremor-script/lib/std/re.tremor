@@ -1,5 +1,5 @@
-##! The re module contains functions for regular expression handing. Please note
-## that if applicable literal regular expressions are faster.
+### The re module contains functions for regular expression handing. Please note
+### that if applicable literal regular expressions are faster.
 
 ## Replaces the first occurrence of regex in the input string with to.
 ##
@@ -27,7 +27,9 @@ intrinsic fn is_match(regex, input) as re::is_match;
 ## Splits the input string using the provided regular expression regex as
 ## separator.
 ##
+## ```tremor
 ## re::split(" ", "this is a test") == ["this", "is", "a", "string"].
+## ```
 ##
 ## Returns a `[string]`
 intrinsic fn split(regex, input) as re::split;

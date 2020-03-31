@@ -17,15 +17,15 @@ mod signed with
   const min_signed = -9223372036854775807;
 end
 
-## mod unsigned with
-##  ##! Unsigned integer constatns
-##
-##  ## Max signed value
-##  const max = 18446744073709551615;
-##  
-##  ## Minimal signed value
-##  const min = 0;
-## end
+# mod unsigned with
+#  ##! Unsigned integer constatns
+#
+#  ## Max signed value
+#  const max = 18446744073709551615;
+#  
+#  ## Minimal signed value
+#  const min = 0;
+# end
 
 
 ## Minimum valid integer value.

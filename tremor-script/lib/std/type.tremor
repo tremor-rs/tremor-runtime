@@ -1,4 +1,4 @@
-## The type module contains functions that help inspecting types of values.
+### The type module contains functions that help inspecting types of values.
 
 
 ## Returns a string representation for the value type:

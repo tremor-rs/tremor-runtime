@@ -1,5 +1,5 @@
-##! The system namespace contains functions that provide information about the
-##! tremor runtime system.
+### The system namespace contains functions that provide information about the
+### tremor runtime system.
 
 
 ## Returns the name of the host where tremor is running.

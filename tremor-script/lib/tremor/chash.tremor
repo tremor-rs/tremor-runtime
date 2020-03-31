@@ -1,5 +1,5 @@
-##! The `chash` module contains functions for consistent hashing of values.
-##! This can be used to achieve consistent routing over multiple outputs.
+### The `chash` module contains functions for consistent hashing of values.
+### This can be used to achieve consistent routing over multiple outputs.
 
 ## Hashes an input key (string) and determine its placement in a slot list.
 ##

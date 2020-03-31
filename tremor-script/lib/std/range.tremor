@@ -1,4 +1,4 @@
-##! The range module contains functions for common range generator operations.
+### The range module contains functions for common range generator operations.
 use std::array;
 
 ## Returns an array from a min-inclusive to b max-inclusive.

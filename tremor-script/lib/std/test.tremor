@@ -1,11 +1,11 @@
-##! The `test` module is used for writing tremor unit tests.
+### The `test` module is used for writing tremor unit tests.
 
 ## Runs an assertion for a test, ensures that `expected` and `got` are the
 ## same. If not errors.
 ##
 ## **WARNING**: Do not run assertions in production code!
 ##  
-## ```
+## ```tremor
 ## assert("one equals one", 1, 1) == true; # suces
 ## assert("one equals one", 1, 2); # errors
 ## ```
