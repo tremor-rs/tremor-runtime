@@ -1,0 +1,14 @@
+use beep as boop;
+
+mod a with
+  mod b with
+    const c = 42;
+    fn d() with c end;
+  end;
+  fn e() with
+    [b::c, b::d()]
+  end;
+end;
+
+a::e()
+

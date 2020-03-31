@@ -1,0 +1,3 @@
+use fib as lies;
+
+lies::fib(event);

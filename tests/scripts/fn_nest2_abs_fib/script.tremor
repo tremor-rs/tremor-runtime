@@ -1,0 +1,14 @@
+mod b with 
+  fn snot() with 
+    "cake" 
+  end;
+end;
+
+mod a with
+  mod b with
+    fn snot() with "snot" end
+  end;
+  fn badger() with "{b::snot()} badger" end
+end;
+
+[a::badger(), b::snot()]

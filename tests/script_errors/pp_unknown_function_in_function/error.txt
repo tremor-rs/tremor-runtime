@@ -1,0 +1,7 @@
+Error: 
+    1 | fn f() with
+    2 |   g(1,2)
+      |   ^^^^^^ Call to undefined function ::g
+    3 | end;
+    4 | 
+    5 | f()

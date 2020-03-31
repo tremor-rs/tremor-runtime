@@ -2019,7 +2019,16 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             let id = helper.meta.name_dflt(mid).clone();
             let mid =
                 helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
+            let mut rel_path = helper.module.clone();
+            rel_path.push(id.to_string());
             if let Some(idx) = helper.is_const(&vec![id.to_string()]) {
+                Ok(LocalPath {
+                    is_const: true,
+                    idx: *idx,
+                    mid,
+                    segments,
+                })
+            } else if let Some(idx) = helper.is_const(&rel_path) {
                 Ok(LocalPath {
                     is_const: true,
                     idx: *idx,
@@ -2258,13 +2267,46 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 args,
             })
         } else {
-            let mut module = self.module.clone();
-            module.push(self.fun.clone());
-            if let Some(f) = helper.functions.get(&module) {
+            // Absolute locability from without a set of nested modules
+            let mut abs_module = helper.module.clone();
+            abs_module.extend_from_slice(&self.module);
+            abs_module.push(self.fun.clone());
+
+            // Relative locability with a nesting level
+            let mut rel_module = self.module.clone();
+            rel_module.push(self.fun.clone());
+
+            // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
+            if let Some(f) = helper.functions.get(&abs_module) {
                 if let Some(f) = helper.func_vec.get(*f) {
                     let invocable = Invocable::Tremor(f.clone());
                     let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
-                    let mf = format!("{}::{}", self.module.join("::"), self.fun);
+                    let mf = abs_module.join("::");
+                    Ok(Invoke {
+                        mid: helper.add_meta_w_name(
+                            self.start,
+                            self.end,
+                            mf,
+                            COMPILATION_UNIT_PART,
+                        ),
+                        module: self.module,
+                        fun: self.fun,
+                        invocable,
+                        args,
+                    })
+                } else {
+                    let inner: Range = (self.start, self.end).into();
+                    let outer: Range = inner.expand_lines(3);
+                    Err(
+                        ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None)
+                            .into(),
+                    )
+                }
+            } else if let Some(f) = helper.functions.get(&rel_module) {
+                if let Some(f) = helper.func_vec.get(*f) {
+                    let invocable = Invocable::Tremor(f.clone());
+                    let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+                    let mf = rel_module.join("::");
                     Ok(Invoke {
                         mid: helper.add_meta_w_name(
                             self.start,

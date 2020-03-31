@@ -29,7 +29,7 @@ grammar<'input>;
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
     <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports: vec![], stmts},
-    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports, stmts},
+    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports, stmts},    
 }
 
 Stmts: StmtsRaw<'input> = {
@@ -45,12 +45,52 @@ Stmts: StmtsRaw<'input> = {
   <item:Stmt> ";"? => vec![item],
 }
 
+ModuleStmt: ModuleStmtRaw<'input> = {
+    <start:@L> "mod" <name:Ident> "with" PreprocessorDirective <doc:ModComment_> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: Some(doc)},
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment_> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: Some(doc)},
+    <start:@L> "mod" <name:Ident> "with" <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: None},
+}
+
+/// List of expressions at the root of the script
+ModuleStmts: StmtsRaw<'input> = {
+    PreprocessorDirective <list:ModuleStmts> => {
+       list
+    },
+    //<stmt:Stmt> ";" <list:ModuleStmts> => {
+    //    let mut list = list;
+    //    list.insert(0,stmt);
+    //    list
+    // },
+    //<item:Stmt> ";"? => vec![item],
+     <stmt:ModuleInnerStmt> ";" <list:ModuleStmts> => {
+        let mut list = list;
+        list.insert(0,stmt);
+        list
+     },
+     <item:ModuleInnerStmt> ";"? => vec![item],
+ }
+
+// In case we need to limit the content of stmt
+ModuleInnerStmt: StmtRaw<'input> = {
+    <m:ModuleStmt> => StmtRaw::ModuleStmt(m),
+    <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.id.to_string(), kind, params: params.0, script: params.1 }),
+    <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::OperatorDecl(OperatorDeclRaw { start, end, kind, id: id.id.to_string(), params }),
+    <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params }),
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.id.to_string() }),
+    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params }),
+    <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params }),
+    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+}
+
 WindowKind: WindowKind = {
   "sliding" => WindowKind::Sliding,
   "tumbling" => WindowKind::Tumbling,
 }
 
 Stmt: StmtRaw<'input> = {
+    <m:ModuleStmt> => StmtRaw::ModuleStmt(m),
     <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.id.to_string(), kind, params: params.0, script: params.1 }),
     <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::OperatorDecl(OperatorDeclRaw { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params }),
@@ -139,7 +179,7 @@ WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
 }
 
 WithClause: Option<WithExprsRaw<'input>> = {
-    (<ScriptWithClause> "end")? => <>?,
+    <ScriptWithClause> "end" => <>,
 }
 
 ScriptWithClause: Option<WithExprsRaw<'input>> = {

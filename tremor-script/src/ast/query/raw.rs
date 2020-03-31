@@ -49,9 +49,22 @@ impl<'script> QueryRaw<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Query<'script>, usize, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
+
+        let mut stmts = vec![];
+        for (_i, e) in self.stmts.into_iter().enumerate() {
+            match e {
+                StmtRaw::ModuleStmt(m) => {
+                    m.define(reg, aggr_reg, &mut vec![], &mut helper)?;
+                }
+                other => {
+                    stmts.push(other.up(&mut helper)?);
+                }
+            }
+        }
+
         Ok((
             Query {
-                stmts: self.stmts.up(&mut helper)?,
+                stmts,
                 node_meta: helper.meta,
             },
             helper.locals.len(),
@@ -77,6 +90,38 @@ pub enum StmtRaw<'script> {
     Script(ScriptStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Select(Box<SelectRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
+    ModuleStmt(ModuleStmtRaw<'script>),
+}
+
+impl<'script> BaseExpr for StmtRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            StmtRaw::ModuleStmt(s) => s.start,
+            StmtRaw::Operator(s) => s.start,
+            StmtRaw::OperatorDecl(s) => s.start,
+            StmtRaw::Script(s) => s.start,
+            StmtRaw::ScriptDecl(s) => s.start,
+            StmtRaw::Select(s) => s.start,
+            StmtRaw::Stream(s) => s.start,
+            StmtRaw::WindowDecl(s) => s.start,
+        }
+    }
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            StmtRaw::ModuleStmt(e) => e.end,
+            StmtRaw::Operator(e) => e.end,
+            StmtRaw::OperatorDecl(e) => e.end,
+            StmtRaw::Script(e) => e.end,
+            StmtRaw::ScriptDecl(e) => e.end,
+            StmtRaw::Select(e) => e.end,
+            StmtRaw::Stream(e) => e.end,
+            StmtRaw::WindowDecl(e) => e.end,
+        }
+    }
 }
 
 impl<'script> Upable<'script> for StmtRaw<'script> {
@@ -113,6 +158,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 Ok(Stmt::WindowDecl(stmt))
             }
+            StmtRaw::ModuleStmt(m) => {
+                error_generic(&m, &m, "Module in wrong place error", &helper.meta)
+            }
         }
     }
 }
@@ -138,6 +186,51 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
         };
         helper.operators.push(operator_decl.clone());
         Ok(operator_decl)
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Clone)]
+pub struct ModuleStmtRaw<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub name: IdentRaw<'script>,
+    pub stmts: StmtsRaw<'script>,
+    pub doc: Option<Vec<Cow<'script, str>>>,
+}
+impl_expr!(ModuleStmtRaw);
+
+impl<'script> ModuleStmtRaw<'script> {
+    pub(crate) fn define<'registry>(
+        self,
+        reg: &'registry Registry,
+        aggr_reg: &'registry AggrRegistry,
+        consts: &mut Vec<Value<'script>>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        helper.module.push(self.name.id.to_string());
+        for e in self.stmts.into_iter() {
+            match e {
+                StmtRaw::ModuleStmt(m) => {
+                    m.define(reg, aggr_reg, consts, helper)?;
+                }
+                StmtRaw::Stream(stmt) => {
+                    dbg!(stmt); // FIXME continue here with modularized trickle impl
+                }
+                StmtRaw::Select(stmt) => {
+                    dbg!(stmt); // FIXME continue here with modularized trickle impl
+                }
+                e => {
+                    return error_generic(
+                        &e,
+                        &e,
+                        "Can't have statements inside of query modules",
+                        &helper.meta,
+                    )
+                }
+            }
+        }
+        helper.module.pop();
+        Ok(())
     }
 }
 
