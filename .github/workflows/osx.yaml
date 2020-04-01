@@ -1,6 +1,6 @@
 name: Tests - OS X
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   tests:
