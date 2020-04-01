@@ -54,7 +54,7 @@ macro_rules! stry {
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {
-        // This might be Ok since we try to compare Result in tets
+        // This might be Ok since we try to compare Result in tests
         false
     }
 }

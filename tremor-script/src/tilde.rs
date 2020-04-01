@@ -339,7 +339,7 @@ impl Extractor {
             },
             other => {
                 return Err(ExtractorError {
-                    msg: format!("Unsuupotred extractor {}", other),
+                    msg: format!("Unsupported extractor {}", other),
                 })
             }
         };

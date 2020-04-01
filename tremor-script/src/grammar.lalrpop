@@ -269,13 +269,13 @@ BitAndExprImut: ImutExprRaw<'input> = {
     EqExprImut => <>,
 }
 
-/// Equality compairison operators
+/// Equality comparison operators
 EqExprImut: ImutExprRaw<'input> = {
     BinOp<BinEq, EqExprImut, CmpExprImut> => <>,
     CmpExprImut => <>,
 }
 
-/// Relational compairison operators
+/// Relational comparison operators
 CmpExprImut: ImutExprRaw<'input> = {
     BinOp<BinCmp, CmpExprImut, BitShiftExprImut> => <>,
     BitShiftExprImut => <>,

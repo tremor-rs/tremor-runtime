@@ -82,7 +82,7 @@ pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 pub use simd_json::value::borrowed::Object;
 pub use simd_json::value::borrowed::Value;
 
-/// Combind struct for an event value and metadata
+/// Combined struct for an event value and metadata
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ValueAndMeta<'event> {
     /// Event value
@@ -130,7 +130,7 @@ rental! {
 
 impl rentals::Value {
     /// Borrow the parts (event and metadata) from a rental.
-    /// This borrows the data as imutable and then transmutes it
+    /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub fn parts(&self) -> (&mut Value, &mut Value) {
@@ -141,9 +141,9 @@ impl rentals::Value {
             (unwind_event, event_meta)
         }
     }
-    /// Consums an event into another
+    /// Consumes an event into another
     /// This function works around a rental limitation that is meant
-    /// to protect it's users: Rental does not allow you to get both
+    /// to protect its users: Rental does not allow you to get both
     /// the owned and borrowed part at the same time.
     ///
     /// The reason for that is that once those are taken out of the
@@ -159,7 +159,7 @@ impl rentals::Value {
     ///
     /// So what this function does it is crowbars the content
     /// from a rental into an accessible struct then uses this
-    /// to modify it's content by adding the owned parts of
+    /// to modify its content by adding the owned parts of
     /// `other` into the owned part `self` and the running
     /// a merge function on the borrowed parts
     pub fn consume<E, F>(&mut self, other: Self, join_f: F) -> Result<(), E>
@@ -238,7 +238,7 @@ impl Clone for LineValue {
         // we need to do this dance to 'free' value from the
         // linked lifetime.
         // An alternative would be keeping the raw data in an ARC
-        // instea of a Box.
+        // instead of a Box.
         Self::new(vec![], |_| {
             let v = self.suffix();
             ValueAndMeta {

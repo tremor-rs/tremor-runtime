@@ -459,7 +459,7 @@ where
 
                             if let Some(range_end) = e.as_usize() {
                                 let range_end = range_end + start;
-                                // We're exceeding the erray
+                                // We're exceeding the array
                                 if range_end >= end {
                                     return Ok(Cow::Borrowed(&FALSE));
                                 } else {
@@ -652,12 +652,11 @@ where
         local: &'run LocalStack<'event>,
         expr: &'script Merge,
     ) -> Result<Cow<'run, Value<'event>>> {
-        // NOTE: We got to clone here since we're are going
-        // to change the value
+        // NOTE: We got to clone here since we're going to change the value
         let value = stry!(expr.target.run(opts, env, event, state, meta, local));
 
         if value.is_object() {
-            // Make sure we clone the data so we don't muate it in place
+            // Make sure we clone the data so we don't mutate it in place
             let mut value = value.into_owned();
             let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local));
 
