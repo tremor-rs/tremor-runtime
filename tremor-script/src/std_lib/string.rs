@@ -86,7 +86,7 @@ pub fn load(registry: &mut Registry) {
                     Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {{}} in your format string".into()})
                 }
             } else {
-                Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to  print a number use `string::format(\"{{}}\", 1)`".into()})
+                Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{{}}\", 1)`".into()})
             }
         }
 

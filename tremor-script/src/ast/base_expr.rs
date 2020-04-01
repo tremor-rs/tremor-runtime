@@ -20,7 +20,7 @@ use super::*;
 use crate::pos::{Location, Range};
 
 #[doc(hidden)]
-/// Implements the BaseExpr trate for a given exression
+/// Implements the BaseExpr trait for a given expression
 #[macro_export]
 macro_rules! impl_expr {
     ($name:ident) => {
@@ -52,7 +52,7 @@ impl BaseExpr for Range {
 }
 
 #[doc(hidden)]
-/// Implements the BaseExpr trate for a given exression
+/// Implements the BaseExpr trait for a given expression
 #[macro_export]
 macro_rules! impl_expr2 {
     ($name:ident) => {

@@ -109,7 +109,7 @@ impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Self) -> bool {
-        // This might be Ok since we try to compare Result in tets
+        // This might be Ok since we try to compare Result in tests
         false
     }
 }

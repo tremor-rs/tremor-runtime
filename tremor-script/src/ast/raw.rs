@@ -94,7 +94,7 @@ impl<'script> ScriptRaw<'script> {
 
         // We make sure the if we return `event` we turn it into `emit event`
         // While this is not required logically it allows us to
-        // take advantage of the `emit event` optiisation
+        // take advantage of the `emit event` optimisation
         if let Some(e) = exprs.pop() {
             match e.borrow() {
                 Expr::Imut(ImutExprInt::Path(Path::Event(p))) => {
@@ -1203,7 +1203,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                 helper.warnings.push(Warning {
                     inner: extent,
                     outer: extent.expand_lines(2),
-                    msg: format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also oberwrite the result of th extractor.", present),
+                    msg: format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of th extractor.", present),
                 })
             }
         }
@@ -1603,12 +1603,12 @@ impl<'script> Upable<'script> for MatchRaw<'script> {
             0 => helper.warnings.push(Warning{
                 outer: Range(self.start, self.end),
                 inner: Range(self.start, self.end),
-                msg: "This match expression has no default clause, if the other clauses do not cover all posiblities this will lead to events being discarded with runtime errors.".into()
+                msg: "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
             }),
             x if x > 1 => helper.warnings.push(Warning{
                 outer: Range(self.start, self.end),
                 inner: Range(self.start, self.end),
-                msg: "A match statement with more then one default clause will enver reach any but the first default clause.".into()
+                msg: "A match statement with more then one default clause will never reach any but the first default clause.".into()
             }),
 
             _ => ()
@@ -1640,12 +1640,12 @@ impl<'script> Upable<'script> for ImutMatchRaw<'script> {
             0 => helper.warnings.push(Warning{
                 outer: Range(self.start, self.end),
                 inner: Range(self.start, self.end),
-                msg: "This match expression has no default clause, if the other clauses do not cover all posiblities this will lead to events being discarded with runtime errors.".into()
+                msg: "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
             }),
             x if x > 1 => helper.warnings.push(Warning{
                 outer: Range(self.start, self.end),
                 inner: Range(self.start, self.end),
-                msg: "A match statement with more then one default clause will enver reach any but the first default clause.".into()
+                msg: "A match statement with more then one default clause will never reach any but the first default clause.".into()
             }),
 
             _ => ()

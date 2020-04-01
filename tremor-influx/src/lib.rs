@@ -46,7 +46,7 @@ mod tests {
         let d = decode(s, 0)
             .expect("failed to parse")
             .expect("failed to parse");
-        // This is a bit ugly but to make a sensible compairison we got to convert the data
+        // This is a bit ugly but to make a sensible comparison we got to convert the data
         // from an object to json to an object
         let j: Value = d;
         let e: Value = json!({

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 macro_rules! instance {
-    // crate::metrics::INSTANCE is never muated after the initial setting
+    // crate::metrics::INSTANCE is never mutated after the initial setting
     // in main::run() so we can use this safely.
     () => {
         unsafe { crate::metrics::INSTANCE.to_string() }

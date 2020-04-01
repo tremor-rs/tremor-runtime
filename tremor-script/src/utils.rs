@@ -25,8 +25,7 @@ pub fn hostname() -> String {
         .unwrap_or_else(|_| "tremor-host.local".to_string())
 }
 
-/// Serialize a Value in a sorted fashion to allow equality compairison
-/// the result
+/// Serialize a Value in a sorted fashion to allow equality comparing the result
 pub fn sorsorted_serialize<'v>(j: &Value<'v>) -> Result<String> {
     // ballpark size of a 'sensible' message
     let mut w = Vec::with_capacity(512);
@@ -80,7 +79,7 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
-/// Loats an event file
+/// Loads an event file
 pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
     use simd_json::to_borrowed_value;
     use std::fs::File;

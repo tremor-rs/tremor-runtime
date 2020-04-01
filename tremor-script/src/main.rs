@@ -257,9 +257,9 @@ fn main() -> Result<()> {
                 &mut global_map,
             );
             match expr {
-                // Seperate out the speical case of emiting the inbound evet,
+                // Separate out the special case of emitting the inbound event,
                 // this way we don't have to clone it on the way out and can
-                // uswe the refference that was apssed in instead.
+                // use the reference that was passed in instead.
                 Ok(Return::EmitEvent { port }) => {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {

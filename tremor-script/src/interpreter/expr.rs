@@ -506,8 +506,8 @@ where
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
             Expr::Imut(expr) => {
-                // If we don't need the result of a imutable value then we
-                // don't need to evalute it.
+                // If we don't need the result of a immutable value then we
+                // don't need to evaluate it.
                 if opts.result_needed {
                     expr.run(opts, env, event, state, meta, local)
                         .map(Cont::Cont)

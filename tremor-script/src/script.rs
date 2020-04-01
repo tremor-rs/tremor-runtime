@@ -26,7 +26,7 @@ use serde::Serialize;
 use simd_json::borrowed::Value;
 use std::io::Write;
 
-/// Return of a secript execution
+/// Return of a script execution
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Return<'event> {
     /// This script should emit the returned
@@ -51,8 +51,8 @@ impl<'run, 'event> From<Cont<'run, 'event>> for Return<'event>
 where
     'event: 'run,
 {
-    // This clones the data since we're returning it out of the scope of the
-    // esecution - we might want to investigate if we can get rid of this in some cases.
+    // TODO: This clones the data since we're returning it out of the scope of the
+    // execution - we might want to investigate if we can get rid of this in some cases.
     fn from(v: Cont<'run, 'event>) -> Self {
         match v {
             Cont::Cont(value) => Return::Emit {

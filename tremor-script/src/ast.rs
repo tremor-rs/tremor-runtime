@@ -113,6 +113,10 @@ where
     operators: Vec<OperatorDecl<'script>>,
     scripts: Vec<ScriptDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
+    // TODO: Users of the `warnings` field might be helped if `warnings` were a Set. Right now,
+    // some places (twice in query/raw.rs) do `append + sort + dedup`. With, e.g., a `BTreeSet`,
+    // this could be achieved in a cleaner and faster way, and `Warning` already implements `Ord`
+    // anyway.
     warnings: Vec<Warning>,
     shadowed_vars: Vec<String>,
     pub locals: HashMap<String, usize>,
@@ -405,7 +409,7 @@ impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
     }
 }
 
-/// An imutable exression
+/// An immutable expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutExpr<'script>(pub(crate) ImutExprInt<'script>);
 
@@ -919,7 +923,7 @@ pub(crate) struct UnaryExpr<'script> {
 impl_expr2!(UnaryExpr);
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
-/// A list of imutable exressons
+/// A list of immutable expressions
 pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub(crate) type Fields<'script> = Vec<Field<'script>>;
 pub(crate) type Segments<'script> = Vec<Segment<'script>>;

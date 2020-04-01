@@ -57,7 +57,7 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
 
-    /// Handles contraflow evetns - defaults to a noop
+    /// Handles contraflow events - defaults to a noop
     fn on_contraflow(&mut self, insight: &mut Event) {
         // Make the trait signature nicer
     }

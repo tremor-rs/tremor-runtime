@@ -35,7 +35,7 @@ use std::ops::RangeInclusive;
 pub trait TremorAggrFn: DowncastSync + Sync + Send {
     /// Accumulate a value
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
-    /// Compenstate for a value being removed
+    /// Compensate for a value being removed
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     /// Emits the function
     fn emit<'event>(&mut self) -> FResult<Value<'event>>;
@@ -48,15 +48,15 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
         self.init();
         Ok(r)
     }
-    /// Marges the state of a differently windowed function into this
+    /// Merges the state of a differently windowed function into this
     /// this requires `&self` and `&src` to be of the same type.
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()>;
-    /// allows cloning the funcitons without implementing
+    /// allows cloning the functions without implementing
     /// `Clone` to avoid rust complaining
     fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
     /// The arity of the function
     fn arity(&self) -> RangeInclusive<usize>;
-    /// Thests if a given arrity is valid
+    /// Tests if a given arity is valid
     fn valid_arity(&self, n: usize) -> bool {
         self.arity().contains(&n)
     }
@@ -72,12 +72,12 @@ pub trait TremorFn: Sync + Send {
     /// Invoce the function and calculate the result
     fn invoke<'event>(&self, ctx: &EventContext, args: &[&Value<'event>])
         -> FResult<Value<'event>>;
-    /// allows cloning the funcitons without implementing
+    /// allows cloning the functions without implementing
     /// `Clone` to avoid rust complaining
     fn snot_clone(&self) -> Box<dyn TremorFn>;
-    /// The arrity of the function
+    /// The arity of the function
     fn arity(&self) -> RangeInclusive<usize>;
-    /// Thests if a given arrity is valid
+    /// Tests if a given arity is valid
     fn valid_arity(&self, n: usize) -> bool {
         self.arity().contains(&n)
     }
@@ -157,35 +157,35 @@ pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError 
 /// Function error
 #[derive(Debug)]
 pub enum FunctionError {
-    /// The function was called with a bad arrity
+    /// The function was called with a bad arity
     BadArity {
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         mfa: MFA,
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         calling_a: usize,
     },
     /// The function encountered a runtime error
     RuntimeError {
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         mfa: MFA,
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         error: String,
     },
     /// The module doesn't exit
     MissingModule {
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         m: String,
     },
-    /// The funciton doesn't exist
+    /// The function doesn't exist
     MissingFunction {
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         m: String,
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         f: String,
     },
     /// A bad type was passed
     BadType {
-        /// The function was called with a bad arrity
+        /// The function was called with a bad arity
         mfa: MFA,
     },
     /// A generic error
@@ -588,7 +588,7 @@ impl Registry {
         }
     }
 
-    /// Inserts a function into the registry, overwriting it if it aloready exists
+    /// Inserts a function into the registry, overwriting it if it already exists
     pub fn insert(&mut self, function: TremorFnWrapper) -> &mut Self {
         if let Some(module) = self.functions.get_mut(&function.module) {
             module.insert(function.name.clone(), function);
@@ -601,7 +601,7 @@ impl Registry {
         self
     }
 
-    /// Loads a module with funciton defiunitions
+    /// Loads a module with function definitions
     #[cfg(feature = "fns")]
     pub fn load_module(&mut self, name: &str, code: &str) -> Result<Vec<Warning>> {
         use crate::lexer::{self};
@@ -668,7 +668,7 @@ impl TremorAggrFnWrapper {
         self.fun.accumulate(args)
     }
 
-    /// Compenstate for a value being removed
+    /// Compensate for a value being removed
     pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.compensate(args)
     }
@@ -683,7 +683,7 @@ impl TremorAggrFnWrapper {
         self.fun.init()
     }
 
-    /// Thests if a given arrity is valid
+    /// Tests if a given arity is valid
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
@@ -698,7 +698,7 @@ impl TremorAggrFnWrapper {
         self.fun.warning()
     }
 
-    /// Marges the state of a differently windowed function into this
+    /// Merges the state of a differently windowed function into this
     /// this requires `&self` and `&src` to be of the same type.
     pub fn merge(&mut self, src: &Self) -> FResult<()> {
         use std::borrow::Borrow;
@@ -753,7 +753,7 @@ impl Aggr {
         }
     }
 
-    /// Inserts a function into the registry, overwriting it if it aloready exists
+    /// Inserts a function into the registry, overwriting it if it already exists
     pub fn insert(&mut self, function: TremorAggrFnWrapper) -> &mut Self {
         if let Some(module) = self.functions.get_mut(&function.module) {
             module.insert(function.name.clone(), function);
@@ -928,7 +928,7 @@ mod tests {
     }
 
     #[test]
-    pub fn umatched_parenthesis() {
+    pub fn unmatched_parenthesis() {
         let format = fun("string", "format");
         let v = Value::from("{");
         let res = format(&[&v]);
