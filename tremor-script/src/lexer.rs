@@ -451,17 +451,14 @@ impl<'input> Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> __ToTriple<'input> for Result<Spanned<Token<'input>>> {
+impl<'input> __ToTriple<'input> for Spanned<Token<'input>> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<
         (Location, Token<'input>, Location),
         lalrpop_util::ParseError<Location, Token<'input>, Error>,
     > {
-        match value {
-            Ok(span) => Ok((span.span.start(), span.value, span.span.end())),
-            Err(error) => Err(lalrpop_util::ParseError::User { error }),
-        }
+        Ok((value.span.start(), value.value, value.span.end()))
     }
 }
 
@@ -495,15 +492,13 @@ impl<'input> fmt::Display for Token<'input> {
             }
             Token::HereDoc(indent, lines) => {
                 writeln!(f, r#"""""#)?;
-                let space = String::from(" ");
                 for l in lines {
-                    writeln!(f, "{}{}", space.repeat(*indent), l)?
+                    writeln!(f, "{}{}", " ".repeat(*indent), l)?
                 }
                 write!(f, r#"""""#)
             }
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
-                let space = String::from(" ");
                 write!(f, "|")?;
                 for l in values {
                     if first {
@@ -512,7 +507,7 @@ impl<'input> fmt::Display for Token<'input> {
                     } else {
                         writeln!(f)?;
                     };
-                    writeln!(f, "{}{}", space.repeat(*indent), l)?;
+                    writeln!(f, "{}{}", " ".repeat(*indent), l)?;
                 }
                 write!(f, "|")
             }

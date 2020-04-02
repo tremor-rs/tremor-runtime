@@ -198,8 +198,8 @@ pub trait Highlighter {
                             //
                             let delta = end.column as i64 - start.column as i64;
                             let len = usize::try_from(delta).unwrap_or(1);
-                            let prefix = String::from(" ").repeat(start.column.saturating_sub(1));
-                            let underline = String::from("^").repeat(len);
+                            let prefix = " ".repeat(start.column.saturating_sub(1));
+                            let underline = "^".repeat(len);
 
                             if let Some(token) = token {
                                 write!(self.get_writer(), "{}", token)?;
@@ -215,7 +215,7 @@ pub trait Highlighter {
                             writeln!(self.get_writer(), "{} {}", underline, callout)?;
                             self.reset()?;
                             if let Some(hint) = hint {
-                                let prefix = String::from(" ").repeat(start.column + len);
+                                let prefix = " ".repeat(start.column + len);
                                 self.set_color(ColorSpec::new().set_bold(true))?;
                                 write!(self.get_writer(), "      | {}", prefix)?;
                                 self.set_color(
@@ -270,7 +270,6 @@ pub trait Highlighter {
                 self.set_color(&mut c)?;
                 match &x.value {
                     Token::HereDoc(indent, lines) => {
-                        let space = String::from(" ");
                         writeln!(self.get_writer(), r#"""""#)?;
                         for l in lines {
                             line += 1;
@@ -279,7 +278,7 @@ pub trait Highlighter {
                             write!(self.get_writer(), "{:5} | ", line)?;
                             self.reset()?;
                             c.set_intense(true).set_fg(Some(Color::Magenta));
-                            writeln!(self.get_writer(), "{}{}", space.repeat(*indent), l)?
+                            writeln!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
                         }
                         line += 1;
                         self.reset()?;
@@ -289,7 +288,6 @@ pub trait Highlighter {
                         write!(self.get_writer(), r#"""""#)?;
                     }
                     Token::TestLiteral(indent, lines) => {
-                        let space = String::from(" ");
                         write!(self.get_writer(), "|")?;
                         let mut first = true;
                         for l in lines {
@@ -303,7 +301,7 @@ pub trait Highlighter {
                                 self.reset()?;
                                 c.set_intense(true).set_fg(Some(Color::Magenta));
                             }
-                            write!(self.get_writer(), "{}{}", space.repeat(*indent), l)?
+                            write!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
                         }
                         self.reset()?;
                         write!(self.get_writer(), "|")?;
@@ -336,8 +334,8 @@ pub trait Highlighter {
                 } else {
                     1
                 };
-                let prefix = String::from(" ").repeat(start.column - 1);
-                let underline = String::from("^").repeat(len);
+                let prefix = " ".repeat(start.column - 1);
+                let underline = "^".repeat(len);
                 if let Some(token) = token {
                     write!(self.get_writer(), "{}", token)?;
                 };
@@ -351,7 +349,7 @@ pub trait Highlighter {
                 writeln!(self.get_writer(), "{} {}", underline, callout)?;
                 self.reset()?;
                 if let Some(hint) = hint {
-                    let prefix = String::from(" ").repeat(start.column + len);
+                    let prefix = " ".repeat(start.column + len);
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     write!(self.get_writer(), "      | {}", prefix)?;
                     self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;

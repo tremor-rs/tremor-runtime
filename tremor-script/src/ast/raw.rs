@@ -30,7 +30,7 @@ pub use query::*;
 use serde::Serialize;
 use simd_json::value::borrowed;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -48,13 +48,14 @@ impl<'script> ScriptRaw<'script> {
         aggr_reg: &'registry AggrRegistry,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
         let mut helper = Helper::new(reg, aggr_reg);
-        let mut consts: Vec<Value> = vec![Value::null(), Value::null(), Value::null()];
         helper.consts.insert("window".to_owned(), WINDOW_CONST_ID);
         helper.consts.insert("group".to_owned(), GROUP_CONST_ID);
         helper.consts.insert("args".to_owned(), ARGS_CONST_ID);
 
+        // TODO: Document why three `null` values are put in the constants vector.
+        let mut consts: Vec<Value> = vec![Value::null(); 3];
         let mut exprs = vec![];
-        let len = self.exprs.len();
+        let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
                 ExprRaw::Const {
@@ -63,7 +64,7 @@ impl<'script> ScriptRaw<'script> {
                     start,
                     end,
                 } => {
-                    if helper.consts.contains_key(&name.to_string()) {
+                    if let Some(_prev) = helper.consts.insert(name.to_string(), consts.len()) {
                         return Err(ErrorKind::DoubleConst(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -71,9 +72,9 @@ impl<'script> ScriptRaw<'script> {
                         )
                         .into());
                     }
-                    helper.consts.insert(name.to_string(), consts.len());
+
                     let expr = expr.up(&mut helper)?;
-                    if i == len - 1 {
+                    if i == last_idx {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
                             idx: consts.len(),
@@ -95,28 +96,21 @@ impl<'script> ScriptRaw<'script> {
         // We make sure the if we return `event` we turn it into `emit event`
         // While this is not required logically it allows us to
         // take advantage of the `emit event` optimisation
-        if let Some(e) = exprs.pop() {
-            match e.borrow() {
-                Expr::Imut(ImutExprInt::Path(Path::Event(p))) => {
-                    if p.segments.is_empty() {
-                        let expr = EmitExpr {
-                            mid: p.mid(),
-                            expr: ImutExprInt::Path(Path::Event(p.clone())),
-                            port: None,
-                        };
-                        exprs.push(Expr::Emit(Box::new(expr)))
-                    } else {
-                        exprs.push(e)
-                    }
+        if let Some(e) = exprs.last_mut() {
+            if let Expr::Imut(ImutExprInt::Path(Path::Event(p))) = e {
+                if p.segments.is_empty() {
+                    let expr = EmitExpr {
+                        mid: p.mid(),
+                        expr: ImutExprInt::Path(Path::Event(p.clone())),
+                        port: None,
+                    };
+                    *e = Expr::Emit(Box::new(expr));
                 }
-                _ => exprs.push(e),
             }
         } else {
             return Err(ErrorKind::EmptyScript.into());
         }
 
-        // let aggregates  = Vec::new();
-        // mem::swap(&mut aggregates, &mut helper.aggregates);
         Ok((
             Script {
                 exprs,
@@ -448,12 +442,13 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
-        let mut locals = HashMap::new();
         let mut consts = HashMap::new();
-
-        for (i, a) in self.args.iter().enumerate() {
-            locals.insert(a.id.to_string(), i);
-        }
+        let mut locals: HashMap<_, _> = self
+            .args
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.to_string(), i))
+            .collect();
 
         helper.can_emit = false;
         helper.swap(&mut aggrs, &mut consts, &mut locals);
@@ -640,12 +635,9 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                         let args: Result<Vec<Value<'script>>> =
                             i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
                         let args = args?;
-                        let mut args2: Vec<&Value<'script>> = Vec::new();
-                        unsafe {
-                            for i in 0..args.len() {
-                                args2.push(args.get_unchecked(i));
-                            }
-                        }
+
+                        // Construct a view into `args`, since `invoke` expects a slice of references.
+                        let args2: Vec<&Value<'script>> = args.iter().collect();
                         let v = i
                             .invocable
                             .invoke(&EventContext::default(), &args2)

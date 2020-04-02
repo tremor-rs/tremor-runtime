@@ -119,14 +119,7 @@ where
 
         let script = rentals::Script::try_new(Box::new(source.clone()), |src| {
             let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(src.as_str()).collect();
-            let mut filtered_tokens = Vec::new();
-
-            for t in lexemes? {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
+            let filtered_tokens = lexemes?.into_iter().filter(|t| !t.value.is_ignorable());
 
             let fake_aggr_reg = AggrRegistry::default();
             let (script, ws) = grammar::ScriptParser::new()

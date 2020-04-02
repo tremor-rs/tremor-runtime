@@ -18,6 +18,24 @@
 use super::super::raw::*;
 use super::*;
 use crate::impl_expr;
+
+fn up_params<'script, 'registry>(
+    params: WithExprsRaw<'script>,
+    helper: &mut Helper<'script, 'registry>,
+) -> Result<HashMap<String, Value<'script>>> {
+    params
+        .into_iter()
+        .map(|(name, value)| Ok((name.id.to_string(), reduce2(value.up(helper)?, &helper)?)))
+        .collect()
+}
+
+fn up_maybe_params<'script, 'registry>(
+    params: Option<WithExprsRaw<'script>>,
+    helper: &mut Helper<'script, 'registry>,
+) -> Result<Option<HashMap<String, Value<'script>>>> {
+    params.map(|params| up_params(params, helper)).transpose()
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
@@ -115,16 +133,7 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             id: self.id,
             kind: self.kind.up(helper)?,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?, &helper)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
+            params: up_maybe_params(self.params, helper)?,
         };
         helper.operators.push(operator_decl.clone());
         Ok(operator_decl)
@@ -149,16 +158,7 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             id: self.id,
             target: self.target,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?, &helper)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
+            params: up_maybe_params(self.params, helper)?,
         })
     }
 }
@@ -184,16 +184,7 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         let script_decl = ScriptDecl {
             mid: helper.add_meta(self.start, self.end),
             id: self.id,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?, &helper)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
+            params: up_maybe_params(self.params, helper)?,
             script,
         };
         helper.scripts.push(script_decl.clone());
@@ -219,16 +210,7 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
         Ok(ScriptStmt {
             mid: helper.add_meta(self.start, self.end),
             id: self.id,
-            params: match self.params {
-                Some(p) => {
-                    let mut pup = HashMap::new();
-                    for (name, value) in p {
-                        pup.insert(name.id.to_string(), reduce2(value.up(helper)?, &helper)?);
-                    }
-                    Some(pup)
-                }
-                None => None,
-            },
+            params: up_maybe_params(self.params, helper)?,
             target: self.target,
         })
     }
@@ -261,13 +243,7 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             id: self.id,
             kind: self.kind,
-            params: {
-                let mut pup = HashMap::new();
-                for (name, value) in self.params {
-                    pup.insert(name.id.to_string(), reduce2(value.up(helper)?, &helper)?);
-                }
-                pup
-            },
+            params: up_params(self.params, helper)?,
             script: maybe_script.map(|s| s.0),
         })
     }

@@ -13,15 +13,40 @@ for (idx, in_port) in outgoing  {
 }
 ```
 
-becomes:
+for (things that deref to) slices becomes:
 
 ```rust
-let len = outgoing.len();
-for (idx, in_port) in outgoing.iter().take(len - 1) {
-  self.stack.push((*idx, in_port.clone(), event.clone()))
-  }
-let (idx, in_port) = &outgoing[len - 1];
-self.stack.push((*idx, in_port.clone(), event))
+if let Some((last_outgoing, other_outgoing)) = outgoing.split_last() {
+    // Iterate over all but the last `outgoing`, cloning the `event`
+    for (idx, in_port) in other_outgoing {
+      self.stack.push((*idx, in_port.clone(), event.clone()))
+    }
+
+    // Handle the last `outgoing`, consuming the `event`
+    let (idx, in_port) = last_outgoing;
+    self.stack.push((*idx, in_port, event))
+} else {
+    // `outgoing` was empty
+}
+```
+
+or for iterators over non-slices becomes:
+
+```rust
+if outgoing.is_empty() {
+    // `outgoing` was empty
+} else {
+    let len = outgoing.len();
+
+    // Iterate over all but the last `outgoing`, cloning the `event`
+    for (idx, in_port) in outgoing.iter().take(len - 1) {
+      self.stack.push((*idx, in_port.clone(), event.clone()))
+    }
+
+    // Handle the last `outgoing`, consuming the `event`
+    let (idx, in_port) = &outgoing[len - 1];
+    self.stack.push((*idx, in_port.clone(), event))
+}
 ```
 
 ### Rewrite entry to not require a clone when the value exists

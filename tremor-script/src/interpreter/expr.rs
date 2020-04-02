@@ -63,17 +63,16 @@ where
         inner: &'script T,
         effectors: &'script [Expr<'script>],
     ) -> Result<Cont<'run, 'event>> {
-        if effectors.is_empty() {
-            return error_missing_effector(self, inner, &env.meta);
+        if let Some((last_effector, other_effectors)) = effectors.split_last() {
+            for effector in other_effectors {
+                demit!(effector.run(opts.without_result(), env, event, state, meta, local));
+            }
+            Ok(Cont::Cont(demit!(
+                last_effector.run(opts, env, event, state, meta, local)
+            )))
+        } else {
+            error_missing_effector(self, inner, &env.meta)
         }
-        // We know we have at least one element so [] access is safe!
-        for effector in &effectors[..effectors.len() - 1] {
-            demit!(effector.run(opts.without_result(), env, event, state, meta, local,));
-        }
-        let effector = &effectors[effectors.len() - 1];
-        Ok(Cont::Cont(demit!(
-            effector.run(opts, env, event, state, meta, local)
-        )))
     }
 
     #[inline]
