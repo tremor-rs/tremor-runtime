@@ -38,13 +38,13 @@ pub struct Query<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt<'script> {
     /// A window declaration
-    WindowDecl(WindowDecl<'script>),
+    WindowDecl(Box<WindowDecl<'script>>),
     /// A stream
     Stream(StreamStmt),
     /// An operator declaration
     OperatorDecl(OperatorDecl<'script>),
     /// A script declaration
-    ScriptDecl(ScriptDecl<'script>),
+    ScriptDecl(Box<ScriptDecl<'script>>),
     /// An operator createion
     Operator(OperatorStmt<'script>),
     /// A script creation

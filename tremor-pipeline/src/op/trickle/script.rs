@@ -112,7 +112,7 @@ impl TrickleScript {
             // This is sound since defn_rentwrapped.stmt is an arc by cloning
             // it we ensure that the referenced data remains available until
             // the rental is dropped.
-            let mut decl = mem::transmute::<ScriptDecl<'_>, ScriptDecl<'static>>(script);
+            let mut decl = mem::transmute::<ScriptDecl<'_>, ScriptDecl<'static>>(*script);
             let args: Value<'static> = mem::transmute(args);
 
             decl.script.consts = vec![Value::null(), Value::null(), Value::null()];

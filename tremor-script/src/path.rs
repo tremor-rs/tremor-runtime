@@ -15,6 +15,7 @@
 use serde::Deserialize;
 
 /// Structure representing module library paths
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct ModulePath {
     /// A set of mount points on the module library path
@@ -36,7 +37,7 @@ impl ModulePath {
     }
 
     /// Convert a relative file path to a module reference
-    pub fn to_module(rel_file: &str) -> String {
+    pub fn file_to_module(rel_file: &str) -> String {
         rel_file
             .to_string()
             .replace(".tremor$", "")
@@ -45,22 +46,25 @@ impl ModulePath {
 }
 
 /// Load module path
-pub fn load_module_path() -> ModulePath {
-    load_module_path_(std::env::var("TREMOR_PATH").ok())
+pub fn load() -> ModulePath {
+    load_(std::env::var("TREMOR_PATH").ok())
 }
 
-fn load_module_path_(tremor_path: Option<String>) -> ModulePath {
+fn load_(tremor_path: Option<String>) -> ModulePath {
     if let Some(value) = tremor_path {
         let mounts: Vec<String> = value
-            .split(":")
-            .filter(|target| {
+            .split(':')
+            .filter_map(|target| {
                 if let Ok(meta) = std::fs::metadata(target) {
-                    meta.is_dir()
+                    if meta.is_dir() {
+                        Some(target.replace("//", "/"))
+                    } else {
+                        None
+                    }
                 } else {
-                    false // Ignore configured elements that are not directories
+                    None // Ignore configured elements that are not directories
                 }
             })
-            .map(|x| x.replace("//", "/").to_string())
             .collect();
         ModulePath { mounts }
     } else {
@@ -75,7 +79,7 @@ mod tests {
     #[test]
     fn test_default_module_path() {
         let empty: Vec<String> = vec![];
-        assert_eq!(empty, load_module_path_(None).mounts)
+        assert_eq!(empty, load_(None).mounts)
     }
 
     #[test]
@@ -86,7 +90,7 @@ mod tests {
         let tremor_path = format!("{}", d.display());
         let empty: Vec<String> = vec![];
 
-        let mp = load_module_path_(Some(tremor_path));
+        let mp = load_(Some(tremor_path));
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
         assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);
@@ -109,7 +113,7 @@ mod tests {
         let tremor_path = format!("{}:snot:badger:/horse", d.display());
         let empty: Vec<String> = vec![];
 
-        let mp = load_module_path_(Some(tremor_path));
+        let mp = load_(Some(tremor_path));
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
         assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);

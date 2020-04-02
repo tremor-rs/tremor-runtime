@@ -25,7 +25,7 @@ use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;
 
-fn to_pipe(module_path: &ModulePath, file_name: String, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let q = Query::parse(
         module_path,
@@ -64,7 +64,7 @@ macro_rules! test_cases {
                     let err = err.trim();
                     let re = Regex::new(err)?;
 
-                    let s = to_pipe(&module_path, err_re_file.to_string(), &contents);
+                    let s = to_pipe(&module_path, err_re_file, &contents);
                     if let Err(e) = s {
                         println!("{} ~ {}", err, format!("{}", e));
                         assert!(re.is_match(&format!("{}", e)));
@@ -79,7 +79,7 @@ macro_rules! test_cases {
                     file.read_to_string(&mut err)?;
                     let err = err.trim();
 
-                    match to_pipe(&module_path, err_file.to_string(), &contents) {
+                    match to_pipe(&module_path, err_file, &contents) {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) =>{
                             let e = tremor_script::errors::Error(e, o);
                             let mut h = Dumb::new();

@@ -23,8 +23,9 @@ use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 use std::borrow::Cow;
 //use std::mem;
-
-pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed("recur"));
+const RECUR_STR: &str = "recur";
+pub(crate) const RECUR_PTR: Option<*const u8> = Some(RECUR_STR.as_ptr());
+pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed(RECUR_STR));
 const RECURSION_LIMIT: u32 = 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -51,10 +52,10 @@ impl<'script> CustomFn<'script> {
             return true;
         }
         let i = match self.body.get(0) {
-            Some(Expr::Imut(ImutExprInt::Invoke1(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke2(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke3(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke1(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke3(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
             _ => return false,
         };
         let mut a_idx = 0;
@@ -77,10 +78,10 @@ impl<'script> CustomFn<'script> {
         }
 
         let i = match self.body.get(0) {
-            Some(Expr::Imut(ImutExprInt::Invoke1(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke2(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke3(i))) => i,
-            Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            Some(Expr::Imut(ImutExprInt::Invoke1(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke3(i)))
+            | Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
             Some(e) => {
                 return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
             }
@@ -102,7 +103,7 @@ impl<'script> CustomFn<'script> {
         })
     }
 
-    #[allow(mutable_transmutes)]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub(crate) fn invoke<'event, 'run>(
         &'script self,
         env: &'run Env<'run, 'event, 'script>,
@@ -172,7 +173,9 @@ impl<'script> CustomFn<'script> {
                             recursion_count += 1;
                             if recursion_count == RECURSION_LIMIT {
                                 mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
-                                return Err(FunctionError::Error("recursion limit reached".into()));
+                                return Err(FunctionError::Error(Box::new(
+                                    "recursion limit reached".into(),
+                                )));
                             }
                             // clear the local variables (that are not the
                             // arguments)
@@ -184,7 +187,7 @@ impl<'script> CustomFn<'script> {
                         }
                         _ => {
                             mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
-                            return Err(FunctionError::Error("can't emit here".into()));
+                            return Err(FunctionError::Error(Box::new("can't emit here".into())));
                         }
                     };
                 } else {

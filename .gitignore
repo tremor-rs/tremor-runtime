@@ -41,3 +41,4 @@ perf.data*
 .gitconfig
 logger-*
 tremor.log
+docs

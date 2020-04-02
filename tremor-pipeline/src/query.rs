@@ -97,7 +97,7 @@ impl Query {
     pub fn parse(
         module_path: &ModulePath,
         script: &str,
-        file_name: String,
+        file_name: &str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
     ) -> Result<Self> {

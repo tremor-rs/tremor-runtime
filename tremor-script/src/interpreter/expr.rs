@@ -18,7 +18,7 @@ use super::{
 };
 use crate::ast::*;
 use crate::errors::*;
-use crate::registry::RECUR;
+use crate::registry::RECUR_PTR;
 use crate::stry;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
@@ -306,11 +306,7 @@ where
         let mut current: &Value = unsafe {
             match path {
                 Path::Const(p) => {
-                    return error_assign_to_const(
-                        self,
-                        env.meta.name_dflt(p.mid).to_string(),
-                        &env.meta,
-                    )
+                    return error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta)
                 }
                 Path::Local(lpath) => match local.values.get(lpath.idx) {
                     Some(Some(l)) => {
@@ -335,7 +331,7 @@ where
                             self,
                             lpath,
                             &path,
-                            env.meta.name_dflt(lpath.mid).to_string(),
+                            env.meta.name_dflt(lpath.mid),
                             vec![],
                             &env.meta,
                         );
@@ -514,9 +510,8 @@ where
                     Cow::Borrowed(&NULL)
                 };
                 if let Cow::Borrowed(v) = r {
-                    let this_ptr = v.as_str().map(|v| v.as_ptr());
-                    let recur_ptr = RECUR.as_str().map(|v| v.as_ptr());
-                    if this_ptr == recur_ptr {
+                    let this_ptr = v.as_str().map(str::as_ptr);
+                    if this_ptr == RECUR_PTR {
                         // NOTE: we abuse drop here to imply recursion - yes it
                         // makes no sense!
                         return Ok(Cont::Drop);

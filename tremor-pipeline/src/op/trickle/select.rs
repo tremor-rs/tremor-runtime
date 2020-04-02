@@ -956,9 +956,9 @@ mod test {
     ) -> Result<crate::op::trickle::select::TrickleSelect> {
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
-        let module_path = tremor_script::path::load_module_path();
+        let module_path = tremor_script::path::load();
         let query =
-            tremor_script::query::Query::parse(&module_path, file_name, query, &reg, &aggr_reg)?;
+            tremor_script::query::Query::parse(&module_path, &file_name, query, &reg, &aggr_reg)?;
 
         let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
             q.suffix().stmts[0].clone()

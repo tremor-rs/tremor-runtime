@@ -1,11 +1,21 @@
-### The tremor language standard library
+### The tremor language standard library it provides the following modules:
+### 
+### * [array](std/array.md) - functions to deal with arrays (`[]`)
+### * [float](std/float.md) - functions to deal with floating point numbers
+### * [integer](std/integer.md) - functions to deal with integer numbers
+### * [json](std/json.md) - functions to deal with JSON
+### * [math](std/math.md) - mathematical functions
+### * [range](std/range.md) - range related functions
+### * [re](std/re.md) - functions handeling regular expressions
+### * [record](std/record.md) - functions dealing with records (`{}`)
+### * [string](std/string.md) - functions dealing with strings
 
-use array;
-use float;
-use integer;
-use json;
-use math;
-use range;
-use re;
-use record;
-use string;
+use std::array;
+use std::float;
+use std::integer;
+use std::json;
+use std::math;
+use std::range;
+use std::re;
+use std::record;
+use std::string;

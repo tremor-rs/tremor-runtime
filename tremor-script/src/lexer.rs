@@ -416,8 +416,8 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_symbol(&self) -> bool {
         match *self {
-            Token::LineDirective(_) => true,
-            Token::Colon
+            Token::LineDirective(_)
+            | Token::Colon
             | Token::ColonColon
             | Token::EqArrow
             | Token::Semi
@@ -494,7 +494,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::NewLine => writeln!(f),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
-            Token::ModComment(ref comment) => write!(f, "##! {}", comment),
+            Token::ModComment(ref comment) => write!(f, "### {}", comment),
             Token::DocComment(ref comment) => write!(f, "## {}", comment),
             Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
@@ -723,6 +723,7 @@ impl<'input> Iterator for Tokenizer<'input> {
 pub struct Preprocessor {}
 
 rental! {
+    #[allow(clippy::ptr_arg)]
     mod rentals {
         use super::*;
         #[rental_mut(covariant,debug)]
@@ -768,12 +769,13 @@ impl<'input> Preprocessor {
             }
         }
 
-        return None;
+        None
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn preprocess(
         module_path: &ModulePath,
-        file_name: std::string::String,
+        file_name: &str,
         input: &'input mut std::string::String,
     ) -> Result<Vec<Result<TokenSpan<'input>>>> {
         use std::fs;
@@ -926,21 +928,19 @@ impl<'input> Preprocessor {
                             })) = next
                             {
                                 break;
-                            } else {
-                                if let Some(Ok(Spanned {
-                                    value: bad_token,
-                                    span,
-                                    ..
-                                })) = next
-                                {
-                                    return Err(ErrorKind::UnrecognizedToken(
-                                        Range::from((span.start, span.end)).expand_lines(2),
-                                        Range::from((span.start, span.end)),
-                                        bad_token.to_string(),
-                                        vec!["::".to_string(), "as".to_string(), ";".to_string()],
-                                    )
-                                    .into());
-                                }
+                            } else if let Some(Ok(Spanned {
+                                value: bad_token,
+                                span,
+                                ..
+                            })) = next
+                            {
+                                return Err(ErrorKind::UnrecognizedToken(
+                                    Range::from((span.start, span.end)).expand_lines(2),
+                                    Range::from((span.start, span.end)),
+                                    bad_token.to_string(),
+                                    vec!["::".to_string(), "as".to_string(), ";".to_string()],
+                                )
+                                .into());
                             }
                         }
 
@@ -959,21 +959,19 @@ impl<'input> Preprocessor {
                             })) = &next
                             {
                                 alias = alias_id.to_string();
-                            } else {
-                                if let Some(Ok(Spanned {
-                                    value: bad_token,
-                                    span,
-                                    ..
-                                })) = next
-                                {
-                                    return Err(ErrorKind::UnrecognizedToken(
-                                        Range::from((span.start, span.end)).expand_lines(2),
-                                        Range::from((span.start, span.end)),
-                                        bad_token.to_string(),
-                                        vec!["`<ident>`".to_string()],
-                                    )
-                                    .into());
-                                }
+                            } else if let Some(Ok(Spanned {
+                                value: bad_token,
+                                span,
+                                ..
+                            })) = next
+                            {
+                                return Err(ErrorKind::UnrecognizedToken(
+                                    Range::from((span.start, span.end)).expand_lines(2),
+                                    Range::from((span.start, span.end)),
+                                    bad_token.to_string(),
+                                    vec!["`<ident>`".to_string()],
+                                )
+                                .into());
                             }
 
                             // ';'
@@ -982,20 +980,19 @@ impl<'input> Preprocessor {
                             // Semi
                             take_while!(next, Token::Whitespace(_), iter);
                         }
-                    } else {
-                        if let Some(Ok(Spanned {
-                            ref value, span, ..
-                        })) = next
-                        {
-                            return Err(ErrorKind::UnrecognizedToken(
-                                Range::from((span.start, span.end)).expand_lines(2),
-                                Range::from((span.start, span.end)),
-                                value.to_string(),
-                                vec!["`<ident>`".to_string()],
-                            )
-                            .into());
-                        }
+                    } else if let Some(Ok(Spanned {
+                        ref value, span, ..
+                    })) = next
+                    {
+                        return Err(ErrorKind::UnrecognizedToken(
+                            Range::from((span.start, span.end)).expand_lines(2),
+                            Range::from((span.start, span.end)),
+                            value.to_string(),
+                            vec!["`<ident>`".to_string()],
+                        )
+                        .into());
                     }
+
                     if let Some(Ok(Spanned {
                         value: Token::Semi, ..
                     })) = next
@@ -1009,85 +1006,77 @@ impl<'input> Preprocessor {
                         ..
                     })) = next
                     {
-                        let file_path = &rel_module_path;
-                        match Preprocessor::resolve(module_path, &rel_module_path) {
-                            Some(file_path) => {
-                                let file_path2 = file_path.clone();
+                        let file_path = rel_module_path.clone();
+                        if let Some(file_path) =
+                            Preprocessor::resolve(module_path, &rel_module_path)
+                        {
+                            let file_path2 = file_path.clone();
 
-                                match fs::File::open(&file_path) {
-                                    Ok(mut file) => {
-                                        let mut s = String::new();
-                                        match file.read_to_string(&mut s) {
-                                            _size => {
-                                                s.push(' ');
-                                                let s = Preprocessor::preprocess(
-                                                    &module_path,
-                                                    file_path,
-                                                    &mut s,
-                                                )?;
-                                                let y = s
-                                                    .into_iter()
-                                                    .filter_map(&Result::ok)
-                                                    .map(|ref x| format!("{}", x.value))
-                                                    .collect::<Vec<String>>()
-                                                    .join("");
-                                                input.push_str(&format!(
-                                                    "#!line {} 0\n",
-                                                    &file_path2
-                                                ));
-                                                input.push_str(&format!("mod {} with ", &alias));
-                                                input.push_str(&format!(
-                                                    "#!line {} 0\n",
-                                                    &file_path2
-                                                ));
-                                                input.push_str(&format!("{}\n", y.trim()));
-                                                input.push_str("end;\n");
-                                                input.push_str(&format!(
-                                                    "#!line {} {}\n",
-                                                    file_name,
-                                                    span2.end.line + 1
-                                                ));
-                                            }
+                            match fs::File::open(&file_path) {
+                                Ok(mut file) => {
+                                    let mut s = String::new();
+                                    match file.read_to_string(&mut s) {
+                                        _size => {
+                                            s.push(' ');
+                                            let s = Preprocessor::preprocess(
+                                                &module_path,
+                                                &file_path,
+                                                &mut s,
+                                            )?;
+                                            let y = s
+                                                .into_iter()
+                                                .filter_map(|x| {
+                                                    x.map(|x| format!("{}", x.value)).ok()
+                                                })
+                                                .collect::<Vec<String>>()
+                                                .join("");
+                                            input.push_str(&format!("#!line {} 0\n", &file_path2));
+                                            input.push_str(&format!("mod {} with ", &alias));
+                                            input.push_str(&format!("#!line {} 0\n", &file_path2));
+                                            input.push_str(&format!("{}\n", y.trim()));
+                                            input.push_str("end;\n");
+                                            input.push_str(&format!(
+                                                "#!line {} {}\n",
+                                                file_name,
+                                                span2.end.line + 1
+                                            ));
                                         }
-                                        file.read_to_string(&mut s)?;
                                     }
-                                    Err(e) => {
-                                        return Err(e.into());
-                                    }
+                                    file.read_to_string(&mut s)?;
+                                }
+                                Err(e) => {
+                                    return Err(e.into());
                                 }
                             }
-                            None => {
-                                return Err(ErrorKind::ModuleNotFound(
-                                    Range::from((use_span.start, use_span.end)).expand_lines(2),
-                                    Range::from((span2.start, span2.end)),
-                                    file_path.to_string(),
-                                    module_path.mounts.clone(),
-                                )
-                                .into());
-                            }
-                        }
-                    } else {
-                        if let Some(Ok(Spanned {
-                            value: bad_token,
-                            span,
-                            ..
-                        })) = next
-                        {
-                            return Err(ErrorKind::UnrecognizedToken(
-                                Range::from((span.start, span.end)).expand_lines(2),
-                                Range::from((span.start, span.end)),
-                                bad_token.to_string(),
-                                vec!["<ident>".to_string()],
+                        } else {
+                            return Err(ErrorKind::ModuleNotFound(
+                                Range::from((use_span.start, use_span.end)).expand_lines(2),
+                                Range::from((span2.start, span2.end)),
+                                file_path,
+                                module_path.mounts.clone(),
                             )
                             .into());
                         }
+                    } else if let Some(Ok(Spanned {
+                        value: bad_token,
+                        span,
+                        ..
+                    })) = next
+                    {
+                        return Err(ErrorKind::UnrecognizedToken(
+                            Range::from((span.start, span.end)).expand_lines(2),
+                            Range::from((span.start, span.end)),
+                            bad_token.to_string(),
+                            vec!["<ident>".to_string()],
+                        )
+                        .into());
                     }
                 }
                 Some(Ok(other)) => {
                     input.push_str(&format!("{}", other.value));
                 }
                 Some(Err(e)) => {
-                    return Err(e.into());
+                    return Err(e);
                 }
                 None => break,
             }
@@ -1187,7 +1176,7 @@ impl<'input> Lexer<'input> {
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
-        if lexeme.starts_with("##!") {
+        if lexeme.starts_with("###") {
             let doc = Token::ModComment(&lexeme[3..]);
             Ok(spanned2(start, end, doc))
         } else if lexeme.starts_with("##") {
@@ -2242,11 +2231,7 @@ mod tests {
         let mut snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
         let mut snot2 = snot.clone();
         let badger: Vec<_> = Tokenizer::new(&mut snot).collect();
-        let badger2 = Preprocessor::preprocess(
-            &ModulePath { mounts: vec![] },
-            "foo".to_string(),
-            &mut snot2,
-        )?;
+        let badger2 = Preprocessor::preprocess(&ModulePath { mounts: vec![] }, "foo", &mut snot2)?;
         let mut res = String::new();
         for b in badger
             .into_iter()

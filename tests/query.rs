@@ -24,7 +24,7 @@ use tremor_runtime::errors::*;
 use tremor_script::path::ModulePath;
 use tremor_script::utils::*;
 
-fn to_pipe(module_path: &ModulePath, file_name: String, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let q = Query::parse(
         &module_path,
@@ -54,7 +54,7 @@ macro_rules! test_cases {
                 let mut file = File::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(&module_path, query_file.to_string(), &contents)?;
+                let mut pipeline = to_pipe(&module_path, query_file, &contents)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;

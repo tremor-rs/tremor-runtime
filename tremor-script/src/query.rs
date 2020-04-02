@@ -104,7 +104,7 @@ where
     /// Parses a string into a query
     pub fn parse(
         module_path: &ModulePath,
-        file_name: String,
+        file_name: &str,
         script: &'script str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
@@ -154,13 +154,13 @@ where
     /// Preprocessesa and highlights a script with a given highlighter.
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_preprocess_script_with<H: Highlighter>(
-        file_name: String,
+        file_name: &str,
         script: &'script str,
         h: &mut H,
     ) -> std::io::Result<()> {
-        let mut s = script.clone().to_string();
+        let mut s = script.to_string();
         let tokens: Vec<_> =
-            lexer::Preprocessor::preprocess(&crate::path::load_module_path(), file_name, &mut s)
+            lexer::Preprocessor::preprocess(&crate::path::load(), &file_name, &mut s)
                 .expect("Did not preprocess ok");
         h.highlight(&tokens)
     }
@@ -223,14 +223,8 @@ mod test {
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
-        let module_path = crate::path::load_module_path();
-        if let Err(e) = Query::parse(
-            &module_path,
-            "test.trickle".to_string(),
-            query,
-            &reg,
-            &aggr_reg,
-        ) {
+        let module_path = crate::path::load();
+        if let Err(e) = Query::parse(&module_path, "test.trickle", query, &reg, &aggr_reg) {
             eprintln!("{}", e);
             assert!(false)
         } else {

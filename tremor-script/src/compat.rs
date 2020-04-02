@@ -26,7 +26,7 @@ use std::ptr;
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
     // let aggr_reg: AggrRegistry = registry::aggr_registry();
-    let script = Script::parse(&crate::path::load_module_path(), src.to_string(), &reg)?;
+    let script = Script::parse(&crate::path::load(), src.to_string(), &reg)?;
 
     let mut event = Value::from(Object::new());
     let mut meta = Value::from(Object::new());

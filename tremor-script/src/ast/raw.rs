@@ -35,6 +35,8 @@ use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::Cow;
 
 pub(crate) const COMPILATION_UNIT_PART: u64 = 0; // FIXME cpp .unwrap()
+const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+const NO_CONSTS: Vec<Value<'static>> = Vec::new();
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -56,6 +58,7 @@ impl<'script> ScriptRaw<'script> {
             doc,
         }
     }
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
         self,
         reg: &'registry Registry,
@@ -101,19 +104,14 @@ impl<'script> ScriptRaw<'script> {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
                             idx: consts.len(),
-                            mid: helper.add_meta_w_name(
-                                start,
-                                end,
-                                name.clone(),
-                                COMPILATION_UNIT_PART,
-                            ),
+                            mid: helper.add_meta_w_name(start, end, &name, COMPILATION_UNIT_PART),
                         }))
                     }
                     let v = reduce2(expr, &helper)?;
                     let value_type = v.value_type();
                     consts.push(v);
                     helper.docs.consts.push(ConstDoc {
-                        name: name,
+                        name,
                         doc: comment
                             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
                         value_type,
@@ -123,6 +121,7 @@ impl<'script> ScriptRaw<'script> {
                 #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
+
                     let f = f.up(&mut helper)?;
                     let f = CustomFn {
                         name: f.name.id,
@@ -155,7 +154,15 @@ impl<'script> ScriptRaw<'script> {
                 }
             }
         } else {
-            return Err(ErrorKind::EmptyScript.into());
+            let expr = EmitExpr {
+                mid: 0,
+                expr: ImutExprInt::Path(Path::Event(EventPath {
+                    mid: 0,
+                    segments: vec![],
+                })),
+                port: None,
+            };
+            exprs.push(Expr::Emit(Box::new(expr)))
         }
 
         helper.docs.module = Some(ModDoc {
@@ -164,6 +171,7 @@ impl<'script> ScriptRaw<'script> {
                 .doc
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
+
         Ok((
             Script {
                 imports: vec![], // Compiled out
@@ -201,7 +209,7 @@ impl<'script> ModuleRaw<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         helper.module.push(self.name.id.to_string());
-        for e in self.exprs.into_iter() {
+        for e in self.exprs {
             match e {
                 ExprRaw::Module(m) => {
                     m.define(reg, aggr_reg, consts, helper)?;
@@ -211,7 +219,7 @@ impl<'script> ModuleRaw<'script> {
                     expr,
                     start,
                     end,
-                    comment,
+                    ..
                 } => {
                     let mut name_v = helper.module.clone();
                     name_v.push(name.to_string());
@@ -226,19 +234,11 @@ impl<'script> ModuleRaw<'script> {
                     helper.consts.insert(name_v.clone(), consts.len());
                     let expr = expr.up(helper)?;
                     let v = reduce2(expr, &helper)?;
-                    let value_type = v.value_type();
                     consts.push(v);
-                    helper.docs.consts.push(ConstDoc {
-                        name: name,
-                        doc: comment
-                            .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
-                        value_type,
-                    });
                 }
                 #[allow(unreachable_code, unused_variables)]
                 #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
-                    helper.docs.fns.push(f.doc());
                     let f = f.up(helper)?;
                     let f = CustomFn {
                         name: f.name.id,
@@ -256,7 +256,7 @@ impl<'script> ModuleRaw<'script> {
                     return error_generic(
                         &e,
                         &e,
-                        "Can't have expressions inside of modules",
+                        &"Can't have expressions inside of modules",
                         &helper.meta,
                     )
                 }
@@ -416,6 +416,7 @@ pub(crate) fn reduce2<'script>(
 }
 
 impl<'script> ImutExprInt<'script> {
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn reduce(self, helper: &Helper) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => match *u {
@@ -513,8 +514,6 @@ impl<'script> ImutExprInt<'script> {
                             args2.push(args.get_unchecked(i));
                         }
                     }
-                    const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-                    const NO_CONSTS: Vec<Value<'static>> = Vec::new();
                     let env = Env {
                         context: &EventContext::default(),
                         consts: &NO_CONSTS,
@@ -593,7 +592,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 // we still rather have an error in case we made
                 // an error then unreachable
                 #[cfg_attr(tarpaulin, skip)]
-                return Err(ErrorKind::InvalidConst(
+                return Err(ErrorKind::InvalidMod(
                     Range::from((start, end)).expand_lines(2),
                     Range::from((start, end)),
                 )
@@ -679,12 +678,11 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { start, .. } => *start,
+            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
             ExprRaw::Module(e) => e.s(meta),
             ExprRaw::MatchExpr(e) => e.s(meta),
             ExprRaw::Assign(e) => e.s(meta),
             ExprRaw::Comprehension(e) => e.s(meta),
-            ExprRaw::Drop { start, .. } => *start,
             ExprRaw::Emit(e) => e.s(meta),
             ExprRaw::FnDecl(e) => e.s(meta),
             ExprRaw::Imut(e) => e.s(meta),
@@ -692,12 +690,11 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { end, .. } => *end,
+            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
             ExprRaw::Module(e) => e.e(meta),
             ExprRaw::MatchExpr(e) => e.e(meta),
             ExprRaw::Assign(e) => e.e(meta),
             ExprRaw::Comprehension(e) => e.e(meta),
-            ExprRaw::Drop { end, .. } => *end,
             ExprRaw::Emit(e) => e.e(meta),
             ExprRaw::FnDecl(e) => e.e(meta),
             ExprRaw::Imut(e) => e.e(meta),
@@ -1094,7 +1091,7 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
             return error_generic(
                 &self,
                 &self,
-                "Can not emit from this location",
+                &"Can not emit from this location",
                 &helper.meta,
             );
         };
@@ -1104,7 +1101,7 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
             return error_generic(
                 &self,
                 &self,
-                format!(
+                &format!(
                     "Wrong number of arguments expected {} but got {}",
                     helper.fn_argc,
                     self.exprs.len()
@@ -1972,14 +1969,13 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid).clone();
-            let mid =
-                helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
+            let id = helper.meta.name_dflt(mid);
+            let mid = helper.add_meta_w_name(self.start, self.end, &id, COMPILATION_UNIT_PART);
             let mut module_direct: Vec<String> =
                 self.module.iter().map(|m| m.id.to_string()).collect();
             let mut module = helper.module.clone();
             module.append(&mut module_direct);
-            module.push(id.to_string());
+            module.push(id);
             if let Some(idx) = helper.is_const(&module) {
                 Ok(LocalPath {
                     is_const: true,
@@ -2016,9 +2012,8 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid).clone();
-            let mid =
-                helper.add_meta_w_name(self.start, self.end, id.clone(), COMPILATION_UNIT_PART);
+            let id = helper.meta.name_dflt(mid);
+            let mid = helper.add_meta_w_name(self.start, self.end, &id, COMPILATION_UNIT_PART);
             let mut rel_path = helper.module.clone();
             rel_path.push(id.to_string());
             if let Some(idx) = helper.is_const(&rel_path) {
@@ -2253,7 +2248,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
             let mf = format!("{}::{}", self.module.join("::"), self.fun);
             Ok(Invoke {
-                mid: helper.add_meta_w_name(self.start, self.end, mf, COMPILATION_UNIT_PART),
+                mid: helper.add_meta_w_name(self.start, self.end, &mf, COMPILATION_UNIT_PART),
                 module: self.module,
                 fun: self.fun,
                 invocable: Invocable::Intrinsic(invocable.clone()),
@@ -2275,7 +2270,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                         mid: helper.add_meta_w_name(
                             self.start,
                             self.end,
-                            mf,
+                            &mf,
                             COMPILATION_UNIT_PART,
                         ),
                         module: self.module,
@@ -2315,7 +2310,7 @@ impl<'script> InvokeRaw<'script> {
         InvokeAggrRaw {
             start: self.start,
             end: self.end,
-            module: module,
+            module,
             fun: self.fun,
             args: self.args,
         }
@@ -2381,7 +2376,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             fun: self.fun.clone(),
         });
         helper.is_in_aggr = false;
-        let aggr_meta_id = helper.add_meta_w_name(self.start, self.end, mf, COMPILATION_UNIT_PART);
+        let aggr_meta_id = helper.add_meta_w_name(self.start, self.end, &mf, COMPILATION_UNIT_PART);
         Ok(InvokeAggr {
             mid: aggr_meta_id,
             module: self.module,

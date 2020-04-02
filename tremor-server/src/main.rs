@@ -129,11 +129,11 @@ async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 
     // FIXME: We should have them constanted
     let aggr_reg = tremor_script::registry::aggr();
-    let module_path = tremor_script::path::load_module_path();
+    let module_path = tremor_script::path::load();
     let query = Query::parse(
         &module_path,
         &raw,
-        file_name.to_string(),
+        file_name,
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
