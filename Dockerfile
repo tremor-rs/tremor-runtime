@@ -45,6 +45,10 @@ RUN apt-get update \
 COPY --from=builder target/release/tremor-server /tremor-server
 COPY --from=builder target/release/tremor-tool /tremor-tool
 
+# stdlib
+RUN mkdir -p /opt/local/tremor/lib
+COPY tremor-script/lib /opt/local/tremor/lib
+
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
 # configuration file
@@ -52,5 +56,7 @@ RUN mkdir /etc/tremor
 COPY docker/config /etc/tremor/config
 # logger configuration
 COPY docker/logger.yaml /etc/tremor/logger.yaml
+
+ENV TREMOR_PATH=/opt/local/tremor/lib
 
 ENTRYPOINT ["/entrypoint.sh"]
