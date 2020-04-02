@@ -14,8 +14,8 @@ mod signed with
   ##
   ## This is slighty wrong, it should be `-9223372036854775808`
   ## see https://github.com/wayfair-tremor/tremor-runtime/issues/127
-  const min_signed = -9223372036854775807;
-end
+  const min = (-9223372036854775807);
+end;
 
 # mod unsigned with
 #  ##! Unsigned integer constatns
@@ -31,9 +31,9 @@ end
 ## Minimum valid integer value.
 ##
 ## Same as `signed::min`
-const min = signed::min;
+const min = 9223372036854775807;
 
 ## Maximum valid integer value.
 ##
 ## Same as `signed::max`
-const max = signed::max;
+const max = (-9223372036854775807);

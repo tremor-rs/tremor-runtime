@@ -79,7 +79,7 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     WindowDecl(WindowDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    OperatorDecl(OperatorDeclRaw<'script>),
+    OperatorDecl(Box<OperatorDeclRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     ScriptDecl(ScriptDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -151,15 +151,15 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             StmtRaw::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),
             StmtRaw::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
-                Ok(Stmt::ScriptDecl(stmt))
+                Ok(Stmt::ScriptDecl(Box::new(stmt)))
             }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             StmtRaw::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
-                Ok(Stmt::WindowDecl(stmt))
+                Ok(Stmt::WindowDecl(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(m) => {
-                error_generic(&m, &m, "Module in wrong place error", &helper.meta)
+                error_generic(&m, &m, &"Module in wrong place error", &helper.meta)
             }
         }
     }
@@ -208,7 +208,7 @@ impl<'script> ModuleStmtRaw<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         helper.module.push(self.name.id.to_string());
-        for e in self.stmts.into_iter() {
+        for e in self.stmts {
             match e {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(reg, aggr_reg, consts, helper)?;
@@ -223,7 +223,7 @@ impl<'script> ModuleStmtRaw<'script> {
                     return error_generic(
                         &e,
                         &e,
-                        "Can't have statements inside of query modules",
+                        &"Can't have statements inside of query modules",
                         &helper.meta,
                     )
                 }
@@ -524,7 +524,7 @@ impl<'script> Upable<'script> for OperatorKindRaw {
             mid: helper.add_meta_w_name(
                 self.start,
                 self.end,
-                format!("{}::{}", self.module, self.operation),
+                &format!("{}::{}", self.module, self.operation),
                 COMPILATION_UNIT_PART,
             ),
             module: self.module,

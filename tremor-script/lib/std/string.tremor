@@ -26,7 +26,7 @@
 ## ```
 ##
 ## Returns a `string`
-intrinsic fn format(format, ..) as string::format;
+intrinsic fn format(format, ...) as string::format;
 
 ## Returns if the input string is empty or not.
 ##
@@ -48,7 +48,7 @@ intrinsic fn bytes(input) as string::bytes;
 ## Replaces all occurrences of from in Input to to.
 ##
 ## Returns a `string`
-intrinsic fn replace(input, from, to) as string::replace;
+intrinsic fn replace(input, `from`, `to`) as string::replace;
 
 ## Trims whitespaces both at the start and end of the input string.
 ##
@@ -84,7 +84,7 @@ intrinsic fn capitalize(input) as string::capitalize;
 ## Get all characters from index start to end-1.
 ##
 ## Returns a `string`
-intrinsic fn substr(input, start, end) as string::substr;
+intrinsic fn substr(input, start, `end`) as string::substr;
 
 ## Splits the input string at every occurrence of the separator string and turns
 ## the result in an array.

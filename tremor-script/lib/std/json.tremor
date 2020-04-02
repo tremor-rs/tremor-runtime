@@ -7,7 +7,7 @@
 ## ```
 ##
 ## Returns any type
-intrinsic fn decode(string) fasor  json::decode;
+intrinsic fn decode(string) as  json::decode;
 
 
 ## Encodes a data structure into a json string using minimal encoding.
@@ -16,7 +16,7 @@ intrinsic fn decode(string) fasor  json::decode;
 ## ```
 ##
 ## Returns a `string`
-intrinsic fn encode(any) as  json::encode;
+intrinsic fn encode(any) as json::encode;
 
 
 ## Encodes a data structure into a prettified json string.
@@ -31,4 +31,4 @@ intrinsic fn encode(any) as  json::encode;
 ## ```
 ##
 ## Returns a `string`
-intrinsic fn encode_pretty(any) as  json::encode_pretty;
+intrinsic fn encode_pretty(any) as json::encode_pretty;

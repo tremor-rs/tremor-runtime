@@ -136,7 +136,7 @@ pub trait Highlighter {
     /// highlights a token stream
     fn highlight(
         &mut self,
-        tokens: &Vec<Result<TokenSpan>>,
+        tokens: &[Result<TokenSpan>],
     ) -> std::result::Result<(), std::io::Error> {
         self.highlight_errors(tokens, None)?;
         self.finalize()
@@ -145,7 +145,7 @@ pub trait Highlighter {
     /// highlights a runtime error
     fn highlight_runtime_error(
         &mut self,
-        tokens: &Vec<Result<TokenSpan>>,
+        tokens: &[Result<TokenSpan>],
         expr_start: Location,
         expr_end: Location,
         error: Option<Error>,
@@ -159,7 +159,7 @@ pub trait Highlighter {
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
-        tokens: &Vec<Result<TokenSpan>>,
+        tokens: &[Result<TokenSpan>],
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let mut printed_error = false;
@@ -371,7 +371,7 @@ pub trait Highlighter {
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors2(
         &mut self,
-        tokens: &Vec<TokenSpan>,
+        tokens: &[TokenSpan],
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let mut printed_error = false;
@@ -486,7 +486,6 @@ pub trait Highlighter {
             self.set_color(&mut c)?;
             match &x.value {
                 Token::HereDoc(indent, lines) => {
-                    let space = " ";
                     writeln!(self.get_writer(), r#"""""#)?;
                     for l in lines {
                         line += 1;
@@ -505,7 +504,6 @@ pub trait Highlighter {
                     write!(self.get_writer(), r#"""""#)?;
                 }
                 Token::TestLiteral(indent, lines) => {
-                    let space = " ";
                     write!(self.get_writer(), "|")?;
                     let mut first = true;
                     for l in lines {
@@ -645,12 +643,12 @@ impl Highlighter for Term {
 }
 
 fn extract<'input>(
-    tokens: &Vec<Result<TokenSpan<'input>>>,
+    tokens: &[Result<TokenSpan<'input>>],
     start: Location,
     end: Location,
 ) -> Vec<TokenSpan<'input>> {
     tokens
-        .into_iter()
+        .iter()
         .filter_map(|x| if let Ok(x) = x { Some(x.clone()) } else { None })
         .skip_while(|t| t.span.end().line < start.line)
         .take_while(|t| t.span.end().line <= end.line)

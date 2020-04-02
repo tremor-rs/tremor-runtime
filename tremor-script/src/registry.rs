@@ -185,7 +185,7 @@ pub enum FunctionError {
         mfa: MFA,
     },
     /// A generic error
-    Error(Error),
+    Error(Box<Error>),
 }
 
 impl PartialEq for FunctionError {
@@ -196,7 +196,7 @@ impl PartialEq for FunctionError {
 
 impl From<Error> for FunctionError {
     fn from(error: Error) -> Self {
-        Self::Error(error)
+        Self::Error(Box::new(error))
     }
 }
 
@@ -243,7 +243,7 @@ impl FunctionError {
                 ErrorKind::MissingFunction(outer, inner, vec![m], f, suggestion).into()
             }
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
-            Error(e) => e,
+            Error(e) => *e,
         }
     }
 }

@@ -95,6 +95,7 @@ where
         value_to_index(outer, self, val.borrow(), env, path, array)
     }
 
+    #[allow(clippy::too_many_lines)]
     #[inline]
     pub fn run(
         &'script self,
@@ -181,7 +182,7 @@ where
                         self,
                         self,
                         &path,
-                        env.meta.name_dflt(*mid).to_string(),
+                        env.meta.name_dflt(*mid),
                         vec![],
                         &env.meta,
                     )

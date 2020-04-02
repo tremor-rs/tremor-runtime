@@ -99,8 +99,11 @@ impl<'event> ValueAndMeta<'event> {
     pub fn value(&self) -> &Value<'event> {
         &self.data.0
     }
-    /// Event value forced to borrowd mutable (uses mem::transmute)
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    /// Event value forced to borrowd mutable (uses `mem::transmute`)
+    ///
+    /// # Safety
+    /// This isn't save, use with care and reason about mutability!
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     pub unsafe fn force_value_mut(&self) -> &mut Value<'event> {
         std::mem::transmute(&self.data.0)
     }

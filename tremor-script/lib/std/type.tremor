@@ -12,7 +12,7 @@
 ## * "record"
 ##
 ## Returns a `string`
-intrinsic fn as_string(value) as type::as_string
+intrinsic fn as_string(value) as type::as_string;
 
 ## Returns if the value is null.
 ##

@@ -428,7 +428,7 @@ where
                     outer,
                     lpath,
                     &path,
-                    env.meta.name_dflt(lpath.mid).to_string(),
+                    env.meta.name_dflt(lpath.mid),
                     vec![],
                     &env.meta,
                 );
@@ -461,7 +461,7 @@ where
                         outer,
                         segment, //&Expr::dummy(*start, *end),
                         &path,
-                        env.meta.name_dflt(*mid).to_string(),
+                        env.meta.name_dflt(*mid),
                         o.keys().map(ToString::to_string).collect(),
                         &env.meta,
                     );

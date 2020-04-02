@@ -119,7 +119,7 @@ where
         let rented_script =
             rentals::Script::try_new(Box::new(script.clone()), |script: &mut String| {
                 let lexemes: Vec<_> =
-                    lexer::Preprocessor::preprocess(module_path, "<top>".to_string(), script)?;
+                    lexer::Preprocessor::preprocess(module_path, "<top>", script)?;
                 let filtered_tokens = lexemes
                     .into_iter()
                     .filter_map(Result::ok)
@@ -156,13 +156,13 @@ where
     /// Preprocessesa and highlights a script with a given highlighter.
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_preprocess_script_with<H: Highlighter>(
-        file_name: String,
+        file_name: &str,
         script: &'script str,
         h: &mut H,
     ) -> std::io::Result<()> {
-        let mut s = script.clone().to_string();
+        let mut s = script.to_string();
         let tokens: Vec<_> =
-            lexer::Preprocessor::preprocess(&crate::path::load_module_path(), file_name, &mut s)
+            lexer::Preprocessor::preprocess(&crate::path::load(), &file_name, &mut s)
                 .expect("Did not preprocess ok");
         h.highlight(&tokens)
     }

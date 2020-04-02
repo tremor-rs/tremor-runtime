@@ -48,7 +48,7 @@ extern crate rental;
 
 use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
-use crate::path::load_module_path;
+use crate::path::load as load_module_path;
 use crate::script::{AggrType, Return, Script};
 use chrono::{Timelike, Utc};
 use clap::{App, Arg};
@@ -76,9 +76,9 @@ fn nanotime() -> u64 {
     (seconds * 1_000_000_000) + nanoseconds
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() -> Result<()> {
-    let module_path = crate::path::load_module_path();
+    let module_path = load_module_path();
 
     let matches = App::new("tremor-script")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
@@ -158,7 +158,7 @@ fn main() -> Result<()> {
             Arg::with_name("docs")
                 .short("d")
                 .long("docs")
-                .takes_value(false)
+                .takes_value(true)
                 .help("Prints docs for a script."),
         )
         .get_matches();
@@ -231,15 +231,15 @@ fn main() -> Result<()> {
                             match r {
                                 Ok(Return::Drop) => (),
                                 Ok(Return::Emit { value, port }) => {
-                                    match port.unwrap_or(String::from("out")).as_str() {
+                                    match port.unwrap_or_else(|| String::from("out")).as_str() {
                                         "error" | "stderr" => eprintln!("{}", value.encode()),
-                                        "out" | "stdout" | _ => println!("{}", value.encode()),
+                                        _ => println!("{}", value.encode()),
                                     }
                                 }
                                 Ok(Return::EmitEvent { port }) => {
-                                    match port.unwrap_or(String::from("out")).as_str() {
+                                    match port.unwrap_or_else(|| String::from("out")).as_str() {
                                         "error" | "stderr" => eprintln!("{}", event.encode()),
-                                        "out" | "stdout" | _ => println!("{}", event.encode()),
+                                        _ => println!("{}", event.encode()),
                                     }
                                 }
                                 Err(e) => eprintln!("error processing event: {}", e),
@@ -251,13 +251,13 @@ fn main() -> Result<()> {
                         }
                     }
                 }
-            } else if matches.is_present("docs") {
+            } else if let Some(name) = matches.value_of("docs") {
                 let docs = runnable.docs();
                 let consts = &docs.consts;
                 let fns = &docs.fns;
 
                 if let Some(m) = &docs.module {
-                    println!("{}", m.to_string());
+                    println!("{}", m.print_with_name(name));
                 }
                 if !consts.is_empty() {
                     println!("## Constants");
@@ -286,11 +286,7 @@ fn main() -> Result<()> {
                 if matches.is_present("print-results-raw") {
                 } else {
                     let mut h = TermHighlighter::new();
-                    Script::highlight_preprocess_script_with(
-                        script_file.to_string(),
-                        &raw,
-                        &mut h,
-                    )?;
+                    Script::highlight_preprocess_script_with(script_file, &raw, &mut h)?;
                 }
             }
             if matches.is_present("print-ast") {
