@@ -128,7 +128,7 @@ impl<'script> ScriptRaw<'script> {
                         args: f.args.iter().map(|i| i.id.to_string()).collect(),
                         locals: f.locals,
                         body: f.body,
-                        is_const: false, // FIXME .unwrap()
+                        is_const: false, // FIXME we should find a way to examine this!
                         open: f.open,
                         inline: f.inline,
                     };
@@ -245,7 +245,7 @@ impl<'script> ModuleRaw<'script> {
                         args: f.args.iter().map(|i| i.id.to_string()).collect(),
                         locals: f.locals,
                         body: f.body,
-                        is_const: false, // FIXME .unwrap()
+                        is_const: false, // FIXME: we should find a way to examine this
                         open: f.open,
                         inline: f.inline,
                     };
@@ -508,12 +508,8 @@ impl<'script> ImutExprInt<'script> {
                     let args: Result<Vec<Value<'script>>> =
                         i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
                     let args = args?;
-                    let mut args2: Vec<&Value<'script>> = Vec::new();
-                    unsafe {
-                        for i in 0..args.len() {
-                            args2.push(args.get_unchecked(i));
-                        }
-                    }
+                    // Construct a view into `args`, since `invoke` expects a slice of references.
+                    let args2: Vec<&Value<'script>> = args.iter().collect();
                     let env = Env {
                         context: &EventContext::default(),
                         consts: &NO_CONSTS,
@@ -1819,100 +1815,110 @@ impl<'script> Upable<'script> for PathRaw<'script> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// we're forced to make this pub because of lalrpop
+pub struct SegmentRangeRaw<'script> {
+    pub(crate) start_lower: Location,
+    pub(crate) range_start: ImutExprRaw<'script>,
+    pub(crate) end_lower: Location,
+    pub(crate) start_upper: Location,
+    pub(crate) range_end: ImutExprRaw<'script>,
+    pub(crate) end_upper: Location,
+}
+
+impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
+    type Target = Segment<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let SegmentRangeRaw {
+            start_lower,
+            range_start,
+            end_lower,
+            start_upper,
+            range_end,
+            end_upper,
+        } = self;
+
+        let lower_mid = helper.add_meta(start_lower, end_lower);
+        let upper_mid = helper.add_meta(start_upper, end_upper);
+        let mid = helper.add_meta(start_lower, end_upper);
+        Ok(Segment::Range {
+            lower_mid,
+            upper_mid,
+            range_start: Box::new(range_start.up(helper)?),
+            range_end: Box::new(range_end.up(helper)?),
+            mid,
+        })
+    }
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SegmentElementRaw<'script> {
+    pub(crate) expr: ImutExprRaw<'script>,
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+}
+
+impl<'script> Upable<'script> for SegmentElementRaw<'script> {
+    type Target = Segment<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let SegmentElementRaw { expr, start, end } = self;
+        let expr = expr.up(helper)?;
+        let r = expr.extent(&helper.meta);
+        match expr {
+            ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), &helper)? {
+                Value::String(id) => {
+                    let mid = helper.add_meta_w_name(start, end, &id, COMPILATION_UNIT_PART);
+                    Ok(Segment::Id {
+                        key: KnownKey::from(id.clone()),
+                        mid,
+                    })
+                }
+                other => {
+                    if let Some(idx) = other.as_usize() {
+                        let mid = helper.add_meta(start, end);
+                        Ok(Segment::Idx { idx, mid })
+                    } else {
+                        Err(ErrorKind::TypeConflict(
+                            r.expand_lines(2),
+                            r,
+                            other.value_type(),
+                            vec![ValueType::I64, ValueType::String],
+                        )
+                        .into())
+                    }
+                }
+            },
+            expr => Ok(Segment::Element {
+                mid: helper.add_meta(start, end),
+                expr,
+            }),
+        }
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum SegmentRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Element {
-        /// we're forced to make this pub because of lalrpop
-        expr: ImutExprRaw<'script>,
-        /// we're forced to make this pub because of lalrpop
-        start: Location,
-        /// we're forced to make this pub because of lalrpop
-        end: Location,
-    },
+    Element(Box<SegmentElementRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    Range {
-        /// we're forced to make this pub because of lalrpop
-        start_lower: Location,
-        /// we're forced to make this pub because of lalrpop
-        range_start: ImutExprRaw<'script>,
-        /// we're forced to make this pub because of lalrpop
-        end_lower: Location,
-        /// we're forced to make this pub because of lalrpop
-        start_upper: Location,
-        /// we're forced to make this pub because of lalrpop
-        range_end: ImutExprRaw<'script>,
-        /// we're forced to make this pub because of lalrpop
-        end_upper: Location,
-    },
+    Range(Box<SegmentRangeRaw<'script>>),
 }
 
 impl<'script> Upable<'script> for SegmentRaw<'script> {
     type Target = Segment<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use SegmentRaw::*;
-        Ok(match self {
-            Element { expr, start, end } => {
-                let expr = expr.up(helper)?;
-                let r = expr.extent(&helper.meta);
-                match expr {
-                    ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), &helper)? {
-                        Value::String(id) => {
-                            let mid =
-                                helper.add_meta_w_name(start, end, &id, COMPILATION_UNIT_PART);
-                            Segment::Id {
-                                key: KnownKey::from(id.clone()),
-                                mid,
-                            }
-                        }
-                        other => {
-                            if let Some(idx) = other.as_usize() {
-                                let mid = helper.add_meta(start, end);
-                                Segment::Idx { idx, mid }
-                            } else {
-                                return Err(ErrorKind::TypeConflict(
-                                    r.expand_lines(2),
-                                    r,
-                                    other.value_type(),
-                                    vec![ValueType::I64, ValueType::String],
-                                )
-                                .into());
-                            }
-                        }
-                    },
-                    expr => {
-                        let mid = helper.add_meta(start, end);
-                        Segment::Element { mid, expr }
-                    }
-                }
-            }
-            Range {
-                start_lower,
-                range_start,
-                end_lower,
-                start_upper,
-                range_end,
-                end_upper,
-            } => {
-                let lower_mid = helper.add_meta(start_lower, end_lower);
-                let upper_mid = helper.add_meta(start_upper, end_upper);
-                let mid = helper.add_meta(start_lower, end_upper);
-                Segment::Range {
-                    lower_mid,
-                    upper_mid,
-                    range_start: Box::new(range_start.up(helper)?),
-                    range_end: Box::new(range_end.up(helper)?),
-                    mid,
-                }
-            }
-        })
+        match self {
+            SegmentRaw::Element(e) => e.up(helper),
+            SegmentRaw::Range(r) => r.up(helper),
+        }
     }
 }
 
 impl<'script> SegmentRaw<'script> {
     pub fn from_id(id: IdentRaw<'script>) -> Self {
-        SegmentRaw::Element {
+        SegmentRaw::Element(Box::new(SegmentElementRaw {
             start: id.start,
             end: id.end,
             expr: ImutExprRaw::Literal(LiteralRaw {
@@ -1920,10 +1926,10 @@ impl<'script> SegmentRaw<'script> {
                 end: id.end,
                 value: Value::String(id.id),
             }),
-        }
+        }))
     }
     pub fn from_str(id: &'script str, start: Location, end: Location) -> Self {
-        SegmentRaw::Element {
+        SegmentRaw::Element(Box::new(SegmentElementRaw {
             start,
             end,
             expr: ImutExprRaw::Literal(LiteralRaw {
@@ -1931,10 +1937,10 @@ impl<'script> SegmentRaw<'script> {
                 end,
                 value: Value::from(id),
             }),
-        }
+        }))
     }
     pub fn from_usize(id: usize, start: Location, end: Location) -> Self {
-        SegmentRaw::Element {
+        SegmentRaw::Element(Box::new(SegmentElementRaw {
             start,
             end,
             expr: ImutExprRaw::Literal(LiteralRaw {
@@ -1942,7 +1948,7 @@ impl<'script> SegmentRaw<'script> {
                 end,
                 value: Value::from(id),
             }),
-        }
+        }))
     }
 }
 

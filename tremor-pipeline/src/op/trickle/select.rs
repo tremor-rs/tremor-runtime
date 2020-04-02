@@ -70,7 +70,7 @@ impl SelectDims {
     pub fn from_query(stmt: Arc<StmtRental>) -> Self {
         Self::new(stmt, |_| HashMap::new())
     }
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     unsafe fn mut_suffix(&self) -> &mut Groups<'static> {
         std::mem::transmute(self.suffix())
     }

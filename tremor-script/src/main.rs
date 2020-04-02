@@ -390,7 +390,7 @@ fn main() -> Result<()> {
                             "{} ",
                             serde_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
-                        let lexed_tokens = lexer::Tokenizer::new(&result).collect();
+                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result).collect();
                         let mut h = TermHighlighter::new();
                         h.highlight(&lexed_tokens)?;
                     }
@@ -403,7 +403,7 @@ fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&result)?);
                     } else {
                         let result = format!("{} ", serde_json::to_string_pretty(&result)?);
-                        let lexed_tokens = lexer::Tokenizer::new(&result).collect();
+                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result).collect();
                         let mut h = TermHighlighter::new();
                         h.highlight(&lexed_tokens)?;
                     }

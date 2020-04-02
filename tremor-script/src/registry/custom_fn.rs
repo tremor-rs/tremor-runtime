@@ -138,13 +138,11 @@ impl<'script> CustomFn<'script> {
             result_needed: false,
             aggr: AggrType::Tick,
         };
-        // FIXME .unwrap()
-        let meta = NodeMetas::default();
         let env = Env {
             context: env.context,
             consts: env.consts,
             aggrs: &NO_AGGRS,
-            meta: &meta,
+            meta: env.meta,
         };
         let mut recursion_count = 0;
         'recur: loop {
