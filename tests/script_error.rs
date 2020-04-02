@@ -38,6 +38,7 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();
 
+                println!("Loading error: {}", err_file);
                 let mut file = File::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
@@ -130,6 +131,7 @@ test_cases!(
     pp_unrecognized_token5,
     pp_mod_not_found,
     unknown_function_in_function,
+    mod_bound_cross,
     //INSERT
 );
 

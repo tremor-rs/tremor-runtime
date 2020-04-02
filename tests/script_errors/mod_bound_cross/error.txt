@@ -1,0 +1,9 @@
+Error: 
+    9 | 
+   10 | mod badger with
+   11 |   fn fib(n) with
+   12 |     lies::snot::fib_(0, 1, n)
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^ Call to undefined function lies::snot::fib_
+   13 |   end;
+   14 | end;
+   15 |

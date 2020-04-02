@@ -146,7 +146,6 @@ test_cases!(
     mod_access_const,
     module,
     fn_fib,
-    fn_nest_fib,
     fn_nest2_fib,
     fn_nest2_abs_fib,
     pp_fn_fib,
