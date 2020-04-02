@@ -130,11 +130,11 @@ test_cases!(
     pp_unrecognized_token5,
     pp_mod_not_found,
     unknown_function_in_function,
-    pp_unknown_function_in_function,
     //INSERT
 );
 
 ignored_cases!(
+    pp_unknown_function_in_function,
     lexer_bad_float,
     lexer_bad_hex,
     lexer_bad_hex2,
