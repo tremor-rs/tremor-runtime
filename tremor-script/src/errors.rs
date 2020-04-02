@@ -123,14 +123,8 @@ pub(crate) fn best_hint(
 ) -> Option<(usize, String)> {
     options
         .iter()
-        .filter_map(|option| {
-            let d = distance::damerau_levenshtein(given, &option);
-            if d <= max_dist {
-                Some((d, option))
-            } else {
-                None
-            }
-        })
+        .map(|option| (distance::damerau_levenshtein(given, &option), option))
+        .filter(|(distance, _)| *distance <= max_dist)
         .min()
         .map(|(d, s)| (d, s.clone()))
 }

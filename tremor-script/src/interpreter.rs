@@ -1201,11 +1201,13 @@ impl<'script> GroupByInt<'script> {
                 let v = expr
                     .run(opts, &env, event, state, meta, &local_stack)?
                     .into_owned();
-                if groups.is_empty() {
-                    groups.push(vec![v]);
+                if let Some((last_group, other_groups)) = groups.split_last_mut() {
+                    other_groups.iter_mut().for_each(|g| g.push(v.clone()));
+                    last_group.push(v)
                 } else {
-                    groups.iter_mut().for_each(|g| g.push(v.clone()));
-                };
+                    // No last group existed, i.e, `groups` was empty. Push a new group:
+                    groups.push(vec![v]);
+                }
                 Ok(())
             }
 

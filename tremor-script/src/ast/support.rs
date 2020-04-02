@@ -77,41 +77,53 @@ impl<'script> PartialEq for StatePath<'script> {
     }
 }
 
+impl BinOpKind {
+    fn operator_name(&self) -> &'static str {
+        match self {
+            Self::Or => "or",
+            Self::Xor => "xor",
+            Self::And => "and",
+            Self::BitOr => "|",
+            Self::BitXor => "^",
+            Self::BitAnd => "&",
+            Self::Eq => "==",
+            Self::NotEq => "!=",
+            Self::Gte => ">=",
+            Self::Gt => ">",
+            Self::Lte => "<=",
+            Self::Lt => "<",
+            Self::RBitShiftSigned => ">>",
+            Self::RBitShiftUnsigned => ">>>",
+            Self::LBitShift => "<<",
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "%",
+        }
+    }
+}
+
 impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.operator_name())
+    }
+}
+
+impl UnaryOpKind {
+    fn operator_name(&self) -> &'static str {
         match self {
-            Self::Or => write!(f, "or"),
-            Self::Xor => write!(f, "xor"),
-            Self::And => write!(f, "and"),
-            Self::BitOr => write!(f, "|"),
-            Self::BitXor => write!(f, "^"),
-            Self::BitAnd => write!(f, "&"),
-            Self::Eq => write!(f, "=="),
-            Self::NotEq => write!(f, "!="),
-            Self::Gte => write!(f, ">="),
-            Self::Gt => write!(f, ">"),
-            Self::Lte => write!(f, "<="),
-            Self::Lt => write!(f, "<"),
-            Self::RBitShiftSigned => write!(f, ">>"),
-            Self::RBitShiftUnsigned => write!(f, ">>>"),
-            Self::LBitShift => write!(f, "<<"),
-            Self::Add => write!(f, "+"),
-            Self::Sub => write!(f, "-"),
-            Self::Mul => write!(f, "*"),
-            Self::Div => write!(f, "/"),
-            Self::Mod => write!(f, "%"),
+            Self::Plus => "+",
+            Self::Minus => "-",
+            Self::Not => "not",
+            Self::BitNot => "!",
         }
     }
 }
 
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Plus => write!(f, "+"),
-            Self::Minus => write!(f, "-"),
-            Self::Not => write!(f, "not"),
-            Self::BitNot => write!(f, "!"),
-        }
+        f.write_str(self.operator_name())
     }
 }
 

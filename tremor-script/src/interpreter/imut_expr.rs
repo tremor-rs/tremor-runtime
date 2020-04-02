@@ -259,12 +259,12 @@ where
         inner: &'script T,
         effectors: &'script [ImutExpr<'script>],
     ) -> Result<Cow<'run, Value<'event>>> {
-        if effectors.is_empty() {
-            return error_missing_effector(self, inner, &env.meta);
-        }
         // Since we don't have side effects we don't need to run anything but the last effector!
-        let effector = &effectors[effectors.len() - 1];
-        effector.run(opts, env, event, state, meta, local)
+        if let Some(effector) = effectors.last() {
+            effector.run(opts, env, event, state, meta, local)
+        } else {
+            error_missing_effector(self, inner, &env.meta)
+        }
     }
 
     fn match_expr(
@@ -576,17 +576,15 @@ where
         local: &'run LocalStack<'event>,
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
-        let mut argv: Vec<Cow<'run, Value<'event>>> = Vec::with_capacity(expr.args.len());
-        let mut argv1: Vec<&Value> = Vec::with_capacity(expr.args.len());
-        for arg in &expr.args {
-            let result = stry!(arg.run(opts, env, event, state, meta, local));
-            argv.push(result);
-        }
-        unsafe {
-            for i in 0..argv.len() {
-                argv1.push(argv.get_unchecked(i));
-            }
-        }
+        let argv: Vec<Cow<'run, _>> = expr
+            .args
+            .iter()
+            .map(|arg| arg.run(opts, env, event, state, meta, local))
+            .collect::<Result<_>>()?;
+
+        // Construct a view into `argv`, since `invoke` expects a slice of references, not Cows.
+        let argv1: Vec<&Value> = argv.iter().map(Cow::borrow).collect();
+
         expr.invocable
             .invoke(&env.context, &argv1)
             .map(Cow::Owned)
