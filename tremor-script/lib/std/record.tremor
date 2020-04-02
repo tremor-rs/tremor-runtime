@@ -61,7 +61,7 @@ intrinsic fn from_array(array) as record::from_array;
 ## ```
 ##
 ## Returns a `record`
-intrinsic fn select(record, array) as record::select;
+intrinsic fn `select`(record, array) as record::`select`;
 
 ## Merges the two records left and right overwriting existing values in left
 ## with those provided in right
@@ -72,7 +72,7 @@ intrinsic fn select(record, array) as record::select;
 ## ```
 ##
 ## Returns a `record`
-intrinsic fn merge(left, right) as record::merge;
+intrinsic fn `merge`(left, right) as record::`merge`;
 
 ## Renames the keys in the record target based on the key value pairs in the
 ## record changes where the key is the current name and the value is the new

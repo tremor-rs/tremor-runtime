@@ -4,7 +4,9 @@ set -u
 set -o pipefail
 
 BASEDIR=$(dirname "$0")
-FEATURES="drop_copy kafka mssql php-runtime"
+FEATURES=""
+export TREMOR_PATH="${BASEDIR}/../tremor-script/lib"
+echo $TREMOR_PATH
 
 # shellcheck disable=SC1091
 . "${BASEDIR}/common.sh"
