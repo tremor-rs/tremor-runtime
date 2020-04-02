@@ -835,8 +835,8 @@ PathSegment: SegmentRaw<'input> = {
 
 /// A path selector aka [...]
 Selector: SegmentRaw<'input> = {
-    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => SegmentRaw::Range{range_start, range_end, start_lower, end_lower, start_upper, end_upper},
-    <start:@L> <expr:ComplexExprImut> <end:@L>  => SegmentRaw::Element{expr, start, end},
+    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => SegmentRaw::Range(Box::new(SegmentRangeRaw{range_start, range_end, start_lower, end_lower, start_upper, end_upper})),
+    <start:@L> <expr:ComplexExprImut> <end:@L>  => SegmentRaw::Element(Box::new(SegmentElementRaw{expr, start, end})),
 }
 
 

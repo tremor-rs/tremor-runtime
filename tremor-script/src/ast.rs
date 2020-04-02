@@ -412,38 +412,6 @@ where
     'script: 'event,
     'event: 'run,
 {
-    // pub(crate) fn include(&mut self, other: &mut Self) -> Result<()> {
-    //     self.exprs.append(&mut other.exprs);
-    //     Ok(())
-    // }
-
-    /*
-    pub(crate) fn parse_import(
-        src: &'script str,
-        _reg: &Registry,
-    ) -> Result<crate::ast::raw::ScriptRaw<'script>> {
-        use crate::lexer;
-        use crate::parser::g;
-
-        let lexemes: Result<Vec<_>> = lexer::Tokenizer::new(&src).collect();
-        let mut filtered_tokens = Vec::new();
-
-        for t in lexemes? {
-            let keep = !t.value.is_ignorable();
-            if keep {
-                filtered_tokens.push(Ok(t));
-            }
-        }
-
-        //let mut warnings = vec![];
-
-        // let _fake_aggr_reg = AggrRegistry::default();
-        let script = g::ScriptParser::new().parse(filtered_tokens)?;
-        //        warnings = ws;
-        Ok(script)
-    }
-    */
-
     /// Runs the script and evaluates to a resulting event
     pub fn run(
         &'script self,
@@ -739,13 +707,13 @@ impl<'script> Invocable<'script> {
     fn inline(self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
-            Invocable::Tremor(f) => f.inline(args), // FIXME .unwrap()
+            Invocable::Tremor(f) => f.inline(args),
         }
     }
     fn can_inline(&self) -> bool {
         match self {
             Invocable::Intrinsic(_f) => false,
-            Invocable::Tremor(f) => f.can_inline(), // FIXME .unwrap()
+            Invocable::Tremor(f) => f.can_inline(),
         }
     }
 
@@ -766,7 +734,7 @@ impl<'script> Invocable<'script> {
     {
         match self {
             Invocable::Intrinsic(f) => f.invoke(env.context, args),
-            Invocable::Tremor(f) => f.invoke(env, args), // FIXME .unwrap()
+            Invocable::Tremor(f) => f.invoke(env, args),
         }
     }
 }
