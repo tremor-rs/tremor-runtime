@@ -167,6 +167,36 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     }
 }
 
+/// Casts the `&Value` to an index, i.e., a `usize`, or returns the appropriate error indicating
+/// why the `Value` is not an index.
+///
+/// # Note
+/// This method explicitly *does not* check whether the resulting index is in range of the array.
+#[inline]
+fn value_to_index<'run, 'event, 'script, OuterExpr, InnerExpr>(
+    outer: &'run OuterExpr,
+    inner: &'run InnerExpr,
+    val: &Value,
+    env: &'run Env<'run, 'event, 'script>,
+    path: &'script Path,
+    array: &[Value],
+) -> Result<usize>
+where
+    OuterExpr: BaseExpr,
+    InnerExpr: BaseExpr,
+    'script: 'event,
+    'event: 'run,
+{
+    // TODO: As soon as value-trait v0.1.8 is used, switch this `is_i64` to `is_integer`.
+    match val.as_usize() {
+        Some(n) => Ok(n),
+        None if val.is_i64() => {
+            error_bad_array_index(outer, inner, path, val.borrow(), array.len(), &env.meta)
+        }
+        None => error_need_int(outer, inner, val.value_type(), &env.meta),
+    }
+}
+
 #[allow(
     clippy::cognitive_complexity,
     clippy::cast_precision_loss,
@@ -388,8 +418,9 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut subrange: Option<(usize, usize)> = None;
-    let mut current: &Value = match path {
+    // Fetch the base of the path
+    // TODO: Extract this into a method on `Path`?
+    let base_value: &Value = match path {
         Path::Local(lpath) => match local.values.get(lpath.idx) {
             Some(Some(l)) => l,
             Some(None) => {
@@ -407,15 +438,19 @@ where
         },
         Path::Const(lpath) => match env.consts.get(lpath.idx) {
             Some(v) => v,
-            _ => return error_oops(outer, "Use of uninitalized constant", &env.meta),
+            _ => return error_oops(outer, "Use of uninitialized constant", &env.meta),
         },
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,
     };
 
+    // Resolve the targeted value by applying all path segments
+    let mut subrange: Option<&[Value]> = None;
+    let mut current = base_value;
     for segment in path.segments() {
         match segment {
+            // Next segment is an identifier: lookup the identifier on `current`, if it's an object
             Segment::Id { mid, key, .. } => {
                 if let Some(c) = key.lookup(current) {
                     current = c;
@@ -434,28 +469,13 @@ where
                     return error_need_obj(outer, segment, current.value_type(), &env.meta);
                 }
             }
+            // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {
                 if let Some(a) = current.as_array() {
-                    let (start, end) = if let Some((start, end)) = subrange {
-                        // We check range on setting the subrange!
-                        (start, end)
-                    } else {
-                        (0, a.len())
-                    };
-                    let idx = *idx as usize + start;
-                    if idx >= end {
-                        // We exceed the sub range
-                        let bad_idx = idx - start;
-                        return error_array_out_of_bound(
-                            outer,
-                            segment,
-                            &path,
-                            bad_idx..bad_idx,
-                            &env.meta,
-                        );
-                    }
+                    let range_to_consider = subrange.unwrap_or_else(|| a.as_slice());
+                    let idx = *idx;
 
-                    if let Some(c) = a.get(idx) {
+                    if let Some(c) = range_to_consider.get(idx) {
                         current = c;
                         subrange = None;
                         continue;
@@ -465,6 +485,7 @@ where
                             segment,
                             &path,
                             idx..idx,
+                            range_to_consider.len(),
                             &env.meta,
                         );
                     }
@@ -472,10 +493,46 @@ where
                     return error_need_arr(outer, segment, current.value_type(), &env.meta);
                 }
             }
+            // Next segment is an index range: index into `current`, if it's an array
+            Segment::Range {
+                range_start,
+                range_end,
+                ..
+            } => {
+                if let Some(a) = current.as_array() {
+                    let array = subrange.unwrap_or_else(|| a.as_slice());
+                    let start_idx = stry!(range_start
+                        .eval_to_index(outer, opts, env, event, state, meta, local, path, &array));
+                    let end_idx = stry!(range_end
+                        .eval_to_index(outer, opts, env, event, state, meta, local, path, &array));
+
+                    if end_idx < start_idx {
+                        return error_decreasing_range(
+                            outer, segment, &path, start_idx, end_idx, &env.meta,
+                        );
+                    } else if end_idx > array.len() {
+                        return error_array_out_of_bound(
+                            outer,
+                            segment,
+                            &path,
+                            start_idx..end_idx,
+                            array.len(),
+                            &env.meta,
+                        );
+                    } else {
+                        subrange = Some(&array[start_idx..end_idx]);
+                        continue;
+                    }
+                } else {
+                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
+                }
+            }
+            // Next segment is an expression: run `expr` to know which key it signifies at runtime
             Segment::Element { expr, .. } => {
                 let key = stry!(expr.run(opts, env, event, state, meta, local));
 
                 match (current, key.borrow()) {
+                    // The segment resolved to an identifier, and `current` is an object: lookup
                     (Value::Object(o), Value::String(id)) => {
                         if let Some(v) = o.get(id) {
                             current = v;
@@ -492,112 +549,47 @@ where
                             );
                         }
                     }
+                    // The segment did not resolve to an identifier, but `current` is an object: err
                     (Value::Object(_), other) => {
                         return error_need_str(outer, segment, other.value_type(), &env.meta)
                     }
+                    // If `current` is an array, the segment has to be an index
                     (Value::Array(a), idx) => {
-                        if let Some(idx) = idx.as_usize() {
-                            let (start, end) = if let Some((start, end)) = subrange {
-                                // We check range on setting the subrange!
-                                (start, end)
-                            } else {
-                                (0, a.len())
-                            };
-                            let idx = idx + start;
-                            if idx >= end {
-                                // We exceed the sub range
-                                let bad_idx = idx - start;
-                                return error_array_out_of_bound(
-                                    outer,
-                                    segment,
-                                    &path,
-                                    bad_idx..bad_idx,
-                                    &env.meta,
-                                );
-                            }
+                        let array = subrange.unwrap_or_else(|| a.as_slice());
+                        let idx = value_to_index(outer, segment, idx, env, path, array)?;
 
-                            if let Some(v) = a.get(idx) {
-                                current = v;
-                                subrange = None;
-                                continue;
-                            } else {
-                                return error_array_out_of_bound(
-                                    outer,
-                                    segment,
-                                    &path,
-                                    idx..idx,
-                                    &env.meta,
-                                );
-                            }
+                        if let Some(v) = array.get(idx) {
+                            current = v;
+                            subrange = None;
+                            continue;
                         } else {
-                            return error_need_int(outer, segment, idx.value_type(), &env.meta);
+                            return error_array_out_of_bound(
+                                outer,
+                                segment,
+                                &path,
+                                idx..idx,
+                                array.len(),
+                                &env.meta,
+                            );
                         }
                     }
-                    (other, k) => {
-                        return if key.is_str() {
-                            error_need_obj(outer, segment, other.value_type(), &env.meta)
-                        } else if k.is_usize() {
-                            error_need_arr(outer, segment, other.value_type(), &env.meta)
-                        } else {
-                            error_oops(outer, "Bad path segments", &env.meta)
-                        }
+                    // The segment resolved to an identifier, but `current` isn't an object: err
+                    (other, key) if key.is_str() => {
+                        return error_need_obj(outer, segment, other.value_type(), &env.meta);
                     }
-                }
-            }
-
-            Segment::Range {
-                range_start,
-                range_end,
-                ..
-            } => {
-                if let Some(a) = current.as_array() {
-                    let (start, end) = if let Some((start, end)) = subrange {
-                        // We check range on setting the subrange!
-                        (start, end)
-                    } else {
-                        (0, a.len())
-                    };
-                    let s = stry!(range_start.run(opts, env, event, state, meta, local));
-                    if let Some(range_start) = s.as_usize() {
-                        let range_start = range_start + start;
-                        let e = stry!(range_end.run(opts, env, event, state, meta, local));
-                        if let Some(range_end) = e.as_usize() {
-                            let range_end = range_end;
-                            if range_end > end {
-                                return error_array_out_of_bound(
-                                    outer,
-                                    segment,
-                                    &path,
-                                    // Compensate for range inclusiveness
-                                    range_start..(range_end - 1),
-                                    &env.meta,
-                                );
-                            } else {
-                                subrange = Some((range_start, range_end));
-                                continue;
-                            }
-                        } else {
-                            let re: &ImutExprInt = range_end.borrow();
-                            return error_need_int(outer, re, e.value_type(), &env.meta);
-                        }
-                    } else {
-                        let rs: &ImutExprInt = range_start.borrow();
-                        return error_need_int(outer, rs.borrow(), s.value_type(), &env.meta);
+                    // The segment resolved to an index, but `current` isn't an array: err
+                    (other, key) if key.is_usize() => {
+                        return error_need_arr(outer, segment, other.value_type(), &env.meta);
                     }
-                } else {
-                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
+                    // Anything else: err
+                    _ => return error_oops(outer, "Bad path segments", &env.meta),
                 }
             }
         }
     }
-    if let Some((start, end)) = subrange {
-        if let Some(a) = current.as_array() {
-            // We check the range whemn we set it;
-            let sub = unsafe { a.get_unchecked(start..end).to_vec() };
-            Ok(Cow::Owned(Value::Array(sub)))
-        } else {
-            error_need_arr(outer, outer, current.value_type(), &env.meta)
-        }
+
+    if let Some(range_to_consider) = subrange {
+        Ok(Cow::Owned(Value::Array(range_to_consider.to_vec())))
     } else {
         Ok(Cow::Borrowed(current))
     }
@@ -867,9 +859,10 @@ where
                         &target,
                         &ap,
                     )) {
-                        // we need to assign prior to the guard so we can cehck
+                        // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
                         Ok(false)
@@ -887,7 +880,7 @@ where
                         &target,
                         &rp,
                     )) {
-                        // we need to assign prior to the guard so we can cehck
+                        // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
@@ -900,15 +893,10 @@ where
                     let v = stry!(expr.run(opts, env, event, state, meta, local));
                     let vb: &Value = v.borrow();
                     if val_eq(target, vb) {
-                        // we need to assign prior to the guard so we can cehck
+                        // we need to assign prior to the guard so we can check
                         // against the pattern expressions
-                        stry!(set_local_shadow(
-                            outer,
-                            local,
-                            &env.meta,
-                            a.idx,
-                            v.into_owned(),
-                        ));
+                        let v = v.into_owned();
+                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {

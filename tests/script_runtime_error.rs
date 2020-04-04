@@ -151,6 +151,8 @@ test_cases!(
     subslice_and_idx_out_of_bounds,
     subslice_bad_end,
     subslice_bad_start,
+    subslice_end_lt_start,
+    subslice_neg_start,
     subslice_no_arr,
     subslice_out_of_bounds,
     undefined_local,

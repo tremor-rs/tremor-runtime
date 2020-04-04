@@ -36,7 +36,7 @@ use serde_json;
 pub use simd_json::ValueType;
 use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
-use std::ops::{Range as IRange, RangeInclusive};
+use std::ops::{Range as RangeExclusive, RangeInclusive};
 use url;
 
 #[doc(hidden)]
@@ -136,16 +136,18 @@ impl ErrorKind {
         match self {
             NoClauseHit(outer) | Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
             QueryStreamNotDefined(outer, inner, _)
-            | ArrayOutOfRange(outer, inner, _)
+            | ArrayOutOfRange(outer, inner, _, _)
             | AssignIntoArray(outer, inner)
             | BadAccessInEvent(outer, inner, _, _)
             | BadAccessInState(outer, inner, _, _)
             | BadAccessInGlobal(outer, inner, _, _)
             | BadAccessInLocal(outer, inner, _, _)
             | BadArity(outer, inner, _, _, _, _)
+            | BadArrayIndex(outer, inner, _, _)
             | BadType(outer, inner, _, _, _)
             | BinaryDrop(outer, inner)
             | BinaryEmit(outer, inner)
+            | DecreasingRange(outer, inner, _, _)
             | ExtraToken(outer, inner, _)
             | PatchKeyExists(outer, inner, _)
             | InvalidAssign(outer, inner)
@@ -459,21 +461,37 @@ error_chain! {
             description("Trying to access a non existing state key")
                 display("Trying to access a non existing state key `{}`", key)
         }
-        ArrayOutOfRange(expr: Range, inner: Range, r: IRange<usize>) {
-            description("Trying to access an index that is out of range")
-                display("Trying to access an index that is out of range {}", if r.start == r.end {
-                    format!("{}", r.start)
-                } else {
-                    format!("{}..{}", r.start, r.end)
-                })
+        BadArrayIndex(expr: Range, inner: Range, idx: Value<'static>, len: usize) {
+            description("Trying to index into an array with invalid index")
+                display("Bad array index, got `{}` but expected an index in the range 0:{}",
+                        idx, len)
+        }
+        DecreasingRange(expr: Range, inner: Range, start_idx: usize, end_idx: usize) {
+            description("A range's end cannot be smaller than its start")
+                display("A range's end cannot be smaller than its start, {}:{} is invalid",
+                        start_idx, end_idx)
+        }
+        ArrayOutOfRange(expr: Range, inner: Range, r: RangeExclusive<usize>, len: usize) {
+            description("Array index out of bounds")
+                display("Array index out of bounds, got {} but expected {}",
+                        if r.start == r.end {
+                            format!("index {}", r.start)
+                        } else {
+                            format!("index range {}:{}", r.start, r.end)
+                        },
+                        if r.start == r.end {
+                            format!("an index in the range 0:{}", len)
+                        } else {
+                            format!("a subrange of 0:{}", len)
+                        })
         }
         AssignIntoArray(expor: Range, inner: Range) {
-            description("Can not assign tinto a array")
+            description("Can not assign into an array")
                 display("It is not supported to assign value into an array")
         }
         InvalidAssign(expor: Range, inner: Range) {
             description("You can not assign that")
-                display("You are trying to assing to a value that isn't valid")
+                display("You are trying to assign to a value that isn't valid")
         }
         InvalidConst(expr: Range, inner: Range) {
             description("Can't declare a const here")
@@ -672,6 +690,7 @@ pub(crate) fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
 ) -> Result<T> {
     error_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
 }
+
 pub(crate) fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
@@ -811,17 +830,77 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
-    r: IRange<usize>,
+    r: RangeExclusive<usize>,
+    len: usize,
+    meta: &NodeMetas,
+) -> Result<T> {
+    let expr: Range = outer.extent(meta);
+    // FIXME: Why match on `path` when all arms do the same?!
+    // -> ideally: put the `path` into the `ErrorKind::ArrayOutOfRange`, handle in display
+    //        but: not trivial: `Path` is parametric in non-'static lifetime 'script
+    Err(match path {
+        ast::Path::Local(_path) | ast::Path::Const(_path) => {
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
+        }
+        ast::Path::Meta(_path) => {
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
+        }
+        ast::Path::Event(_path) => {
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
+        }
+        ast::Path::State(_path) => {
+            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
+        }
+    })
+}
+
+pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    path: &ast::Path<'script>,
+    idx: &Value<'idx>,
+    len: usize,
+    meta: &NodeMetas,
+) -> Result<T> {
+    let expr: Range = outer.extent(meta);
+    let idx = idx.clone_static();
+    Err(match path {
+        ast::Path::Local(_path) | ast::Path::Const(_path) => {
+            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
+        }
+        ast::Path::Meta(_path) => {
+            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
+        }
+        ast::Path::Event(_path) => {
+            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
+        }
+        ast::Path::State(_path) => {
+            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
+        }
+    })
+}
+pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    path: &ast::Path<'script>,
+    start_idx: usize,
+    end_idx: usize,
     meta: &NodeMetas,
 ) -> Result<T> {
     let expr: Range = outer.extent(meta);
     Err(match path {
         ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into()
+            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
         }
-        ast::Path::Meta(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
-        ast::Path::Event(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
-        ast::Path::State(_path) => ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r).into(),
+        ast::Path::Meta(_path) => {
+            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
+        }
+        ast::Path::Event(_path) => {
+            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
+        }
+        ast::Path::State(_path) => {
+            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
+        }
     })
 }
 

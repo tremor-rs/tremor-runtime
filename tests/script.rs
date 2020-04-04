@@ -90,6 +90,7 @@ test_cases!(
     datetime,
     dummy,
     emit_port,
+    empty_subslice,
     empty_record_pattern,
     eq,
     escape,
@@ -122,6 +123,7 @@ test_cases!(
     string_concat,
     string_interpolation,
     subslice,
+    subslice_repeated,
     unary,
     // regression
     empty_array_pattern,
