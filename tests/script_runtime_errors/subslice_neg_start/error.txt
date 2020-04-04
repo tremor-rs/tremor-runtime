@@ -1,0 +1,3 @@
+Error: 
+    2 | event[k:4]
+      |       ^ Bad array index, got `-1` but expected an index in the range 0:3

@@ -169,6 +169,7 @@ where
         }
     }
 
+    // FIXME: Quite some overlap with `ImutExprInt::comprehension`
     fn comprehension(
         &'script self,
         opts: ExecOpts,
@@ -191,20 +192,17 @@ where
             } else {
                 0
             });
-            // NOTE: Since we we are going to create new data from this
-            // object we are cloning it.
-            // This is also required since we might mutate. If we restruct
-            // mutation in the future we could get rid of this.
+
+            // NOTE: the `execute_effectors` below cannot happen while `env`, `event`, `state`,
+            // `meta`, and `local` are borrowed by `target_value`, and thus by `target_map`. We
+            // clone `target_map` to end the lifetime of that borrow.
+            // If we restruct mutation in the future we could get rid of this.
 
             'comprehension_outer: for (k, v) in target_map.clone() {
-                stry!(set_local_shadow(
-                    self,
-                    local,
-                    &env.meta,
-                    expr.key_id,
-                    Value::String(k)
-                ));
+                let k = Value::from(k);
+                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
                 stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
+
                 for e in cases {
                     if stry!(test_guard(
                         self, opts, env, event, state, meta, local, &e.guard
@@ -228,20 +226,15 @@ where
                 0
             });
 
-            // NOTE: Since we we are going to create new data from this
-            // object we are cloning it.
-            // This is also required since we might mutate. If we restruct
-            // mutation in the future we could get rid of this.
+            // NOTE: the `execute_effectors` below cannot happen while `env`, `event`, `state`,
+            // `meta`, and `local` are borrowed by `target_value`, and thus by `target_array`. We
+            // clone `target_array` to end the lifetime of that borrow.
+            // If we restruct mutation in the future we could get rid of this.
 
             let mut count = 0;
             'comp_array_outer: for x in target_array.clone() {
-                stry!(set_local_shadow(
-                    self,
-                    local,
-                    &env.meta,
-                    expr.key_id,
-                    count.into()
-                ));
+                let k = count.into();
+                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
                 stry!(set_local_shadow(self, local, &env.meta, expr.val_id, x));
 
                 for e in cases {
@@ -399,9 +392,8 @@ where
                             current = if let Some(v) = map.get_mut(&id) {
                                 v
                             } else {
-                                map.insert(id.clone(), Value::from(Object::with_capacity(32)));
-                                // ALLOW: this is safe because we just added this element to the map.
-                                map.get_mut(&id).unwrap_or_else(|| unreachable!())
+                                map.entry(id)
+                                    .or_insert_with(|| Value::from(Object::with_capacity(32)))
                             }
                         } else {
                             return error_need_obj(self, segment, current.value_type(), &env.meta);
