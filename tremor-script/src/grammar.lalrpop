@@ -1126,7 +1126,7 @@ PredicateFieldPattern: PredicatePatternRaw<'input> = {
 }
 
 TestExpr: TestExprRaw = {
-    <start:@L> <id:Ident> <tl: TestLiteral> <end:@L> => {
+    <start:@L> <id:Ident> <tl:TestLiteral> <end:@L> => {
         TestExprRaw { id: id.id.to_string(), test: tl, start, end}
     },
 }
@@ -1213,7 +1213,7 @@ Ident: IdentRaw<'input> = {
 
 #[inline]
 TestLiteral: String = {
-    "test" => <>.join(""),
+    "<extractor>" => <>.join(""),
 }
 
 Sep<L, T, D>: L = {
@@ -1368,7 +1368,7 @@ extern {
         "float" => Token::FloatLiteral(<f64>, <String>),
         "string" => Token::StringLiteral(<Cow<'input, str>>),
         "heredoc" => Token::HereDoc(_, <Vec<String>>),
-        "test" => Token::TestLiteral(_, <Vec<String>>),
+        "<extractor>" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
         "<end-of-stream>" => Token::EndOfStream,
