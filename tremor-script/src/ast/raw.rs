@@ -576,7 +576,7 @@ impl<'script> ImutExprInt<'script> {
                 segments,
                 idx,
                 mid,
-            })) if segments.is_empty() => {
+            })) if segments.is_empty() && idx > LAST_RESERVED_CONST => {
                 if let Some(v) = helper.const_values.get(idx) {
                     let lit = Literal {
                         mid,
@@ -594,7 +594,10 @@ impl<'script> ImutExprInt<'script> {
                             helper.meta.start(mid).unwrap_or_default(),
                             helper.meta.end(mid).unwrap_or_default(),
                         )),
-                        &"Invalid const reference",
+                        &format!(
+                            "Invalid const reference to '{}'",
+                            helper.meta.name_dflt(mid),
+                        ),
                         &helper.meta,
                     )
                 }
@@ -2422,7 +2425,8 @@ impl<'script> InvokeRaw<'script> {
     fn is_aggregate<'registry>(&self, helper: &mut Helper<'script, 'registry>) -> bool {
         if self.module.get(0) == Some(&String::from("aggr")) && self.module.len() == 2 {
             let module = self.module.get(1).cloned().unwrap_or_default();
-            helper.aggr_reg.find(&module, &self.fun).is_ok()
+
+            dbg!(helper.aggr_reg.find(dbg!(&module), dbg!(&self.fun)).is_ok())
         } else {
             false
         }
