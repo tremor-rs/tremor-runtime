@@ -24,6 +24,8 @@ pub const WINDOW_CONST_ID: usize = 0;
 pub const GROUP_CONST_ID: usize = 1;
 /// The Constant ID of the `args` constant
 pub const ARGS_CONST_ID: usize = 2;
+/// Last constant that is erserved for executionand can not be inlined.
+pub const LAST_RESERVED_CONST: usize = ARGS_CONST_ID;
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]

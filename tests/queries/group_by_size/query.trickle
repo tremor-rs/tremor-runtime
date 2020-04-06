@@ -3,4 +3,10 @@ with
   size = 10
 end;
 
-select {"g": group, "c": aggr::stats::sum(event.c)} from in[by_10] group by set(event.g) into out;
+select {
+  "g": group,
+  "c": aggr::stats::sum(event.c)
+}
+from in[by_10]
+group by set(event.g)
+into out;
