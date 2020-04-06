@@ -39,9 +39,7 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            mod array with
-              intrinsic fn contains(a,e) as array::contains;
-            end;
+            use std::array;
             match event.application of
               case "app1" => let $class = "applog_app1",  let $rate = 1250, let $dimension = event.application, emit event
               case "app2" => let $class = "applog_app1",  let $rate = 2500, let $dimension = event.application, emit event
