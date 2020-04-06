@@ -356,7 +356,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                    .expect("parse failed");
             let mut event = Value::from(Object::new());
             let mut state = Value::null();
             let mut global_map = Value::from(Object::new());
@@ -393,7 +394,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                    .expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
@@ -424,7 +426,8 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, src, &reg).expect("parse failed");
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                    .expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});

@@ -69,6 +69,12 @@ impl From<url::ParseError> for Error {
     }
 }
 
+impl From<Error> for std::io::Error {
+    fn from(e: Error) -> Self {
+        std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e))
+    }
+}
+
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {

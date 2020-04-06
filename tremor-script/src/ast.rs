@@ -35,37 +35,49 @@ use serde::Serialize;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 // use std::fs::File;
+use crate::lexer::CompilationUnit;
 use std::mem;
 use upable::Upable;
-
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 struct NodeMeta {
     start: Location,
     end: Location,
     name: Option<String>,
-    compilation_unit_part: u64, // id of current compilation unit part
+    /// id of current compilation unit part
+    cu: usize,
     terminal: bool,
 }
 
-impl From<(Location, Location)> for NodeMeta {
-    fn from((start, end): (Location, Location)) -> Self {
+impl From<(Location, Location, usize)> for NodeMeta {
+    fn from((start, end, cu): (Location, Location, usize)) -> Self {
         Self {
             start,
             end,
             name: None,
-            compilation_unit_part: 0, // TODO FIXME
+            cu, // TODO FIXME
             terminal: false,
         }
     }
 }
 /// Information about node metadata
-#[derive(Default, Clone, Serialize, Debug, PartialEq)]
-pub struct NodeMetas(Vec<NodeMeta>);
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct NodeMetas {
+    nodes: Vec<NodeMeta>,
+    #[serde(skip)]
+    cus: Vec<CompilationUnit>,
+}
 
 impl<'script> NodeMetas {
-    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        let mid = self.0.len();
-        self.0.push((start, end).into());
+    /// Initializes meta noes with a given set of
+    pub fn new(cus: Vec<CompilationUnit>) -> Self {
+        Self {
+            nodes: Vec::new(),
+            cus,
+        }
+    }
+    pub(crate) fn add_meta(&mut self, start: Location, end: Location, cu: usize) -> usize {
+        let mid = self.nodes.len();
+        self.nodes.push((start, end, cu).into());
         mid
     }
     pub(crate) fn add_meta_w_name<S>(
@@ -73,16 +85,16 @@ impl<'script> NodeMetas {
         start: Location,
         end: Location,
         name: &S,
-        compilation_unit_part: u64,
+        cu: usize,
     ) -> usize
     where
         S: ToString,
     {
-        let mid = self.0.len();
-        self.0.push(NodeMeta {
+        let mid = self.nodes.len();
+        self.nodes.push(NodeMeta {
             start,
             end,
-            compilation_unit_part,
+            cu,
             name: Some(name.to_string()),
             terminal: false,
         });
@@ -96,14 +108,22 @@ impl<'script> NodeMetas {
     // }
 
     pub(crate) fn start(&self, idx: usize) -> Option<Location> {
-        self.0.get(idx).map(|v| v.start)
+        self.nodes.get(idx).map(|v| v.start)
     }
     pub(crate) fn end(&self, idx: usize) -> Option<Location> {
-        self.0.get(idx).map(|v| v.end)
+        self.nodes.get(idx).map(|v| v.end)
     }
     pub(crate) fn name(&self, idx: usize) -> Option<&String> {
-        self.0.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
+        self.nodes.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
     }
+    /// Returns the CU for a meta node
+    pub fn cu(&self, idx: usize) -> Option<&str> {
+        self.nodes
+            .get(idx)
+            .and_then(|e| self.cus.get(e.cu))
+            .and_then(|cu| cu.to_str())
+    }
+
     pub(crate) fn name_dflt(&self, idx: usize) -> String {
         self.name(idx)
             .cloned()
@@ -251,6 +271,7 @@ where
     fn_argc: usize,
     is_open: bool,
     file_offset: Location,
+    cu: usize,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -259,15 +280,9 @@ where
 {
     pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta
-            .add_meta(start - self.file_offset, end - self.file_offset)
+            .add_meta(start - self.file_offset, end - self.file_offset, self.cu)
     }
-    pub fn add_meta_w_name<S>(
-        &mut self,
-        start: Location,
-        end: Location,
-        name: &S,
-        compilation_unit_part: u64,
-    ) -> usize
+    pub fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
     where
         S: ToString,
     {
@@ -275,7 +290,7 @@ where
             start - self.file_offset,
             end - self.file_offset,
             name,
-            compilation_unit_part,
+            self.cu,
         )
     }
     pub fn has_locals(&self) -> bool {
@@ -305,7 +320,11 @@ where
         mem::swap(&mut self.locals, locals);
     }
 
-    pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
+    pub fn new(
+        reg: &'registry Registry,
+        aggr_reg: &'registry AggrRegistry,
+        cus: Vec<crate::lexer::CompilationUnit>,
+    ) -> Self {
         Helper {
             reg,
             aggr_reg,
@@ -320,7 +339,7 @@ where
             functions: HashMap::new(),
             func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
-            meta: NodeMetas::default(),
+            meta: NodeMetas::new(cus),
             docs: Docs::default(),
             module: Vec::new(),
             possible_leaf: false,
@@ -328,6 +347,7 @@ where
             is_open: false,
             const_values: Vec::new(),
             file_offset: Location::default(),
+            cu: 0,
         }
     }
 
