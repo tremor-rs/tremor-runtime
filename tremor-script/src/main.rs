@@ -49,6 +49,7 @@ extern crate rental;
 use crate::errors::*;
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::path::load as load_module_path;
+use crate::pos::{Span, Spanned};
 use crate::script::{AggrType, Return, Script};
 use chrono::{Timelike, Utc};
 use clap::{App, Arg};
@@ -93,6 +94,12 @@ fn main() -> Result<()> {
             Arg::with_name("process")
                 .long("process")
                 .help("Processes each line on stdin through the script"),
+        )
+        .arg(
+            Arg::with_name("lex")
+                .short("l")
+                .long("lex")
+                .help("Prints the lexemes"),
         )
         .arg(
             Arg::with_name("ENCODING")
@@ -175,6 +182,47 @@ fn main() -> Result<()> {
     let mut reg: Registry = registry::registry();
 
     let mp = load_module_path();
+
+    if matches.is_present("lex") {
+        println!();
+        raw.push('\n');
+        let lexemes = if matches.is_present("highlight-preprocess-source") {
+            lexer::Preprocessor::preprocess(&crate::path::load(), &script_file, &mut raw)
+                .expect("Did not preprocess ok")
+        } else {
+            lexer::Tokenizer::new(&raw).collect()
+        };
+        for l in lexemes {
+            match l {
+                Ok(Spanned {
+                    span: Span { start, end },
+                    value,
+                }) => {
+                    if start.line == end.line {
+                        println!(
+                            "{:>3}:{:3}-{:3}> {}",
+                            start.line,
+                            start.column,
+                            end.column,
+                            value.prettify()
+                        )
+                    } else {
+                        println!(
+                            "{:>3}:{:3}-{:3}:{}> {}",
+                            start.line,
+                            start.column,
+                            end.line,
+                            end.column,
+                            value.prettify()
+                        )
+                    }
+                }
+                Err(e) => println!("ERR> {}", e),
+            }
+        }
+        return Ok(());
+    }
+
     match Script::parse(&mp, raw.clone(), &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
@@ -289,6 +337,7 @@ fn main() -> Result<()> {
                     Script::highlight_preprocess_script_with(script_file, &raw, &mut h)?;
                 }
             }
+
             if matches.is_present("print-ast") {
                 let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
                 println!();
