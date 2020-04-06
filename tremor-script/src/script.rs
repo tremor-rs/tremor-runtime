@@ -118,8 +118,13 @@ where
 
         let rented_script =
             rentals::Script::try_new(Box::new(script.clone()), |script: &mut String| {
-                let lexemes: Vec<_> =
-                    lexer::Preprocessor::preprocess(module_path, "<top>", script)?;
+                let mut include_stack = lexer::IncludeStack::default();
+                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
+                    module_path,
+                    "<top>",
+                    script,
+                    &mut include_stack,
+                )?;
                 let filtered_tokens = lexemes
                     .into_iter()
                     .filter_map(Result::ok)
@@ -161,9 +166,15 @@ where
         h: &mut H,
     ) -> std::io::Result<()> {
         let mut s = script.to_string();
-        let tokens: Vec<_> =
-            lexer::Preprocessor::preprocess(&crate::path::load(), &file_name, &mut s)
-                .expect("Did not preprocess ok");
+        let mut include_stack = lexer::IncludeStack::default();
+
+        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
+            &crate::path::load(),
+            &file_name,
+            &mut s,
+            &mut include_stack,
+        )
+        .expect("Did not preprocess ok");
         h.highlight(&tokens)
     }
 

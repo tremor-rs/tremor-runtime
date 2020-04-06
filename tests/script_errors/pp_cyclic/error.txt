@@ -1,2 +1,2 @@
-Error:
-      | ^ Too many open files (os error 24)
+Error: 
+      | ^ Cyclec dependency detected: tests/script_errors/pp_cyclic/script.tremor -> tests/script_errors/pp_cyclic/script.tremor
