@@ -321,6 +321,14 @@ pub enum Token<'input> {
 }
 
 impl<'input> Token<'input> {
+    /// a prettified version of the token
+    pub fn prettify(&self) -> String {
+        if self.is_keyword() || self.is_symbol() || self.is_ignorable() {
+            format!("{}", self)
+        } else {
+            format!("{:?}", self)
+        }
+    }
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     #[cfg_attr(tarpaulin, skip)]
@@ -416,21 +424,23 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_symbol(&self) -> bool {
         match *self {
-            Token::LineDirective(_)
+            Token::BSlash
             | Token::Colon
             | Token::ColonColon
+            | Token::Comma
+            | Token::Eq
             | Token::EqArrow
-            | Token::Semi
-            | Token::LParen
-            | Token::RParen
-            | Token::LPatBrace
             | Token::LBrace
-            | Token::RBrace
             | Token::LBracket
+            | Token::LineDirective(_)
+            | Token::LParen
+            | Token::LPatBrace
             | Token::LPatBracket
+            | Token::RBrace
             | Token::RBracket
-            | Token::BSlash
-            | Token::Comma => true,
+            | Token::RParen
+            | Token::Semi
+            | Token::TildeEq => true,
             _ => false,
         }
     }
@@ -517,7 +527,7 @@ impl<'input> fmt::Display for Token<'input> {
                 let mut first = true;
                 write!(f, "|")?;
                 if values.len() == 1 {
-                    write!(f, "{}", values[0])?;
+                    write!(f, "{}", values[0].replace('\\', "\\\\").replace('|', "\\|"))?;
                 } else {
                     for l in values {
                         if first {
@@ -525,7 +535,8 @@ impl<'input> fmt::Display for Token<'input> {
                         } else {
                             write!(f, "\\\n{}", " ".repeat(*indent))?;
                         };
-                        write!(f, "{}", l)?;
+                        dbg!(l);
+                        write!(f, "{}", l.replace('\\', "\\\\").replace('|', "\\|"))?;
                     }
                 }
                 write!(f, "|")
