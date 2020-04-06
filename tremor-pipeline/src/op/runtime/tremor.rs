@@ -25,6 +25,7 @@ op!(TremorFactory(node) {
 
         match tremor_script::Script::parse(
                &load_module_path(),
+               "<operator>",
                config.script.clone(), &*FN_REGISTRY.lock()?) {
             Ok(runtime) =>
                 Ok(Box::new(Tremor {
@@ -125,6 +126,7 @@ mod test {
         };
         let runtime = Script::parse(
             &ModulePath { mounts: vec![] }, // FIXME config cpp
+            "<test>",
             config.script.clone(),
             &*FN_REGISTRY.lock().expect("could not claim lock"),
         )
@@ -164,6 +166,7 @@ mod test {
         };
         let _runtime = Script::parse(
             &ModulePath { mounts: vec![] }, // FIXME config cpp
+            "<test>",
             config.script,
             &*FN_REGISTRY.lock().expect("could not claim lock"),
         );

@@ -119,8 +119,14 @@ where
 
         let query = rentals::Query::try_new(Box::new(source.clone()), |src: &mut String| {
             let mut include_stack = lexer::IncludeStack::default();
-            let lexemes: Vec<_> =
-                lexer::Preprocessor::preprocess(module_path, file_name, src, &mut include_stack)?;
+            let cu = include_stack.push(&file_name)?;
+            let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
+                module_path,
+                file_name,
+                src,
+                cu,
+                &mut include_stack,
+            )?;
             let filtered_tokens = lexemes
                 .into_iter()
                 .filter_map(Result::ok)
@@ -128,7 +134,7 @@ where
 
             let (script, local_count, ws) = crate::parser::g::QueryParser::new()
                 .parse(filtered_tokens)?
-                .up_script(reg, aggr_reg)?;
+                .up_script(include_stack.into_cus(), reg, aggr_reg)?;
 
             warnings = ws;
             locals = local_count;
@@ -162,14 +168,15 @@ where
     ) -> std::io::Result<()> {
         let mut s = script.to_string();
         let mut include_stack = lexer::IncludeStack::default();
+        let cu = include_stack.push(&file_name)?;
 
         let tokens: Vec<_> = lexer::Preprocessor::preprocess(
             &crate::path::load(),
             &file_name,
             &mut s,
+            cu,
             &mut include_stack,
-        )
-        .expect("Did not preprocess ok");
+        )?;
         h.highlight(&tokens)
     }
 

@@ -539,7 +539,6 @@ impl<'input> fmt::Display for Token<'input> {
                         } else {
                             write!(f, "\\\n{}", " ".repeat(*indent))?;
                         };
-                        dbg!(l);
                         write!(f, "{}", l.replace('\\', "\\\\").replace('|', "\\|"))?;
                     }
                 }
@@ -751,11 +750,13 @@ macro_rules! take_while {
     };
 }
 
-struct IncludeElement {
+/// A compilation unit
+#[derive(Clone, Debug)]
+pub struct CompilationUnit {
     file_path: Box<Path>,
 }
 
-impl IncludeElement {
+impl CompilationUnit {
     fn from_file(file: &Path) -> Result<Self> {
         let mut p = PathBuf::new();
         p.push(file);
@@ -763,26 +764,32 @@ impl IncludeElement {
             file_path: p.into_boxed_path(),
         })
     }
+    /// String representation of the computational unit
+    pub fn to_str(&self) -> Option<&str> {
+        self.file_path.to_str()
+    }
 }
-impl PartialEq for IncludeElement {
+impl PartialEq for CompilationUnit {
     fn eq(&self, other: &Self) -> bool {
         self.file_path == other.file_path
     }
 }
 
-impl fmt::Display for IncludeElement {
+impl fmt::Display for CompilationUnit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.file_path.to_string_lossy())
     }
 }
 
 pub(crate) struct IncludeStack {
-    elements: Vec<IncludeElement>,
+    elements: Vec<CompilationUnit>,
+    cus: Vec<CompilationUnit>,
 }
 impl Default for IncludeStack {
     fn default() -> Self {
         Self {
             elements: Vec::new(),
+            cus: Vec::new(),
         }
     }
 }
@@ -791,8 +798,13 @@ impl IncludeStack {
     fn pop(&mut self) {
         self.elements.pop();
     }
-    fn push(&mut self, file: &Path) -> Result<()> {
-        let e = IncludeElement::from_file(file)?;
+
+    pub fn into_cus(self) -> Vec<CompilationUnit> {
+        self.cus
+    }
+
+    pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
+        let e = CompilationUnit::from_file(Path::new(file))?;
         if self.contains(&e) {
             Err(format!(
                 "Cyclec dependency detected: {} -> {}",
@@ -805,11 +817,13 @@ impl IncludeStack {
             )
             .into())
         } else {
-            self.elements.push(IncludeElement::from_file(file)?);
-            Ok(())
+            let cu = self.cus.len();
+            self.cus.push(e.clone());
+            self.elements.push(e);
+            Ok(cu)
         }
     }
-    fn contains(&self, e: &IncludeElement) -> bool {
+    fn contains(&self, e: &CompilationUnit) -> bool {
         self.elements.contains(e)
     }
 }
@@ -821,23 +835,23 @@ impl<'input> Preprocessor {
         span2: Span,
         rel_module_path: &Path,
         include_stack: &mut IncludeStack,
-    ) -> Result<Box<Path>> {
+    ) -> Result<(usize, Box<Path>)> {
         let mut file = PathBuf::from(rel_module_path);
         file.set_extension("tremor");
         // FIXME consider raw JSON: let json = Path::new(format!("{}.json", rel_module_path));
 
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
-                include_stack.push(&path)?;
-                return Ok(path);
+                let cu = include_stack.push(path.as_os_str())?;
+                return Ok((cu, path));
             }
         }
         file.set_extension("trickle");
 
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
-                include_stack.push(&path)?;
-                return Ok(path);
+                let cu = include_stack.push(path.as_os_str())?;
+                return Ok((cu, path));
             }
         }
 
@@ -855,6 +869,7 @@ impl<'input> Preprocessor {
         module_path: &ModulePath,
         file_name: &S,
         input: &'input mut std::string::String,
+        cu: usize,
         include_stack: &mut IncludeStack,
     ) -> Result<Vec<Result<TokenSpan<'input>>>> {
         let file_name = Path::new(file_name);
@@ -1085,7 +1100,7 @@ impl<'input> Preprocessor {
                     })) = next
                     {
                         //let file_path = rel_module_path.clone();
-                        let file_path = Preprocessor::resolve(
+                        let (inner_cu, file_path) = Preprocessor::resolve(
                             module_path,
                             use_span,
                             span2,
@@ -1104,6 +1119,7 @@ impl<'input> Preprocessor {
                                             &module_path,
                                             file_path.as_os_str(),
                                             &mut s,
+                                            inner_cu,
                                             include_stack,
                                         )?;
                                         let y = s
@@ -1112,21 +1128,24 @@ impl<'input> Preprocessor {
                                             .collect::<Vec<String>>()
                                             .join("");
                                         input.push_str(&format!(
-                                            "#!line 0 0 0 {}\n",
+                                            "#!line 0 0 0 {} {}\n",
+                                            inner_cu,
                                             &file_path2.to_string_lossy()
                                         ));
                                         input.push_str(&format!("mod {} with\n", &alias));
                                         input.push_str(&format!(
-                                            "#!line 0 0 0 {}\n",
+                                            "#!line 0 0 0 {} {}\n",
+                                            inner_cu,
                                             &file_path2.to_string_lossy()
                                         ));
                                         input.push_str(&format!("{}\n", y.trim()));
                                         input.push_str("end;\n");
                                         input.push_str(&format!(
-                                            "#!line {} {} {} {}\n",
+                                            "#!line {} {} {} {} {}\n",
                                             span2.end.absolute,
                                             span2.end.line + 1,
                                             0,
+                                            cu,
                                             file_name.to_string_lossy(),
                                         ));
                                     }
@@ -2317,6 +2336,7 @@ mod tests {
             &ModulePath { mounts: vec![] },
             "foo",
             &mut snot2,
+            0,
             &mut include_stack,
         )?;
         let mut res = String::new();

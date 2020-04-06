@@ -872,7 +872,7 @@ mod test {
     fn test_query(stmt: ast::Stmt) -> ast::Query {
         ast::Query {
             stmts: vec![stmt.clone()],
-            node_meta: ast::NodeMetas::default(),
+            node_meta: ast::NodeMetas::new(Vec::new()),
         }
     }
 
@@ -1291,7 +1291,7 @@ mod test {
             aggregates: vec![],
             consts: vec![Value::null(), Value::null(), Value::null()],
             locals: 0,
-            node_meta: ast::NodeMetas::default(),
+            node_meta: ast::NodeMetas::new(vec![]),
         })
     }
     #[test]

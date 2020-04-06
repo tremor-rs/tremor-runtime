@@ -187,14 +187,15 @@ fn main() -> Result<()> {
         println!();
         raw.push('\n');
         let mut include_stack = lexer::IncludeStack::default();
+        let cu = include_stack.push(script_file)?;
         let lexemes = if matches.is_present("highlight-preprocess-source") {
             lexer::Preprocessor::preprocess(
                 &crate::path::load(),
                 &script_file,
                 &mut raw,
+                cu,
                 &mut include_stack,
-            )
-            .expect("Did not preprocess ok")
+            )?
         } else {
             lexer::Tokenizer::new(&raw).collect()
         };
@@ -229,7 +230,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    match Script::parse(&mp, raw.clone(), &reg) {
+    match Script::parse(&mp, script_file, raw.clone(), &reg) {
         Ok(runnable) => {
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;

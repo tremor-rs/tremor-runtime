@@ -43,7 +43,7 @@ macro_rules! test_cases {
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, contents2, &*FN_REGISTRY.lock()?);
+                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
                     Script::format_error_from_script(&contents, &mut h, &e)?;
@@ -83,7 +83,7 @@ macro_rules! ignored_cases {
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir] }, contents2, &*FN_REGISTRY.lock()?);
+                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
                     Script::format_error_from_script(&contents, &mut h, &e)?;

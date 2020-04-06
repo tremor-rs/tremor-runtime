@@ -209,6 +209,7 @@ fn script_run_cmd(cmd: &ArgMatches<'_>) -> Result<()> {
     let context = Context::new(666, None);
     let s = tremor_script::Script::parse(
         &ModulePath { mounts: vec![] },
+        f,
         script,
         &*tremor_pipeline::FN_REGISTRY.lock()?,
     )?;
