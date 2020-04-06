@@ -1,0 +1,6 @@
+use `script` as s;
+
+match event of
+  case {} => "snot {snot}"
+  default => "ko"
+end;
