@@ -1,1 +1,2 @@
-core::record::from_array(7)
+use std::record;
+record::from_array(7)

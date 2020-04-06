@@ -1,1 +1,2 @@
-core::string::format(7, "snot", "badger")
+use std::string;
+string::format(7, "snot", "badger")

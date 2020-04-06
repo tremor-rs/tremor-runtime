@@ -9,6 +9,8 @@ nodes:
     op: runtime::tremor
     config:
       script: |
+        # We are using core instead of use here since it's called out
+        # of a odd test case
         let event.application = "snot";
         let event.index = "badger7";
         let event.logger_name = "tsunami";

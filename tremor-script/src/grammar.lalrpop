@@ -262,8 +262,8 @@ ImportDirective: LexicalUnit<'input> = {
     "use" <mp:ModPath> => LexicalUnit::NakedImportDecl(mp),
 }
 
-PreprocessorDirective: LexicalUnit<'input> = {
-    <d:"#!line"> => LexicalUnit::LineDirective(d)
+PreprocessorDirective: ExprRaw<'input> = {
+    <start:@L> <directive:"#!line"> <end:@L> => ExprRaw::LineDirective{start, end, directive}
 }
 
 ModComment: Option<Vec<Cow<'input, str>>> = {
@@ -282,14 +282,18 @@ ModComment_: Vec<Cow<'input, str>> = {
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {
     <d:PreprocessorDirective> <list:Exprs> => {
-       list
+       let mut exprs = vec![d];
+       let mut list = list;
+       exprs.append(&mut list);
+       exprs
+       
     },
     <expr:MayBeConstExpr> ";" <list:Exprs> => {
        let mut list = list;
        list.insert(0,expr);
        list
     },
-    <d:PreprocessorDirective> => vec![],
+    <d:PreprocessorDirective> => vec![d],
     <item:MayBeConstExpr> ";"? => vec![item],
 }
 
@@ -527,15 +531,23 @@ Intrinsic: AnyFnRaw<'input> = {
 }
 
 Module: ModuleRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" PreprocessorDirective <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
+    <start:@L> "mod" <name:Ident> "with" <d:PreprocessorDirective> <doc:ModComment_> <list:ModuleExprs> "end" <end:@L> => {
+        let mut exprs = vec![d];
+        let mut list = list;
+        exprs.append(&mut list);
+        ModuleRaw{name, start, end, exprs, doc: Some(doc)}
+    },
     <start:@L> "mod" <name:Ident> "with" <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
     <start:@L> "mod" <name:Ident> "with" <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: None},
 }
 
 /// List of expressions at the root of the script
 ModuleExprs: ExprsRaw<'input> = {
-    PreprocessorDirective <list:ModuleExprs> => {
-       list
+    <d:PreprocessorDirective> <list:ModuleExprs> => {
+        let mut exprs = vec![d];
+        let mut list = list;
+        exprs.append(&mut list);
+        exprs
     },
     <expr:ModuleExpr> ";" <list:ModuleExprs> => {
        let mut list = list;

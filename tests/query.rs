@@ -48,7 +48,7 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
-                let module_path = ModulePath { mounts: vec![query_dir] };
+                let module_path = ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
                 let mut file = File::open(query_file)?;

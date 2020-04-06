@@ -244,11 +244,13 @@ where
     pub functions: HashMap<Vec<String>, usize>,
     pub consts: HashMap<Vec<String>, usize>,
     pub meta: NodeMetas,
+    pub const_values: Vec<Value<'script>>,
     docs: Docs<'script>,
     module: Vec<String>,
     possible_leaf: bool,
     fn_argc: usize,
     is_open: bool,
+    file_offset: Location,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -256,7 +258,8 @@ where
     'script: 'registry,
 {
     pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        self.meta.add_meta(start, end)
+        self.meta
+            .add_meta(start - self.file_offset, end - self.file_offset)
     }
     pub fn add_meta_w_name<S>(
         &mut self,
@@ -268,8 +271,12 @@ where
     where
         S: ToString,
     {
-        self.meta
-            .add_meta_w_name(start, end, name, compilation_unit_part)
+        self.meta.add_meta_w_name(
+            start - self.file_offset,
+            end - self.file_offset,
+            name,
+            compilation_unit_part,
+        )
     }
     pub fn has_locals(&self) -> bool {
         self.locals
@@ -319,6 +326,8 @@ where
             possible_leaf: false,
             fn_argc: 0,
             is_open: false,
+            const_values: Vec::new(),
+            file_offset: Location::default(),
         }
     }
 
@@ -688,7 +697,7 @@ impl_expr2!(Invoke);
 
 impl<'script> Invoke<'script> {
     fn inline(self) -> Result<ImutExprInt<'script>> {
-        self.invocable.inline(self.args)
+        self.invocable.inline(self.args, self.mid)
     }
     fn can_inline(&self) -> bool {
         self.invocable.can_inline()
@@ -704,10 +713,10 @@ pub(crate) enum Invocable<'script> {
 use crate::registry::FResult;
 
 impl<'script> Invocable<'script> {
-    fn inline(self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
+    fn inline(self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExprInt<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
-            Invocable::Tremor(f) => f.inline(args),
+            Invocable::Tremor(f) => f.inline(args, mid),
         }
     }
     fn can_inline(&self) -> bool {

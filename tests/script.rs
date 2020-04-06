@@ -41,7 +41,7 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir] }, contents2, &*FN_REGISTRY.lock()?)?;
+                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, contents2, &*FN_REGISTRY.lock()?)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
@@ -141,7 +141,10 @@ test_cases!(
     pp_alias3,
     // regression
     empty_array_pattern,
+    // TODO
+    // const_in_const_lookup,
     //INSERT
+    const_of_const,
     fn_extractors,
     mod_access_const,
     module,

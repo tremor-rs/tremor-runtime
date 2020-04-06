@@ -72,7 +72,11 @@ impl<'script> CustomFn<'script> {
 
         true
     }
-    pub(crate) fn inline(&self, args: ImutExprs<'script>) -> Result<ImutExprInt<'script>> {
+    pub(crate) fn inline(
+        &self,
+        args: ImutExprs<'script>,
+        mid: usize,
+    ) -> Result<ImutExprInt<'script>> {
         if self.body.len() != 1 {
             return Err(format!("can't inline {}: too large body", self.name).into());
         }
@@ -93,6 +97,7 @@ impl<'script> CustomFn<'script> {
         }
 
         let mut i = i.clone();
+        i.mid = mid;
         i.args = args;
 
         Ok(match i.args.len() {

@@ -34,6 +34,18 @@ pub struct Location {
     pub absolute: usize,
 }
 
+impl std::ops::Sub for Location {
+    type Output = Location;
+    fn sub(self, rhs: Location) -> Self::Output {
+        Location {
+            unit_id: self.unit_id,
+            line: self.line.saturating_sub(rhs.line),
+            column: self.column.saturating_sub(rhs.column),
+            absolute: self.absolute.saturating_sub(rhs.absolute),
+        }
+    }
+}
+
 /// A Span with start and end location
 #[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub struct Span {
