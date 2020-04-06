@@ -733,18 +733,6 @@ impl<'input> Iterator for Tokenizer<'input> {
 ///
 pub struct Preprocessor {}
 
-rental! {
-    #[allow(clippy::ptr_arg)]
-    mod rentals {
-        use super::*;
-        #[rental_mut(covariant,debug)]
-        pub(crate) struct Preprocessor {
-            pre: Box<(String, Vec<String>)>,
-            parsed: Vec<Result<TokenSpan<'pre>>>,
-        }
-    }
-}
-
 macro_rules! take_while {
     ($let:ident, $token:pat, $iter:expr) => {
         $let = $iter.next();
