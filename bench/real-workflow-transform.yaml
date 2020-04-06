@@ -39,26 +39,12 @@ pipeline:
         op: runtime::tremor
         config:
           script: |          
-            mod string with
-              intrinsic fn len(e) as string::len;
-              intrinsic fn substr(e,s,e) as string::substr;
-            end;
-            mod json with
-              intrinsic fn contains(e) as json::encode;
-            end;
-            mod type with
-              intrinsic fn as_string(e) as type::as_string;
-            end;
-            mod array with
-              intrinsic fn contains(a,e) as array::contains;
-            end;
-            mod record with
-              intrinsic fn rename(a,e) as record::rename;
-            end;
-            mod system with
-              intrinsic fn ingest_ns() as system::ingest_ns;
-              intrinsic fn hostname() as system::hostname;
-            end;
+            use std::string;
+            use std::json;
+            use std::type;
+            use std::array;
+            use std::record;
+            use tremor::system;
             let event = patch event of
               upsert "message" => event.full_message,
               upsert "tremor" => system::hostname()

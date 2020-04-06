@@ -2,14 +2,18 @@
 
 set -x
 
-. $(dirname $0)/common.inc
+BENCH_ROOT="$(dirname $0)"
+
+. "${BENCH_ROOT}/common.inc"
+
+
 
 BENCH_EXTRA?=""
 
 file=$1
 if [ ! -f $file ]
 then
-  file="./bench/$file.yaml"
+  file="${BENCH_ROOT}/$file.yaml"
 fi
 
 if [ "${TREMOR_DEV_ENV}" = "devcontainer" ]
@@ -28,7 +32,7 @@ fi
 
 if [ ! -f $file ]
 then
-    echo "Benchmark file ./bench/$1.yaml not found!"
+    echo "Benchmark file ${BENCH_ROOT}/$1.yaml not found!"
     exit 1
 fi
 
@@ -36,9 +40,9 @@ echo "######## $1"
 
 echo "TARGET_ROOT: ${TARGET_ROOT}"
 
-if [ -d ./bench/$1 ]
+if [ -d ${BENCH_ROOT}/$1 ]
 then
-  ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
 else
-  ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml
+  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml
 fi

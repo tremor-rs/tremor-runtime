@@ -40,9 +40,7 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            mod system with
-              intrinsic fn ingest_ns() as system::ingest_ns;
-            end;
+            use tremor::system;
             let event.timestamp = system::ingest_ns();
             event
       - id: batch
