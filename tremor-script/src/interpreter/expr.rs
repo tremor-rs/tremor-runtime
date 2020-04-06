@@ -129,8 +129,47 @@ where
         expr: &'script Patch,
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
-        // NOTE: Is this good? I don't like it.
-        let value = stry!(expr.target.run(opts, env, event, state, meta, local));
+        // This function is called when we encounter code that consumes a value
+        // to patch it. So the following code:
+        // ```tremor
+        // let event = patch event of insert "key" => "value" end
+        // ```
+        // When executed on it's own would clone the event, add a key and
+        // overwrite original event.
+        //
+        // We optimise this as:
+        // ```
+        // patch_in_place event of insert "key" => "value" end
+        // ```
+        //
+        // This code is generated in impl Upable for ExprRaw where the following
+        // checks are performed:
+        //
+        // 1) the patch is on the RHS of an assignment
+        // 2) the path of the assigned value and the path of the patched
+        //    expression are identical.
+        //
+        // In turn this guarantees (at compile time):
+        //
+        // 1) The target (`expr`) is a path lookup
+        // 2) The target is not a known constant as otherwise the assignment
+        //    will complan
+        // 3) this leave the `expr` to be either a local, the event, the state,
+        //    metadata or a subkey thereof.
+        //
+        // And the following guarantees at run time:
+        //
+        // 1) the `expr` is an existing key of the mentioned categories,
+        //    otherwise `expr.target.run` will error.
+        // 2) `value` will never be owned (however the resolve function is
+        //    generic so it needs to return a Cow)
+
+        let value: Cow<'run, Value<'event>> =
+            stry!(expr.target.run(opts, env, event, state, meta, local));
+        debug_assert!(
+            !matches!(value, Cow::Owned(_)),
+            "We should never see a owned value here as patch_in_place is only ever called on existing data in event, state, meta or local"
+        );
         let v: &Value<'event> = value.borrow();
         let v: &mut Value<'event> = unsafe { mem::transmute(v) };
         stry!(patch_value(
@@ -151,12 +190,19 @@ where
         expr: &'script Merge,
     ) -> Result<Cow<'run, Value<'event>>> {
         use std::mem;
-        // NOTE: Is this good? I don't like it.
-        let value_cow = stry!(expr.target.run(opts, env, event, state, meta, local));
-        let value: &Value<'event> = value_cow.borrow();
-        let value: &mut Value<'event> = unsafe { mem::transmute(value) };
+        // Please see the soundness reasoning in `patch_in_place` for details
+        // those functions perform the same function just with slighty different
+        // operations.
+        let value_cow: Cow<'run, Value<'event>> =
+            stry!(expr.target.run(opts, env, event, state, meta, local));
+        debug_assert!(
+            !matches!(value_cow, Cow::Owned(_)),
+            "We should never see a owned value here as merge_in_place is only ever called on existing data in event, state, meta or local"
+        );
 
-        if value.is_object() {
+        if value_cow.is_object() {
+            let value: &Value<'event> = value_cow.borrow();
+            let value: &mut Value<'event> = unsafe { mem::transmute(value) };
             let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local,));
 
             if replacement.is_object() {
@@ -166,7 +212,7 @@ where
                 error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
             }
         } else {
-            error_need_obj(self, &expr.target, value.value_type(), &env.meta)
+            error_need_obj(self, &expr.target, value_cow.value_type(), &env.meta)
         }
     }
 
