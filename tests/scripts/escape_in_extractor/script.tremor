@@ -1,0 +1,5 @@
+match event of
+  case r = %{ m ~= re|\\d+| } => "ok"
+  case r = %{ m ~= re|[0-9]+\\s| } => "ok"
+  default => "ok"
+end
