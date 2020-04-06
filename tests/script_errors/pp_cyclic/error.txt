@@ -1,0 +1,2 @@
+Error:
+      | ^ Too many open files (os error 24)
