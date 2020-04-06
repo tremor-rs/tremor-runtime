@@ -186,9 +186,15 @@ fn main() -> Result<()> {
     if matches.is_present("lex") {
         println!();
         raw.push('\n');
+        let mut include_stack = lexer::IncludeStack::default();
         let lexemes = if matches.is_present("highlight-preprocess-source") {
-            lexer::Preprocessor::preprocess(&crate::path::load(), &script_file, &mut raw)
-                .expect("Did not preprocess ok")
+            lexer::Preprocessor::preprocess(
+                &crate::path::load(),
+                &script_file,
+                &mut raw,
+                &mut include_stack,
+            )
+            .expect("Did not preprocess ok")
         } else {
             lexer::Tokenizer::new(&raw).collect()
         };

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use serde::Deserialize;
-
+use std::path::{Path, PathBuf};
 /// Structure representing module library paths
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize)]
@@ -24,12 +24,14 @@ pub struct ModulePath {
 
 impl ModulePath {
     /// Does a particular module exist relative to the module path in force
-    pub fn resolve(&self, rel_file: &str) -> Option<String> {
+    pub fn resolve<S: AsRef<Path> + ?Sized>(&self, rel_file: &S) -> Option<Box<Path>> {
         for mount in &self.mounts {
-            let target = format!("{}/{}", &mount, &rel_file);
+            let mut target = PathBuf::new();
+            target.push(mount);
+            target.push(rel_file);
             if let Ok(meta) = std::fs::metadata(&target) {
                 if meta.is_file() {
-                    return Some(target); // NOTE The first match on the path is returned so overriding is neither possible nor supported
+                    return Some(target.into()); // NOTE The first match on the path is returned so overriding is neither possible nor supported
                 }
             }
         }
