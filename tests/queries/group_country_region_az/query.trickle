@@ -1,6 +1,7 @@
 create stream by_co_re;
 
-select {
+select 
+{
   "country": event.country,
    "region": group[0],
    "azs": event.regions[group[0]],

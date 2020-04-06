@@ -1030,15 +1030,23 @@ impl<'input> Preprocessor {
                                                 })
                                                 .collect::<Vec<String>>()
                                                 .join("");
-                                            input.push_str(&format!("#!line {} 0\n", &file_path2));
-                                            input.push_str(&format!("mod {} with ", &alias));
-                                            input.push_str(&format!("#!line {} 0\n", &file_path2));
+                                            input.push_str(&format!(
+                                                "#!line 0 0 0 {}\n",
+                                                &file_path2
+                                            ));
+                                            input.push_str(&format!("mod {} with\n", &alias));
+                                            input.push_str(&format!(
+                                                "#!line 0 0 0 {}\n",
+                                                &file_path2
+                                            ));
                                             input.push_str(&format!("{}\n", y.trim()));
                                             input.push_str("end;\n");
                                             input.push_str(&format!(
-                                                "#!line {} {}\n",
+                                                "#!line {} {} {} {}\n",
+                                                span2.end.absolute,
+                                                span2.end.line + 1,
+                                                0,
                                                 file_name,
-                                                span2.end.line + 1
                                             ));
                                         }
                                     }

@@ -74,13 +74,43 @@ impl<'script> ScriptRaw<'script> {
         helper.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
 
         // TODO: Document why three `null` values are put in the constants vector.
-        let mut consts: Vec<Value> = vec![Value::null(); 3];
+        helper.const_values = vec![Value::null(); 3];
         let mut exprs = vec![];
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
+                ExprRaw::LineDirective {
+                    directive,
+                    start,
+                    end,
+                    ..
+                } => {
+                    let splitted: Vec<_> = directive.split(' ').collect();
+                    match splitted.get(0..4) {
+                        Some(&[absolute, line, column, _file]) => {
+                            let mut l = Location {
+                                unit_id: 0,
+                                line: line.parse()?,
+                                column: column.parse()?,
+                                absolute: absolute.parse()?,
+                            };
+                            l.line -= l.line.saturating_sub(1);
+                            let mut l = end - l;
+                            l.column = 0;
+                            helper.file_offset = l;
+                        }
+                        _ => {
+                            return error_generic(
+                                &Range::from((start, end)).expand_lines(2),
+                                &Range::from((start, end)),
+                                &"invalid #!line statement",
+                                &helper.meta,
+                            )
+                        }
+                    }
+                }
                 ExprRaw::Module(m) => {
-                    m.define(reg, aggr_reg, &mut consts, &mut helper)?;
+                    m.define(reg, aggr_reg, &mut helper)?;
                 }
                 ExprRaw::Const {
                     name,
@@ -90,7 +120,11 @@ impl<'script> ScriptRaw<'script> {
                     comment,
                 } => {
                     let name_v = vec![name.to_string()];
-                    if helper.consts.insert(name_v.clone(), consts.len()).is_some() {
+                    if helper
+                        .consts
+                        .insert(name_v.clone(), helper.const_values.len())
+                        .is_some()
+                    {
                         return Err(ErrorKind::DoubleConst(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -103,13 +137,15 @@ impl<'script> ScriptRaw<'script> {
                     if i == last_idx {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
-                            idx: consts.len(),
+                            idx: helper.const_values.len(),
                             mid: helper.add_meta_w_name(start, end, &name, COMPILATION_UNIT_PART),
                         }))
                     }
+                    let expr = expr.reduce(&helper)?;
+
                     let v = reduce2(expr, &helper)?;
                     let value_type = v.value_type();
-                    consts.push(v);
+                    helper.const_values.push(v);
                     helper.docs.consts.push(ConstDoc {
                         name,
                         doc: comment
@@ -176,7 +212,7 @@ impl<'script> ScriptRaw<'script> {
             Script {
                 imports: vec![], // Compiled out
                 exprs,
-                consts,
+                consts: helper.const_values,
                 aggregates: helper.aggregates,
                 locals: helper.locals.len(),
                 node_meta: helper.meta,
@@ -205,14 +241,43 @@ impl<'script> ModuleRaw<'script> {
         self,
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
-        consts: &mut Vec<Value<'script>>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         helper.module.push(self.name.id.to_string());
         for e in self.exprs {
             match e {
+                ExprRaw::LineDirective {
+                    directive,
+                    start,
+                    end,
+                    ..
+                } => {
+                    let splitted: Vec<_> = directive.split(' ').collect();
+                    match splitted.get(0..4) {
+                        Some(&[absolute, line, column, _file]) => {
+                            let mut l = Location {
+                                unit_id: 0,
+                                line: line.parse()?,
+                                column: column.parse()?,
+                                absolute: absolute.parse()?,
+                            };
+                            l.line -= l.line.saturating_sub(1);
+                            let mut l = end - l;
+                            l.column = 0;
+                            helper.file_offset = l;
+                        }
+                        _ => {
+                            return error_generic(
+                                &Range::from((start, end)).expand_lines(2),
+                                &Range::from((start, end)),
+                                &"invalid #!line statement",
+                                &helper.meta,
+                            )
+                        }
+                    }
+                }
                 ExprRaw::Module(m) => {
-                    m.define(reg, aggr_reg, consts, helper)?;
+                    m.define(reg, aggr_reg, helper)?;
                 }
                 ExprRaw::Const {
                     name,
@@ -231,10 +296,12 @@ impl<'script> ModuleRaw<'script> {
                         )
                         .into());
                     }
-                    helper.consts.insert(name_v.clone(), consts.len());
+                    helper
+                        .consts
+                        .insert(name_v.clone(), helper.const_values.len());
                     let expr = expr.up(helper)?;
                     let v = reduce2(expr, &helper)?;
-                    consts.push(v);
+                    helper.const_values.push(v);
                 }
                 #[allow(unreachable_code, unused_variables)]
                 #[cfg_attr(tarpaulin, skip)]
@@ -407,6 +474,11 @@ pub(crate) fn reduce2<'script>(
 ) -> Result<Value<'script>> {
     match expr {
         ImutExprInt::Literal(Literal { value: v, .. }) => Ok(v),
+        ImutExprInt::Local {
+            is_const: true,
+            idx,
+            ..
+        } => Ok(Value::from(idx)),
         other => Err(ErrorKind::NotConstant(
             other.extent(&helper.meta),
             other.extent(&helper.meta).expand_lines(2),
@@ -417,7 +489,7 @@ pub(crate) fn reduce2<'script>(
 
 impl<'script> ImutExprInt<'script> {
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn reduce(self, helper: &Helper) -> Result<Self> {
+    pub(crate) fn reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => match *u {
                 u1
@@ -499,6 +571,34 @@ impl<'script> ImutExprInt<'script> {
                     Ok(ImutExprInt::Record(r))
                 }
             }
+            ImutExprInt::Path(Path::Const(LocalPath {
+                is_const: true,
+                segments,
+                idx,
+                mid,
+            })) if segments.is_empty() => {
+                if let Some(v) = helper.const_values.get(idx) {
+                    let lit = Literal {
+                        mid,
+                        value: v.clone(),
+                    };
+                    Ok(ImutExprInt::Literal(lit))
+                } else {
+                    error_generic(
+                        &Range::from((
+                            helper.meta.start(mid).unwrap_or_default(),
+                            helper.meta.end(mid).unwrap_or_default(),
+                        ))
+                        .expand_lines(2),
+                        &Range::from((
+                            helper.meta.start(mid).unwrap_or_default(),
+                            helper.meta.end(mid).unwrap_or_default(),
+                        )),
+                        &"Invalid const reference",
+                        &helper.meta,
+                    )
+                }
+            }
             ImutExprInt::Invoke1(i)
             | ImutExprInt::Invoke2(i)
             | ImutExprInt::Invoke3(i)
@@ -544,6 +644,11 @@ impl<'script> ImutExprInt<'script> {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
+    LineDirective {
+        start: Location,
+        end: Location,
+        directive: Cow<'script, str>,
+    },
     /// we're forced to make this pub because of lalrpop
     Const {
         /// we're forced to make this pub because of lalrpop
@@ -583,6 +688,14 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
+            ExprRaw::LineDirective { start, end, .. } => {
+                return error_generic(
+                    &Range::from((start, end)).expand_lines(2),
+                    &Range::from((start, end)),
+                    &"We can't have a line directrive here",
+                    &helper.meta,
+                )
+            }
             ExprRaw::Module(ModuleRaw { start, end, .. }) => {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
@@ -674,7 +787,9 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
+            ExprRaw::LineDirective { start, .. }
+            | ExprRaw::Const { start, .. }
+            | ExprRaw::Drop { start, .. } => *start,
             ExprRaw::Module(e) => e.s(meta),
             ExprRaw::MatchExpr(e) => e.s(meta),
             ExprRaw::Assign(e) => e.s(meta),
@@ -686,7 +801,9 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
+            ExprRaw::LineDirective { end, .. }
+            | ExprRaw::Const { end, .. }
+            | ExprRaw::Drop { end, .. } => *end,
             ExprRaw::Module(e) => e.e(meta),
             ExprRaw::MatchExpr(e) => e.e(meta),
             ExprRaw::Assign(e) => e.e(meta),

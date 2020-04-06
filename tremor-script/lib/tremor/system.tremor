@@ -10,3 +10,8 @@ intrinsic fn hostname() as system::hostname;
 ##
 ## Returns a `string`
 intrinsic fn ingest_ns() as system::ingest_ns;
+
+## Returns the instance of tremor.
+##
+## Returns a `string`
+intrinsic fn instance() as system::instance;
