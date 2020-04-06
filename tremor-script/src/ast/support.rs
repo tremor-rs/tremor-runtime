@@ -78,7 +78,7 @@ impl<'script> PartialEq for StatePath<'script> {
 }
 
 impl BinOpKind {
-    fn operator_name(&self) -> &'static str {
+    fn operator_name(self) -> &'static str {
         match self {
             Self::Or => "or",
             Self::Xor => "xor",
@@ -111,7 +111,7 @@ impl fmt::Display for BinOpKind {
 }
 
 impl UnaryOpKind {
-    fn operator_name(&self) -> &'static str {
+    fn operator_name(self) -> &'static str {
         match self {
             Self::Plus => "+",
             Self::Minus => "-",
