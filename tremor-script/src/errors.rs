@@ -165,7 +165,7 @@ impl ErrorKind {
     pub(crate) fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
-            NoClauseHit(outer) | Oops(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
+            NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
             QueryStreamNotDefined(outer, inner, _)
             | ArrayOutOfRange(outer, inner, _, _)
             | AssignIntoArray(outer, inner)
@@ -292,7 +292,7 @@ impl ErrorKind {
             MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_, _) => Some("Please take the error output script and test data and open a ticket, this should not happen.".into()),
+            Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/wayfair-tremor/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
             _ => None,
         }
     }
@@ -381,7 +381,7 @@ error_chain! {
             description("Conflicting types")
                 display("Conflicting types, got {} but expected {}", t2s(*got), choices(&expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))
         }
-        Oops(expr: Range, msg: String) {
+        Oops(expr: Range, id: u64, msg: String) {
             description("Something went wrong and we're not sure what it was")
                 display("Something went wrong and we're not sure what it was: {}", msg)
         }
@@ -829,10 +829,11 @@ pub(crate) fn error_no_clause_hit<T, O: BaseExpr>(outer: &O, meta: &NodeMetas) -
 
 pub(crate) fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
     outer: &O,
+    id: u64,
     msg: &S,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::Oops(outer.extent(meta), msg.to_string()).into())
+    Err(ErrorKind::Oops(outer.extent(meta), id, msg.to_string()).into())
 }
 
 pub(crate) fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
