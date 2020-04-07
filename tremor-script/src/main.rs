@@ -446,9 +446,11 @@ fn main() -> Result<()> {
                             "{} ",
                             serde_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
-                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result).collect();
+                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
+                            .filter_map(Result::ok)
+                            .collect();
                         let mut h = TermHighlighter::new();
-                        h.highlight(&lexed_tokens)?;
+                        h.highlight(Some(script_file), &lexed_tokens)?;
                     }
                 }
                 // Handle the other success returns
@@ -459,9 +461,11 @@ fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&result)?);
                     } else {
                         let result = format!("{} ", serde_json::to_string_pretty(&result)?);
-                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result).collect();
+                        let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
+                            .filter_map(Result::ok)
+                            .collect();
                         let mut h = TermHighlighter::new();
-                        h.highlight(&lexed_tokens)?;
+                        h.highlight(Some(script_file), &lexed_tokens)?;
                     }
                 }
                 // Hande and print runtime errors.

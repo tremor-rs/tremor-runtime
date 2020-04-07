@@ -34,7 +34,7 @@ use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
-use tremor_script::errors::query_stream_not_defined;
+use tremor_script::errors::{query_stream_not_defined, CompilerError};
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
@@ -100,7 +100,7 @@ impl Query {
         file_name: &str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
-    ) -> Result<Self> {
+    ) -> std::result::Result<Self, CompilerError> {
         Ok(Self(tremor_script::query::Query::parse(
             module_path,
             file_name,
