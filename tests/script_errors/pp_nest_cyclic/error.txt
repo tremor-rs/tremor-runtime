@@ -1,0 +1,2 @@
+Error: 
+      | ^ Cyclic dependency detected: tests/script_errors/pp_nest_cyclic/script.tremor -> tests/script_errors/pp_nest_cyclic/foo/bar.tremor -> tests/script_errors/pp_nest_cyclic/foo/baz.tremor -> tests/script_errors/pp_nest_cyclic/foo/bar.tremor
