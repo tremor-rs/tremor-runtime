@@ -108,7 +108,7 @@ where
         script: &'script str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
-    ) -> Result<Self> {
+    ) -> std::result::Result<Self, CompilerError> {
         let mut source = script.to_string();
 
         let mut warnings = vec![];
@@ -117,36 +117,42 @@ where
         // FIXME make lexer EOS tolerant to avoid this kludge
         source.push('\n');
 
-        let query = rentals::Query::try_new(Box::new(source.clone()), |src: &mut String| {
-            let mut include_stack = lexer::IncludeStack::default();
-            let cu = include_stack.push(&file_name)?;
-            let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                module_path,
-                file_name,
-                src,
-                cu,
-                &mut include_stack,
-            )?;
-            let filtered_tokens = lexemes
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|t| !t.value.is_ignorable());
+        let mut include_stack = lexer::IncludeStack::default();
+        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
+            let query = rentals::Query::try_new(Box::new(source.clone()), |src: &mut String| {
+                let cu = include_stack.push(&file_name)?;
+                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
+                    module_path,
+                    file_name,
+                    src,
+                    cu,
+                    include_stack,
+                )?;
+                let filtered_tokens = lexemes
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|t| !t.value.is_ignorable());
 
-            let (script, local_count, ws) = crate::parser::g::QueryParser::new()
-                .parse(filtered_tokens)?
-                .up_script(include_stack.into_cus(), reg, aggr_reg)?;
+                let (script, local_count, ws) = crate::parser::g::QueryParser::new()
+                    .parse(filtered_tokens)?
+                    .up_script(include_stack.cus.clone(), reg, aggr_reg)?;
 
-            warnings = ws;
-            locals = local_count;
-            Ok(script)
-        })
-        .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
+                warnings = ws;
+                locals = local_count;
+                Ok(script)
+            })
+            .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
 
-        Ok(Self {
-            query: Arc::new(query),
-            source,
-            locals,
-            warnings,
+            Ok(Self {
+                query: Arc::new(query),
+                source,
+                locals,
+                warnings,
+            })
+        }(&mut include_stack);
+        r.map_err(|error| CompilerError {
+            error,
+            cus: include_stack.into_cus(),
         })
     }
 
@@ -249,7 +255,7 @@ mod test {
         let aggr_reg = crate::aggr_registry();
         let module_path = crate::path::load();
         if let Err(e) = Query::parse(&module_path, "test.trickle", query, &reg, &aggr_reg) {
-            eprintln!("{}", e);
+            eprintln!("{}", e.error());
             assert!(false)
         } else {
             assert!(true)

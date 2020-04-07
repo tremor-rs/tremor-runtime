@@ -107,6 +107,11 @@ impl From<crossbeam_channel::RecvError> for Error {
         Self::from(format!("{:?}", e))
     }
 }
+impl From<tremor_script::errors::CompilerError> for Error {
+    fn from(e: tremor_script::errors::CompilerError) -> Self {
+        e.error().into()
+    }
+}
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {

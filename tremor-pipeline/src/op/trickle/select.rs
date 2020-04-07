@@ -958,7 +958,8 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
         let module_path = tremor_script::path::load();
         let query =
-            tremor_script::query::Query::parse(&module_path, &file_name, query, &reg, &aggr_reg)?;
+            tremor_script::query::Query::parse(&module_path, &file_name, query, &reg, &aggr_reg)
+                .map_err(tremor_script::errors::CompilerError::error)?;
 
         let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
             q.suffix().stmts[0].clone()

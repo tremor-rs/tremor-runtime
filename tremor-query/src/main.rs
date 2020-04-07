@@ -32,7 +32,6 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::iter::FromIterator;
 use tremor_pipeline::errors::*;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::path::load as load_module_path;
@@ -243,22 +242,6 @@ fn main() -> Result<()> {
             });
             continuation.clear();
             let ingest_ns = nanotime();
-            /*
-            if matches.value_of("replay-influx").is_some() {
-                let this = event
-                    .get("timestamp")
-                    .and_then(Value::as_u64)
-                    .unwrap_or_else(|| id * 1_000_000_000);
-                if this < last {
-                    last += 1;
-                } else {
-                    last = this;
-                }
-                last
-            } else {
-                id * 1_000_000_000
-            };
-            */
             execable.enqueue(
                 "in",
                 tremor_pipeline::Event {
@@ -280,9 +263,11 @@ fn main() -> Result<()> {
                 } else if selected_output.is_none() || selected_output == Some(&output) {
                     println!("{}>>", output);
                     let result = format!("{} ", serde_json::to_string_pretty(event)?);
-                    let lexed_tokens = Vec::from_iter(lexer::Tokenizer::new(&result));
+                    let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
+                        .filter_map(std::result::Result::ok)
+                        .collect();
                     let mut h = TermHighlighter::new();
-                    h.highlight(&lexed_tokens)?;
+                    h.highlight(Some(script_file), &lexed_tokens)?;
                 }
             }
         }

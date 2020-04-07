@@ -90,6 +90,16 @@ macro_rules! test_cases {
                             println!("{}", got);
                             assert_eq!(err, got);
                         }
+                        Err(Error(ErrorKind::Script(e), o)) =>{
+                            let e = tremor_script::errors::Error(e, o);
+                            let mut h = Dumb::new();
+                            tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
+                            h.finalize()?;
+                            let got = h.to_string();
+                            let got = got.trim();
+                            println!("{}", got);
+                            assert_eq!(err, got);
+                        }
                         Err(e) =>{
                             println!("got wrong error: {:?}", e);
                             assert!(false);
