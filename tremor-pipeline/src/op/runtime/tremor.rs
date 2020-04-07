@@ -40,7 +40,7 @@ op!(TremorFactory(node) {
                 } else {
                     error!("{}", h.to_string());
                 };
-                Err(e.into())
+                Err(e.error().into())
             }
         }
     } else {

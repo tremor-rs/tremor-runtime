@@ -33,10 +33,6 @@ pub(crate) Query : QueryRaw<'input> = {
 }
 
 Stmts: StmtsRaw<'input> = {
-    <d:PreprocessorDirective> <list:Stmts> => {
-       list
-    },
-    <d:PreprocessorDirective> => vec![],
     <stmt:Stmt> ";" <list:Stmts> => {
       let mut list = list;
       list.insert(0,stmt);
@@ -46,16 +42,12 @@ Stmts: StmtsRaw<'input> = {
 }
 
 ModuleStmt: ModuleStmtRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" PreprocessorDirective <doc:ModComment_> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: Some(doc)},
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment_> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: Some(doc)},
-    <start:@L> "mod" <name:Ident> "with" <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: None},
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: doc},
+    
 }
 
 /// List of expressions at the root of the script
 ModuleStmts: StmtsRaw<'input> = {
-    PreprocessorDirective <list:ModuleStmts> => {
-       list
-    },
     //<stmt:Stmt> ";" <list:ModuleStmts> => {
     //    let mut list = list;
     //    list.insert(0,stmt);
@@ -262,10 +254,6 @@ ImportDirective: LexicalUnit<'input> = {
     "use" <mp:ModPath> => LexicalUnit::NakedImportDecl(mp),
 }
 
-PreprocessorDirective: ExprRaw<'input> = {
-    <start:@L> <directive:"#!line"> <end:@L> => ExprRaw::LineDirective{start, end, directive}
-}
-
 ModComment: Option<Vec<Cow<'input, str>>> = {
     (<ModComment_>)? => <>
 }
@@ -281,19 +269,11 @@ ModComment_: Vec<Cow<'input, str>> = {
 
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {
-    <d:PreprocessorDirective> <list:Exprs> => {
-       let mut exprs = vec![d];
-       let mut list = list;
-       exprs.append(&mut list);
-       exprs
-       
-    },
     <expr:MayBeConstExpr> ";" <list:Exprs> => {
        let mut list = list;
        list.insert(0,expr);
        list
     },
-    <d:PreprocessorDirective> => vec![d],
     <item:MayBeConstExpr> ";"? => vec![item],
 }
 
@@ -531,24 +511,11 @@ Intrinsic: AnyFnRaw<'input> = {
 }
 
 Module: ModuleRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <d:PreprocessorDirective> <doc:ModComment_> <list:ModuleExprs> "end" <end:@L> => {
-        let mut exprs = vec![d];
-        let mut list = list;
-        exprs.append(&mut list);
-        ModuleRaw{name, start, end, exprs, doc: Some(doc)}
-    },
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment_> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: Some(doc)},
-    <start:@L> "mod" <name:Ident> "with" <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: None},
+    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: doc},
 }
 
 /// List of expressions at the root of the script
 ModuleExprs: ExprsRaw<'input> = {
-    <d:PreprocessorDirective> <list:ModuleExprs> => {
-        let mut exprs = vec![d];
-        let mut list = list;
-        exprs.append(&mut list);
-        exprs
-    },
     <expr:ModuleExpr> ";" <list:ModuleExprs> => {
        let mut list = list;
        list.insert(0,expr);
@@ -1397,7 +1364,6 @@ extern {
         "use" => Token::Use,
         "as" => Token::As,
 
-        "#!line" => Token::LineDirective(<Cow<'input, str>>),
     }
 }
 

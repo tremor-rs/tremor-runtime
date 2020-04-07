@@ -1,0 +1,3 @@
+fn badger() with
+  snot::badger::boo
+end

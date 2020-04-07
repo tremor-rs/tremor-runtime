@@ -26,7 +26,6 @@ use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
-use halfbrown::hashmap;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
@@ -79,37 +78,6 @@ impl<'script> ScriptRaw<'script> {
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
-                ExprRaw::LineDirective {
-                    directive,
-                    start,
-                    end,
-                    ..
-                } => {
-                    let splitted: Vec<_> = directive.split(' ').collect();
-                    match splitted.get(0..5) {
-                        Some(&[absolute, line, column, cu, _file]) => {
-                            let mut l = Location {
-                                unit_id: 0,
-                                line: line.parse()?,
-                                column: column.parse()?,
-                                absolute: absolute.parse()?,
-                            };
-                            l.line -= l.line.saturating_sub(1);
-                            let mut l = end - l;
-                            l.column = 0;
-                            helper.file_offset = l;
-                            helper.cu = cu.parse()?;
-                        }
-                        _ => {
-                            return error_generic(
-                                &Range::from((start, end)).expand_lines(2),
-                                &Range::from((start, end)),
-                                &"invalid #!line statement",
-                                &helper.meta,
-                            )
-                        }
-                    }
-                }
                 ExprRaw::Module(m) => {
                     m.define(reg, aggr_reg, &mut helper)?;
                 }
@@ -217,7 +185,6 @@ impl<'script> ScriptRaw<'script> {
                 aggregates: helper.aggregates,
                 locals: helper.locals.len(),
                 node_meta: helper.meta,
-                compilation_units: hashmap![], // FIXME cpp
                 functions: helper.func_vec,
                 docs: helper.docs,
             },
@@ -247,36 +214,6 @@ impl<'script> ModuleRaw<'script> {
         helper.module.push(self.name.id.to_string());
         for e in self.exprs {
             match e {
-                ExprRaw::LineDirective {
-                    directive,
-                    start,
-                    end,
-                    ..
-                } => {
-                    let splitted: Vec<_> = directive.split(' ').collect();
-                    match splitted.get(0..4) {
-                        Some(&[absolute, line, column, _file]) => {
-                            let mut l = Location {
-                                unit_id: 0,
-                                line: line.parse()?,
-                                column: column.parse()?,
-                                absolute: absolute.parse()?,
-                            };
-                            l.line -= l.line.saturating_sub(1);
-                            let mut l = end - l;
-                            l.column = 0;
-                            helper.file_offset = l;
-                        }
-                        _ => {
-                            return error_generic(
-                                &Range::from((start, end)).expand_lines(2),
-                                &Range::from((start, end)),
-                                &"invalid #!line statement",
-                                &helper.meta,
-                            )
-                        }
-                    }
-                }
                 ExprRaw::Module(m) => {
                     m.define(reg, aggr_reg, helper)?;
                 }
@@ -648,11 +585,6 @@ impl<'script> ImutExprInt<'script> {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
-    LineDirective {
-        start: Location,
-        end: Location,
-        directive: Cow<'script, str>,
-    },
     /// we're forced to make this pub because of lalrpop
     Const {
         /// we're forced to make this pub because of lalrpop
@@ -692,14 +624,6 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ExprRaw::LineDirective { start, end, .. } => {
-                return error_generic(
-                    &Range::from((start, end)).expand_lines(2),
-                    &Range::from((start, end)),
-                    &"We can't have a line directrive here",
-                    &helper.meta,
-                )
-            }
             ExprRaw::Module(ModuleRaw { start, end, .. }) => {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
@@ -791,9 +715,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::LineDirective { start, .. }
-            | ExprRaw::Const { start, .. }
-            | ExprRaw::Drop { start, .. } => *start,
+            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
             ExprRaw::Module(e) => e.s(meta),
             ExprRaw::MatchExpr(e) => e.s(meta),
             ExprRaw::Assign(e) => e.s(meta),
@@ -805,9 +727,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::LineDirective { end, .. }
-            | ExprRaw::Const { end, .. }
-            | ExprRaw::Drop { end, .. } => *end,
+            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
             ExprRaw::Module(e) => e.e(meta),
             ExprRaw::MatchExpr(e) => e.e(meta),
             ExprRaw::Assign(e) => e.e(meta),
@@ -2111,9 +2031,13 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
                     segments,
                 })
             } else {
-                error_oops(
+                error_generic(
                     &(self.start, self.end),
-                    "Only consts can be addressed inside of modules",
+                    &(self.start, self.end),
+                    &format!(
+                        "The constant {} (absolute path) does is not defined.",
+                        module.join("::")
+                    ),
                     &helper.meta,
                 )
             }

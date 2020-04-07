@@ -155,8 +155,10 @@ where
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
         script.push('\n');
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
-        h.highlight(&tokens)
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
+            .filter_map(Result::ok)
+            .collect();
+        h.highlight(None, &tokens)
     }
 
     /// Preprocessesa and highlights a script with a given highlighter.
@@ -176,8 +178,11 @@ where
             &mut s,
             cu,
             &mut include_stack,
-        )?;
-        h.highlight(&tokens)
+        )?
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect();
+        h.highlight(Some(file_name), &tokens)
     }
 
     /// Format an error given a script source.
@@ -189,10 +194,12 @@ where
         let mut script = script.to_string();
         script.push('\n');
 
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script).collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
+            .filter_map(Result::ok)
+            .collect();
         match e.context() {
             (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(&tokens, start, end, Some(e.into()))?;
+                h.highlight_runtime_error(None, &tokens, start, end, Some(e.into()))?;
                 h.finalize()
             }
 
@@ -209,8 +216,10 @@ where
         warnings.sort();
         warnings.dedup();
         for w in &warnings {
-            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source).collect();
-            h.highlight_runtime_error(&tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
+                .filter_map(Result::ok)
+                .collect();
+            h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }
         h.finalize()
     }

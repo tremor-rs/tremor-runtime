@@ -40,6 +40,27 @@ use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 use url;
 
+/// A Compiletime error capturing the prerpocessors cus at the time of the error
+#[derive(Debug)]
+pub struct CompilerError {
+    /// The original error
+    pub error: Error,
+    /// The cus
+    pub cus: Vec<lexer::CompilationUnit>,
+}
+
+impl CompilerError {
+    /// Turns this into the underlying error
+    pub fn error(self) -> Error {
+        self.error
+    }
+}
+impl From<CompilerError> for Error {
+    fn from(e: CompilerError) -> Self {
+        e.error()
+    }
+}
+
 #[doc(hidden)]
 /// Optimised try
 #[macro_export]
@@ -138,6 +159,9 @@ pub(crate) fn best_hint(
 pub(crate) type ErrorLocation = (Option<Range>, Option<Range>);
 // FIXME: Option<(Location, Location, Option<(Location, Location)>)>
 impl ErrorKind {
+    pub(crate) fn cu(&self) -> usize {
+        self.expr().0.map(Range::cu).unwrap_or_default()
+    }
     pub(crate) fn expr(&self) -> ErrorLocation {
         use ErrorKind::*;
         match self {
@@ -275,9 +299,15 @@ impl ErrorKind {
 }
 
 impl Error {
-    pub(crate) fn context(&self) -> ErrorLocation {
+    /// the context of the error
+    pub fn context(&self) -> ErrorLocation {
         self.0.expr()
     }
+    /// The compilation unit
+    pub fn cu(&self) -> usize {
+        self.0.cu()
+    }
+
     pub(crate) fn hint(&self) -> Option<String> {
         self.0.hint()
     }

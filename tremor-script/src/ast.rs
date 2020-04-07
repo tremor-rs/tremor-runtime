@@ -64,7 +64,7 @@ impl From<(Location, Location, usize)> for NodeMeta {
 pub struct NodeMetas {
     nodes: Vec<NodeMeta>,
     #[serde(skip)]
-    cus: Vec<CompilationUnit>,
+    pub(crate) cus: Vec<CompilationUnit>,
 }
 
 impl<'script> NodeMetas {
@@ -75,21 +75,25 @@ impl<'script> NodeMetas {
             cus,
         }
     }
-    pub(crate) fn add_meta(&mut self, start: Location, end: Location, cu: usize) -> usize {
+    pub(crate) fn add_meta(&mut self, mut start: Location, mut end: Location, cu: usize) -> usize {
         let mid = self.nodes.len();
+        start.set_cu(cu);
+        end.set_cu(cu);
         self.nodes.push((start, end, cu).into());
         mid
     }
     pub(crate) fn add_meta_w_name<S>(
         &mut self,
-        start: Location,
-        end: Location,
+        mut start: Location,
+        mut end: Location,
         name: &S,
         cu: usize,
     ) -> usize
     where
         S: ToString,
     {
+        start.set_cu(cu);
+        end.set_cu(cu);
         let mid = self.nodes.len();
         self.nodes.push(NodeMeta {
             start,
@@ -428,8 +432,7 @@ pub struct Script<'script> {
     aggregates: Vec<InvokeAggrFn<'script>>,
     functions: Vec<CustomFn<'script>>,
     locals: usize,
-    node_meta: NodeMetas,
-    compilation_units: HashMap<u64, String>, // CPP
+    pub(crate) node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentaiton from the script
     pub docs: Docs<'script>,

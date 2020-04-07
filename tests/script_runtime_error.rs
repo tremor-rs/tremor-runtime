@@ -19,6 +19,7 @@ use std::io::prelude::*;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
+use tremor_script::errors::CompilerError;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;
 use tremor_script::utils::*;
@@ -42,7 +43,7 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".into()] }, script_file, contents2, &*FN_REGISTRY.lock()?)?;
+                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".into()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -93,7 +94,7 @@ macro_rules! ignore_cases {
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?)?;
+                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
