@@ -190,6 +190,7 @@ where
 
                 _ => error_oops(
                     self,
+                    0xdead000d,
                     &format!(
                         "Unknown local variable in ImutExprInt::Local: '{}'",
                         env.meta.name_dflt(*mid)
@@ -203,7 +204,7 @@ where
                 ..
             } => match env.consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
-                _ => error_oops(self, "Unknown const variable", &env.meta),
+                _ => error_oops(self, 0xdead000e, "Unknown const variable", &env.meta),
             },
             ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExprInt::Binary(ref expr) => {
@@ -397,11 +398,18 @@ where
             Path::Local(path) => match local.values.get(path.idx) {
                 Some(Some(l)) => l,
                 Some(None) => return Ok(Cow::Borrowed(&FALSE)),
-                _ => return error_oops(self, "Unknown local variable in present", &env.meta),
+                _ => {
+                    return error_oops(
+                        self,
+                        0xdead000f,
+                        "Unknown local variable in present",
+                        &env.meta,
+                    )
+                }
             },
             Path::Const(path) => match env.consts.get(path.idx) {
                 Some(v) => v,
-                _ => return error_oops(self, "Unknown constant variable", &env.meta),
+                _ => return error_oops(self, 0xdead0010, "Unknown constant variable", &env.meta),
             },
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
@@ -633,6 +641,7 @@ where
         if opts.aggr != AggrType::Emit {
             return error_oops(
                 self,
+                0xdead0011,
                 "Trying to emit aggreagate outside of emit context",
                 &env.meta,
             );

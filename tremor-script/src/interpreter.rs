@@ -434,11 +434,18 @@ where
                 );
             }
 
-            _ => return error_oops(outer, "Use of unknown local value", &env.meta),
+            _ => return error_oops(outer, 0xdead0001, "Use of unknown local value", &env.meta),
         },
         Path::Const(lpath) => match env.consts.get(lpath.idx) {
             Some(v) => v,
-            _ => return error_oops(outer, "Use of uninitialized constant", &env.meta),
+            _ => {
+                return error_oops(
+                    outer,
+                    0xdead0002,
+                    "Use of uninitialized constant",
+                    &env.meta,
+                )
+            }
         },
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
@@ -582,7 +589,7 @@ where
                         return error_need_arr(outer, segment, other.value_type(), &env.meta);
                     }
                     // Anything else: err
-                    _ => return error_oops(outer, "Bad path segments", &env.meta),
+                    _ => return error_oops(outer, 0xdead0003, "Bad path segments", &env.meta),
                 }
             }
         }
@@ -946,8 +953,10 @@ where
                         Ok(false)
                     }
                 }
-                Pattern::Assign(_) => error_oops(outer, "nested assign pattern", &env.meta),
-                Pattern::Default => error_oops(outer, "default in assign", &env.meta),
+                Pattern::Assign(_) => {
+                    error_oops(outer, 0xdead0004, "nested assign pattern", &env.meta)
+                }
+                Pattern::Default => error_oops(outer, 0xdead0005, "default in assign", &env.meta),
             }
         }
         Pattern::Default => Ok(true),
@@ -1250,6 +1259,7 @@ where
     } else {
         error_oops(
             outer,
+            0xdead0006,
             "Unknown local variable in set_local_shadow",
             &node_meta,
         )
