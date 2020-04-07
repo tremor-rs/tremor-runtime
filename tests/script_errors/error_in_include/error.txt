@@ -1,0 +1,3 @@
+Error in tests/script_errors/error_in_include/snot.tremor:2:3 
+    2 |   snot::badger::boo
+      |   ^^^^^^^^^^^^^^^^^ The constant snot::snot::badger::boo (absolute path) does is not defined.

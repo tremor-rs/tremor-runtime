@@ -321,7 +321,7 @@ pub enum Token<'input> {
     /// The `as` keyword
     As,
     /// Preprocessor directives
-    LineDirective(Cow<'input, str>),
+    LineDirective(Location, Cow<'input, str>),
 }
 
 impl<'input> Token<'input> {
@@ -338,7 +338,10 @@ impl<'input> Token<'input> {
     #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
-            Token::SingleLineComment(_) | Token::Whitespace(_) | Token::NewLine => true,
+            Token::SingleLineComment(_)
+            | Token::Whitespace(_)
+            | Token::NewLine
+            | Token::LineDirective(_, _) => true,
             _ => false,
         }
     }
@@ -436,7 +439,7 @@ impl<'input> Token<'input> {
             | Token::EqArrow
             | Token::LBrace
             | Token::LBracket
-            | Token::LineDirective(_)
+            | Token::LineDirective(_, _)
             | Token::LParen
             | Token::LPatBrace
             | Token::LPatBracket
@@ -649,7 +652,11 @@ impl<'input> fmt::Display for Token<'input> {
             Token::As => write!(f, "as"),
             Token::Recur => write!(f, "recur"),
 
-            Token::LineDirective(s) => write!(f, "#!line {}", s),
+            Token::LineDirective(l, file) => write!(
+                f,
+                "#!line {} {} {} {} {}",
+                l.absolute, l.line, l.column, l.unit_id, file
+            ),
         }
     }
 }
@@ -690,6 +697,7 @@ impl<'input> Iterator for CharLocations<'input> {
 
 /// A Tremor tokeniser
 pub struct Tokenizer<'input> {
+    //cu: usize,
     eos: bool,
     pos: Span,
     iter: Peekable<Lexer<'input>>,
@@ -702,6 +710,7 @@ impl<'input> Tokenizer<'input> {
         let start = Location::default();
         let end = Location::default();
         Tokenizer {
+            //cu: 0,
             eos: false,
             iter: lexer.peekable(),
             pos: span(start, end),
@@ -768,6 +777,10 @@ impl CompilationUnit {
     pub fn to_str(&self) -> Option<&str> {
         self.file_path.to_str()
     }
+    /// Returns the path of the file for this
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
+    }
 }
 impl PartialEq for CompilationUnit {
     fn eq(&self, other: &Self) -> bool {
@@ -783,7 +796,7 @@ impl fmt::Display for CompilationUnit {
 
 pub(crate) struct IncludeStack {
     elements: Vec<CompilationUnit>,
-    cus: Vec<CompilationUnit>,
+    pub(crate) cus: Vec<CompilationUnit>,
 }
 impl Default for IncludeStack {
     fn default() -> Self {
@@ -1195,12 +1208,28 @@ pub struct Lexer<'input> {
     input: &'input str,
     chars: CharLocations<'input>,
     start_index: BytePos,
+    file_offset: Location,
+    cu: usize,
     stored_tokens: VecDeque<TokenSpan<'input>>,
 }
 
 type Lexeme = Option<(Location, char)>;
 
 impl<'input> Lexer<'input> {
+    pub(crate) fn spanned2<T>(
+        &self,
+        mut start: Location,
+        mut end: Location,
+        value: T,
+    ) -> Spanned<T> {
+        start.unit_id = self.cu;
+        end.unit_id = self.cu;
+        Spanned {
+            span: span(start - self.file_offset, end - self.file_offset),
+            value,
+        }
+    }
+
     /// Create a new lexer from the source string
     pub(crate) fn new<S>(input: &'input S) -> Self
     where
@@ -1211,6 +1240,8 @@ impl<'input> Lexer<'input> {
             input: input.src(),
             chars,
             start_index: input.start_index(),
+            file_offset: Location::default(),
+            cu: 0,
             stored_tokens: VecDeque::new(),
         }
     }
@@ -1278,17 +1309,37 @@ impl<'input> Lexer<'input> {
 
         if lexeme.starts_with("###") {
             let doc = Token::ModComment(&lexeme[3..]);
-            Ok(spanned2(start, end, doc))
+            Ok(self.spanned2(start, end, doc))
         } else if lexeme.starts_with("##") {
             let doc = Token::DocComment(&lexeme[2..]);
-            Ok(spanned2(start, end, doc))
+            Ok(self.spanned2(start, end, doc))
         } else if lexeme.starts_with("#!line") {
             let directive = &lexeme[6..];
+
             let directive = directive.trim();
-            let line_directive = Token::LineDirective(Cow::from(directive));
-            Ok(spanned2(start, end, line_directive))
+            let splitted: Vec<_> = directive.split(' ').collect();
+
+            if let Some(&[absolute, line, column, cu, file]) = splitted.get(0..5) {
+                let cu = cu.parse()?;
+                let mut l = Location {
+                    unit_id: cu,
+                    line: line.parse()?,
+                    column: column.parse()?,
+                    absolute: absolute.parse()?,
+                };
+                l.line -= l.line.saturating_sub(1);
+                let line_directive = Token::LineDirective(l, file.into());
+
+                let mut l = start - l;
+                l.column = 0;
+                self.file_offset = l;
+                self.cu = cu;
+                Ok(self.spanned2(start, end, line_directive))
+            } else {
+                return Err("Snot!".into());
+            }
         } else {
-            Ok(spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
+            Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
         }
     }
 
@@ -1296,13 +1347,13 @@ impl<'input> Lexer<'input> {
         match self.lookahead() {
             Some((end, '>')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::EqArrow))
+                Ok(self.spanned2(start, end, Token::EqArrow))
             }
             Some((end, '=')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::EqEq))
+                Ok(self.spanned2(start, end, Token::EqEq))
             }
-            _ => Ok(spanned2(start, start, Token::Eq)),
+            _ => Ok(self.spanned2(start, start, Token::Eq)),
         }
     }
 
@@ -1310,9 +1361,9 @@ impl<'input> Lexer<'input> {
         let (end, lexeme) = self.take_while(start, |ch| ch == ':');
 
         match lexeme {
-            "::" => Ok(spanned2(start, end, Token::ColonColon)),
-            ":" => Ok(spanned2(start, end, Token::Colon)),
-            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
+            "::" => Ok(self.spanned2(start, end, Token::ColonColon)),
+            ":" => Ok(self.spanned2(start, end, Token::Colon)),
+            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -1320,8 +1371,8 @@ impl<'input> Lexer<'input> {
         let (end, lexeme) = self.take_while(start, |ch| ch == '-');
 
         match lexeme {
-            "-" => Ok(spanned2(start, end, Token::Sub)),
-            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
+            "-" => Ok(self.spanned2(start, end, Token::Sub)),
+            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -1331,14 +1382,14 @@ impl<'input> Lexer<'input> {
         });
 
         match lexeme {
-            "<" => Ok(spanned2(start, end, Token::Lt)),
-            "<=" => Ok(spanned2(start, end, Token::Lte)),
-            ">" => Ok(spanned2(start, end, Token::Gt)),
-            ">=" => Ok(spanned2(start, end, Token::Gte)),
-            "<<" => Ok(spanned2(start, end, Token::LBitShift)),
-            ">>" => Ok(spanned2(start, end, Token::RBitShiftSigned)),
-            ">>>" => Ok(spanned2(start, end, Token::RBitShiftUnsigned)),
-            _ => Ok(spanned2(start, end, Token::Bad(lexeme.to_string()))),
+            "<" => Ok(self.spanned2(start, end, Token::Lt)),
+            "<=" => Ok(self.spanned2(start, end, Token::Lte)),
+            ">" => Ok(self.spanned2(start, end, Token::Gt)),
+            ">=" => Ok(self.spanned2(start, end, Token::Gte)),
+            "<<" => Ok(self.spanned2(start, end, Token::LBitShift)),
+            ">>" => Ok(self.spanned2(start, end, Token::RBitShiftSigned)),
+            ">>>" => Ok(self.spanned2(start, end, Token::RBitShiftUnsigned)),
+            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
         }
     }
 
@@ -1346,17 +1397,17 @@ impl<'input> Lexer<'input> {
         match self.lookahead() {
             Some((end, '[')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::LPatBracket))
+                Ok(self.spanned2(start, end, Token::LPatBracket))
             }
             Some((end, '(')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::LPatParen))
+                Ok(self.spanned2(start, end, Token::LPatParen))
             }
             Some((end, '{')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::LPatBrace))
+                Ok(self.spanned2(start, end, Token::LPatBrace))
             }
-            Some((end, _)) => Ok(spanned2(start, end, Token::Mod)),
+            Some((end, _)) => Ok(self.spanned2(start, end, Token::Mod)),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -1365,9 +1416,9 @@ impl<'input> Lexer<'input> {
         match self.lookahead() {
             Some((end, '=')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::NotEq))
+                Ok(self.spanned2(start, end, Token::NotEq))
             }
-            Some((end, ch)) => Ok(spanned2(start, end, Token::Bad(format!("!{}", ch)))),
+            Some((end, ch)) => Ok(self.spanned2(start, end, Token::Bad(format!("!{}", ch)))),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -1376,9 +1427,9 @@ impl<'input> Lexer<'input> {
         match self.lookahead() {
             Some((end, '=')) => {
                 self.bump();
-                Ok(spanned2(start, end, Token::TildeEq))
+                Ok(self.spanned2(start, end, Token::TildeEq))
             }
-            Some((end, _)) => Ok(spanned2(start, end, Token::Tilde)),
+            Some((end, _)) => Ok(self.spanned2(start, end, Token::Tilde)),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -1446,7 +1497,7 @@ impl<'input> Lexer<'input> {
             src => Token::Ident(src.into(), false),
         };
 
-        Ok(spanned2(start, end, token))
+        Ok(self.spanned2(start, end, token))
     }
 
     fn next_index(&mut self) -> Result<Location> {
@@ -1525,11 +1576,11 @@ impl<'input> Lexer<'input> {
                     end.absolute += 1;
                     if let Some(slice) = self.slice(s, e) {
                         let token = Token::Ident(slice.into(), true);
-                        return Ok(spanned2(start, end, token));
+                        return Ok(self.spanned2(start, end, token));
                     } else {
                         // Invalid start end case :(
                         let token = Token::Ident(string.into(), true);
-                        return Ok(spanned2(start, end, token));
+                        return Ok(self.spanned2(start, end, token));
                     }
                 }
                 Some((end, '\n')) => {
@@ -1562,7 +1613,7 @@ impl<'input> Lexer<'input> {
         let mut end = start;
         end.column += 1;
         end.absolute += 1;
-        let q1 = spanned2(start, end, Token::DQuote);
+        let q1 = self.spanned2(start, end, Token::DQuote);
         let mut res = vec![q1];
         let string = String::new();
 
@@ -1596,7 +1647,7 @@ impl<'input> Lexer<'input> {
                     let start = end;
                     end.column += 1;
                     end.absolute += 1;
-                    res.push(spanned2(start, end, Token::DQuote));
+                    res.push(self.spanned2(start, end, Token::DQuote));
                     Ok(res)
                 }
             }
@@ -1633,7 +1684,7 @@ impl<'input> Lexer<'input> {
                         let token = Token::HereDoc(indent, strings);
                         end.column += 1;
                         end.absolute += 1;
-                        return Ok(spanned2(start, end, token));
+                        return Ok(self.spanned2(start, end, token));
                     }
                 }
                 None => {
@@ -1685,12 +1736,12 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(string.into())
                         };
-                        res.push(spanned2(start, end, token));
+                        res.push(self.spanned2(start, end, token));
                     }
                     let start = end;
                     end.column += 1;
                     end.absolute += 1;
-                    res.push(spanned2(start, end, Token::DQuote));
+                    res.push(self.spanned2(start, end, Token::DQuote));
                     return Ok(res);
                 }
                 Some((end_inner, '{')) => {
@@ -1713,14 +1764,14 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(string.into())
                         };
-                        res.push(spanned2(start, end_inner, token));
+                        res.push(self.spanned2(start, end_inner, token));
                         string = String::new();
                     }
                     start = end_inner;
                     end = end_inner;
                     end.column += 1;
                     end.absolute += 1;
-                    res.push(spanned2(start, end, Token::LBrace));
+                    res.push(self.spanned2(start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
                     #[allow(clippy::while_let_on_iterator)]
@@ -1817,7 +1868,7 @@ impl<'input> Lexer<'input> {
                         })
                         .collect();
                     let token = Token::TestLiteral(indent, strings);
-                    return Ok(spanned2(start, end, token));
+                    return Ok(self.spanned2(start, end, token));
                 }
                 Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedExtractor(
@@ -1961,13 +2012,13 @@ impl<'input> Lexer<'input> {
             }
         };
 
-        Ok(spanned2(start, end, token))
+        Ok(self.spanned2(start, end, token))
     }
 
     /// Consume whitespace
     fn ws(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, src) = self.take_while(start, is_ws);
-        Ok(spanned2(start, end, Token::Whitespace(src)))
+        Ok(self.spanned2(start, end, Token::Whitespace(src)))
     }
 }
 
@@ -1998,28 +2049,28 @@ impl<'input> Iterator for Lexer<'input> {
             None => None,
             Some((start, ch)) => {
                 match ch as char {
-                    // '...' =>  Some(Ok(spanned2(start, self.next_index(), Token::DotDotDot))),
-                    // ".." =>  Some(Ok(spanned2(start, self.next_index(), Token::DotDot))),
-                    ',' => Some(Ok(spanned2(start, start, Token::Comma))),
-                    '$' => Some(Ok(spanned2(start, start, Token::Dollar))),
-                    '.' => Some(Ok(spanned2(start, start, Token::Dot))),
-                    //                        '?' => Some(Ok(spanned2(start, start, Token::Question))),
-                    '_' => Some(Ok(spanned2(start, start, Token::DontCare))),
-                    ';' => Some(Ok(spanned2(start, start, Token::Semi))),
-                    '+' => Some(Ok(spanned2(start, start, Token::Add))),
-                    '*' => Some(Ok(spanned2(start, start, Token::Mul))),
-                    '\\' => Some(Ok(spanned2(start, start, Token::BSlash))),
-                    '(' => Some(Ok(spanned2(start, start, Token::LParen))),
-                    ')' => Some(Ok(spanned2(start, inc_loc(start), Token::RParen))),
-                    '{' => Some(Ok(spanned2(start, start, Token::LBrace))),
-                    '}' => Some(Ok(spanned2(start, inc_loc(start), Token::RBrace))),
-                    '[' => Some(Ok(spanned2(start, start, Token::LBracket))),
-                    ']' => Some(Ok(spanned2(start, inc_loc(start), Token::RBracket))),
-                    '/' => Some(Ok(spanned2(start, start, Token::Div))),
+                    // '...' =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDotDot))),
+                    // ".." =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDot))),
+                    ',' => Some(Ok(self.spanned2(start, start, Token::Comma))),
+                    '$' => Some(Ok(self.spanned2(start, start, Token::Dollar))),
+                    '.' => Some(Ok(self.spanned2(start, start, Token::Dot))),
+                    //                        '?' => Some(Ok(self.spanned2(start, start, Token::Question))),
+                    '_' => Some(Ok(self.spanned2(start, start, Token::DontCare))),
+                    ';' => Some(Ok(self.spanned2(start, start, Token::Semi))),
+                    '+' => Some(Ok(self.spanned2(start, start, Token::Add))),
+                    '*' => Some(Ok(self.spanned2(start, start, Token::Mul))),
+                    '\\' => Some(Ok(self.spanned2(start, start, Token::BSlash))),
+                    '(' => Some(Ok(self.spanned2(start, start, Token::LParen))),
+                    ')' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RParen))),
+                    '{' => Some(Ok(self.spanned2(start, start, Token::LBrace))),
+                    '}' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RBrace))),
+                    '[' => Some(Ok(self.spanned2(start, start, Token::LBracket))),
+                    ']' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RBracket))),
+                    '/' => Some(Ok(self.spanned2(start, start, Token::Div))),
                     // TODO account for extractors which use | to mark format boundaries
-                    //'|' => Some(Ok(spanned2(start, start, Token::BitOr))),
-                    '^' => Some(Ok(spanned2(start, start, Token::BitXor))),
-                    '&' => Some(Ok(spanned2(start, start, Token::BitAnd))),
+                    //'|' => Some(Ok(self.spanned2(start, start, Token::BitOr))),
+                    '^' => Some(Ok(self.spanned2(start, start, Token::BitXor))),
+                    '&' => Some(Ok(self.spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
                     '-' => Some(self.sb(start)),
                     '#' => Some(self.cx(start)),
@@ -2030,7 +2081,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '`' => Some(self.id2(start)),
                     // TODO account for bitwise not operator
                     '!' => Some(self.pe(start)),
-                    '\n' => Some(Ok(spanned2(start, start, Token::NewLine))),
+                    '\n' => Some(Ok(self.spanned2(start, start, Token::NewLine))),
                     ch if is_ident_start(ch) => Some(self.id(start)),
                     '"' => match self.qs_or_hd(start) {
                         Ok(mut tokens) => {
@@ -2046,7 +2097,7 @@ impl<'input> Iterator for Lexer<'input> {
                     ch if ch.is_whitespace() => Some(self.ws(start)),
                     _ => {
                         let str = format!("{}", ch);
-                        Some(Ok(spanned2(start, start, Token::Bad(str))))
+                        Some(Ok(self.spanned2(start, start, Token::Bad(str))))
                     }
                 }
             }

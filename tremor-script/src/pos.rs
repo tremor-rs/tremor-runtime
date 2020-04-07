@@ -25,7 +25,7 @@ pub use codespan::{
 )]
 pub struct Location {
     /// The compilation unit id
-    pub unit_id: u64, // mapping of id -> file ( str )
+    pub unit_id: usize, // mapping of id -> file ( str )
     /// The Line
     pub line: usize,
     /// The Column
@@ -91,17 +91,15 @@ impl Range {
         new.1 = new.1.move_down_lines(lines);
         new
     }
+    /// The compilation unit associated with this range
+    pub fn cu(self) -> usize {
+        self.0.unit_id
+    }
 }
 
 impl From<(Location, Location)> for Range {
     fn from(locs: (Location, Location)) -> Self {
         Self(locs.0, locs.1)
-    }
-}
-pub(crate) fn spanned2<T>(start: Location, end: Location, value: T) -> Spanned<T> {
-    Spanned {
-        span: span(start, end),
-        value,
     }
 }
 
@@ -112,8 +110,12 @@ impl Location {
             line,
             column,
             absolute,
-            unit_id: 0_u64, // FIXME unit_id cpp
+            unit_id: 0, // FIXME unit_id cpp
         }
+    }
+
+    pub(crate) fn set_cu(&mut self, cu: usize) {
+        self.unit_id = cu;
     }
 
     /// Location for line directives

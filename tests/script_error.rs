@@ -135,6 +135,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+    error_in_include,
 );
 
 ignored_cases!(
