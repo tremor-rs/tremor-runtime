@@ -807,7 +807,7 @@ impl IncludeStack {
         let e = CompilationUnit::from_file(Path::new(file))?;
         if self.contains(&e) {
             Err(format!(
-                "Cyclec dependency detected: {} -> {}",
+                "Cyclic dependency detected: {} -> {}",
                 self.elements
                     .iter()
                     .map(|v| v.to_string())

@@ -133,6 +133,7 @@ test_cases!(
     unknown_function_in_function,
     mod_bound_cross,
     pp_cyclic,
+    pp_nest_cyclic,
     //INSERT
 );
 
