@@ -966,7 +966,10 @@ impl Pipeline {
                 .collect(),
             stack: Vec::with_capacity(graph.len()),
             id: self.id.clone(),
-            metrics_idx: i2pos[&self.nodes["metrics"]],
+            metrics_idx: i2pos[&self
+                .nodes
+                .get("metrics")
+                .ok_or_else(|| Error::from("metrics node missing"))?],
             last_metrics: 0,
             state: State {
                 ops: iter::repeat(Value::null()).take(graph.len()).collect(),

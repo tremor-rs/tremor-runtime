@@ -462,7 +462,9 @@ impl Query {
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
                 id: "generated".to_string(), // FIXME make configurable
-                metrics_idx: i2pos[&nodes["metrics"]],
+                metrics_idx: i2pos[&nodes
+                    .get("metrics")
+                    .ok_or_else(|| Error::from("metrics node missing"))?],
                 last_metrics: 0,
                 state: State {
                     ops: iter::repeat(Value::null()).take(graph.len()).collect(),
