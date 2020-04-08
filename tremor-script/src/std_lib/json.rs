@@ -14,7 +14,6 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use serde_json;
 use simd_json::to_owned_value;
 
 pub fn load(registry: &mut Registry) {
@@ -30,10 +29,10 @@ pub fn load(registry: &mut Registry) {
             to_owned_value(&mut bytes).map_err(to_runtime_error).map(Value::from)
         }))
         .insert(tremor_const_fn! (json::encode(_context, _input) {
-            serde_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
+            simd_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
         }))
         .insert(tremor_const_fn! (json::encode_pretty(_context, _input) {
-            serde_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
+            simd_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
         }));
 }
 

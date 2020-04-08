@@ -23,7 +23,6 @@ use crate::errors::*;
 use crate::parser::g::__ToTriple;
 use crate::path::ModulePath;
 pub use crate::pos::*;
-use lalrpop_util;
 use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -823,7 +822,7 @@ impl IncludeStack {
                 "Cyclic dependency detected: {} -> {}",
                 self.elements
                     .iter()
-                    .map(|v| v.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(" -> "),
                 e.to_string()
@@ -1336,7 +1335,7 @@ impl<'input> Lexer<'input> {
                 self.cu = cu;
                 Ok(self.spanned2(start, end, line_directive))
             } else {
-                return Err("Snot!".into());
+                Err("Snot!".into())
             }
         } else {
             Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))

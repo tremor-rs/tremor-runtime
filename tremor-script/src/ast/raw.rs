@@ -2045,7 +2045,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
             // We should never encounter this
             error_oops(
                 &(self.start, self.end),
-                0xdead0007,
+                0xdead_0007,
                 "Empty local path",
                 &helper.meta,
             )
@@ -2092,7 +2092,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             // We should never encounter this
             error_oops(
                 &(self.start, self.end),
-                0xdead0008,
+                0xdead_0008,
                 "Empty local path",
                 &helper.meta,
             )

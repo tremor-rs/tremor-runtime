@@ -27,6 +27,7 @@ use chrono::prelude::*;
 use postgres::types::to_sql_checked;
 use postgres_protocol;
 use simd_json::prelude::*;
+use simd_json::BorrowedValue as Value;
 use std::time::SystemTime;
 
 #[derive(Debug)]
@@ -106,7 +107,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => "",
                 };
 
-                serde_json::ser::to_writer(w.writer(), &val)?;
+                simd_json::to_writer(w.writer(), &val)?;
             }
             postgres::types::Type::JSONB => {
                 let val = match self.value.as_str() {
@@ -115,7 +116,7 @@ impl postgres::types::ToSql for Record<'_> {
                 };
                 w.put_u8(1);
 
-                serde_json::ser::to_writer(w.writer(), &val)?;
+                simd_json::to_writer(w.writer(), &val)?;
             }
             postgres::types::Type::TIMESTAMPTZ => {
                 let val = match self.value.as_str() {
@@ -211,95 +212,82 @@ pub fn json_to_record<'a>(json: &'a simd_json::BorrowedValue<'a>) -> Result<Reco
 
     Ok(Record { t, value, name })
 }
-
 pub fn row_to_json(
     row: &postgres::row::Row,
-) -> std::result::Result<serde_json::Value, Box<dyn std::error::Error + Sync + Send>> {
-    let mut json = serde_json::Map::new();
+) -> std::result::Result<Value, Box<dyn std::error::Error + Sync + Send>> {
+    let mut json = Value::object();
 
     for (cid, col) in row.columns().iter().enumerate() {
         let t: &'static str;
-        let mut obj = serde_json::Map::new();
+        let mut obj = Value::object();
 
-        let v: serde_json::Value = match *col.type_() {
+        let v = match *col.type_() {
             postgres::types::Type::BOOL => {
                 t = "BOOL";
-                serde_json::Value::Bool(row.get(cid))
+                Value::from(row.get::<_, bool>(cid))
             }
             postgres::types::Type::CHAR => {
                 t = "CHAR";
-                serde_json::Value::String(row.get(cid))
+                Value::from(row.get::<_, String>(cid))
             }
             postgres::types::Type::INT8 => {
                 t = "INT8";
-                let val: i64 = row.get(cid);
-                serde_json::Value::Number(serde_json::Number::from(val))
+                Value::from(row.get::<_, i64>(cid))
             }
             postgres::types::Type::INT2 => {
                 t = "INT2";
-                let val: i16 = row.get(cid);
-                serde_json::Value::Number(serde_json::Number::from(val))
+                Value::from(row.get::<_, i64>(cid))
             }
             postgres::types::Type::INT4 => {
                 t = "INT4";
-                let val: i32 = row.get(cid);
-                serde_json::Value::Number(serde_json::Number::from(val))
+                Value::from(row.get::<_, i64>(cid))
             }
             postgres::types::Type::JSON => {
                 t = "JSON";
-                let val = row.get::<usize, serde_json::Value>(cid);
-                serde_json::Value::String(val.to_string())
+                let val = row.get::<usize, String>(cid);
+                Value::from(val)
             }
             postgres::types::Type::JSONB => {
                 t = "JSONB";
-                let val = row.get::<usize, serde_json::Value>(cid);
-                serde_json::Value::String(val.to_string())
+                let val = row.get::<usize, String>(cid);
+                Value::from(val)
             }
             postgres::types::Type::NAME => {
                 t = "NAME";
-                serde_json::Value::String(row.get(cid))
+                Value::from(row.get::<_, String>(cid))
             }
             postgres::types::Type::TEXT => {
                 t = "TEXT";
-                serde_json::Value::String(row.get(cid))
+                Value::from(row.get::<_, String>(cid))
             }
             // FIXME: We should specify timezone offset for data in config
             postgres::types::Type::TIMESTAMPTZ => {
                 t = "TIMESTAMPTZ";
                 let ts: DateTime<Utc> = row.get::<usize, SystemTime>(cid).into();
-                serde_json::Value::String(ts.with_timezone(&FixedOffset::east(0)).to_string())
+                Value::from(ts.with_timezone(&FixedOffset::east(0)).to_string())
             }
             postgres::types::Type::TIMESTAMP => {
                 t = "TIMESTAMP";
                 let ts: DateTime<Utc> = row.get::<usize, SystemTime>(cid).into();
-                serde_json::Value::String(ts.to_string())
+                Value::from(ts.to_string())
             }
             postgres::types::Type::UNKNOWN => {
                 t = "UNKNOWN";
-                serde_json::Value::String(row.get(cid))
+                Value::from(row.get::<_, String>(cid))
             }
             // FIXME: Encoding, see UTF-8
             postgres::types::Type::VARCHAR => {
                 t = "VARCHAR";
-                serde_json::Value::String(row.get(cid))
+                Value::from(row.get::<_, String>(cid))
             }
             _ => return Err(format!("type not supported: {}", col.type_()).into()),
         };
-        obj.insert(
-            "fieldType".to_string(),
-            serde_json::value::Value::String(String::from(t)),
-        );
-        obj.insert("value".to_string(), v);
-        obj.insert(
-            "name".to_string(),
-            serde_json::value::Value::from(String::from(col.name())),
-        );
+        obj.insert("fieldType", Value::from(t))?;
+        obj.insert("value", v)?;
+        obj.insert("name", Value::from(String::from(col.name())))?;
 
-        json.insert(
-            String::from(col.name()),
-            serde_json::value::Value::from(obj),
-        );
+        json.insert(col.name(), obj)?;
     }
 
-    Ok(serde_json::Value::Object(json))
+    Ok(json)
 }
