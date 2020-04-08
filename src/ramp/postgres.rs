@@ -20,6 +20,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+use crate::errors::*;
 use bytes;
 use bytes::buf::{BufMut, BufMutExt};
 use chrono::prelude::*;
@@ -32,7 +33,7 @@ use std::time::SystemTime;
 pub struct Record<'a> {
     pub t: postgres::types::Type,
     pub value: &'a simd_json::BorrowedValue<'a>,
-    pub name: String,
+    pub name: &'a str,
 }
 
 impl postgres::types::ToSql for Record<'_> {
@@ -176,10 +177,8 @@ impl postgres::types::ToSql for Record<'_> {
     to_sql_checked!();
 }
 
-pub fn json_to_record<'a>(
-    json: &'a simd_json::BorrowedValue<'a>,
-) -> std::result::Result<Record, Box<dyn std::error::Error + Sync + Send>> {
-    let field_type = match json["fieldType"].as_str() {
+pub fn json_to_record<'a>(json: &'a simd_json::BorrowedValue<'a>) -> Result<Record> {
+    let field_type = match json.get("fieldType").and_then(ValueTrait::as_str) {
         Some(v) => v,
         None => return Err("error getting fieldType".into()),
     };
@@ -201,13 +200,16 @@ pub fn json_to_record<'a>(
         _ => return Err("intermediate representation does not support field type".into()),
     };
 
-    let n: String = json["name"].to_string();
+    let name = json
+        .get("name")
+        .and_then(ValueTrait::as_str)
+        .ok_or_else(|| Error::from("Missing field `name`"))?;
 
-    Ok(Record {
-        t,
-        value: &json["value"],
-        name: n,
-    })
+    let value = json
+        .get("value")
+        .ok_or_else(|| Error::from("Missing field `value`"))?;
+
+    Ok(Record { t, value, name })
 }
 
 pub fn row_to_json(
