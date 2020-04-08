@@ -22,7 +22,7 @@
 use crate::datetime::*;
 use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn};
-use chrono::{offset::Utc, Datelike, NaiveDateTime, SubsecRound, Timelike};
+use chrono::{offset::Utc, DateTime, Datelike, NaiveDateTime, SubsecRound, Timelike};
 use simd_json::prelude::*;
 
 macro_rules! time_fn {
@@ -54,7 +54,7 @@ pub fn load(registry: &mut Registry) {
         .insert(time_fn!(iso8601, _iso8601))
         .insert(tremor_const_fn!(datetime::format(_context, _datetime, _fmt) {
             if let (Some(datetime), Some(fmt)) = (_datetime.as_u64(), _fmt.as_str()) {
-                Ok(Value::from(_format(datetime, fmt)))
+                Ok(Value::from(_format(datetime, fmt, has_tz(fmt))))
             } else {
                 Err(FunctionError::BadType{ mfa: this_mfa() })
             }
@@ -94,11 +94,18 @@ pub fn load(registry: &mut Registry) {
 }
 
 pub fn _iso8601(datetime: u64) -> String {
-    _format(datetime, "%Y-%m-%dT%H:%M:%S%.9f+00:00")
+    _format(datetime, "%Y-%m-%dT%H:%M:%S%.9f+00:00", false)
 }
 
-pub fn _format(value: u64, fmt: &str) -> String {
-    format!("{}", to_naive_datetime(value).format(fmt))
+pub fn _format(value: u64, fmt: &str, has_timezone: bool) -> String {
+    if has_timezone {
+        format!(
+            "{}",
+            DateTime::<Utc>::from_utc(to_naive_datetime(value), Utc).format(fmt)
+        )
+    } else {
+        format!("{}", to_naive_datetime(value).format(fmt))
+    }
 }
 pub fn _second(value: u64) -> u8 {
     to_naive_datetime(value).second() as u8
@@ -251,7 +258,6 @@ mod tests {
     #[test]
     pub fn parse_at_timestamp() {
         let time = "2019-06-17T13:15:40.752Z";
-        //let time = "2019-06-17T13:15:40.752";
         let output =
             _parse(time, "%Y-%m-%dT%H:%M:%S%.3fZ", false).expect("cannot parse datetime string");
         assert_eq!(output, 1_560_777_340_752_000_000);
@@ -273,6 +279,28 @@ mod tests {
         let output = _parse("1560777212", "%s", false).expect("cannot parse datetime string");
 
         assert_eq!(output, 1_560_777_212_000_000_000);
+    }
+
+    #[test]
+    pub fn format_timestamp() {
+        let val = 419_083_754_274_000_000;
+        let output = _format(val, "%Y %b %d %H:%M:%S%.3f", false);
+        assert_eq!("1983 Apr 13 12:09:14.274", output);
+    }
+
+    #[test]
+    pub fn format_timestamp_tz() {
+        let val = 419_083_754_274_000_000;
+        let output = _format(val, "%Y %b %d %H:%M:%S%.3f %:z", true);
+        assert_eq!("1983 Apr 13 12:09:14.274 +00:00", output);
+    }
+
+    #[test]
+    #[should_panic]
+    pub fn format_timestamp_tz_panic() {
+        let val = 419_083_754_274_000_000;
+        let output = _format(val, "%Y %b %d %H:%M:%S%.3f %:z", false);
+        assert_eq!("1983 Apr 13 12:09:14.274 +00:00", output);
     }
 
     #[test]
@@ -348,10 +376,13 @@ mod tests {
     #[test]
     pub fn test_format() {
         assert_eq!(
-            _format(1_559_655_782_123_567_892u64, "%Y-%m-%d"),
+            _format(1_559_655_782_123_567_892u64, "%Y-%m-%d", false),
             "2019-06-04".to_owned()
         );
-        assert_eq!(_format(123_567_892u64, "%Y-%m-%d"), "1970-01-01".to_owned());
+        assert_eq!(
+            _format(123_567_892u64, "%Y-%m-%d", false),
+            "1970-01-01".to_owned()
+        );
     }
 
     #[test]
