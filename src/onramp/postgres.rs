@@ -164,22 +164,20 @@ fn onramp_loop(
             }
         };
 
-        let consume_from = match obj.get("consume_from") {
-            Some(v) => v,
-            None => {
-                metrics_reporter.increment_error();
-                warn!("Failed to fetching consume_from");
-                continue;
-            }
+        let consume_from = if let Some(v) = obj.get("consume_from") {
+            v
+        } else {
+            metrics_reporter.increment_error();
+            warn!("Failed to fetching consume_from");
+            continue;
         };
 
-        let consume_until = match obj.get("consume_until") {
-            Some(v) => v,
-            None => {
-                metrics_reporter.increment_error();
-                warn!("Failed to fetching consume_until");
-                continue;
-            }
+        let consume_until = if let Some(v) = obj.get("consume_until") {
+            v
+        } else {
+            metrics_reporter.increment_error();
+            warn!("Failed to fetching consume_until");
+            continue;
         };
 
         let cf = match DateTime::parse_from_str(
