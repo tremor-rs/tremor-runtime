@@ -84,8 +84,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
+impl From<simd_json::Error> for Error {
+    fn from(e: simd_json::Error) -> Self {
         Self::generic(
             StatusCode::BadRequest,
             &format!("json encoder failed: {}", e),
@@ -195,7 +195,7 @@ pub fn serialize<T: Serialize>(
             .set_header(headers::CONTENT_TYPE, t.to_string())),
 
         ResourceType::Json => Ok(Response::new(ok_code)
-            .body_string(serde_json::to_string(d)?)
+            .body_string(simd_json::to_string(d)?)
             .set_header(headers::CONTENT_TYPE, t.to_string())),
     }
 }
@@ -217,7 +217,7 @@ async fn decode<T>(mut req: Request) -> Result<(Request, T)>
 where
     for<'de> T: Deserialize<'de>,
 {
-    let body = req.body_bytes().await?;
+    let mut body = req.body_bytes().await?;
     match content_type(&req) {
         Some(ResourceType::Yaml) => serde_yaml::from_slice(body.as_slice())
             .map_err(|e| {
@@ -227,7 +227,7 @@ where
                 )
             })
             .map(|data| (req, data)),
-        Some(ResourceType::Json) => serde_json::from_slice(body.as_slice())
+        Some(ResourceType::Json) => simd_json::from_slice(body.as_mut_slice())
             .map_err(|e| {
                 Error::Generic(
                     StatusCode::BadRequest,

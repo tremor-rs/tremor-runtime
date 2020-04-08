@@ -166,13 +166,13 @@ fn main() -> Result<()> {
     }
 
     if matches.is_present("print-ast") {
-        let ast = serde_json::to_string_pretty(&runnable.0.suffix())?;
+        let ast = simd_json::to_string_pretty(&runnable.0.suffix())?;
         println!();
         let mut h = TermHighlighter::new();
         Query::highlight_script_with(&ast, &mut h)?;
     }
     if matches.is_present("print-ast-raw") {
-        let ast = serde_json::to_string_pretty(&runnable.0.suffix())?;
+        let ast = simd_json::to_string_pretty(&runnable.0.suffix())?;
         println!();
         println!("{}", ast);
     }
@@ -259,10 +259,10 @@ fn main() -> Result<()> {
                 let event = event.data.suffix().value();
                 if matches.is_present("quiet") {
                 } else if matches.is_present("print-result-raw") {
-                    println!("{}", serde_json::to_string_pretty(event)?);
+                    println!("{}", simd_json::to_string_pretty(event)?);
                 } else if selected_output.is_none() || selected_output == Some(&output) {
                     println!("{}>>", output);
-                    let result = format!("{} ", serde_json::to_string_pretty(event)?);
+                    let result = format!("{} ", simd_json::to_string_pretty(event)?);
                     let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
                         .filter_map(std::result::Result::ok)
                         .collect();

@@ -23,7 +23,6 @@
 //  '{}' -> json|| => Ok({})
 //  Predicate for json||: "is valid json"
 //  '{blarg' -> json|| =>
-use base64;
 use halfbrown::{hashmap, HashMap};
 
 use crate::datetime;
@@ -34,7 +33,6 @@ use cidr_utils::{
     utils::IpCidrCombiner,
 };
 use dissect::Pattern;
-use glob;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
 use simd_json::prelude::*;

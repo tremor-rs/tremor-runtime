@@ -28,7 +28,6 @@ use log4rs;
 use rdkafka;
 use rental;
 use rmp_serde;
-use serde_json;
 use serde_yaml;
 use std;
 use tremor_influx as influx;
@@ -142,7 +141,6 @@ error_chain! {
         Base64Error(base64::DecodeError);
         YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);
-        SerdeError(serde_json::Error);
         Io(std::io::Error);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);

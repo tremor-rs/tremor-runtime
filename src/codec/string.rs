@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use serde_json;
 use simd_json::{self, BorrowedValue as Value};
 
 #[derive(Clone)]
@@ -32,7 +31,7 @@ impl Codec for String {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else {
-            Ok(serde_json::to_vec(&data)?)
+            Ok(simd_json::to_vec(&data)?)
         }
     }
 }

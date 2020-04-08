@@ -31,7 +31,6 @@ simd-json = {version = "0.3", features = ["known-key"]}
 error-chain="0.12"
 lalrpop-util = "0.18"
 regex = "1"
-serde_json = "1"
 serde_derive = "1.0"
 serde = "1.0"
 glob = "0.3"

@@ -125,7 +125,7 @@ impl<'script> NodeMetas {
         self.nodes
             .get(idx)
             .and_then(|e| self.cus.get(e.cu))
-            .and_then(|cu| cu.to_str())
+            .and_then(CompilationUnit::to_str)
     }
 
     pub(crate) fn name_dflt(&self, idx: usize) -> String {

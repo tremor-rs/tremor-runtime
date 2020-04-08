@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use tremor_pipeline::errors::*;
 use tremor_pipeline::query::Query;
 use tremor_script::errors::CompilerError;
 

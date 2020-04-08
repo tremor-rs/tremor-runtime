@@ -23,7 +23,6 @@ use crate::ramp::postgres::row_to_json;
 use crate::ramp::Config as CacheConfig;
 use chrono::prelude::*;
 use postgres::{Client, NoTls};
-use serde_json;
 use serde_yaml::Value;
 use simd_json::prelude::*;
 use std::time::Duration;
@@ -284,7 +283,7 @@ fn onramp_loop(
                 }
             };
 
-            let json = match serde_json::to_string(&json) {
+            let json = match simd_json::to_string(&json) {
                 Ok(v) => v,
                 Err(e) => {
                     metrics_reporter.increment_error();

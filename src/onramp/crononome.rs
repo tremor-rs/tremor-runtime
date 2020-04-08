@@ -280,7 +280,7 @@ fn onramp_loop(
         let mut ingest_ns = nanotime();
         let sched = cq.drain();
         for trigger in sched {
-            let data = serde_json::to_vec(
+            let data = simd_json::to_vec(
                 &json!({"onramp": "crononome", "ingest_ns": ingest_ns, "id": id, "trigger": {
                         "name": trigger.0,
                         "payload": trigger.1
@@ -344,8 +344,8 @@ mod tests {
 
     #[test]
     pub fn test_deserialize_cron_entry() -> Result<()> {
-        let mut entry: CronEntry =
-            serde_json::from_str("{\"name\": \"test\", \"expr\": \"* 0 0 * * * *\"}")?;
+        let mut s = b"{\"name\": \"test\", \"expr\": \"* 0 0 * * * *\"}".to_vec();
+        let mut entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
         assert_eq!("test", entry.name);
         assert_eq!("* 0 0 * * * *", entry.expr);
         entry.parse().ok();
@@ -355,8 +355,8 @@ mod tests {
 
     #[test]
     pub fn test_deserialize_cron_entry_error() -> Result<()> {
-        let mut entry: CronEntry =
-            serde_json::from_str("{\"name\": \"test\", \"expr\": \"snot snot\"}")?;
+        let mut s = b"{\"name\": \"test\", \"expr\": \"snot snot\"}".to_vec();
+        let mut entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
         assert_eq!("test", entry.name);
         assert!(entry.parse().ok().is_none());
         Ok(())

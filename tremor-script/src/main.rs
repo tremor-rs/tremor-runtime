@@ -346,13 +346,13 @@ fn main() -> Result<()> {
             }
 
             if matches.is_present("print-ast") {
-                let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
+                let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
                 println!();
                 let mut h = TermHighlighter::new();
                 Script::highlight_script_with(&ast, &mut h)?;
             }
             if matches.is_present("print-ast-raw") {
-                let ast = serde_json::to_string_pretty(&runnable.script.suffix())?;
+                let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
                 println!();
                 println!("{}", ast);
             }
@@ -439,12 +439,12 @@ fn main() -> Result<()> {
                     } else if matches.is_present("print-result-raw") {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&Return::Emit { value: event, port })?
+                            simd_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
                     } else {
                         let result = format!(
                             "{} ",
-                            serde_json::to_string_pretty(&Return::Emit { value: event, port })?
+                            simd_json::to_string_pretty(&Return::Emit { value: event, port })?
                         );
                         let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
                             .filter_map(Result::ok)
@@ -458,9 +458,9 @@ fn main() -> Result<()> {
                     println!("Interpreter ran ok");
                     if matches.is_present("quiet") {
                     } else if matches.is_present("print-result-raw") {
-                        println!("{}", serde_json::to_string_pretty(&result)?);
+                        println!("{}", simd_json::to_string_pretty(&result)?);
                     } else {
-                        let result = format!("{} ", serde_json::to_string_pretty(&result)?);
+                        let result = format!("{} ", simd_json::to_string_pretty(&result)?);
                         let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
                             .filter_map(Result::ok)
                             .collect();

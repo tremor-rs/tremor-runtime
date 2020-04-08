@@ -24,16 +24,9 @@ use crate::lexer;
 use crate::path::ModulePath;
 use crate::pos;
 use crate::pos::{Location, Range};
-use base64;
-use dissect;
 use error_chain::error_chain;
-use glob;
-use grok;
-use lalrpop_util;
 use lalrpop_util::ParseError as LalrpopError;
-use regex;
 use serde::{Deserialize, Serialize};
-use serde_json;
 pub use simd_json::ValueType;
 use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
@@ -230,7 +223,6 @@ impl ErrorKind {
             | ParseIntError(_)
             | ParserError(_)
             | PreprocessorError(_)
-            | SerdeJSONError(_)
             | UnexpectedEndOfStream
             | Utf8Error(_)
             | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
@@ -340,7 +332,6 @@ error_chain! {
         Io(std::io::Error);
         JSONError(simd_json::Error);
         ParseIntError(num::ParseIntError);
-        SerdeJSONError(serde_json::Error);
         Utf8Error(std::str::Utf8Error);
         NoObjectError(simd_json::KnownKeyError);
     }

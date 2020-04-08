@@ -68,7 +68,7 @@ fn onramp_loop(
 
         thread::sleep(Duration::from_millis(config.interval));
         let data =
-            serde_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
+            simd_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
         let mut ingest_ns = nanotime();
         if let Ok(data) = data {
             send_event(
