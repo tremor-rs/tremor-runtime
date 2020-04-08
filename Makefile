@@ -23,7 +23,7 @@ it:
 	integration_testing/runner
 
 bench: force
-	cargo build --release --features bench
+	cargo build --release -p tremor-server
 	./bench/all.sh | tee bench-`date +%s`.txt
 
 force:
