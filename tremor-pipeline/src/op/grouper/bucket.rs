@@ -220,7 +220,7 @@ impl Operator for Grouper {
             m.insert("measurement".into(), "bucketing".into());
             m.insert("tags".into(), Value::from(tags.clone()));
             let mut fields = Object::with_capacity(1);
-            fields.insert("count".into(), b.pass.into());
+            fields.insert("count".into(), b.overflow.into());
             m.insert("fields".into(), Value::from(fields));
             m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly
             res.push(Value::from(m.clone()));
