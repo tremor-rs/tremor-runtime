@@ -1346,9 +1346,9 @@ dependencies = [
 
 [[package]]
 name = "google-storage1"
-version = "1.0.12+20190624"
+version = "1.0.13+20200326"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "066c44ec4fdf5d4a4aaf7a09aec3dc2e23bb203e762b15a052941f9fffc06edb"
+checksum = "b6ff8a63135e77611bb687b4167d8f3f49d865afe6df065f49be52b89b4e8a17"
 dependencies = [
  "hyper 0.10.16",
  "mime 0.2.6",
