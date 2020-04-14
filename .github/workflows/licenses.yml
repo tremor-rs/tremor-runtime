@@ -7,7 +7,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Install clippy-deny
-        run: cargo install cargo-deny
-      - name: Check dependencies
-        run: cargo deny check
+      - uses: EmbarkStudios/cargo-deny-action@v0  
