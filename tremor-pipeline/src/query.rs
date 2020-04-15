@@ -121,7 +121,7 @@ impl Query {
         use crate::State;
         use std::iter;
 
-        let script = self.0.suffix();
+        let query = self.0.suffix();
 
         let mut pipe_graph = ConfigGraph::new();
         let mut pipe_ops = HashMap::new();
@@ -129,6 +129,12 @@ impl Query {
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
+
+        let metric_interval = query
+            .config
+            .get("metrics_interval_s")
+            .and_then(Value::as_u64)
+            .map(|i| i * 1_000_000_000);
 
         // FIXME compute public streams - do not hardcode
         let in_s: Cow<'static, str> = "in".into();
@@ -178,7 +184,7 @@ impl Query {
 
         let mut select_num = 0;
 
-        for stmt in &script.stmts {
+        for stmt in &query.stmts {
             let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                 // This is sound since self.0 includes an ARC of the data we
                 // so we hold on to any referenced data by including a clone
@@ -197,8 +203,7 @@ impl Query {
                     if !nodes.contains_key(&s.from.0.id) {
                         let from = s.from.0.id.clone().to_string();
                         let mut h = DumbHighlighter::default();
-                        let butt =
-                            query_stream_not_defined(&s, &s.from.0, from, &script.node_meta)?;
+                        let butt = query_stream_not_defined(&s, &s.from.0, from, &query.node_meta)?;
                         tremor_script::query::Query::format_error_from_script(
                             &self.0.source,
                             &mut h,
@@ -276,7 +281,7 @@ impl Query {
                     let id = pipe_graph.add_node(node.clone());
 
                     let mut ww: HashMap<String, WindowImpl> = HashMap::new();
-                    for w in &script.windows {
+                    for w in &query.windows {
                         ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
                     }
                     let op = node.to_op(supported_operators, None, Some(that), Some(ww))?;
@@ -330,7 +335,7 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
                     let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(
-                        script
+                        query
                             .operators
                             .get(&fqon)
                             .ok_or_else(|| Error::from("operator not found"))?
@@ -359,7 +364,7 @@ impl Query {
                         format!("{}::{}", o.module.join("::"), target)
                     };
                     let inner_stmt: tremor_script::ast::Stmt = Stmt::ScriptDecl(Box::new(
-                        script
+                        query
                             .scripts
                             .get(&fqsn)
                             .ok_or_else(|| Error::from("script not found"))?
@@ -486,7 +491,6 @@ impl Query {
                 inputs2.insert(k.clone(), i2pos[idx]);
             }
 
-            let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
             let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())

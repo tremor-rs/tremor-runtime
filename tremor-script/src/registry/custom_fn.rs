@@ -128,6 +128,8 @@ impl<'script> CustomFn<'script> {
                 .collect::<Vec<Value<'static>>>(),
         );
 
+        // We are swapping out the var args for constatns
+
         let consts: &'run mut [Value<'event>] = unsafe { mem::transmute(env.consts) };
 
         mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);

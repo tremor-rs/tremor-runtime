@@ -28,9 +28,25 @@ grammar<'input>;
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports: vec![], stmts},
-    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{imports, stmts},    
+    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, imports: vec![], stmts},
+    <config:ConfigDirectives>  <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, imports, stmts},    
+    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], imports: vec![], stmts},
+    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], imports, stmts},    
 }
+
+ConfigDirectives: WithExprsRaw<'input> = {
+    <directive:ConfigDirective> <directives:ConfigDirectives> => {
+        let mut directives = directives;
+        directives.insert(0, directive);
+        directives 
+    },
+    <directive:ConfigDirective> => vec![directive]
+}
+
+ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
+    "#!config" <WithExpr> => <>
+}
+
 
 Stmts: StmtsRaw<'input> = {
     <stmt:Stmt> ";" <list:Stmts> => {
@@ -73,9 +89,9 @@ ModuleInnerStmt: StmtRaw<'input> = {
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: Some(params) }),
     <start:@L> "define" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: None }),
     
-    Const => StmtRaw::Expr(<>),
-    FnDecl => StmtRaw::Expr(ExprRaw::FnDecl(<>)),
-    Intrinsic => StmtRaw::Expr(ExprRaw::FnDecl(<>)),
+    Const => StmtRaw::Expr(Box::new(<>)),
+    FnDecl => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
+    Intrinsic => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 
     
     //
@@ -1354,6 +1370,7 @@ extern {
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
         "<end-of-stream>" => Token::EndOfStream,
+        
 
         "select" => Token::Select,
         "from" => Token::From,
@@ -1379,6 +1396,7 @@ extern {
         "use" => Token::Use,
         "as" => Token::As,
 
+        "#!config" => Token::ConfigDirective,
     }
 }
 

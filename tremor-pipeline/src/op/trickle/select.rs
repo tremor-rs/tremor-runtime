@@ -896,6 +896,7 @@ mod test {
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),
+            config: HashMap::new(),
         }
     }
 

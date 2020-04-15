@@ -39,6 +39,7 @@ fn up_maybe_params<'script, 'registry>(
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
+    pub(crate) config: WithExprsRaw<'script>,
     pub(crate) imports: Imports<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
 }
@@ -61,6 +62,7 @@ impl<'script> QueryRaw<'script> {
 
         Ok((
             Query {
+                config: up_params(self.config, helper)?,
                 stmts,
                 node_meta: helper.meta.clone(),
                 windows: helper.windows.clone(),
@@ -93,7 +95,7 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     ModuleStmt(ModuleStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    Expr(ExprRaw<'script>),
+    Expr(Box<ExprRaw<'script>>),
 }
 
 impl<'script> BaseExpr for StmtRaw<'script> {
@@ -174,7 +176,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 error_generic(&m, &m, &"Module in wrong place error", &helper.meta)
             }
             StmtRaw::Expr(m) => {
-                error_generic(&m, &m, &"Expression in wrong place error", &helper.meta)
+                error_generic(&*m, &*m, &"Expression in wrong place error", &helper.meta)
             }
         }
     }
@@ -239,7 +241,7 @@ impl<'script> ModuleStmtRaw<'script> {
                         start: self.start,
                         end: self.end,
                         doc: None,
-                        exprs: vec![e],
+                        exprs: vec![*e],
                     };
                     // since `ModuleRaw::define` also prepends the module
                     // name we got to remove it prior to calling `define` and
