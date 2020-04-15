@@ -22,7 +22,6 @@ use crate::impl_expr;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
 use crate::registry::CustomFn;
-use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::tilde::Extractor;
 use crate::EventContext;
 pub use base_expr::BaseExpr;
@@ -59,11 +58,8 @@ impl<'script> ScriptRaw<'script> {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
         self,
-        cus: Vec<CompilationUnit>,
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
+        mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
-        let mut helper = Helper::new(reg, aggr_reg, cus);
         helper
             .consts
             .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
@@ -79,7 +75,7 @@ impl<'script> ScriptRaw<'script> {
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
                 ExprRaw::Module(m) => {
-                    m.define(reg, aggr_reg, &mut helper)?;
+                    m.define(&mut helper)?;
                 }
                 ExprRaw::Const {
                     name,
@@ -181,14 +177,15 @@ impl<'script> ScriptRaw<'script> {
             Script {
                 imports: vec![], // Compiled out
                 exprs,
-                consts: helper.const_values,
-                aggregates: helper.aggregates,
+                consts: helper.const_values.clone(),
+                aggregates: helper.aggregates.clone(),
+                windows: helper.windows.clone(),
                 locals: helper.locals.len(),
-                node_meta: helper.meta,
-                functions: helper.func_vec,
-                docs: helper.docs,
+                node_meta: helper.meta.clone(),
+                functions: helper.func_vec.clone(),
+                docs: helper.docs.clone(),
             },
-            helper.warnings,
+            helper.warnings.clone(),
         ))
     }
 }
@@ -205,17 +202,12 @@ pub struct ModuleRaw<'script> {
 impl_expr!(ModuleRaw);
 
 impl<'script> ModuleRaw<'script> {
-    pub(crate) fn define<'registry>(
-        self,
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
+    pub(crate) fn define<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<()> {
         helper.module.push(self.name.id.to_string());
         for e in self.exprs {
             match e {
                 ExprRaw::Module(m) => {
-                    m.define(reg, aggr_reg, helper)?;
+                    m.define(helper)?;
                 }
                 ExprRaw::Const {
                     name,
@@ -2070,7 +2062,14 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             let segments = segments.collect();
             let id = helper.meta.name_dflt(mid);
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
-            let mut rel_path = helper.module.clone();
+
+            // NOTE We never modularise `window`, `args` or `group`
+            //
+            let mut rel_path = if id != "args" && id != "window" && id != "group" {
+                helper.module.clone()
+            } else {
+                vec![]
+            };
             rel_path.push(id.to_string());
             if let Some(idx) = helper.is_const(&rel_path) {
                 Ok(LocalPath {

@@ -137,7 +137,7 @@ fn main() -> Result<()> {
     let aggr_reg = registry::aggr();
 
     let module_path = load_module_path();
-    let runnable = match Query::parse(&module_path, script_file, &raw, &reg, &aggr_reg) {
+    let runnable = match Query::parse(&module_path, script_file, &raw, vec![], &reg, &aggr_reg) {
         Ok(runnable) => runnable,
         Err(e) => {
             let mut h = TermHighlighter::new();

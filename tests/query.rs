@@ -30,6 +30,7 @@ fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<Exe
         &module_path,
         query,
         file_name,
+        vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
@@ -119,5 +120,12 @@ test_cases!(
     window_by_two_scripted,
     window_by_two,
     window_size_tilted,
+    // Preprocessor + modules
+    pp_win,
+    pp_script,
+    pp_operator,
+    pp_alias_win,
+    pp_alias_script,
+    pp_alias_operator,
     //INSERT
 );

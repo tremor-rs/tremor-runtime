@@ -1,0 +1,3 @@
+use foo::bar as baz;
+
+select aggr::win::collect_flattened(event) from in[baz::by_two] into out;

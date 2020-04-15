@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::Helper;
 use crate::ast::{Docs, Warning};
 use crate::ctx::EventContext;
 use crate::errors::*;
@@ -134,8 +135,8 @@ where
 
                     let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
                     let fake_aggr_reg = AggrRegistry::default();
-                    let (screw_rust, ws) =
-                        script_raw.up_script(include_stack.cus.clone(), reg, &fake_aggr_reg)?;
+                    let mut helper = Helper::new(&reg, &fake_aggr_reg, include_stack.cus.clone());
+                    let (screw_rust, ws) = script_raw.up_script(&mut helper)?;
 
                     warnings = ws;
                     Ok(screw_rust)

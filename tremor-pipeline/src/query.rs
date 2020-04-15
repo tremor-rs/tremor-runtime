@@ -33,7 +33,7 @@ use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
+use tremor_script::ast::{CompilationUnit, Ident, SelectType, Stmt, WindowDecl, WindowKind};
 use tremor_script::errors::{query_stream_not_defined, CompilerError};
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::path::ModulePath;
@@ -84,7 +84,7 @@ fn window_decl_to_impl<'script>(
         }
     }
 }
-/// A Tremoe Query
+/// A Tremor Query
 #[derive(Clone, Debug)]
 pub struct Query(pub tremor_script::query::Query);
 impl From<tremor_script::query::Query> for Query {
@@ -98,6 +98,7 @@ impl Query {
         module_path: &ModulePath,
         script: &str,
         file_name: &str,
+        cus: Vec<CompilationUnit>,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, CompilerError> {
@@ -105,6 +106,7 @@ impl Query {
             module_path,
             file_name,
             script,
+            cus,
             reg,
             aggr_reg,
         )?))
@@ -174,9 +176,6 @@ impl Query {
         outputs.push(id);
         let mut port_indexes: PortIndexMap = HashMap::new();
 
-        let mut windows = HashMap::new();
-        let mut operators = HashMap::new();
-        let mut scripts = HashMap::new();
         let mut select_num = 0;
 
         for stmt in &script.stmts {
@@ -275,8 +274,12 @@ impl Query {
                         node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let op =
-                        node.to_op(supported_operators, None, Some(that), Some(windows.clone()))?;
+
+                    let mut ww: HashMap<String, WindowImpl> = HashMap::new();
+                    for w in &script.windows {
+                        ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
+                    }
+                    let op = node.to_op(supported_operators, None, Some(that), Some(ww))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
@@ -299,23 +302,23 @@ impl Query {
                             supported_operators,
                             None,
                             Some(that),
-                            Some(windows.clone()),
+                            Some(HashMap::new()),
                         )?;
                         inputs.insert(name.clone(), id);
                         pipe_ops.insert(id, op);
                         outputs.push(id);
                     };
                 }
-                Stmt::WindowDecl(w) => {
-                    let name = w.id.clone().to_string();
-                    windows.insert(name, window_decl_to_impl(w, &that)?);
-                }
-                Stmt::OperatorDecl(o) => {
-                    let name = o.id.clone().to_string();
-                    operators.insert(name, Stmt::OperatorDecl(o.clone()));
-                }
+                Stmt::WindowDecl(_w) => {}
+                Stmt::ScriptDecl(_s) => {}
+                Stmt::OperatorDecl(_o) => {}
                 Stmt::Operator(o) => {
                     let target = o.target.clone().to_string();
+                    let fqon = if o.module.is_empty() {
+                        target
+                    } else {
+                        format!("{}::{}", o.module.join("::"), target)
+                    };
 
                     let node = NodeConfig {
                         id: common_cow(&o.id),
@@ -326,10 +329,13 @@ impl Query {
                         node: None,
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let inner_stmt: tremor_script::ast::Stmt = operators
-                        .get(&target)
-                        .ok_or_else(|| Error::from("operator not found"))?
-                        .clone();
+                    let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(
+                        script
+                            .operators
+                            .get(&fqon)
+                            .ok_or_else(|| Error::from("operator not found"))?
+                            .clone(),
+                    );
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
@@ -345,16 +351,20 @@ impl Query {
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
                 }
-                Stmt::ScriptDecl(s) => {
-                    let name = s.id.clone().to_string();
-                    scripts.insert(name, Stmt::ScriptDecl(s.clone()));
-                }
                 Stmt::Script(o) => {
                     let target = o.target.clone().to_string();
-                    let inner_stmt: tremor_script::ast::Stmt = scripts
-                        .get(&target)
-                        .ok_or_else(|| Error::from("script not found"))?
-                        .clone();
+                    let fqsn = if o.module.is_empty() {
+                        target
+                    } else {
+                        format!("{}::{}", o.module.join("::"), target)
+                    };
+                    let inner_stmt: tremor_script::ast::Stmt = Stmt::ScriptDecl(Box::new(
+                        script
+                            .scripts
+                            .get(&fqsn)
+                            .ok_or_else(|| Error::from("script not found"))?
+                            .clone(),
+                    ));
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
@@ -425,6 +435,7 @@ impl Query {
             petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
         );
         */
+
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
             Err(ErrorKind::CyclicGraphError(format!(
@@ -556,13 +567,14 @@ pub(crate) fn supported_operators(
                                 .windows
                                 .iter()
                                 .map(|w| {
+                                    let fqwn = w.fqwn();
                                     Ok(windows
-                                        .get(&w.id)
+                                        .get(&fqwn)
                                         .map(|imp| (w.id.to_string(), imp.clone()))
                                         .ok_or_else(|| {
                                             ErrorKind::BadOpConfig(format!(
                                                 "Unknown window: {}",
-                                                &w.id
+                                                &fqwn
                                             ))
                                         })?)
                                 })
