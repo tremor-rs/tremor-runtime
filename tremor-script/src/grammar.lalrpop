@@ -73,6 +73,11 @@ ModuleInnerStmt: StmtRaw<'input> = {
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: Some(params) }),
     <start:@L> "define" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: None }),
     
+    Const => StmtRaw::Expr(<>),
+    FnDecl => StmtRaw::Expr(ExprRaw::FnDecl(<>)),
+    Intrinsic => StmtRaw::Expr(ExprRaw::FnDecl(<>)),
+
+    
     //
     // FIXME - Future, allow modular subgraphs in query language
     //

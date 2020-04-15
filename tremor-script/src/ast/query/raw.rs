@@ -92,13 +92,15 @@ pub enum StmtRaw<'script> {
     Select(Box<SelectRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     ModuleStmt(ModuleStmtRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Expr(ExprRaw<'script>),
 }
 
 impl<'script> BaseExpr for StmtRaw<'script> {
     fn mid(&self) -> usize {
         0
     }
-    fn s(&self, _meta: &NodeMetas) -> Location {
+    fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             StmtRaw::ModuleStmt(s) => s.start,
             StmtRaw::Operator(s) => s.start,
@@ -108,9 +110,10 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(s) => s.start,
             StmtRaw::Stream(s) => s.start,
             StmtRaw::WindowDecl(s) => s.start,
+            StmtRaw::Expr(s) => s.s(meta),
         }
     }
-    fn e(&self, _meta: &NodeMetas) -> Location {
+    fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             StmtRaw::ModuleStmt(e) => e.end,
             StmtRaw::Operator(e) => e.end,
@@ -120,6 +123,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(e) => e.end,
             StmtRaw::Stream(e) => e.end,
             StmtRaw::WindowDecl(e) => e.end,
+            StmtRaw::Expr(e) => e.e(meta),
         }
     }
 }
@@ -168,6 +172,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::ModuleStmt(m) => {
                 error_generic(&m, &m, &"Module in wrong place error", &helper.meta)
+            }
+            StmtRaw::Expr(m) => {
+                error_generic(&m, &m, &"Expression in wrong place error", &helper.meta)
             }
         }
     }
@@ -223,6 +230,23 @@ impl<'script> ModuleStmtRaw<'script> {
             match e {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(reg, aggr_reg, consts, helper)?;
+                }
+                StmtRaw::Expr(e) => {
+                    // We create a 'fake' tremor script module to define
+                    // expressions inside this module
+                    let expr_m = ModuleRaw {
+                        name: self.name.clone(),
+                        start: self.start,
+                        end: self.end,
+                        doc: None,
+                        exprs: vec![e],
+                    };
+                    // since `ModuleRaw::define` also prepends the module
+                    // name we got to remove it prior to calling `define` and
+                    // add it back later
+                    helper.module.pop();
+                    expr_m.define(helper)?;
+                    helper.module.push(self.name.id.to_string());
                 }
                 StmtRaw::WindowDecl(stmt) => {
                     let w = stmt.up(&mut helper)?;
