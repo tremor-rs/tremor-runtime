@@ -321,6 +321,8 @@ pub enum Token<'input> {
     As,
     /// Preprocessor directives
     LineDirective(Location, Cow<'input, str>),
+    /// Config Directive
+    ConfigDirective,
 }
 
 impl<'input> Token<'input> {
@@ -439,6 +441,7 @@ impl<'input> Token<'input> {
             | Token::LBrace
             | Token::LBracket
             | Token::LineDirective(_, _)
+            | Token::ConfigDirective
             | Token::LParen
             | Token::LPatBrace
             | Token::LPatBracket
@@ -650,7 +653,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Use => write!(f, "use"),
             Token::As => write!(f, "as"),
             Token::Recur => write!(f, "recur"),
-
+            Token::ConfigDirective => write!(f, "#!config "),
             Token::LineDirective(l, file) => write!(
                 f,
                 "#!line {} {} {} {} {}",
@@ -1251,6 +1254,25 @@ impl<'input> Lexer<'input> {
         self.chars.chars.peek().map(|b| (loc, *b))
     }
 
+    fn starts_with(&mut self, start: Location, s: &str) -> Option<(Location, &'input str)> {
+        let mut end = start;
+        end.column += s.bytes().len();
+        end.absolute += s.bytes().len();
+
+        if let Some(head) = self.slice(start, end) {
+            if head == s {
+                for _ in 0..s.len() - 1 {
+                    self.bump();
+                }
+                Some((end, head))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn bump(&mut self) -> Lexeme {
         self.chars.next()
     }
@@ -1304,41 +1326,45 @@ impl<'input> Lexer<'input> {
     }
 
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
-
-        if lexeme.starts_with("###") {
-            let doc = Token::ModComment(&lexeme[3..]);
-            Ok(self.spanned2(start, end, doc))
-        } else if lexeme.starts_with("##") {
-            let doc = Token::DocComment(&lexeme[2..]);
-            Ok(self.spanned2(start, end, doc))
-        } else if lexeme.starts_with("#!line") {
-            let directive = &lexeme[6..];
-
-            let directive = directive.trim();
-            let splitted: Vec<_> = directive.split(' ').collect();
-
-            if let Some(&[absolute, line, column, cu, file]) = splitted.get(0..5) {
-                let cu = cu.parse()?;
-                let mut l = Location {
-                    unit_id: cu,
-                    line: line.parse()?,
-                    column: column.parse()?,
-                    absolute: absolute.parse()?,
-                };
-                l.line -= l.line.saturating_sub(1);
-                let line_directive = Token::LineDirective(l, file.into());
-
-                let mut l = start - l;
-                l.column = 0;
-                self.file_offset = l;
-                self.cu = cu;
-                Ok(self.spanned2(start, end, line_directive))
-            } else {
-                Err("Snot!".into())
-            }
+        if let Some((end, _)) = self.starts_with(start, "#!config ") {
+            Ok(self.spanned2(start, end, Token::ConfigDirective))
         } else {
-            Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
+            let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
+
+            if lexeme.starts_with("###") {
+                let doc = Token::ModComment(&lexeme[3..]);
+                Ok(self.spanned2(start, end, doc))
+            } else if lexeme.starts_with("##") {
+                let doc = Token::DocComment(&lexeme[2..]);
+                Ok(self.spanned2(start, end, doc))
+            } else if lexeme.starts_with("#!line") {
+                let directive = &lexeme[6..];
+
+                let directive = directive.trim();
+                let splitted: Vec<_> = directive.split(' ').collect();
+
+                if let Some(&[absolute, line, column, cu, file]) = splitted.get(0..5) {
+                    let cu = cu.parse()?;
+                    let mut l = Location {
+                        unit_id: cu,
+                        line: line.parse()?,
+                        column: column.parse()?,
+                        absolute: absolute.parse()?,
+                    };
+                    l.line -= l.line.saturating_sub(1);
+                    let line_directive = Token::LineDirective(l, file.into());
+
+                    let mut l = start - l;
+                    l.column = 0;
+                    self.file_offset = l;
+                    self.cu = cu;
+                    Ok(self.spanned2(start, end, line_directive))
+                } else {
+                    Err("Snot!".into())
+                }
+            } else {
+                Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
+            }
         }
     }
 

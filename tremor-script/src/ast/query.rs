@@ -30,6 +30,8 @@ pub const LAST_RESERVED_CONST: usize = ARGS_CONST_ID;
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Query<'script> {
+    /// Config for the query
+    pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: Stmts<'script>,
     /// Query Node Metadata

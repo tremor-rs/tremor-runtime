@@ -128,4 +128,5 @@ test_cases!(
     pp_alias_script,
     pp_alias_operator,
     //INSERT
+    with_config,
 );
