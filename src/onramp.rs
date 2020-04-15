@@ -21,6 +21,7 @@ use serde_yaml::Value;
 use std::fmt;
 mod blaster;
 mod crononome;
+mod exec;
 mod file;
 mod gsub;
 mod kafka;
@@ -68,6 +69,7 @@ pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onram
         "gsub" => gsub::GSub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),
+        "exec" => exec::Exec::from_config(config),
         "metronome" => metronome::Metronome::from_config(config),
         "crononome" => crononome::Crononome::from_config(config),
         "udp" => udp::Udp::from_config(config),

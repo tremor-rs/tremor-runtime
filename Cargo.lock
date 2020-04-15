@@ -1109,6 +1109,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f2a4a2034423744d2cc7ca2068453168dcdb82c438419e639a26bd87839c674"
 
 [[package]]
+name = "fsio"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2131cb03096f67334dfba2f0bc46afc5564b08a919d042c6e217e2665741fc54"
+dependencies = [
+ "rand 0.7.3",
+ "users",
+]
+
+[[package]]
 name = "fuchsia-cprng"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3607,6 +3617,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
+name = "subprocess"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5109e3c3215ce5339ca9766a6db7f39144ccc7d9bad53b96d65cfb14ae6c2985"
+dependencies = [
+ "libc",
+ "winapi 0.3.8",
+]
+
+[[package]]
 name = "subtle"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4170,7 +4190,9 @@ dependencies = [
  "elastic",
  "env_logger 0.7.1",
  "error-chain 0.12.2",
+ "fsio",
  "futures 0.3.4",
+ "futures-util",
  "google-pubsub1",
  "google-storage1",
  "grok",
@@ -4190,6 +4212,7 @@ dependencies = [
  "matches",
  "memmap",
  "mio 0.7.0",
+ "pin-project-lite",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
@@ -4204,6 +4227,7 @@ dependencies = [
  "serde_yaml",
  "simd-json",
  "snap",
+ "subprocess",
  "surf",
  "tempfile",
  "threadpool",
@@ -4449,6 +4473,15 @@ dependencies = [
  "idna 0.2.0",
  "matches",
  "percent-encoding 2.1.0",
+]
+
+[[package]]
+name = "users"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c72f4267aea0c3ec6d07eaabea6ead7c5ddacfafc5e22bcf8d186706851fb4cf"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
