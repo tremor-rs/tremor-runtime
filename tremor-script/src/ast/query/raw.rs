@@ -63,6 +63,15 @@ impl<'script> QueryRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
+    Args {
+        /// we're forced to make this pub because of lalrpop
+        start: Location,
+        /// we're forced to make this pub because of lalrpop
+        end: Location,
+        /// we're forced to make this pub because of lalrpop
+        params: Option<WithExprsRaw<'script>>,
+    },
+    /// we're forced to make this pub because of lalrpop
     WindowDecl(WindowDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     OperatorDecl(OperatorDeclRaw<'script>),
@@ -100,6 +109,10 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     node_meta: helper.meta.clone(),
                 }))
             }
+            StmtRaw::Args { params, .. } => Ok(Stmt::Args(
+                up_maybe_params(params, helper)?.unwrap_or_default(),
+            )),
+
             StmtRaw::Stream(stmt) => Ok(Stmt::Stream(stmt.up(helper)?)),
             StmtRaw::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
             StmtRaw::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),

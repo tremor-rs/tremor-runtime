@@ -14,10 +14,12 @@
 
 use crate::config::{InputPort, OutputPort};
 use crate::errors::*;
-use crate::op;
 use crate::op::trickle::select::WindowImpl;
-use crate::OperatorNode;
-use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
+use crate::op::{self, Operator};
+use crate::{
+    common_cow, ConfigGraph, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics, OperatorNode,
+    PortIndexMap, State,
+};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use op::identity::PassthroughFactory;
@@ -31,6 +33,7 @@ use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
 use simd_json::prelude::*;
 use std::borrow::Cow;
+use std::iter;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::ast::{Ident, SelectType, Stmt, WindowDecl, WindowKind};
@@ -38,7 +41,6 @@ use tremor_script::errors::query_stream_not_defined;
 use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{AggrRegistry, Registry, Value};
-
 // Legacy ops for backwards compat with pipeline.yaml at runtime in trickle / extension
 use op::debug::EventHistoryFactory;
 use op::generic::{BackpressureFactory, BatchFactory, CounterFactory};
@@ -102,12 +104,6 @@ impl Query {
     /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self) -> Result<crate::ExecutableGraph> {
-        use crate::op::Operator;
-        use crate::ExecutableGraph;
-        use crate::NodeMetrics;
-        use crate::State;
-        use std::iter;
-
         let script = self.0.suffix();
 
         let mut pipe_graph = ConfigGraph::new();
@@ -116,6 +112,8 @@ impl Query {
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
+
+        let mut metric_interval = None;
 
         // FIXME compute public streams - do not hardcode
         let in_s: Cow<'static, str> = "in".into();
@@ -178,6 +176,14 @@ impl Query {
             };
 
             match stmt {
+                Stmt::Args(ref params) => {
+                    if let Some(i) = params
+                        .get("metrics_interval_s")
+                        .and_then(ValueTrait::as_u64)
+                    {
+                        metric_interval = Some(i * 1_000_000_000)
+                    }
+                }
                 Stmt::Select(ref select) => {
                     let s = &select.stmt;
 
@@ -455,7 +461,6 @@ impl Query {
                 inputs2.insert(k.clone(), i2pos[idx]);
             }
 
-            let metric_interval = Some(1_000_000_000); // FIXME either make configurable or define sensible default
             let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())

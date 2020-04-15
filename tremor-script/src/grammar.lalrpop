@@ -46,6 +46,9 @@ WindowKind: WindowKind = {
 }
 
 Stmt: StmtRaw<'input> = {
+    
+    <start:@L> "define" "args" <params:WithClause> <end:@L> => StmtRaw::Args{start, end, params},
+
     <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.id.to_string(), kind, params: params.0, script: params.1 }),
     <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::OperatorDecl(OperatorDeclRaw { start, end, kind, id: id.id.to_string(), params }),
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params }),

@@ -1,0 +1,4 @@
+define args with
+  metrics_interval_s = 10
+end;
+select event from in into out;

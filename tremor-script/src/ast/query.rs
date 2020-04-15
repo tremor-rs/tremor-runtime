@@ -51,6 +51,8 @@ pub enum Stmt<'script> {
     Script(ScriptStmt<'script>),
     /// A selelect statement
     Select(SelectStmt<'script>),
+    /// A selelect statement
+    Args(HashMap<String, Value<'script>>),
 }
 
 /// A Select statement
