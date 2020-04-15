@@ -1,0 +1,4 @@
+define script add 
+script
+  event.a + event.b
+end;

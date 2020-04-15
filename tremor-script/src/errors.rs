@@ -184,6 +184,7 @@ impl ErrorKind {
             | InvalidFn(outer, inner)
             | AssignToConst(outer, inner, _)
             | DoubleConst(outer, inner, _)
+            | DoubleStream(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner)
             | InvalidHexLiteral(outer, inner)
@@ -561,6 +562,10 @@ error_chain! {
         DoubleConst(expr: Range, inner: Range, name: String) {
             description("Can't declare a constant twice")
                 display("Can't declare the constant `{}` twice", name)
+        }
+        DoubleStream(expr: Range, inner: Range, name: String) {
+            description("Can't declare a stream twice")
+                display("Can't declare the stream `{}` twice", name)
         }
         AssignToConst(expr: Range, inner: Range, name: String) {
             description("Can't assign to a constant")

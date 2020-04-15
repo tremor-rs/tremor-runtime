@@ -18,7 +18,9 @@ fn to_pipe(file_name: String, query: &str) -> std::result::Result<(), CompilerEr
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
-    let q = Query::parse(&module_path, query, &file_name, &reg, &aggr_reg)?;
+    let cus = vec![];
+    let q = Query::parse(&module_path, query, &file_name, cus, &reg, &aggr_reg)?;
+
     q.to_pipe().map_err(|error| CompilerError {
         error: format!("{}", error).into(),
         cus: vec![],

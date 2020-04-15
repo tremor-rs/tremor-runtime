@@ -1,0 +1,6 @@
+use foo::bar ;
+
+
+create operator counter from bar::counter;
+select event from in into counter;
+select event from counter into out;

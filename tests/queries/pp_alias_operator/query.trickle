@@ -1,0 +1,5 @@
+use foo::bar as baz;
+
+create operator counter from baz::counter;
+select event from in into counter;
+select event from counter into out;

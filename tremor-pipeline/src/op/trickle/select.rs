@@ -92,10 +92,29 @@ pub trait WindowTrait: std::fmt::Debug {
 #[derive(Debug)]
 pub struct Window {
     window_impl: WindowImpl,
+    module: Vec<String>,
     name: String,
     dims: SelectDims,
     last_dims: SelectDims,
     next_swap: u64,
+}
+
+impl Window {
+    pub(crate) fn module_path(fqwn: &str) -> Vec<String> {
+        let segments: Vec<String> = fqwn
+            .split("::")
+            .map(std::string::ToString::to_string)
+            .collect();
+        segments[..segments.len() - 1].to_vec()
+    }
+
+    pub(crate) fn ident_name(fqwn: &str) -> String {
+        let segments: Vec<_> = fqwn
+            .split("::")
+            .map(std::string::ToString::to_string)
+            .collect();
+        segments[segments.len() - 1].to_string()
+    }
 }
 
 // We allow this since No is barely ever used.
@@ -367,10 +386,11 @@ impl TrickleSelect {
 
         let windows = windows
             .into_iter()
-            .map(|(name, window_impl)| Window {
+            .map(|(fqwn, window_impl)| Window {
                 dims: dims.clone(),
                 last_dims: dims.clone(),
-                name,
+                module: Window::module_path(&fqwn),
+                name: Window::ident_name(&fqwn),
                 window_impl,
                 next_swap: 0,
             })
@@ -873,6 +893,9 @@ mod test {
         ast::Query {
             stmts: vec![stmt.clone()],
             node_meta: ast::NodeMetas::new(Vec::new()),
+            windows: HashMap::new(),
+            scripts: HashMap::new(),
+            operators: HashMap::new(),
         }
     }
 
@@ -957,9 +980,16 @@ mod test {
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
         let module_path = tremor_script::path::load();
-        let query =
-            tremor_script::query::Query::parse(&module_path, &file_name, query, &reg, &aggr_reg)
-                .map_err(tremor_script::errors::CompilerError::error)?;
+        let cus = vec![];
+        let query = tremor_script::query::Query::parse(
+            &module_path,
+            &file_name,
+            query,
+            cus,
+            &reg,
+            &aggr_reg,
+        )
+        .map_err(tremor_script::errors::CompilerError::error)?;
 
         let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
             q.suffix().stmts[0].clone()

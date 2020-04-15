@@ -1,0 +1,4 @@
+define tumbling window by_two
+with
+  size = 2
+end;

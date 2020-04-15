@@ -45,17 +45,13 @@ pub struct QueryRaw<'script> {
 impl<'script> QueryRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
-        cus: Vec<CompilationUnit>,
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
+        mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<(Query<'script>, usize, Vec<Warning>)> {
-        let mut helper = Helper::new(reg, aggr_reg, cus);
-
         let mut stmts = vec![];
         for (_i, e) in self.stmts.into_iter().enumerate() {
             match e {
                 StmtRaw::ModuleStmt(m) => {
-                    m.define(reg, aggr_reg, &mut vec![], &mut helper)?;
+                    m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
                 }
                 other => {
                     stmts.push(other.up(&mut helper)?);
@@ -66,10 +62,13 @@ impl<'script> QueryRaw<'script> {
         Ok((
             Query {
                 stmts,
-                node_meta: helper.meta,
+                node_meta: helper.meta.clone(),
+                windows: helper.windows.clone(),
+                scripts: helper.scripts.clone(),
+                operators: helper.operators.clone(),
             },
             helper.locals.len(),
-            helper.warnings,
+            helper.warnings.clone(),
         ))
     }
 }
@@ -148,15 +147,23 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 }))
             }
             StmtRaw::Stream(stmt) => Ok(Stmt::Stream(stmt.up(helper)?)),
-            StmtRaw::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
+            StmtRaw::OperatorDecl(stmt) => {
+                let stmt: OperatorDecl<'script> = stmt.up(helper)?;
+                helper
+                    .operators
+                    .insert(stmt.fqon(&stmt.module), stmt.clone());
+                Ok(Stmt::OperatorDecl(stmt))
+            }
             StmtRaw::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),
             StmtRaw::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
+                helper.scripts.insert(stmt.fqsn(&stmt.module), stmt.clone());
                 Ok(Stmt::ScriptDecl(Box::new(stmt)))
             }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             StmtRaw::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
+                helper.windows.insert(stmt.fqwn(&stmt.module), stmt.clone());
                 Ok(Stmt::WindowDecl(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(m) => {
@@ -181,11 +188,14 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            module: helper.module.clone(),
             id: self.id,
             kind: self.kind.up(helper)?,
             params: up_maybe_params(self.params, helper)?,
         };
-        helper.operators.push(operator_decl.clone());
+        helper
+            .operators
+            .insert(operator_decl.fqon(&helper.module), operator_decl.clone());
         Ok(operator_decl)
     }
 }
@@ -206,7 +216,7 @@ impl<'script> ModuleStmtRaw<'script> {
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
         consts: &mut Vec<Value<'script>>,
-        helper: &mut Helper<'script, 'registry>,
+        mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         helper.module.push(self.name.id.to_string());
         for e in self.stmts {
@@ -214,11 +224,17 @@ impl<'script> ModuleStmtRaw<'script> {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(reg, aggr_reg, consts, helper)?;
                 }
-                StmtRaw::Stream(stmt) => {
-                    dbg!(stmt); // FIXME continue here with modularized trickle impl
+                StmtRaw::WindowDecl(stmt) => {
+                    let w = stmt.up(&mut helper)?;
+                    helper.windows.insert(w.fqwn(&helper.module), w);
                 }
-                StmtRaw::Select(stmt) => {
-                    dbg!(stmt); // FIXME continue here with modularized trickle impl
+                StmtRaw::ScriptDecl(stmt) => {
+                    let s = stmt.up(&mut helper)?;
+                    helper.scripts.insert(s.fqsn(&helper.module), s);
+                }
+                StmtRaw::OperatorDecl(stmt) => {
+                    let o = stmt.up(&mut helper)?;
+                    helper.operators.insert(o.fqon(&helper.module), o);
                 }
                 e => {
                     return error_generic(
@@ -240,6 +256,7 @@ impl<'script> ModuleStmtRaw<'script> {
 pub struct OperatorStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
+    pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) id: String,
     pub(crate) target: String,
     pub(crate) params: Option<WithExprsRaw<'script>>,
@@ -252,6 +269,12 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
         Ok(OperatorStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
+            module: self
+                .module
+                .into_iter()
+                .map(|x| x.id.to_string())
+                .collect::<Vec<String>>(),
+
             target: self.target,
             params: up_maybe_params(self.params, helper)?,
         })
@@ -271,20 +294,31 @@ pub struct ScriptDeclRaw<'script> {
 impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
     type Target = ScriptDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // Inject consts
-        let (script, mut warnings) =
-            self.script
-                .up_script(helper.meta.cus.clone(), helper.reg, helper.aggr_reg)?;
+        // NOTE As we can have module aliases and/or nested modules within script definitions
+        // that are private to or inline with the script - multiple script definitions in the
+        // same module scope can share the same relative function/const module paths.
+        //
+        // We add the script name to the scope as a means to distinguish these orthogonal
+        // definitions. This is achieved with the push/pop pointcut around the up() call
+        // below. The actual function registration occurs in the up() call in the usual way.
+        //
+        helper.module.push(self.id.to_string());
+        let (script, mut warnings) = self.script.up_script(helper)?;
         helper.warnings.append(&mut warnings);
+
         helper.warnings.sort();
         helper.warnings.dedup();
         let script_decl = ScriptDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            module: helper.module.clone(),
             id: self.id,
             params: up_maybe_params(self.params, helper)?,
             script,
         };
-        helper.scripts.push(script_decl.clone());
+        helper.module.pop();
+        helper
+            .scripts
+            .insert(script_decl.fqsn(&helper.module), script_decl.clone());
         Ok(script_decl)
     }
 }
@@ -296,6 +330,7 @@ pub struct ScriptStmtRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) target: String,
+    pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) params: Option<WithExprsRaw<'script>>,
 }
 
@@ -309,6 +344,11 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
             id: self.id,
             params: up_maybe_params(self.params, helper)?,
             target: self.target,
+            module: self
+                .module
+                .into_iter()
+                .map(|x| x.id.to_string())
+                .collect::<Vec<String>>(),
         })
     }
 }
@@ -327,10 +367,7 @@ pub struct WindowDeclRaw<'script> {
 impl<'script> Upable<'script> for WindowDeclRaw<'script> {
     type Target = WindowDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let mut maybe_script = self
-            .script
-            .map(|s| s.up_script(helper.meta.cus.clone(), helper.reg, helper.aggr_reg))
-            .transpose()?;
+        let mut maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
         if let Some((_, ref mut warnings)) = maybe_script {
             helper.warnings.append(warnings);
             helper.warnings.sort();
@@ -338,6 +375,7 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
         };
         Ok(WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            module: helper.module.clone(),
             id: self.id,
             kind: self.kind,
             params: up_params(self.params, helper)?,
@@ -348,11 +386,32 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDefnRaw {
+pub struct WindowDefnRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
-    /// ID of the window
+    /// Module of the window definition
+    pub module: Vec<IdentRaw<'script>>,
+    /// Identity of the window definition
     pub id: String,
+}
+
+impl<'script> WindowDefnRaw<'script> {
+    /// Calculate fully qualified module name
+    pub fn fqwn(&self) -> String {
+        if self.module.is_empty() {
+            self.id.clone()
+        } else {
+            format!(
+                "{}::{}",
+                self.module
+                    .iter()
+                    .map(|x| x.id.to_string())
+                    .collect::<Vec<String>>()
+                    .join("::"),
+                self.id
+            )
+        }
+    }
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -366,7 +425,7 @@ pub struct SelectRaw<'script> {
     pub(crate) maybe_where: Option<ImutExprRaw<'script>>,
     pub(crate) maybe_having: Option<ImutExprRaw<'script>>,
     pub(crate) maybe_group_by: Option<GroupByRaw<'script>>,
-    pub(crate) windows: Option<Vec<WindowDefnRaw>>,
+    pub(crate) windows: Option<Vec<WindowDefnRaw<'script>>>,
 }
 impl_expr!(SelectRaw);
 

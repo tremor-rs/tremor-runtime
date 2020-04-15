@@ -134,6 +134,7 @@ async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
         &module_path,
         &raw,
         file_name,
+        vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;

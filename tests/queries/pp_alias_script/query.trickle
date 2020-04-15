@@ -1,0 +1,5 @@
+use foo::bar as baz;
+
+create script adder from baz::add;
+select event from in into adder;
+select event from adder into out;

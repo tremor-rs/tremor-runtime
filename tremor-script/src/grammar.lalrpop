@@ -73,21 +73,24 @@ ModuleInnerStmt: StmtRaw<'input> = {
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: Some(params) }),
     <start:@L> "define" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: None }),
     
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.id.to_string() }),
+    //
+    // FIXME - Future, allow modular subgraphs in query language
+    //
+    // <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.id.to_string() }),
 
-    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident>  <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
+    // <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
+    // <start:@L> "create" "operator" <id:Ident> "from" <target:Ident>  <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
 
-    <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "operator" <id:Ident> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
+    // <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
+    // <start:@L> "create" "operator" <id:Ident> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
 
-    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
+    // <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
+    // <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
 
-    <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "script" <id:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
+    // <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
+    // <start:@L> "create" "script" <id:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
 
-    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    // <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 
 WindowKind: WindowKind = {
@@ -108,17 +111,17 @@ Stmt: StmtRaw<'input> = {
     
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.id.to_string() }),
 
-    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "operator" <id:Ident> "from" <target:Ident>  <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), module: target.0, target: target.1.id.to_string(), params: Some(params) }),
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget>  <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), module: target.0, target: target.1.id.to_string(), params: None }),
 
-    <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "operator" <id:Ident> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
+    <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), module: vec![], target: id.id.to_string(), params: Some(params) }),
+    <start:@L> "create" "operator" <id:Ident> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), module: vec![], target: id.id.to_string(), params: None }),
 
-    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "script" <id:Ident> "from" <target:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: target.id.to_string(), params: None }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, module: vec![], id: id.id.to_string(), target: target.1.id.to_string(), params: Some(params) }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), module: target.0, target: target.1.id.to_string(), params: None }),
 
-    <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: Some(params) }),
-    <start:@L> "create" "script" <id:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), target: id.id.to_string(), params: None }),
+    <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), module: vec![], target: id.id.to_string(), params: Some(params) }),
+    <start:@L> "create" "script" <id:Ident> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.id.to_string(), module: vec![], target: id.id.to_string(), params: None }),
 
     <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
@@ -127,19 +130,26 @@ MaybePort: Option<IdentRaw<'input>> = {
     ("/" <Ident>)? => <>,
 }
 
-StreamPort: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
-    <op:Ident> <port:MaybePort> => (op, port)
+ModularTarget: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
+    <target:Ident> => (vec![], target),
+    <m:ModPath> "::" <target:Ident> => (m, target),
 }
 
-WindowClause: Option<Vec<WindowDefnRaw>> = {
+StreamPort: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
+    <op:Ident> <port:MaybePort> => (op, port),
+    // <m:ModPath> "::" <op:Ident> <port:MaybePort> => (op, port) // FIXME future
+}
+
+WindowClause: Option<Vec<WindowDefnRaw<'input>>> = {
     (<WindowDefn>)? => <>,
 }
 
-Window: WindowDefnRaw = {
-    <start:@L> <id:Ident> <end:@L> => WindowDefnRaw { start, end, id: id.id.to_string() },
+Window: WindowDefnRaw<'input> = {
+    <start:@L> <id:Ident> <end:@L> => WindowDefnRaw { start, end, module: vec![], id: id.id.to_string() },
+    <start:@L> <module:ModPath> "::" <id:Ident> <end:@L> => WindowDefnRaw { start, end, module, id: id.id.to_string() },
 }
 
-Windows: Vec<WindowDefnRaw> = {
+Windows: Vec<WindowDefnRaw<'input>> = {
     <fields:Windows_> => {
         let mut fields = fields;
         fields.reverse();
@@ -147,12 +157,12 @@ Windows: Vec<WindowDefnRaw> = {
     },
 }
 
-Windows_: Vec<WindowDefnRaw> = {
+Windows_: Vec<WindowDefnRaw<'input>> = {
     <Sep<Windows_, Window, ",">> => <>
 }
 
 
-WindowDefn: Vec<WindowDefnRaw>  = {
+WindowDefn: Vec<WindowDefnRaw<'input>>  = {
     "[" <windows:Windows> "]" => windows
 }
 

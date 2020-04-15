@@ -34,6 +34,12 @@ pub struct Query<'script> {
     pub stmts: Stmts<'script>,
     /// Query Node Metadata
     pub node_meta: NodeMetas,
+    /// Window declarations
+    pub windows: HashMap<String, WindowDecl<'script>>,
+    /// Script declarations
+    pub scripts: HashMap<String, ScriptDecl<'script>>,
+    /// Operators declarations
+    pub operators: HashMap<String, OperatorDecl<'script>>,
 }
 
 /// Query statement
@@ -126,12 +132,25 @@ pub struct OperatorDecl<'script> {
     pub(crate) mid: usize,
     /// Type of the operator
     pub kind: OperatorKind,
+    /// Module of the operator
+    pub module: Vec<String>,
     /// Identifyer for the operator
     pub id: String,
     /// Parameters for the operator
     pub params: Option<HashMap<String, Value<'script>>>,
 }
 impl_expr2!(OperatorDecl);
+
+impl<'script> OperatorDecl<'script> {
+    /// Calculate the fully qualified name
+    pub fn fqon(&self, module: &[String]) -> String {
+        if module.is_empty() {
+            self.id.clone()
+        } else {
+            format!("{}::{}", module.join("::"), self.id)
+        }
+    }
+}
 
 /// An operator creaton
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -141,6 +160,8 @@ pub struct OperatorStmt<'script> {
     pub id: String,
     /// Target of the operator
     pub target: String,
+    /// Module of the script
+    pub module: Vec<String>,
     pub(crate) params: Option<HashMap<String, Value<'script>>>,
 }
 impl_expr2!(OperatorStmt);
@@ -149,6 +170,8 @@ impl_expr2!(OperatorStmt);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl<'script> {
     pub(crate) mid: usize,
+    /// Module of the script
+    pub module: Vec<String>,
     /// ID of the script
     pub id: String,
     /// Parameters of a script declaration
@@ -157,6 +180,17 @@ pub struct ScriptDecl<'script> {
     pub script: Script<'script>,
 }
 impl_expr2!(ScriptDecl);
+
+impl<'script> ScriptDecl<'script> {
+    /// Calculate the fully qualified name
+    pub fn fqsn(&self, module: &[String]) -> String {
+        if module.is_empty() {
+            self.id.clone()
+        } else {
+            format!("{}::{}", module.join("::"), self.id)
+        }
+    }
+}
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -168,6 +202,8 @@ pub struct ScriptStmt<'script> {
     pub target: String,
     /// Parameters of the script statement
     pub params: Option<HashMap<String, Value<'script>>>,
+    /// Module path of the script
+    pub module: Vec<String>,
 }
 impl_expr2!(ScriptStmt);
 
@@ -184,6 +220,8 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDecl<'script> {
     pub(crate) mid: usize,
+    /// Module of the window declaration
+    pub module: Vec<String>,
     /// Name of the window declaration
     pub id: String,
     /// The type of window
@@ -194,6 +232,17 @@ pub struct WindowDecl<'script> {
     pub script: Option<Script<'script>>,
 }
 impl_expr2!(WindowDecl);
+
+impl<'script> WindowDecl<'script> {
+    /// Calculate the fully qualified window name
+    pub fn fqwn(&self, module: &[String]) -> String {
+        if module.is_empty() {
+            self.id.clone()
+        } else {
+            format!("{}::{}", module.join("::"), self.id)
+        }
+    }
+}
 
 /// A select statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -214,7 +263,7 @@ pub struct Select<'script> {
     /// Group-By clause
     pub maybe_group_by: Option<GroupBy<'script>>,
     /// Window
-    pub windows: Vec<WindowDefnRaw>,
+    pub windows: Vec<WindowDefnRaw<'script>>,
 }
 impl_expr2!(Select);
 

@@ -106,6 +106,7 @@ where
         module_path: &ModulePath,
         file_name: &str,
         script: &'script str,
+        cus: Vec<ast::CompilationUnit>,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, CompilerError> {
@@ -118,8 +119,10 @@ where
         source.push('\n');
 
         let mut include_stack = lexer::IncludeStack::default();
+
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
             let query = rentals::Query::try_new(Box::new(source.clone()), |src: &mut String| {
+                let mut helper = ast::Helper::new(reg, aggr_reg, cus);
                 let cu = include_stack.push(&file_name)?;
                 let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
                     module_path,
@@ -135,7 +138,7 @@ where
 
                 let (script, local_count, ws) = crate::parser::g::QueryParser::new()
                     .parse(filtered_tokens)?
-                    .up_script(include_stack.cus.clone(), reg, aggr_reg)?;
+                    .up_script(&mut helper)?;
 
                 warnings = ws;
                 locals = local_count;
@@ -254,7 +257,8 @@ mod test {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
         let module_path = crate::path::load();
-        if let Err(e) = Query::parse(&module_path, "test.trickle", query, &reg, &aggr_reg) {
+        let cus = vec![];
+        if let Err(e) = Query::parse(&module_path, "test.trickle", query, cus, &reg, &aggr_reg) {
             eprintln!("{}", e.error());
             assert!(false)
         } else {

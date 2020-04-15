@@ -21,6 +21,7 @@ mod upable;
 use crate::errors::*;
 use crate::impl_expr2;
 use crate::interpreter::*;
+pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
 use crate::registry::{
     Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
@@ -34,8 +35,6 @@ pub use query::*;
 use serde::Serialize;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
-// use std::fs::File;
-use crate::lexer::CompilationUnit;
 use std::mem;
 use upable::Upable;
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
@@ -43,7 +42,7 @@ struct NodeMeta {
     start: Location,
     end: Location,
     name: Option<String>,
-    /// id of current compilation unit part
+    /// Id of current compilation unit part
     cu: usize,
     terminal: bool,
 }
@@ -54,7 +53,7 @@ impl From<(Location, Location, usize)> for NodeMeta {
             start,
             end,
             name: None,
-            cu, // TODO FIXME
+            cu,
             terminal: false,
         }
     }
@@ -104,12 +103,6 @@ impl<'script> NodeMetas {
         });
         mid
     }
-
-    // pub(crate) fn make_meta_terminal(&mut self, mid: usize) {
-    //     if let Some(m) = self.0.get_mut(mid) {
-    //         m.terminal = true;
-    //     }
-    // }
 
     pub(crate) fn start(&self, idx: usize) -> Option<Location> {
         self.nodes.get(idx).map(|v| v.start)
@@ -254,8 +247,9 @@ where
     aggr_reg: &'registry AggrRegistry,
     can_emit: bool,
     is_in_aggr: bool,
-    operators: Vec<OperatorDecl<'script>>,
-    scripts: Vec<ScriptDecl<'script>>,
+    windows: HashMap<String, WindowDecl<'script>>,
+    scripts: HashMap<String, ScriptDecl<'script>>,
+    operators: HashMap<String, OperatorDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     // TODO: Users of the `warnings` field might be helped if `warnings` were a Set. Right now,
     // some places (twice in query/raw.rs) do `append + sort + dedup`. With, e.g., a `BTreeSet`,
@@ -267,6 +261,7 @@ where
     pub locals: HashMap<String, usize>,
     pub functions: HashMap<Vec<String>, usize>,
     pub consts: HashMap<Vec<String>, usize>,
+    pub streams: HashMap<Vec<String>, usize>,
     pub meta: NodeMetas,
     pub const_values: Vec<Value<'script>>,
     docs: Docs<'script>,
@@ -334,12 +329,14 @@ where
             aggr_reg,
             can_emit: true,
             is_in_aggr: false,
-            operators: Vec::new(),
-            scripts: Vec::new(),
+            windows: HashMap::new(),
+            scripts: HashMap::new(),
+            operators: HashMap::new(),
             aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
             consts: HashMap::new(),
+            streams: HashMap::new(),
             functions: HashMap::new(),
             func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
@@ -430,6 +427,7 @@ pub struct Script<'script> {
     /// Constants defined in this script
     pub consts: Vec<Value<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
+    windows: HashMap<String, WindowDecl<'script>>,
     functions: Vec<CustomFn<'script>>,
     locals: usize,
     pub(crate) node_meta: NodeMetas,

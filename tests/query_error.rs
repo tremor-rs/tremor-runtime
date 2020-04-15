@@ -27,10 +27,12 @@ use tremor_script::path::ModulePath;
 
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
+    let cus = vec![];
     let q = Query::parse(
         module_path,
         query,
         file_name,
+        cus,
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
