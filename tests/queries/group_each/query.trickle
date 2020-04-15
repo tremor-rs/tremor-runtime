@@ -1,3 +1,4 @@
+use std::record;
 define tumbling window by_2
 with
   size = 2
@@ -8,4 +9,4 @@ select {
   "c": aggr::stats::sum(event.c),
 }
 from in[by_2]
-group by set(each(core::record::keys(event.g))) into out;
+group by set(each(record::keys(event.g))) into out;

@@ -1,2 +1,4 @@
+use std::record;
+
 let a = 7;
-core::record::from_array(a)
+record::from_array(a)
