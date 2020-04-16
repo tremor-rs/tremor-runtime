@@ -127,6 +127,6 @@ test_cases!(
     pp_alias_win,
     pp_alias_script,
     pp_alias_operator,
+    pp_config_directive,
     //INSERT
-    with_config,
 );
