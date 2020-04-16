@@ -81,7 +81,17 @@ impl Rest {
                 Err(e) => error!("Bad header name: {}", e),
             }
         }
-        c.await?;
+
+        let mut reply = c.await?;
+        let status = reply.status();
+        if status.is_client_error() || status.is_server_error() {
+            if let Ok(body) = reply.body_string().await {
+                error!("HTTP request failed: {} => {}", status, body)
+            } else {
+                error!("HTTP request failed: {}", status)
+            }
+        }
+
         let d = duration_to_millis(start.elapsed());
         Ok(d)
     }
