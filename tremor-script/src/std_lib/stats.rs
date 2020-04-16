@@ -18,7 +18,6 @@ use crate::registry::{
 };
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
-use math as libmath;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::Value;
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
@@ -27,6 +26,39 @@ use std::f64;
 use std::marker::Send;
 use std::ops::RangeInclusive;
 use std::u64;
+
+/// Round up.
+///
+/// Round `value` up to accuracy defined by `scale`.
+/// Positive `scale` defines the number of decimal digits in the result
+/// while negative `scale` rounds to a whole number and defines the number
+/// of trailing zeroes in the result.
+///
+/// # Arguments
+///
+/// * `value` - value to round
+/// * `scale` - result accuracy
+///
+/// # Examples
+///
+/// ```
+/// use math::round;
+///
+/// let rounded = round::ceil(3.14159, 3);
+/// assert_eq!(rounded, 3.142);
+/// ```
+///
+/// ```
+/// use math::round;
+///
+/// let rounded = round::ceil(3456., -2);
+/// assert_eq!(rounded, 3500.);
+/// ```
+/// taken from https://github.com/0x022b/libmath-rs/blob/af3aff7e1500e5f801e73f3c464ea7bf81ec83c7/src/round.rs
+pub fn ceil(value: f64, scale: i8) -> f64 {
+    let multiplier = 10f64.powi(scale as i32) as f64;
+    (value * multiplier).ceil() / multiplier
+}
 
 #[derive(Clone, Debug, Default)]
 struct Count(i64);
@@ -462,7 +494,7 @@ impl TremorAggrFn for Dds {
                 for (pcn, percentile) in &self.percentiles {
                     match histo.quantile(*percentile) {
                         Ok(Some(quantile)) => {
-                            let quantile_dsp = libmath::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
                             p.insert(pcn.clone().into(), Value::from(quantile_dsp));
                         }
                         _ => {
@@ -501,7 +533,7 @@ impl TremorAggrFn for Dds {
                 for (pcn, percentile) in &self.percentiles {
                     match histo.quantile(*percentile) {
                         Ok(Some(quantile)) => {
-                            let quantile_dsp = libmath::round::ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                            let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
                             p.insert(pcn.clone().into(), Value::from(quantile_dsp));
                         }
                         _ => {

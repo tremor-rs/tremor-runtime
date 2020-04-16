@@ -53,7 +53,6 @@ hdrhistogram = "7"
 sketches-ddsketch = "0.1.1"
 xz2 = "0.1"
 url = "2"
-libmath = "0.2"
 tremor-influx = { version = "0.1" }
 
 [build-dependencies]
