@@ -39,21 +39,6 @@ use std::u64;
 /// * `value` - value to round
 /// * `scale` - result accuracy
 ///
-/// # Examples
-///
-/// ```
-/// use math::round;
-///
-/// let rounded = round::ceil(3.14159, 3);
-/// assert_eq!(rounded, 3.142);
-/// ```
-///
-/// ```
-/// use math::round;
-///
-/// let rounded = round::ceil(3456., -2);
-/// assert_eq!(rounded, 3500.);
-/// ```
 /// taken from https://github.com/0x022b/libmath-rs/blob/af3aff7e1500e5f801e73f3c464ea7bf81ec83c7/src/round.rs
 pub fn ceil(value: f64, scale: i8) -> f64 {
     let multiplier = 10f64.powi(scale as i32) as f64;
