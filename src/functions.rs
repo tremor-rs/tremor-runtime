@@ -20,7 +20,6 @@ use tremor_script::tremor_fn;
 pub fn load() -> Result<()> {
     FN_REGISTRY
         .lock()?
-        //        .or_ok(Error::from("Could not lock function registry"))?
         .insert(tremor_fn!(system::instance(_context) {
             Ok(Value::from(instance!()))
         }));
