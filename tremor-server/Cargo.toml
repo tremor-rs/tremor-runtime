@@ -1,6 +1,6 @@
 [package]
 name = "tremor-server"
-version = "0.7.3"
+version = "0.8.0"
 description = "Tremor Runtime Server"
 authors = ["The Tremor Team"]
 edition = "2018"

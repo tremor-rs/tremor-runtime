@@ -1,6 +1,6 @@
 [package]
 name = "tremor-tool"
-version = "0.7.3"
+version = "0.8.0"
 description = "Tremor CLI Tool"
 authors = ["The Tremor Team"]
 edition = "2018"

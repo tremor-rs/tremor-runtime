@@ -4177,7 +4177,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
 name = "tremor-api"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "hashbrown 0.7.1",
  "http-types",
@@ -4223,7 +4223,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "base64 0.12.0",
  "criterion",
@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-query"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
@@ -4363,7 +4363,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-server"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "async-std",
  "clap",
@@ -4383,7 +4383,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-tool"
-version = "0.7.3"
+version = "0.8.0"
 dependencies = [
  "async-std",
  "clap",
