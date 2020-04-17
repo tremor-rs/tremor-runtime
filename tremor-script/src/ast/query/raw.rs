@@ -40,7 +40,6 @@ fn up_maybe_params<'script, 'registry>(
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
     pub(crate) config: WithExprsRaw<'script>,
-    pub(crate) imports: Imports<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
 }
 impl<'script> QueryRaw<'script> {

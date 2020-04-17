@@ -129,5 +129,4 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     //INSERT
-    unlinked_sub_pipeline,
 );

@@ -14,7 +14,7 @@
 
 use crate::ast::raw::*;
 use crate::ast::query::raw::*;
-use crate::ast::{BinOpKind, UnaryOpKind, LexicalUnit, Imports};
+use crate::ast::{BinOpKind, UnaryOpKind, LexicalUnit};
 use crate::lexer::Token;
 use crate::pos::Location;
 use simd_json::{BorrowedValue as Value};
@@ -28,10 +28,8 @@ grammar<'input>;
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, imports: vec![], stmts},
-    <config:ConfigDirectives>  <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, imports, stmts},    
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], imports: vec![], stmts},
-    <imports:Imports> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], imports, stmts},    
+    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, stmts},
+    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts},
 }
 
 ConfigDirectives: WithExprsRaw<'input> = {
@@ -93,7 +91,6 @@ ModuleInnerStmt: StmtRaw<'input> = {
     FnDecl => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
     Intrinsic => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 
-    
     //
     // FIXME - Future, allow modular subgraphs in query language
     //
@@ -222,8 +219,7 @@ EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
 }
 
 EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
-    <ExprImut> => Some(ScriptRaw::new(vec![], vec![ExprRaw::Imut(<>)], None)),
-    <imports:Imports> <exprs:ExprImut> => Some(ScriptRaw::new(imports, vec![ExprRaw::Imut(exprs)], None)),
+    <ExprImut> => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>)], None)),
 }
 
 WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
@@ -259,35 +255,19 @@ OperatorKind: OperatorKindRaw = {
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:Exprs> "end" => ScriptRaw::new(vec![], exprs, None),
-    "script" <imports:Imports> <exprs:Exprs> "end" => ScriptRaw::new(imports, exprs, None),
+    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs, None),
 }
 
 ///////////////////////////////////////
 
-
 pub(crate) Script : ScriptRaw<'input> = {
-  <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(vec![], exprs, doc),
-  <doc:ModComment> <imports:Imports> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(imports, exprs, doc),
-}
-
-Imports: Imports<'input> = {
-  <stmt:ImportDirective> <list:Imports> => {
-    let mut list = list;
-    list.insert(0,stmt);
-    list
-  },
-  <item:ImportDirective> ";" => vec![item],
-}
-
-ImportDirective: LexicalUnit<'input> = {
-    "use" <mp:ModPath> "as" <alias:Ident> => LexicalUnit::AliasedImportDecl(mp,alias),
-    "use" <mp:ModPath> => LexicalUnit::NakedImportDecl(mp),
+  <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
 }
 
 ModComment: Option<Vec<Cow<'input, str>>> = {
     (<ModComment_>)? => <>
 }
+
 ModComment_: Vec<Cow<'input, str>> = {
     <c:"<mod-comment>"> => vec![c.into()],
     <v:ModComment_> <c:"<mod-comment>"> => {
@@ -296,7 +276,6 @@ ModComment_: Vec<Cow<'input, str>> = {
         v
     },
 }
-
 
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {

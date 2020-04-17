@@ -38,22 +38,13 @@ const NO_CONSTS: Vec<Value<'static>> = Vec::new();
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
-    imports: Imports<'script>,
     exprs: ExprsRaw<'script>,
     doc: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> ScriptRaw<'script> {
-    pub(crate) fn new(
-        imports: Imports<'script>,
-        exprs: ExprsRaw<'script>,
-        doc: Option<Vec<Cow<'script, str>>>,
-    ) -> Self {
-        Self {
-            imports,
-            exprs,
-            doc,
-        }
+    pub(crate) fn new(exprs: ExprsRaw<'script>, doc: Option<Vec<Cow<'script, str>>>) -> Self {
+        Self { exprs, doc }
     }
     #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
