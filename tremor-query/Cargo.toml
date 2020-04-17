@@ -1,6 +1,6 @@
 [package]
 name = "tremor-query"
-version = "0.7.3"
+version = "0.8.0"
 description = "Tremor Query CLI"
 authors = ["The Tremor Team"]
 edition = "2018"
