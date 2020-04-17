@@ -224,7 +224,7 @@ fn main() -> Result<()> {
         input?.read_to_string(&mut raw)?;
         let raw = raw.trim_end().to_string();
 
-        vec![simd_json::borrowed::Value::String(raw.into())]
+        vec![simd_json::borrowed::Value::from(raw)]
     } else {
         vec![simd_json::borrowed::Value::from(Object::default())]
     };

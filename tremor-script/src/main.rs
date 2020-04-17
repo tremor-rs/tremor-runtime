@@ -275,7 +275,7 @@ fn main() -> Result<()> {
                                     std::process::exit(1);
                                 }
                             };
-                            let mut global_map = Value::from(Object::new());
+                            let mut global_map = Value::object();
                             let r = runnable.run(
                                 &EventContext::new(nanotime(), Some(EventOriginUri::default())),
                                 AggrType::Tick,
@@ -403,12 +403,12 @@ fn main() -> Result<()> {
                 input.read_to_string(&mut raw)?;
                 let raw = raw.trim_end().to_string();
 
-                vec![simd_json::borrowed::Value::String(raw.into())]
+                vec![simd_json::borrowed::Value::from(raw)]
             } else {
-                vec![simd_json::borrowed::Value::from(Object::new())]
+                vec![simd_json::borrowed::Value::object()]
             };
 
-            let mut global_map = Value::from(Object::new());
+            let mut global_map = Value::object();
             let mut state = Value::null();
             let mut event = events
                 .pop()

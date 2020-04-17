@@ -39,7 +39,7 @@ pub struct Batch {
 }
 
 pub fn empty() -> LineValue {
-    LineValue::new(vec![], |_| ValueAndMeta::from(Value::Array(vec![])))
+    LineValue::new(vec![], |_| ValueAndMeta::from(Value::array()))
 }
 
 op!(BatchFactory(node) {

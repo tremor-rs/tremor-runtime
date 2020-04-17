@@ -605,7 +605,7 @@ impl Operator for TrickleSelect {
                     // See if we need to merge into the next tiltframe
                     // If so merge the aggregates
                     // Then emit the window itself
-                    consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
+                    consts[WINDOW_CONST_ID] = Value::from(this.name.to_string());
                     let data = event.data.suffix();
                     let unwind_event = data.value();
                     let event_meta = data.meta();
@@ -760,7 +760,7 @@ impl Operator for TrickleSelect {
             // If we had at least one window ingest the event into this window
             if let Some(this) = self.windows.first() {
                 let (unwind_event, event_meta) = event.data.parts();
-                consts[WINDOW_CONST_ID] = Value::String(this.name.to_string().into());
+                consts[WINDOW_CONST_ID] = Value::from(this.name.to_string());
                 // FIXME: reason about soundness
                 let this_groups = unsafe { this.dims.mut_suffix() };
                 let (_, this_group) = this_groups
@@ -1197,7 +1197,7 @@ mod test {
         let mut stmt_ast = test_stmt(target);
         stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
-            value: Value::String("snot".into()),
+            value: Value::from("snot"),
         }));
 
         let stmt_ast = test_select_stmt(stmt_ast);

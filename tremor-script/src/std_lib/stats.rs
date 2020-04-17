@@ -1088,14 +1088,7 @@ mod test {
             }
             a.accumulate(&[
                 &Value::from(i),
-                &Value::Array(vec![
-                    Value::String(std::borrow::Cow::Borrowed("0.5")),
-                    Value::String(std::borrow::Cow::Borrowed("0.9")),
-                    Value::String(std::borrow::Cow::Borrowed("0.95")),
-                    Value::String(std::borrow::Cow::Borrowed("0.99")),
-                    Value::String(std::borrow::Cow::Borrowed("0.999")),
-                    Value::String(std::borrow::Cow::Borrowed("0.9999")),
-                ]),
+                &Value::from(vec!["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
             ])?;
             i += 1;
         }
@@ -1135,14 +1128,7 @@ mod test {
             }
             a.accumulate(&[
                 &Value::from(i),
-                &Value::Array(vec![
-                    Value::String(std::borrow::Cow::Borrowed("0.5")),
-                    Value::String(std::borrow::Cow::Borrowed("0.9")),
-                    Value::String(std::borrow::Cow::Borrowed("0.95")),
-                    Value::String(std::borrow::Cow::Borrowed("0.99")),
-                    Value::String(std::borrow::Cow::Borrowed("0.999")),
-                    Value::String(std::borrow::Cow::Borrowed("0.9999")),
-                ]),
+                &Value::from(vec!["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
             ])?;
             i += 1;
         }
