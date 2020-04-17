@@ -39,9 +39,9 @@ use std::u64;
 /// * `value` - value to round
 /// * `scale` - result accuracy
 ///
-/// taken from https://github.com/0x022b/libmath-rs/blob/af3aff7e1500e5f801e73f3c464ea7bf81ec83c7/src/round.rs
+/// taken from <https://github.com/0x022b/libmath-rs/blob/af3aff7e1500e5f801e73f3c464ea7bf81ec83c7/src/round.rs>
 pub fn ceil(value: f64, scale: i8) -> f64 {
-    let multiplier = 10f64.powi(scale as i32) as f64;
+    let multiplier = 10_f64.powi(i32::from(scale)) as f64;
     (value * multiplier).ceil() / multiplier
 }
 
