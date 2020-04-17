@@ -76,7 +76,7 @@ impl Rest {
             use http::header::HeaderName;
             match HeaderName::from_bytes(k.as_str().as_bytes()) {
                 Ok(h) => {
-                    c = c.set_header(&h, v.as_str());
+                    c = c.set_header(&h, v.to_string());
                 }
                 Err(e) => error!("Bad header name: {}", e),
             }
