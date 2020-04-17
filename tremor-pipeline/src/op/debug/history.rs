@@ -65,7 +65,7 @@ impl Operator for EventHistory {
                 if let Some(ref mut obj) = meta.as_object_mut() {
                     obj.insert(
                         self.config.name.clone().into(),
-                        Value::Array(vec![Value::from(format!(
+                        Value::from(vec![Value::from(format!(
                             "evt: {}({})",
                             self.config.op, id
                         ))]),
@@ -94,7 +94,7 @@ impl Operator for EventHistory {
                 if let Some(ref mut obj) = meta.as_object_mut() {
                     obj.insert(
                         self.config.name.clone().into(),
-                        Value::Array(vec![Value::from(format!(
+                        Value::from(vec![Value::from(format!(
                             "sig: {}({})",
                             self.config.op, id
                         ))]),

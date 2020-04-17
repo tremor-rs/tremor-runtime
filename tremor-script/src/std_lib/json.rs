@@ -50,36 +50,18 @@ mod test {
     fn decode() {
         let f = fun("json", "decode");
         let v = Value::from(r#"["this","is","a","cake"]"#);
-        assert_val!(
-            f(&[&v]),
-            Value::Array(vec![
-                Value::from("this"),
-                Value::from("is"),
-                Value::from("a"),
-                Value::from("cake")
-            ])
-        );
+        assert_val!(f(&[&v]), Value::from(vec!["this", "is", "a", "cake"]));
     }
     #[test]
     fn encode() {
         let f = fun("json", "encode");
-        let v = Value::Array(vec![
-            Value::from("this"),
-            Value::from("is"),
-            Value::from("a"),
-            Value::from("cake"),
-        ]);
+        let v = Value::from(vec!["this", "is", "a", "cake"]);
         assert_val!(f(&[&v]), Value::from(r#"["this","is","a","cake"]"#));
     }
     #[test]
     fn encode_pretty() {
         let f = fun("json", "encode_pretty");
-        let v = Value::Array(vec![
-            Value::from("this"),
-            Value::from("is"),
-            Value::from("a"),
-            Value::from("cake"),
-        ]);
+        let v = Value::from(vec!["this", "is", "a", "cake"]);
         assert_val!(
             f(&[&v]),
             Value::from(

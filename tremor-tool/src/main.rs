@@ -38,7 +38,7 @@ use clap::ArgMatches;
 use dirs;
 use halfbrown::HashMap;
 use http_types::{headers, StatusCode};
-use simd_json::borrowed::{Object, Value};
+use simd_json::borrowed::Value;
 use simd_json::prelude::*;
 use std::ffi::OsStr;
 use std::fs;
@@ -225,7 +225,7 @@ fn script_run_cmd(cmd: &ArgMatches<'_>) -> Result<()> {
         let debuf = codec.decode(enbuf, 0);
         match debuf {
             Ok(Some(ref json)) => {
-                let mut global_map = Value::from(Object::new());
+                let mut global_map = Value::object();
                 let (mut unwind_event, _) = json.parts();
                 match s.run(
                     &context,

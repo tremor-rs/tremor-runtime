@@ -94,7 +94,7 @@ impl Operator for Tremor {
                 Ok(Return::Drop) => return Ok(vec![]),
                 Err(ref e) => {
                     let mut o = Value::from(hashmap! {
-                        "error".into() => Value::String(self.runtime.format_error(&e).into()),
+                        "error".into() => Value::from(self.runtime.format_error(&e)),
                     });
                     std::mem::swap(&mut o, unwind_event);
                     if let Some(error) = unwind_event.as_object_mut() {

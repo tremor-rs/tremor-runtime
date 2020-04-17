@@ -367,10 +367,7 @@ impl Extractor {
                             .capture_names()
                             .flatten()
                             .filter_map(|n| {
-                                Some((
-                                    n.into(),
-                                    Value::String(caps.name(n)?.as_str().to_string().into()),
-                                ))
+                                Some((n.into(), Value::from(caps.name(n)?.as_str().to_string())))
                             })
                             .collect();
                         Ok(Value::from(matches.clone()))
@@ -408,13 +405,11 @@ impl Extractor {
                         return Ok(Value::null());
                     }
 
-                    Ok(Value::String(
-                        String::from_utf8(decoded)
-                            .map_err(|_| ExtractorError {
-                                msg: "failed to decode".into(),
-                            })?
-                            .into(),
-                    ))
+                    Ok(Value::from(String::from_utf8(decoded).map_err(|_| {
+                        ExtractorError {
+                            msg: "failed to decode".into(),
+                        }
+                    })?))
                 }
                 Self::Json => {
                     let mut s = s.to_string();
@@ -581,20 +576,16 @@ impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
 mod test {
     use super::*;
     use halfbrown::hashmap;
-    use simd_json::borrowed::Value;
+    use simd_json::{borrowed::Value, json};
     #[test]
     fn test_re_extractor() {
         let ex = Extractor::new("re", "(snot)?foo(?P<snot>.*)").expect("bad extractor");
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
-                    ex.extract(
-                        true,
-                        &Value::String("foobar".to_string().into()),
-                        &EventContext::new(0, None)
-                    ),
+                    ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
                     Ok(Value::from(
-                        hashmap! { "snot".into() => Value::String("bar".into()) }
+                        hashmap! { "snot".into() => Value::from("bar") }
                     ))
                 );
             }
@@ -607,11 +598,7 @@ mod test {
         match ex {
             Extractor::Kv { .. } => {
                 assert_eq!(
-                    ex.extract(
-                        true,
-                        &Value::String("a:b c:d".to_string().into()),
-                        &EventContext::new(0, None)
-                    ),
+                    ex.extract(true, &Value::from("a:b c:d"), &EventContext::new(0, None)),
                     Ok(Value::from(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
@@ -630,7 +617,7 @@ mod test {
                 assert_eq!(
                     ex.extract(
                         true,
-                        &Value::String(r#"{"a":"b", "c":"d"}"#.to_string().into()),
+                        &Value::from(r#"{"a":"b", "c":"d"}"#),
                         &EventContext::new(0, None)
                     ),
                     Ok(Value::from(hashmap! {
@@ -649,11 +636,7 @@ mod test {
         match ex {
             Extractor::Glob { .. } => {
                 assert_eq!(
-                    ex.extract(
-                        true,
-                        &Value::String("INFO".to_string().into()),
-                        &EventContext::new(0, None)
-                    ),
+                    ex.extract(true, &Value::from("INFO"), &EventContext::new(0, None)),
                     Ok(Value::from(true))
                 );
             }
@@ -669,7 +652,7 @@ mod test {
                 assert_eq!(
                     ex.extract(
                         true,
-                        &Value::String("8J+agHNuZWFreSByb2NrZXQh".into()),
+                        &Value::from("8J+agHNuZWFreSByb2NrZXQh"),
                         &EventContext::new(0, None)
                     ),
                     Ok("🚀sneaky rocket!".into())
@@ -685,14 +668,11 @@ mod test {
         match ex {
             Extractor::Dissect { .. } => {
                 assert_eq!(
-                    ex.extract(
-                        true,
-                        &Value::String("John".to_string().into()),
-                        &EventContext::new(0, None)
-                    ),
-                    Ok(Value::from(hashmap! {
-                        "name".into() => Value::from("John")
-                    }))
+                    ex.extract(true, &Value::from("John"), &EventContext::new(0, None))
+                        .unwrap(),
+                    json!({
+                        "name": "John"
+                    })
                 );
             }
             _ => unreachable!(),
@@ -711,19 +691,18 @@ mod test {
                 ), &EventContext::new(0, None));
 
                 assert_eq!(
-                    output,
-                    Ok(Value::from(hashmap!(
-                    "syslog_timestamp1".into() =>  "".into(),
-                              "syslog_ingest_timestamp".into() => "2019-04-01T09:59:19+0010".into(),
-                              "wf_datacenter".into() => "dc".into(),
-                              "syslog_hostname".into() => "hostname".into(),
-                              "syslog_pri".into() => "1".into(),
-                              "wf_pod".into() => "pod".into(),
-                              "syslog_message".into() => "foo bar baz".into(),
-                              "syslog_version".into() => "123".into(),
-                              "syslog_timestamp0".into() =>  "Jul   7 10:51:24".into()
-
-                                       )))
+                    output.unwrap(),
+                    json!({
+                              "syslog_timestamp1": "",
+                              "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
+                              "wf_datacenter": "dc",
+                              "syslog_hostname": "hostname",
+                              "syslog_pri": "1",
+                              "wf_pod": "pod",
+                              "syslog_message": "foo bar baz",
+                              "syslog_version": "123",
+                              "syslog_timestamp0": "Jul   7 10:51:24"
+                    })
                 );
             }
 

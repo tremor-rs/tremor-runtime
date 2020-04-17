@@ -124,10 +124,7 @@ impl<'event> ValueAndMeta<'event> {
 impl<'event> Default for ValueAndMeta<'event> {
     fn default() -> Self {
         ValueAndMeta {
-            data: (
-                Value::from(Object::default()),
-                Value::from(Object::default()),
-            ),
+            data: (Value::object(), Value::object()),
         }
     }
 }
@@ -135,7 +132,7 @@ impl<'event> Default for ValueAndMeta<'event> {
 impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
     fn from(value: Value<'v>) -> ValueAndMeta<'v> {
         ValueAndMeta {
-            data: (value, Value::from(Object::default())),
+            data: (value, Value::object()),
         }
     }
 }
@@ -338,7 +335,7 @@ mod tests {
     use crate::lexer::TokenSpan;
     use crate::path::ModulePath;
     use halfbrown::hashmap;
-    use simd_json::borrowed::{Object, Value};
+    use simd_json::borrowed::Value;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
@@ -358,9 +355,9 @@ mod tests {
             let runnable: Script =
                 Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
                     .expect("parse failed");
-            let mut event = Value::from(Object::new());
+            let mut event = Value::object();
             let mut state = Value::null();
-            let mut global_map = Value::from(Object::new());
+            let mut global_map = Value::object();
             let value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,

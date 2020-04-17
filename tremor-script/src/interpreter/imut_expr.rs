@@ -147,7 +147,7 @@ where
                 for expr in &list.exprs {
                     r.push(stry!(expr.run(opts, env, event, state, meta, local)).into_owned());
                 }
-                Ok(Cow::Owned(Value::Array(r)))
+                Ok(Cow::Owned(Value::from(r)))
             }
             ImutExprInt::Invoke1(ref call) => {
                 self.invoke1(opts, env, event, state, meta, local, call)
@@ -284,7 +284,7 @@ where
                 count += 1;
             }
         }
-        Ok(Cow::Owned(Value::Array(value_vec)))
+        Ok(Cow::Owned(Value::from(value_vec)))
     }
 
     #[inline]

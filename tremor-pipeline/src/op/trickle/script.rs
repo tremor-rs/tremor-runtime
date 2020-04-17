@@ -171,7 +171,7 @@ impl Operator for TrickleScript {
             Ok(Return::Drop) => Ok(vec![]),
             Err(e) => {
                 let mut o = Value::from(hashmap! {
-                    "error".into() => Value::String(self.node.head().format_error(&e).into()),
+                    "error".into() => Value::from(self.node.head().format_error(&e)),
                 });
                 mem::swap(&mut o, unwind_event);
                 if let Some(error) = unwind_event.as_object_mut() {

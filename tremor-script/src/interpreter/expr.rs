@@ -21,7 +21,7 @@ use crate::errors::*;
 use crate::registry::RECUR_PTR;
 use crate::stry;
 use simd_json::prelude::*;
-use simd_json::value::borrowed::{Object, Value};
+use simd_json::value::borrowed::Value;
 
 use std::borrow::{Borrow, Cow};
 
@@ -301,7 +301,7 @@ where
                 count += 1;
             }
         }
-        Ok(Cont::Cont(Cow::Owned(Value::Array(value_vec))))
+        Ok(Cont::Cont(Cow::Owned(Value::from(value_vec))))
     }
 
     #[allow(
@@ -421,7 +421,7 @@ where
                     Segment::Id { key, .. } => {
                         current = if let Ok(next) = key.lookup_or_insert_mut(
                             mem::transmute::<&Value, &mut Value>(current),
-                            || Value::from(Object::with_capacity(halfbrown::VEC_LIMIT_UPPER)),
+                            || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
                         ) {
                             next
                         } else {
@@ -436,7 +436,7 @@ where
                                 v
                             } else {
                                 map.entry(id)
-                                    .or_insert_with(|| Value::from(Object::with_capacity(32)))
+                                    .or_insert_with(|| Value::object_with_capacity(32))
                             }
                         } else {
                             return error_need_obj(self, segment, current.value_type(), &env.meta);

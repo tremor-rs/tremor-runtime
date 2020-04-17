@@ -154,7 +154,7 @@ pub fn load(registry: &mut Registry) {
         .insert(
             tremor_const_fn! (string::split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
-                Ok(Value::Array(_input.split(sep).map(|v| Value::from(v.to_string())).collect()))
+                Ok(Value::from(_input.split(sep).map(|v| Value::from(v.to_string())).collect::<Vec<_>>()))
             }),
         )
         .insert(TremorFnWrapper::new(
@@ -264,14 +264,6 @@ mod test {
         let f = fun("string", "split");
         let v1 = Value::from("this is a test");
         let v2 = Value::from(" ");
-        assert_val!(
-            f(&[&v1, &v2]),
-            Value::Array(vec![
-                Value::from("this"),
-                Value::from("is"),
-                Value::from("a"),
-                Value::from("test")
-            ])
-        )
+        assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]))
     }
 }

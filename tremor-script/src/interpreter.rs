@@ -38,7 +38,7 @@ use crate::ast::*;
 use crate::errors::*;
 use crate::stry;
 use crate::EventContext;
-use simd_json::borrowed::{Object, Value};
+use simd_json::borrowed::Value;
 use simd_json::prelude::*;
 use simd_json::StaticNode;
 use std::borrow::Borrow;
@@ -596,7 +596,7 @@ where
     }
 
     if let Some(range_to_consider) = subrange {
-        Ok(Cow::Owned(Value::Array(range_to_consider.to_vec())))
+        Ok(Cow::Owned(Value::from(range_to_consider.to_vec())))
     } else {
         Ok(Cow::Borrowed(current))
     }
@@ -736,7 +736,7 @@ where
                             );
                         }
                         None => {
-                            let mut new_value = Value::from(Object::new());
+                            let mut new_value = Value::object();
                             stry!(merge_values(patch_expr, expr, &mut new_value, &merge_spec));
                             obj.insert(new_key, new_value);
                         }
@@ -982,11 +982,11 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut acc = Value::from(Object::with_capacity(if opts.result_needed {
+    let mut acc = Value::object_with_capacity(if opts.result_needed {
         rp.fields.len()
     } else {
         0
-    }));
+    });
     for pp in &rp.fields {
         let known_key = pp.key();
 
@@ -1124,7 +1124,7 @@ where
 
                         // NOTE: We are creating a new value here so we have to clone
                         if val_eq(candidate, vb) && opts.result_needed {
-                            acc.push(Value::Array(vec![Value::from(idx), r.into_owned()]));
+                            acc.push(Value::from(vec![Value::from(idx), r.into_owned()]));
                         }
                     }
                     ArrayPredicatePattern::Tilde(test) => {
@@ -1133,7 +1133,7 @@ where
                                 .extract(opts.result_needed, &candidate, &env.context)
                         {
                             if opts.result_needed {
-                                acc.push(Value::Array(vec![Value::from(idx), r]));
+                                acc.push(Value::from(vec![Value::from(idx), r]));
                             }
                         } else {
                             continue 'inner;
@@ -1144,7 +1144,7 @@ where
                             outer, opts, env, event, state, meta, local, candidate, rp,
                         )) {
                             if opts.result_needed {
-                                acc.push(Value::Array(vec![Value::from(idx), r]))
+                                acc.push(Value::from(vec![Value::from(idx), r]))
                             };
                         } else {
                             continue 'inner;
@@ -1154,7 +1154,7 @@ where
             }
             idx += 1;
         }
-        Ok(Some(Value::Array(acc)))
+        Ok(Some(Value::from(acc)))
     } else {
         Ok(None)
     }
@@ -1229,7 +1229,7 @@ where
                 }
             }
         }
-        Ok(Some(Value::Array(acc)))
+        Ok(Some(Value::from(acc)))
     } else {
         Ok(None)
     }

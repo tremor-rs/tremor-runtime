@@ -21,7 +21,7 @@ pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (origin::as_uri_string(context) {
             if let Some(uri) = context.origin_uri() {
-                Ok(Value::String(uri.to_string().into()))
+                Ok(Value::from(uri.to_string()))
             } else {
                 Ok(Value::null())
             }
@@ -72,8 +72,6 @@ pub fn load(registry: &mut Registry) {
         }))
         .insert(tremor_fn! (origin::path(context) {
             if let Some(uri) = context.origin_uri() {
-                // TODO make this work
-                //Ok(Value::Array(uri.path().clone().into()))
                 // TODO avoid uri path clone here?
                 Ok(Value::from(uri.path().to_vec()))
             } else {

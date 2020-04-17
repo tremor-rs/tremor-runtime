@@ -129,12 +129,12 @@ impl TremorAggrFn for CollectFlattened {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::Array(self.0.clone()))
+        Ok(Value::from(self.0.clone()))
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let mut r = Vec::with_capacity(self.0.len());
         std::mem::swap(&mut r, &mut self.0);
-        Ok(Value::Array(r))
+        Ok(Value::from(r))
     }
     fn init(&mut self) {
         self.0 = Vec::with_capacity(self.0.len());
@@ -178,7 +178,7 @@ impl TremorAggrFn for CollectNested {
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let mut r = Vec::with_capacity(self.0.len());
         std::mem::swap(&mut r, &mut self.0);
-        Ok(Value::Array(r))
+        Ok(Value::from(r))
     }
     fn init(&mut self) {
         self.0 = Vec::with_capacity(self.0.len());
@@ -188,7 +188,7 @@ impl TremorAggrFn for CollectNested {
         if let Some(other) = src.downcast_ref::<Self>() {
             // On self is earlier then other, so as long
             // as other has a value we take it
-            self.0.push(Value::Array(other.0.clone()));
+            self.0.push(Value::from(other.0.clone()));
         }
         Ok(())
     }

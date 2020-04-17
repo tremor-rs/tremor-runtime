@@ -16,7 +16,6 @@ use crate::errors::*;
 use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};
 use crate::{registry, EventContext};
-use simd_json::borrowed::Object;
 use simd_json::{prelude::*, BorrowedValue as Value};
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -29,8 +28,8 @@ fn eval(src: &str) -> Result<String> {
     let script = Script::parse(&crate::path::load(), "<eval>", src.to_string(), &reg)
         .map_err(|e| e.error)?;
 
-    let mut event = Value::from(Object::new());
-    let mut meta = Value::from(Object::new());
+    let mut event = Value::object();
+    let mut meta = Value::object();
     let mut state = Value::null();
     let value = script.run(
         &EventContext::new(0, None),

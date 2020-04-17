@@ -474,7 +474,7 @@ impl<'script> ImutExprInt<'script> {
                         l.exprs.into_iter().map(|v| reduce2(v.0, &helper)).collect();
                     Ok(ImutExprInt::Literal(Literal {
                         mid: l.mid,
-                        value: Value::Array(elements?),
+                        value: Value::from(elements?),
                     }))
                 } else {
                     Ok(ImutExprInt::List(l))
@@ -1035,7 +1035,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 let lit = ImutExprRaw::Literal(LiteralRaw {
                     start: s.start,
                     end: s.end,
-                    value: Value::String(s.string),
+                    value: Value::from(s.string),
                 });
                 if s.exprs.is_empty() {
                     lit.up(helper)?
@@ -1957,7 +1957,7 @@ impl<'script> SegmentRaw<'script> {
             expr: ImutExprRaw::Literal(LiteralRaw {
                 start: id.start,
                 end: id.end,
-                value: Value::String(id.id),
+                value: Value::from(id.id),
             }),
         }))
     }

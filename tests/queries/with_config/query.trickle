@@ -1,0 +1,3 @@
+#!config metrics_interval_s = 10
+
+select event from in into out;
