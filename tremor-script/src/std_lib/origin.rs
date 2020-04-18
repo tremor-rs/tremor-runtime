@@ -33,13 +33,13 @@ pub fn load(registry: &mut Registry) {
                         "scheme".into() => Value::from(uri.scheme().to_string()),
                         "host".into() => Value::from(uri.host().to_string()),
                         "port".into() => match uri.port() {
-                            Some(n) => Value::from(*n),
+                            Some(n) => Value::from(n),
                             // TODO would be nice to support this?
                             //None => Value::from(None),
                             None => Value::null(),
                         },
                         // TODO avoid uri path clone here?
-                        "path".into() => Value::from(uri.path().clone()),
+                        "path".into() => Value::from(uri.path().to_vec()),
                     }
                 ))
             } else {
@@ -63,7 +63,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_fn! (origin::port(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(match uri.port() {
-                    Some(n) => Value::from(*n),
+                    Some(n) => Value::from(n),
                     None => Value::null(),
                 })
             } else {
@@ -75,7 +75,7 @@ pub fn load(registry: &mut Registry) {
                 // TODO make this work
                 //Ok(Value::Array(uri.path().clone().into()))
                 // TODO avoid uri path clone here?
-                Ok(Value::from(uri.path().clone()))
+                Ok(Value::from(uri.path().to_vec()))
             } else {
                 Ok(Value::null())
             }

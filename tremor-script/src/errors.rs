@@ -64,7 +64,7 @@ type ParserError<'screw_lalrpop> =
 
 impl From<url::ParseError> for Error {
     fn from(e: url::ParseError) -> Self {
-        Self::from(format!("Url Parse Error: {:?}", e))
+        Self::from(format!("Url Parse Error: {}", e))
     }
 }
 
