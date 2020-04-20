@@ -62,7 +62,7 @@ lz4 = "1.23.1"
 # will be in new graph
 tremor-script = { path = "tremor-script" }
 tremor-influx = { path = "tremor-influx" }
-http = "0.1" # we need this for surf
+http = "0.2" # we need this for surf
 indexmap = { version = "1", features=["serde-1"] }
 
 crossbeam-channel = "0.4"
