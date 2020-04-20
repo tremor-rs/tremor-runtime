@@ -34,6 +34,7 @@ where
     'event: 'run,
 {
     /// Evaluates the expression
+    #[inline]
     pub fn run(
         &'script self,
         opts: ExecOpts,
@@ -527,10 +528,15 @@ where
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
-            let v = stry!(expr
-                .args
-                .get_unchecked(0)
-                .run(opts, env, event, state, meta, local));
+            let v = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(0)
+            ));
             expr.invocable
                 .invoke(env, &[v.borrow()])
                 .map(Cow::Owned)
@@ -552,14 +558,24 @@ where
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
-            let v1 = stry!(expr
-                .args
-                .get_unchecked(0)
-                .run(opts, env, event, state, meta, local));
-            let v2 = stry!(expr
-                .args
-                .get_unchecked(1)
-                .run(opts, env, event, state, meta, local));
+            let v1 = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(0)
+            ));
+            let v2 = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(1)
+            ));
             expr.invocable
                 .invoke(env, &[v1.borrow(), v2.borrow()])
                 .map(Cow::Owned)
@@ -581,18 +597,33 @@ where
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
         unsafe {
-            let v1 = stry!(expr
-                .args
-                .get_unchecked(0)
-                .run(opts, env, event, state, meta, local));
-            let v2 = stry!(expr
-                .args
-                .get_unchecked(1)
-                .run(opts, env, event, state, meta, local));
-            let v3 = stry!(expr
-                .args
-                .get_unchecked(2)
-                .run(opts, env, event, state, meta, local));
+            let v1 = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(0)
+            ));
+            let v2 = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(1)
+            ));
+            let v3 = stry!(eval_for_fn_arg(
+                opts,
+                env,
+                event,
+                state,
+                meta,
+                local,
+                expr.args.get_unchecked(2)
+            ));
             expr.invocable
                 .invoke(env, &[v1.borrow(), v2.borrow(), v3.borrow()])
                 .map(Cow::Owned)
@@ -613,11 +644,11 @@ where
         local: &'run LocalStack<'event>,
         expr: &'script Invoke,
     ) -> Result<Cow<'run, Value<'event>>> {
-        let argv: Vec<Cow<'run, _>> = expr
+        let argv: Vec<Cow<'run, _>> = stry!(expr
             .args
             .iter()
-            .map(|arg| arg.run(opts, env, event, state, meta, local))
-            .collect::<Result<_>>()?;
+            .map(|arg| eval_for_fn_arg(opts, env, event, state, meta, local, arg))
+            .collect::<Result<_>>());
 
         // Construct a view into `argv`, since `invoke` expects a slice of references, not Cows.
         let argv1: Vec<&Value> = argv.iter().map(Cow::borrow).collect();
@@ -705,5 +736,30 @@ where
         } else {
             error_need_obj(self, &expr.target, value.value_type(), &env.meta)
         }
+    }
+}
+
+/// We need to handles arguments that are directly derived from `args` in a
+/// special form since args gets cleared and overwritten inside of functions.
+#[inline]
+fn eval_for_fn_arg<'run, 'event, 'script>(
+    opts: ExecOpts,
+    env: &'run Env<'run, 'event, 'script>,
+    event: &'run Value<'event>,
+    state: &'run Value<'static>,
+    meta: &'run Value<'event>,
+    local: &'run LocalStack<'event>,
+    arg: &'script ImutExpr<'script>,
+) -> Result<Cow<'run, Value<'event>>>
+where
+    'script: 'event,
+    'event: 'run,
+{
+    match arg.0 {
+        ImutExprInt::Path(Path::Const(LocalPath { idx, .. })) if idx == ARGS_CONST_ID => arg
+            .0
+            .run(opts, env, event, state, meta, local)
+            .map(|v| Cow::Owned(v.clone_static())),
+        _ => arg.0.run(opts, env, event, state, meta, local),
     }
 }
