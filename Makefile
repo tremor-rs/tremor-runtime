@@ -23,6 +23,7 @@ it:
 	integration_testing/runner
 
 stdlib-doc:
+	cargo build -p tremor-script;
 	-rm -rf docs;
 	for file in `find tremor-script/lib -type f`; do \
 	dir=`dirname $$file | sed -e 's;^tremor-script/lib;docs;'`;\
@@ -30,7 +31,7 @@ stdlib-doc:
 	output_file=`echo $$base | sed -e 's/.tremor/.md/'`;\
 	echo "$$file -> $$dir/$$output_file"; \
 	[ -d $$dir ] || mkdir -p $$dir;\
-	TREMOR_PATH=tremor-script/lib cargo run -p tremor-script -- $$file --docs $${output_file%.*}  > $$dir/$$output_file;\
+	TREMOR_PATH=./tremor-script/lib ./target/debug/tremor-script $$file --docs $${output_file%.*}  > $$dir/$$output_file;\
 	done
 
 bench: force
