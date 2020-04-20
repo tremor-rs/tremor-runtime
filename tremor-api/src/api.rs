@@ -39,10 +39,18 @@ pub struct State {
     pub world: World,
 }
 
+#[derive(Debug)]
 pub enum Error {
     Generic(StatusCode, String),
     JSON(StatusCode, String),
 }
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl std::error::Error for Error {}
 
 impl Error {
     fn not_found() -> Self {
@@ -173,16 +181,20 @@ impl From<TremorError> for Error {
     }
 }
 
-pub fn serialize<T: Serialize>(t: ResourceType, d: &T, ok_code: StatusCode) -> Result<Response> {
-    Ok(match t {
-        ResourceType::Yaml => Response::new(ok_code)
+pub fn serialize<T: Serialize>(
+    t: ResourceType,
+    d: &T,
+    ok_code: StatusCode,
+) -> std::result::Result<Response, crate::Error> {
+    match t {
+        ResourceType::Yaml => Ok(Response::new(ok_code)
             .body_string(serde_yaml::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string()),
+            .set_header(headers::CONTENT_TYPE, t.to_string())),
 
-        ResourceType::Json => Response::new(ok_code)
+        ResourceType::Json => Ok(Response::new(ok_code)
             .body_string(serde_json::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string()),
-    })
+            .set_header(headers::CONTENT_TYPE, t.to_string())),
+    }
 }
 
 pub async fn reply<T: Serialize + Send + Sync + 'static>(
@@ -190,7 +202,7 @@ pub async fn reply<T: Serialize + Send + Sync + 'static>(
     result_in: T,
     persist: bool,
     ok_code: StatusCode,
-) -> Result<Response> {
+) -> std::result::Result<Response, crate::Error> {
     if persist {
         let world = &req.state().world;
         world.save_config().await?;
