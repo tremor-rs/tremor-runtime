@@ -13,13 +13,5 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_fn;
-use simd_json::BorrowedValue;
 
-// ALLOW: Until we have u64 support in clippy
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_fn! (system::ingest_ns(ctx) {
-        Ok(BorrowedValue::from(ctx.ingest_ns()))
-    }));
-}
+pub fn load(_registry: &mut Registry) {}
