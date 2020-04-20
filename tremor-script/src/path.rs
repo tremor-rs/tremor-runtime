@@ -23,6 +23,11 @@ pub struct ModulePath {
 }
 
 impl ModulePath {
+    /// Adds to the module path
+    pub fn add(&mut self, path: String) {
+        self.mounts.push(path)
+    }
+
     /// Does a particular module exist relative to the module path in force
     pub fn resolve<S: AsRef<Path> + ?Sized>(&self, rel_file: &S) -> Option<Box<Path>> {
         for mount in &self.mounts {
@@ -45,11 +50,15 @@ impl ModulePath {
             .replace(".tremor$", "")
             .replace("/", "::")
     }
+    /// Load module path
+    pub fn load() -> Self {
+        load_(std::env::var("TREMOR_PATH").ok())
+    }
 }
 
 /// Load module path
 pub fn load() -> ModulePath {
-    load_(std::env::var("TREMOR_PATH").ok())
+    ModulePath::load()
 }
 
 fn load_(tremor_path: Option<String>) -> ModulePath {
