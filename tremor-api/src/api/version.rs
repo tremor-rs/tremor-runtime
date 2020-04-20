@@ -28,5 +28,5 @@ impl Version {
 }
 
 pub async fn get(req: Request) -> Result<Response> {
-    reply(req, Version::default(), false, 200).await
+    reply(req, Version::default(), false, StatusCode::Ok).await
 }

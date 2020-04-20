@@ -27,7 +27,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
@@ -35,18 +35,18 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     let url = build_url(&["offramp", &data.id])?;
     let repo = &req.state().world.repo;
     let result = repo.publish_offramp(&url, false, data).await?;
-    reply(req, result, true, 201).await
+    reply(req, result, true, StatusCode::NoContent).await
 }
 
-pub async fn unpublish_artefact(req: Request) -> Result<Response> {
+pub async fn unpublish_artefact(req: Request) -> std::result::Result<Response, crate::api::Error> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["offramp", &id])?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_offramp(&url).await?;
-    reply(req, result, true, 200).await
+    reply(req, result, true, StatusCode::Ok).await
 }
 
-pub async fn get_artefact(req: Request) -> Result<Response> {
+pub async fn get_artefact(req: Request) -> crate::Result<Response> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["offramp", &id])?;
     let repo = &req.state().world.repo;
@@ -63,5 +63,5 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .collect(),
     };
 
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }

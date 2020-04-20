@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::api::*;
-use http::StatusCode;
 use tremor_runtime::repository::PipelineArtefact;
 
 #[derive(Serialize)]
@@ -31,7 +30,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
@@ -49,7 +48,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
             //ALLOW:  We publish a pipeline we can't ever get anything else back
             _ => unreachable!(),
         })?;
-    reply(req, result, true, 201).await
+    reply(req, result, true, StatusCode::NoContent).await
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -63,7 +62,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
             PipelineArtefact::Pipeline(p) => Ok(p.config),
             _ => Err("This is a query".into()), // FIXME
         })?;
-    reply(req, result, true, 200).await
+    reply(req, result, true, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -87,12 +86,12 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
                         .collect(),
                 },
                 false,
-                200,
+                StatusCode::Ok,
             )
             .await
         }
         _ => Err(Error::json(
-            StatusCode::BAD_REQUEST,
+            StatusCode::BadRequest,
             &r#"{"error": "Artefact is a query"}"#,
         )),
     }
