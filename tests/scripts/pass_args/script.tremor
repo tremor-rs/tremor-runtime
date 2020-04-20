@@ -1,0 +1,11 @@
+
+fn a(es) with
+  es
+end;
+
+fn b(...) with
+  a(args)
+end;
+
+b(event)
+
