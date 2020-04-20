@@ -19,7 +19,6 @@ use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::*;
 use crate::utils::hostname as get_hostname;
 use crate::{tremor_fn, EventContext};
-use chrono::{Timelike, Utc};
 use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
 use simd_json::BorrowedValue as Value;
@@ -93,18 +92,16 @@ pub type FResult<T> = std::result::Result<T, FunctionError>;
 pub fn registry() -> Registry {
     let mut registry = Registry::default();
 
-    registry.insert(tremor_fn!(system::hostname(_context) {
-        Ok(Value::from( get_hostname()))
-    }));
-
-    registry.insert(tremor_fn!(system::ingest_ns(_context) {
-        let now = Utc::now();
-        #[allow(clippy::cast_sign_loss)]
-        let seconds: u64 = now.timestamp() as u64;
-        let nanoseconds: u64 = u64::from(now.nanosecond());
-
-        Ok(Value::from((seconds * 1_000_000_000) + nanoseconds))
-    }));
+    registry
+        .insert(tremor_fn!(system::hostname(_context) {
+            Ok(Value::from( get_hostname()))
+        }))
+        .insert(tremor_fn! (system::ingest_ns(ctx) {
+            Ok(Value::from(ctx.ingest_ns()))
+        }))
+        .insert(tremor_fn!(system::instance(_context) {
+            Ok(Value::from("tremor-script"))
+        }));
 
     crate::std_lib::load(&mut registry);
     registry

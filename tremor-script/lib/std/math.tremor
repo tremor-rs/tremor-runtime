@@ -2,7 +2,7 @@
 
 ## Returns the smallest integer value less than or equal to n.
 ##
-## ```
+## ```tremor
 ## math::floor(42.9) == 42
 ## ```
 ##
@@ -11,7 +11,7 @@ intrinsic fn floor(n) as math::floor;
 
 ## Returns the largest integer value greater than or equal to n.
 ##
-## ```
+## ```tremor
 ## math::ceil(41.1) == 42
 ## ```
 ##
