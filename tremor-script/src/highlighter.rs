@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::ast::Warning;
-use crate::errors::Error as ScriptError;
+use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::*;
 use serde::{Deserialize, Serialize};
@@ -100,6 +100,23 @@ impl From<&ScriptError> for Error {
     }
 }
 
+impl From<&CompilerError> for Error {
+    fn from(error: &CompilerError) -> Self {
+        let error = &error.error;
+        let (start, end) = match error.context() {
+            (_, Some(inner)) => (inner.0, inner.1),
+            _ => (Location::default(), Location::default()),
+        };
+        Self {
+            start,
+            end,
+            callout: format!("{}", error),
+            hint: error.hint(),
+            level: ErrorLevel::Error,
+            token: error.token(),
+        }
+    }
+}
 impl From<&Warning> for Error {
     fn from(warning: &Warning) -> Self {
         Self {
