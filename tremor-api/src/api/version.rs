@@ -27,6 +27,6 @@ impl Version {
     }
 }
 
-pub async fn get(req: Request) -> Result<Response> {
-    reply(req, Version::default(), false, 200).await
+pub async fn get(req: Request) -> std::result::Result<Response, crate::Error> {
+    reply(req, Version::default(), false, StatusCode::Ok).await
 }

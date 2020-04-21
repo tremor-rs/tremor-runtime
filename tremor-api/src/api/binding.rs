@@ -31,7 +31,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
         .collect();
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
@@ -50,7 +50,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
         )
         .await?;
 
-    reply(req, result.binding, true, 201).await
+    reply(req, result.binding, true, StatusCode::NoContent).await
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -58,7 +58,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let url = build_url(&["binding", &id])?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_binding(&url).await?;
-    reply(req, result.binding, true, 200).await
+    reply(req, result.binding, true, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -80,7 +80,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .collect(),
     };
 
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }
 
 pub async fn get_servant(req: Request) -> Result<Response> {
@@ -95,7 +95,7 @@ pub async fn get_servant(req: Request) -> Result<Response> {
         .ok_or_else(Error::not_found)?
         .binding;
 
-    reply(req, result, false, 200).await
+    reply(req, result, false, StatusCode::Ok).await
 }
 
 // We really don't want to deal with that!
@@ -110,7 +110,7 @@ pub async fn link_servant(req: Request) -> Result<Response> {
 
     let result = world.link_binding(&url, decoded_data).await?.binding;
 
-    reply(req, result, true, 201).await
+    reply(req, result, true, StatusCode::NoContent).await
 }
 
 #[allow(clippy::implicit_hasher)]
@@ -122,5 +122,5 @@ pub async fn unlink_servant(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let result = world.unlink_binding(&url, HashMap::new()).await?.binding;
 
-    reply(req, result, true, 201).await
+    reply(req, result, true, StatusCode::NoContent).await
 }
