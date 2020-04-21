@@ -32,7 +32,6 @@ pub struct EventOriginUri {
     //pub query: Hashmap<String, String>
 }
 
-// TODO add tests for this struct
 impl EventOriginUri {
     /// parses a string into a URI
     pub fn parse(url: &str) -> Result<Self> {
@@ -48,8 +47,7 @@ impl EventOriginUri {
                     port: r.port(),
                     path: r
                         .path_segments()
-                        .map(|segs| segs.map(String::from).collect())
-                        .unwrap_or_else(Vec::new),
+                        .map_or_else(Vec::new, |segs| segs.map(String::from).collect()),
                 })
             }
             Err(e) => Err(e.into()),
