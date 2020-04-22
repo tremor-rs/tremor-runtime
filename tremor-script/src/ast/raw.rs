@@ -1108,12 +1108,11 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
         if !was_leaf {
-            return error_generic(
-                &self,
-                &self,
-                &"Can not emit from this location",
-                &helper.meta,
-            );
+            return Err(ErrorKind::InvalidRecur(
+                self.extent(&helper.meta).expand_lines(2),
+                self.extent(&helper.meta),
+            )
+            .into());
         };
         if (helper.is_open && helper.fn_argc < self.exprs.len())
             || (!helper.is_open && helper.fn_argc != self.exprs.len())
