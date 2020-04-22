@@ -37,7 +37,7 @@ use clap::load_yaml;
 use clap::ArgMatches;
 use dirs;
 use halfbrown::HashMap;
-use http::status::StatusCode;
+use http_types::{headers, StatusCode};
 use simd_json::borrowed::{Object, Value};
 use simd_json::prelude::*;
 use std::ffi::OsStr;
@@ -535,8 +535,14 @@ async fn conductor_binding_activate_cmd(app: &TremorApp<'_>, cmd: &ArgMatches<'_
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let response = surf::post(&endpoint)
-        .set_header("content-type", content_type(app))
-        .set_header("accept", accept(app))
+        .set_header(headers::CONTENT_TYPE, content_type(app))
+        .set_header(
+            unsafe {
+                // yes seriously ...
+                headers::HeaderName::from_ascii_unchecked(b"Accept".to_vec())
+            },
+            accept(app),
+        )
         .body_string(ser)
         .await?;
     handle_response(response).await
@@ -641,8 +647,14 @@ async fn conductor_create_cmd(
     let ser = ser(&app, &json)?;
     let endpoint = format!("{}{}", base_url, endpoint);
     let response = surf::post(&endpoint)
-        .set_header("content-type", content_type(app))
-        .set_header("accept", accept(app))
+        .set_header(headers::CONTENT_TYPE, content_type(app))
+        .set_header(
+            unsafe {
+                // yes seriously ...
+                headers::HeaderName::from_ascii_unchecked(b"Accept".to_vec())
+            },
+            accept(app),
+        )
         .body_string(ser)
         .await?;
     handle_response(response).await
@@ -727,10 +739,13 @@ fn accept(app: &TremorApp<'_>) -> &'static str {
 async fn handle_response(mut response: surf::Response) -> Result<()> {
     let status = response.status();
     match status {
-        StatusCode::OK | StatusCode::CREATED => println!("{}", response.body_string().await?),
-        StatusCode::NOT_FOUND => eprintln!("Not found"),
-        StatusCode::CONFLICT => eprintln!("Conflict"),
-        _ => eprintln!("Unexpected response ( status: {} )", status.as_u16()),
+        StatusCode::Ok | StatusCode::Created => println!("{}", response.body_string().await?),
+        StatusCode::NotFound => eprintln!("Not found"),
+        StatusCode::Conflict => eprintln!("Conflict"),
+        _ => eprintln!(
+            "Unexpected response ( status: {} )",
+            status.canonical_reason()
+        ),
     };
     Ok(())
 }

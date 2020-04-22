@@ -15,5 +15,4 @@ serde_json = "1"
 serde_yaml = "0.8"
 hashbrown = { version = "0.7", features = ["serde"] }
 tide = "0.7"
-http = "0.1.17"
 http-types = "1.2"

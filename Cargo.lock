@@ -1207,26 +1207,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-channel-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5e5f4df964fa9c1c2f8bddeb5c3611631cacd93baf810fc8bb2fb4b495c263a"
-dependencies = [
- "futures-core-preview",
- "futures-sink-preview",
-]
-
-[[package]]
 name = "futures-core"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f25592f769825e89b92358db00d26f965761e094951ac44d3663ef25b7ac464a"
-
-[[package]]
-name = "futures-core-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35b6263fb1ef523c3056565fa67b1d16f0a8604ff12b11b08c25f28a734c60a"
 
 [[package]]
 name = "futures-cpupool"
@@ -1250,27 +1234,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-executor-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75236e88bd9fe88e5e8bfcd175b665d0528fe03ca4c5207fabc028c8f9d93e98"
-dependencies = [
- "futures-core-preview",
- "futures-util-preview",
- "num_cpus",
-]
-
-[[package]]
 name = "futures-io"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a638959aa96152c7a4cddf50fcb1e3fede0583b27157c26e67d6f99904090dc6"
-
-[[package]]
-name = "futures-io-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4914ae450db1921a56c91bde97a27846287d062087d4a652efc09bb3a01ebda"
 
 [[package]]
 name = "futures-macro"
@@ -1285,30 +1252,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b1dce2a0267ada5c6ff75a8ba864b4e679a9e2aa44262af7a3b5516d530d76e"
-dependencies = [
- "futures-channel-preview",
- "futures-core-preview",
- "futures-executor-preview",
- "futures-io-preview",
- "futures-sink-preview",
- "futures-util-preview",
-]
-
-[[package]]
 name = "futures-sink"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3466821b4bc114d95b087b850a724c6f83115e929bc88f1fa98a3304a944c8a6"
-
-[[package]]
-name = "futures-sink-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f148ef6b69f75bb610d4f9a2336d4fc88c4b5b67129d1a340dd0fd362efeec"
 
 [[package]]
 name = "futures-task"
@@ -1339,23 +1286,6 @@ dependencies = [
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
- "slab",
- "tokio-io",
-]
-
-[[package]]
-name = "futures-util-preview"
-version = "0.3.0-alpha.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ce968633c17e5f97936bd2797b6e38fb56cf16a7422319f7ec2e30d3c470e8d"
-dependencies = [
- "futures 0.1.29",
- "futures-channel-preview",
- "futures-core-preview",
- "futures-io-preview",
- "futures-sink-preview",
- "memchr",
- "pin-utils",
  "slab",
  "tokio-io",
 ]
@@ -1627,7 +1557,7 @@ dependencies = [
  "js-sys",
  "log 0.4.8",
  "wasm-bindgen",
- "wasm-bindgen-futures 0.4.10",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -1817,26 +1747,6 @@ dependencies = [
 
 [[package]]
 name = "isahc"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17b77027f12e53ae59a379f7074259d32eb10867e6183388020e922832d9c3fb"
-dependencies = [
- "bytes 0.4.12",
- "crossbeam-channel 0.3.9",
- "crossbeam-utils 0.6.6",
- "curl",
- "curl-sys",
- "futures-io-preview",
- "futures-util-preview",
- "http 0.1.21",
- "lazy_static",
- "log 0.4.8",
- "slab",
- "sluice 0.4.2",
-]
-
-[[package]]
-name = "isahc"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c45d8c41e6f0b5aa495fd2577e6068e100f57eb87c4b353b0dab20bb53a56035"
@@ -1853,7 +1763,7 @@ dependencies = [
  "lazy_static",
  "log 0.4.8",
  "slab",
- "sluice 0.5.2",
+ "sluice",
 ]
 
 [[package]]
@@ -1874,7 +1784,7 @@ dependencies = [
  "lazy_static",
  "log 0.4.8",
  "slab",
- "sluice 0.5.2",
+ "sluice",
 ]
 
 [[package]]
@@ -3653,17 +3563,6 @@ checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
 name = "sluice"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a7d06dfb3e8743bc19e6de8a302277471d08077d68946b307280496dc5a3531"
-dependencies = [
- "futures-channel-preview",
- "futures-core-preview",
- "futures-io-preview",
-]
-
-[[package]]
-name = "sluice"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed13b7cb46f13a15db2c4740f087a848acc8b31af89f95844d40137451f89b1"
@@ -3817,28 +3716,6 @@ checksum = "2d67a5a62ba6e01cb2192ff309324cb4875d0c451d55fe2319433abe7a05a8ee"
 
 [[package]]
 name = "surf"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "741a8008f8a833ef16f47df94a30754478fb2c2bf822b9c2e6f7f09203b97ace"
-dependencies = [
- "futures-preview",
- "http 0.1.21",
- "isahc 0.7.6",
- "js-sys",
- "log 0.4.8",
- "mime 0.3.16",
- "mime_guess",
- "serde",
- "serde_json",
- "serde_urlencoded 0.6.1",
- "url 2.1.1",
- "wasm-bindgen",
- "wasm-bindgen-futures 0.3.27",
- "web-sys",
-]
-
-[[package]]
-name = "surf"
 version = "2.0.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7ffc31048aeffca26607cc74b475299bf0ea4b4e5aa389f2f5a4e4d53d43a56"
@@ -3859,7 +3736,7 @@ dependencies = [
  "serde_urlencoded 0.6.1",
  "url 2.1.1",
  "wasm-bindgen",
- "wasm-bindgen-futures 0.4.10",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -4322,7 +4199,6 @@ name = "tremor-api"
 version = "0.7.3"
 dependencies = [
  "hashbrown 0.7.1",
- "http 0.1.21",
  "http-types",
  "serde",
  "serde_derive",
@@ -4428,7 +4304,6 @@ dependencies = [
  "hashbrown 0.7.1",
  "hdrhistogram",
  "hostname",
- "http 0.1.21",
  "http-types",
  "hyper 0.10.16",
  "hyper-rustls",
@@ -4455,7 +4330,7 @@ dependencies = [
  "serde_yaml",
  "simd-json",
  "snap",
- "surf 2.0.0-alpha.1",
+ "surf",
  "tempfile",
  "threadpool",
  "tokio-postgres",
@@ -4538,14 +4413,13 @@ dependencies = [
  "clap",
  "dirs 2.0.2",
  "halfbrown",
- "http 0.1.21",
  "http-types",
  "serde",
  "serde_derive",
  "serde_json",
  "serde_yaml",
  "simd-json",
- "surf 1.0.3",
+ "surf",
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
@@ -4815,22 +4689,6 @@ dependencies = [
  "quote 1.0.3",
  "syn 1.0.17",
  "wasm-bindgen-shared",
-]
-
-[[package]]
-name = "wasm-bindgen-futures"
-version = "0.3.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83420b37346c311b9ed822af41ec2e82839bfe99867ec6c54e2da43b7538771c"
-dependencies = [
- "cfg-if",
- "futures 0.1.29",
- "futures-channel-preview",
- "futures-util-preview",
- "js-sys",
- "lazy_static",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
