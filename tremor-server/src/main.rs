@@ -50,7 +50,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::mem;
 use std::path::Path;
-use tide::IntoResponse;
 use tremor_api as api;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
@@ -143,6 +142,19 @@ async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     Ok(1)
 }
 
+// fn fix_tide(r: api::Result<tide::Response>) -> tide::Result<tide::Response> {
+//     match r {
+//         Ok(r) => Ok(r),
+//         Err(e) => Ok(e.into()),
+//     }
+// }
+fn fix_tide(r: api::Result<tide::Response>) -> tide::Response {
+    match r {
+        Ok(r) => r,
+        Err(e) => e.into(),
+    }
+}
+
 #[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::too_many_lines)]
 async fn run_dun() -> Result<()> {
@@ -201,35 +213,35 @@ async fn run_dun() -> Result<()> {
     });
 
     app.at("/version")
-        .get(|r| async { Ok(api::version::get(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::version::get(r).await) });
     app.at("/binding")
-        .get(|r| async { Ok(api::binding::list_artefact(r).await.into_response()) })
-        .post(|r| async { Ok(api::binding::publish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::binding::list_artefact(r).await) })
+        .post(|r| async { fix_tide(api::binding::publish_artefact(r).await) });
     app.at("/binding/{aid}")
-        .get(|r| async { Ok(api::binding::get_artefact(r).await.into_response()) })
-        .delete(|r| async { Ok(api::binding::unpublish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::binding::get_artefact(r).await) })
+        .delete(|r| async { fix_tide(api::binding::unpublish_artefact(r).await) });
     app.at("/binding/{aid}/{sid}")
-        .get(|r| async { Ok(api::binding::get_servant(r).await.into_response()) })
-        .post(|r| async { Ok(api::binding::link_servant(r).await.into_response()) })
-        .delete(|r| async { Ok(api::binding::unlink_servant(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::binding::get_servant(r).await) })
+        .post(|r| async { fix_tide(api::binding::link_servant(r).await) })
+        .delete(|r| async { fix_tide(api::binding::unlink_servant(r).await) });
     app.at("/pipeline")
-        .get(|r| async { Ok(api::pipeline::list_artefact(r).await.into_response()) })
-        .post(|r| async { Ok(api::pipeline::publish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::pipeline::list_artefact(r).await) })
+        .post(|r| async { fix_tide(api::pipeline::publish_artefact(r).await) });
     app.at("/pipeline/{aid}")
-        .get(|r| async { Ok(api::pipeline::get_artefact(r).await.into_response()) })
-        .delete(|r| async { Ok(api::pipeline::unpublish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::pipeline::get_artefact(r).await) })
+        .delete(|r| async { fix_tide(api::pipeline::unpublish_artefact(r).await) });
     app.at("/onramp")
-        .get(|r| async { Ok(api::onramp::list_artefact(r).await.into_response()) })
-        .post(|r| async { Ok(api::onramp::publish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::onramp::list_artefact(r).await) })
+        .post(|r| async { fix_tide(api::onramp::publish_artefact(r).await) });
     app.at("/onramp/{aid}")
-        .get(|r| async { Ok(api::onramp::get_artefact(r).await.into_response()) })
-        .delete(|r| async { Ok(api::onramp::unpublish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::onramp::get_artefact(r).await) })
+        .delete(|r| async { fix_tide(api::onramp::unpublish_artefact(r).await) });
     app.at("/offramp")
-        .get(|r| async { Ok(api::offramp::list_artefact(r).await.into_response()) })
-        .post(|r| async { Ok(api::offramp::publish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::offramp::list_artefact(r).await) })
+        .post(|r| async { fix_tide(api::offramp::publish_artefact(r).await) });
     app.at("/offramp/{aid}")
-        .get(|r| async { Ok(api::offramp::get_artefact(r).await.into_response()) })
-        .delete(|r| async { Ok(api::offramp::unpublish_artefact(r).await.into_response()) });
+        .get(|r| async { fix_tide(api::offramp::get_artefact(r).await) })
+        .delete(|r| async { fix_tide(api::offramp::unpublish_artefact(r).await) });
 
     if !matches.is_present("no-api") {
         eprintln!("Listening at: http://{}", host);
