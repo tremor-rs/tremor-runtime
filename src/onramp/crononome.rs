@@ -215,7 +215,7 @@ impl ChronomicQueue {
             None => vec![],
         };
 
-        if !next.is_empty() {
+        if let Some(at) = next.get(0) {
             let mut entry2 = CronEntry {
                 name: entry.name.clone(),
                 expr: entry.expr.clone(),
@@ -226,8 +226,7 @@ impl ChronomicQueue {
             // FIXME propagate any errors
             if x.is_ok() {
                 self.tpq.enqueue(TemporalItem {
-                    // ALLOW: fixme
-                    at: next[0],
+                    at: *at,
                     what: entry2,
                 });
             }

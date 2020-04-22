@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::*;
+use crate::errors::Result;
 use crate::utils::ConfigImpl;
 use memmap::MmapOptions;
 use simd_json::prelude::*;
@@ -115,7 +115,6 @@ impl KV for MmapAnon {
 
 impl ConfigImpl for Config {}
 
-// FIXME: Same config for both types of mmap as this stands
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub path: String,

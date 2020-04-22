@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::dflt;
-use crate::errors::*;
+use crate::errors::Result;
 use crate::onramp::prelude::*;
 
 //NOTE: This is required for StreamHander's stream

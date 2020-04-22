@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::api::*;
+use crate::api::prelude::*;
 use hashbrown::HashMap;
 use tremor_runtime::repository::BindingArtefact;
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;

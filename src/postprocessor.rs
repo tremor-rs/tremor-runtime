@@ -15,8 +15,7 @@
 mod gelf;
 pub(crate) use gelf::GELF;
 
-use crate::errors::*;
-use base64;
+use crate::errors::{Error, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
@@ -168,8 +167,7 @@ mod test {
 
         assert_eq!(Ok(vec![vec![]]), post.process(0, 0, &data));
 
-        // FIXME throws invalid length but it should not
-        // assert_eq!(Ok(vec![vec![b'C',b'g',b'=',b'=']]), post.process(0, "\n".as_bytes()));
+        assert_eq!(Ok(vec![b"Cg==".to_vec()]), post.process(0, 0, b"\n"));
 
         assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, 0, b"snot"));
     }

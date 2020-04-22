@@ -17,7 +17,6 @@ use async_std::sync::{channel, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
 use halfbrown::HashMap;
-use serde_yaml;
 use std::time::Duration;
 use tungstenite::protocol::Message;
 use url::Url;

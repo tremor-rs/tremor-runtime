@@ -27,16 +27,16 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 op!(EventHistoryFactory(node) {
-    if let Some(map) = &node.config {
-        let config: Config = Config::new(map)?;
-        Ok(Box::new(EventHistory {
-            config,
-            id: node.id.clone(),
-        }))
-    } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+if let Some(map) = &node.config {
+    let config: Config = Config::new(map)?;
+    Ok(Box::new(EventHistory {
+        config,
+        id: node.id.clone(),
+    }))
+} else {
+    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
-    }});
+}});
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]

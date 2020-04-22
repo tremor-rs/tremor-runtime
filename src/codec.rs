@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::errors::Result;
 use simd_json::BorrowedValue;
 use tremor_script::LineValue;
 pub(crate) mod binflux;

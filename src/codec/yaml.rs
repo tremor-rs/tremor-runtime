@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use serde_yaml;
 
 #[derive(Clone)]
 pub struct YAML {}

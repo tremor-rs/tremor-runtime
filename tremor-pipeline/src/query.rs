@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::config::{InputPort, OutputPort};
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::op;
 use crate::op::trickle::select::WindowImpl;
 use crate::OperatorNode;
@@ -66,7 +66,7 @@ fn window_decl_to_impl<'script>(
     d: &WindowDecl<'script>,
     stmt: &StmtRentalWrapper,
 ) -> Result<WindowImpl> {
-    use op::trickle::select::*;
+    use op::trickle::select::{TumblingWindowOnNumber, TumblingWindowOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {

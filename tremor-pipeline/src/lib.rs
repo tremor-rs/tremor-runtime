@@ -33,7 +33,7 @@ extern crate log;
 #[macro_use]
 extern crate rental;
 
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
@@ -51,7 +51,7 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tremor_script::prelude::*;
-use tremor_script::query::*;
+use tremor_script::query::StmtRentalWrapper;
 
 /// Pipeline Configuration
 pub mod config;

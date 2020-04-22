@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::errors::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use url;
 
 /// The type or resource the url references
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]

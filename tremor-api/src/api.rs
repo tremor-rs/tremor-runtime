@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) use http_types::headers;
-pub(crate) use http_types::StatusCode;
+pub use http_types::headers;
+pub use http_types::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
-pub(crate) use tide::Response;
+pub use tide::Response;
 use tremor_runtime::errors::{Error as TremorError, ErrorKind};
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
@@ -25,6 +25,7 @@ pub mod binding;
 pub mod offramp;
 pub mod onramp;
 pub mod pipeline;
+pub mod prelude;
 pub mod version;
 
 pub type Request = tide::Request<State>;

@@ -31,7 +31,6 @@ pub use simd_json::ValueType;
 use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
-use url;
 
 /// A Compiletime error capturing the prerpocessors cus at the time of the error
 #[derive(Debug)]
@@ -150,13 +149,26 @@ pub(crate) fn best_hint(
         .map(|(d, s)| (d, s.clone()))
 }
 pub(crate) type ErrorLocation = (Option<Range>, Option<Range>);
-// FIXME: Option<(Location, Location, Option<(Location, Location)>)>
 impl ErrorKind {
     pub(crate) fn cu(&self) -> usize {
         self.expr().0.map(Range::cu).unwrap_or_default()
     }
     pub(crate) fn expr(&self) -> ErrorLocation {
-        use ErrorKind::*;
+        use ErrorKind::{
+            AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst, BadAccessInEvent,
+            BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity, BadArrayIndex,
+            BadType, BinaryDrop, BinaryEmit, DecreasingRange, DoubleConst, DoubleStream,
+            EmptyScript, ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift,
+            InvalidConst, InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral,
+            InvalidFn, InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod,
+            InvalidRecur, InvalidToken, InvalidUnary, Io, JSONError, MergeTypeConflict,
+            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
+            NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryStreamNotDefined,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+        };
         match self {
             NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
             QueryStreamNotDefined(outer, inner, _)
@@ -231,7 +243,10 @@ impl ErrorKind {
         }
     }
     pub(crate) fn token(&self) -> Option<String> {
-        use ErrorKind::*;
+        use ErrorKind::{
+            UnexpectedEscapeCode, UnterminatedExtractor, UnterminatedIdentLiteral,
+            UnterminatedStringLiteral,
+        };
         match self {
             UnterminatedExtractor(_, _, token)
             | UnterminatedStringLiteral(_, _, token)
@@ -241,7 +256,10 @@ impl ErrorKind {
         }
     }
     pub(crate) fn hint(&self) -> Option<String> {
-        use ErrorKind::*;
+        use ErrorKind::{
+            BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, MissingFunction, MissingModule,
+            NoClauseHit, Oops, TypeConflict, UnrecognizedToken,
+        };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute == outer.1.absolute => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
@@ -681,18 +699,12 @@ pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
 /// Creates a guard not bool error
 #[allow(clippy::borrowed_box)]
 pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
-    stmt: &Box<O>,
+    stmt: &O,
     inner: &I,
-    _got: &Value,
+    got: &Value,
     meta: &NodeMetas,
 ) -> Result<T> {
-    // FIXME Should actually say expected/actualf or type ( error_type_conflict )
-    Err(ErrorKind::QueryStreamNotDefined(
-        stmt.extent(meta),
-        inner.extent(meta),
-        "snot at error type conflict".to_string(),
-    )
-    .into())
+    error_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
 }
 
 pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(

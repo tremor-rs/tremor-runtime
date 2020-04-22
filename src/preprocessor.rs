@@ -16,8 +16,7 @@ mod gelf;
 pub(crate) use gelf::GELF;
 pub mod lines;
 
-use crate::errors::*;
-use base64;
+use crate::errors::Result;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;

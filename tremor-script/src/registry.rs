@@ -13,10 +13,9 @@
 // limitations under the License.
 
 mod custom_fn;
-pub(crate) use custom_fn::*;
-
+pub(crate) use self::custom_fn::{CustomFn, RECUR, RECUR_PTR};
 use crate::ast::{BaseExpr, NodeMetas};
-use crate::errors::*;
+use crate::errors::{best_hint, Error, ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::{tremor_fn, EventContext};
 use downcast_rs::{impl_downcast, DowncastSync};
@@ -206,7 +205,9 @@ impl FunctionError {
         registry: Option<&Registry>,
         meta: &NodeMetas,
     ) -> crate::errors::Error {
-        use FunctionError::*;
+        use FunctionError::{
+            BadArity, BadType, Error, MissingFunction, MissingModule, RuntimeError,
+        };
         let outer = outer.extent(meta);
         let inner = inner.extent(meta);
         match self {

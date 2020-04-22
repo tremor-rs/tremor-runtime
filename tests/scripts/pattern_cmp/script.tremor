@@ -1,0 +1,9 @@
+match {"e": event} of 
+  case %{ e > 8 } => "9"
+  case %{ e >= 8 } => "8"
+  case %{ e < 1 } => "0"
+  case %{ e <= 1 } => "1"
+
+  default => event
+end
+

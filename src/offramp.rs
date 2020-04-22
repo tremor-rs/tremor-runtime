@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::codec::Codec;
-use crate::errors::*;
+use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::registry::ServantId;
@@ -166,7 +166,6 @@ impl Manager {
 
                         let (tx, rx) = bounded(self.qsize);
                         let offramp_id = id.clone();
-                        // let mut s = req;
                         thread::spawn(move || {
                             info!("[Offramp::{}] started", offramp_id);
                             for m in rx {

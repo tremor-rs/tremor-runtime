@@ -16,8 +16,17 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 use super::upable::Upable;
-use super::*;
-use crate::errors::*;
+use super::{
+    base_expr, is_lit, path_eq, query, replace_last_shadow_use, ArrayPattern,
+    ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Comprehension, ComprehensionCase,
+    ConstDoc, EmitExpr, Env, EventPath, Expr, Field, FnDecl, FnDoc, Helper, Ident,
+    ImutComprehension, ImutComprehensionCase, ImutExpr, ImutExprInt, ImutMatch,
+    ImutPredicateClause, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath,
+    Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern,
+    PredicateClause, PredicatePattern, Predicates, Record, RecordPattern, Recur, Script, Segment,
+    StatePath, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+};
+use crate::errors::{error_generic, error_oops, ErrorKind, Result};
 use crate::impl_expr;
 use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
@@ -1324,7 +1333,7 @@ pub enum PatchOperationRaw<'script> {
 impl<'script> Upable<'script> for PatchOperationRaw<'script> {
     type Target = PatchOperation<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatchOperationRaw::*;
+        use PatchOperationRaw::{Copy, Erase, Insert, Merge, Move, TupleMerge, Update, Upsert};
         Ok(match self {
             Insert { ident, expr } => PatchOperation::Insert {
                 ident: ident.up(helper)?,
@@ -1540,7 +1549,7 @@ pub enum PatternRaw<'script> {
 impl<'script> Upable<'script> for PatternRaw<'script> {
     type Target = Pattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatternRaw::*;
+        use PatternRaw::{Array, Assign, Default, DoNotCare, Expr, Record, Tuple};
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
             Record(rp) => Pattern::Record(rp.up(helper)?),
@@ -1604,7 +1613,9 @@ pub enum PredicatePatternRaw<'script> {
 impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
     type Target = PredicatePattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PredicatePatternRaw::*;
+        use PredicatePatternRaw::{
+            ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+        };
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
                 assign,
@@ -1731,7 +1742,7 @@ pub enum ArrayPredicatePatternRaw<'script> {
 impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
     type Target = ArrayPredicatePattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use ArrayPredicatePatternRaw::*;
+        use ArrayPredicatePatternRaw::{Expr, Ignore, Record, Tilde};
         Ok(match self {
             Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
             Tilde(te) => ArrayPredicatePattern::Tilde(te.up(helper)?),
@@ -1820,7 +1831,7 @@ pub enum PathRaw<'script> {
 impl<'script> Upable<'script> for PathRaw<'script> {
     type Target = Path<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PathRaw::*;
+        use PathRaw::{Const, Event, Local, Meta, State};
         Ok(match self {
             Local(p) => {
                 let p = p.up(helper)?;

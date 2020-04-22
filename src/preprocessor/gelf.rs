@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Preprocessor;
-use crate::errors::*;
+use crate::errors::{ErrorKind, Result};
 use hashbrown::{hash_map::Entry, HashMap};
 use rand::{self, RngCore};
 

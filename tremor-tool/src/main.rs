@@ -31,32 +31,20 @@ extern crate serde_derive;
 #[allow(unused_extern_crates)]
 extern crate serde;
 
-use crate::errors::*;
+use crate::errors::{Error, Result};
 use async_std::task;
-use clap::load_yaml;
-use clap::ArgMatches;
-use dirs;
+use clap::{load_yaml, ArgMatches};
 use halfbrown::HashMap;
 use http_types::{headers, StatusCode};
 use simd_json::borrowed::Value;
 use simd_json::prelude::*;
 use std::ffi::OsStr;
-use std::fs;
-use std::fs::File;
-use std::io;
+use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::path::Path;
-use tremor_pipeline;
-use tremor_runtime;
-use tremor_runtime::config;
-use tremor_runtime::errors;
-use tremor_runtime::functions as tr_fun;
-use tremor_runtime::utils;
-use tremor_script::grok;
-use tremor_script::interpreter::AggrType;
-use tremor_script::path::ModulePath;
-use tremor_script::EventContext as Context;
+use tremor_runtime::{config, errors, functions as tr_fun, utils};
+use tremor_script::{grok, interpreter::AggrType, path::ModulePath, EventContext as Context};
 
 enum FormatKind {
     Json,

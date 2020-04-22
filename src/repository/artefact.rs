@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::codec;
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;

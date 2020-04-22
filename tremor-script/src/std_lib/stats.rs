@@ -84,18 +84,22 @@ impl TremorAggrFn for Sum {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.0 += v;
+            Ok(())
         } else {
-            // FIXME type error
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "sum", 1),
+            })
         }
-        Ok(())
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.0 -= v;
+            Ok(())
         } else {
-            // FIXME type error
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "sum", 1),
+            })
         }
-        Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
@@ -126,19 +130,23 @@ impl TremorAggrFn for Mean {
         self.0 += 1;
         if let Some(v) = args[0].cast_f64() {
             self.1 += v;
+            Ok(())
         } else {
-            // FIXME type error
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "mean", 1),
+            })
         }
-        Ok(())
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 -= 1;
         if let Some(v) = args[0].cast_f64() {
             self.1 -= v;
+            Ok(())
         } else {
-            // FIXME type errpr
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "mean", 1),
+            })
         }
-        Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
@@ -176,10 +184,12 @@ impl TremorAggrFn for Min {
             if self.0.is_none() || Some(v) < self.0 {
                 self.0 = Some(v);
             };
+            Ok(())
         } else {
-            // FIXME type errpr
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "min", 1),
+            })
         }
-        Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // FIXME: how?
@@ -231,10 +241,12 @@ impl TremorAggrFn for Max {
             if self.0.is_none() || Some(v) > self.0 {
                 self.0 = Some(v);
             };
+            Ok(())
         } else {
-            // FIXME type errpr
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "max", 1),
+            })
         }
-        Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // FIXME: how?
@@ -281,20 +293,24 @@ impl TremorAggrFn for Var {
             self.n += 1;
             self.ex += v - self.k;
             self.ex2 += (v - self.k) * (v - self.k);
+            Ok(())
         } else {
-            // FIXME type errpr
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "var", 1),
+            })
         }
-        Ok(())
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(v) = args[0].cast_f64() {
             self.n -= 1;
             self.ex -= v - self.k;
             self.ex2 -= (v - self.k) * (v - self.k);
+            Ok(())
         } else {
-            // FIXME type errpr
+            Err(FunctionError::BadType {
+                mfa: mfa("stats", "var", 1),
+            })
         }
-        Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {

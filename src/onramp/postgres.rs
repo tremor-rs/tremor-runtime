@@ -16,7 +16,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use crate::errors::*;
+use crate::errors::Result;
 use crate::onramp::prelude::*;
 use crate::ramp;
 use crate::ramp::postgres::row_to_json;

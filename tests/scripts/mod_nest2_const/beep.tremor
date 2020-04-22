@@ -1,2 +1,2 @@
 const snot = "snot";
-const badger = "badger "; # TODO FIXME + snot;
+const badger = ("badger " + snot);

@@ -15,7 +15,7 @@
 // Nopt yet implemented - this is behind a feature flag
 #![cfg_attr(tarpaulin, skip)]
 
-use super::*;
+use super::{FResult, FunctionError, Result};
 use crate::ast::query::ARGS_CONST_ID;
 use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};

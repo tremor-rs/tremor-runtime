@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::common_cow;
-use crate::errors::*;
+use crate::errors::missing_config;
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
@@ -61,7 +61,7 @@ impl TrickleOperator {
                         })
                     }
                     ("generic", "backpressure") => {
-                        use op::generic::backpressure::*;
+                        use op::generic::backpressure::{Backpressure, Config, Output};
                         let outputs = op
                             .params
                             .as_ref()

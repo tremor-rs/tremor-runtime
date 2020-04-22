@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Postprocessor;
-use crate::errors::*;
+use crate::errors::Result;
 
 #[derive(Clone)]
 pub struct GELF {

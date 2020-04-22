@@ -15,7 +15,7 @@
 use crate::ast::Helper;
 use crate::ast::{Docs, Warning};
 use crate::ctx::EventContext;
-use crate::errors::*;
+use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
 use crate::interpreter::Cont;
@@ -69,8 +69,7 @@ where
 }
 
 /// A tremor script
-#[derive(Debug)] // FIXME rename ScriptRentalWrapper
-
+#[derive(Debug)]
 pub struct Script {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
     pub(crate) script: rentals::Script,
