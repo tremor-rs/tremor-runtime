@@ -408,6 +408,10 @@ error_chain! {
             description("Runtime error in function")
                 display("Runtime error in function {}::{}/{}: {}", m, f, a, c)
         }
+        InvalidRecur(expr: Range, inner: Range) {
+            description("Can not recur from this location")
+                display("Can not recur from this location")
+        }
         /*
          * Lexer, Preprocessor and Parser
          */
@@ -577,7 +581,6 @@ error_chain! {
         InvalidEmit(expr: Range, inner: Range) {
             description("Can not emit from this location")
                 display("Can not emit from this location")
-
         }
         InvalidDrop(expr: Range, inner: Range) {
             description("Can not drop from this location")
