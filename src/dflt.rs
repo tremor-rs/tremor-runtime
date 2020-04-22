@@ -28,15 +28,6 @@ pub fn d_false() -> bool {
 
 // just a default
 #[cfg_attr(tarpaulin, skip)]
-pub fn d_0<T>() -> T
-where
-    T: convert::From<u8>,
-{
-    T::from(0)
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_4<T>() -> T
 where
     T: convert::From<u8>,

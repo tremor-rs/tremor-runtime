@@ -31,7 +31,9 @@ mod blackhole;
 mod debug;
 mod elastic;
 mod file;
+#[cfg(feature = "gcp")]
 mod gcs;
+#[cfg(feature = "gcp")]
 mod gpub;
 mod kafka;
 mod postgres;
@@ -86,7 +88,9 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "debug" => debug::Debug::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
         "file" => file::File::from_config(config),
+        #[cfg(feature = "gcp")]
         "gcs" => gcs::GCS::from_config(config),
+        #[cfg(feature = "gcp")]
         "gpub" => gpub::GPub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),

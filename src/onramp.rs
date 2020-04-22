@@ -22,6 +22,7 @@ use std::fmt;
 mod blaster;
 mod crononome;
 mod file;
+#[cfg(feature = "gcp")]
 mod gsub;
 mod kafka;
 mod metronome;
@@ -65,6 +66,7 @@ pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onram
     match name {
         "blaster" => blaster::Blaster::from_config(config),
         "file" => file::File::from_config(config),
+        #[cfg(feature = "gcp")]
         "gsub" => gsub::GSub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),
