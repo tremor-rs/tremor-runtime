@@ -38,7 +38,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     reply(req, result, true, StatusCode::NoContent).await
 }
 
-pub async fn unpublish_artefact(req: Request) -> std::result::Result<Response, crate::api::Error> {
+pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["offramp", &id])?;
     let repo = &req.state().world.repo;
@@ -46,7 +46,7 @@ pub async fn unpublish_artefact(req: Request) -> std::result::Result<Response, c
     reply(req, result, true, StatusCode::Ok).await
 }
 
-pub async fn get_artefact(req: Request) -> crate::Result<Response> {
+pub async fn get_artefact(req: Request) -> Result<Response> {
     let id: String = req.param("aid").unwrap_or_default();
     let url = build_url(&["offramp", &id])?;
     let repo = &req.state().world.repo;

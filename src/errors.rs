@@ -47,6 +47,18 @@ impl From<hdr_s::DeserializeError> for Error {
     }
 }
 
+impl From<Box<dyn std::error::Error>> for Error {
+    fn from(e: Box<dyn std::error::Error>) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<Box<dyn std::error::Error + Sync + Send>> for Error {
+    fn from(e: Box<dyn std::error::Error + Sync + Send>) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
 impl From<hdrhistogram::errors::CreationError> for Error {
     fn from(e: hdrhistogram::errors::CreationError) -> Self {
         Self::from(format!("{:?}", e))
@@ -65,9 +77,9 @@ impl From<hdrhistogram::serialization::V2SerializeError> for Error {
     }
 }
 
-impl From<surf::Exception> for Error {
-    fn from(e: surf::Exception) -> Self {
-        Self::from(format!("{:?}", e))
+impl From<http_types::Error> for Error {
+    fn from(e: http_types::Error) -> Self {
+        Self::from(format!("{}", e))
     }
 }
 

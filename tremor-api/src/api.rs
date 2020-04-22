@@ -30,11 +30,6 @@ pub mod version;
 pub type Request = tide::Request<State>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl tide::IntoResponse for Error {
-    fn into_response(self) -> Response {
-        self.into()
-    }
-}
 pub struct State {
     pub world: World,
 }
@@ -47,12 +42,22 @@ pub enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Error::Generic(_c, d) => write!(f, "{}", d),
+            Error::JSON(_c, d) => write!(f, "{}", d),
+        }
     }
 }
 impl std::error::Error for Error {}
 
 impl Error {
+    pub fn into_http_error(self) -> http_types::Error {
+        match &self {
+            Error::Generic(c, _d) => http_types::Error::new(*c, self),
+            Error::JSON(c, _d) => http_types::Error::new(*c, self),
+        }
+    }
+
     fn not_found() -> Self {
         Self::json(StatusCode::NotFound, &r#"{"error": "Artefact not found"}"#)
     }
