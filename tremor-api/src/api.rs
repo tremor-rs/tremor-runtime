@@ -43,8 +43,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Generic(_c, d) => write!(f, "{}", d),
-            Error::JSON(_c, d) => write!(f, "{}", d),
+            Error::Generic(_c, d) | Error::JSON(_c, d) => write!(f, "{}", d),
         }
     }
 }
@@ -53,8 +52,7 @@ impl std::error::Error for Error {}
 impl Error {
     pub fn into_http_error(self) -> http_types::Error {
         match &self {
-            Error::Generic(c, _d) => http_types::Error::new(*c, self),
-            Error::JSON(c, _d) => http_types::Error::new(*c, self),
+            Error::Generic(c, _d) | Error::JSON(c, _d) => http_types::Error::new(*c, self),
         }
     }
 
