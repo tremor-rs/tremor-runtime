@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec, PipelineVec};
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
@@ -29,7 +29,6 @@ use async_std::{
     task::{self, JoinHandle},
 };
 use hashbrown::HashMap;
-use tremor_pipeline;
 
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;

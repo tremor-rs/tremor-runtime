@@ -99,13 +99,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     let mut b: u8 = 0;
     while let Some(e) = itr.next() {
         match *e {
-            b'0'..=b'9' => {
-                b = if let Some(b) = b.checked_mul(10).and_then(|b| b.checked_add(e - b'0')) {
-                    b
-                } else {
-                    return None;
-                };
-            }
+            b'0'..=b'9' => b = b.checked_mul(10).and_then(|b| b.checked_add(e - b'0'))?,
             b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, b), itr),
             b'.' => {
                 if itr.peek().is_none() {
@@ -127,13 +121,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     let mut c: u8 = 0;
     while let Some(e) = itr.next() {
         match *e {
-            b'0'..=b'9' => {
-                c = if let Some(c) = c.checked_mul(10).and_then(|c| c.checked_add(e - b'0')) {
-                    c
-                } else {
-                    return None;
-                };
-            }
+            b'0'..=b'9' => c = c.checked_mul(10).and_then(|c| c.checked_add(e - b'0'))?,
             b'/' => return parse_network(Ipv4Addr::new(a, b, 0, c), itr),
             b'.' => {
                 if itr.peek().is_none() {
@@ -155,13 +143,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     let mut d: u8 = 0;
     while let Some(e) = itr.next() {
         match *e {
-            b'0'..=b'9' => {
-                d = if let Some(d) = d.checked_mul(10).and_then(|d| d.checked_add(e - b'0')) {
-                    d
-                } else {
-                    return None;
-                };
-            }
+            b'0'..=b'9' => d = d.checked_mul(10).and_then(|d| d.checked_add(e - b'0'))?,
             b'/' => return parse_network(Ipv4Addr::new(a, b, c, d), itr),
             _ => return None,
         }
@@ -221,8 +203,6 @@ pub struct SnotCombiner {
     #[serde(skip)]
     combiner: IpCidrCombiner,
 }
-
-// FIXME add deser for SnotCombiner
 
 impl SnotCombiner {
     fn from_rules(rules: Vec<String>) -> Result<Self, ExtractorError> {

@@ -20,12 +20,10 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use crate::errors::*;
-use bytes;
+use crate::errors::{Error, Result};
 use bytes::buf::{BufMut, BufMutExt};
 use chrono::prelude::*;
 use postgres::types::to_sql_checked;
-use postgres_protocol;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 use std::time::SystemTime;

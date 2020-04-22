@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::{self, Warning};
-use crate::errors::*;
+use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::lexer;
 use crate::path::ModulePath;

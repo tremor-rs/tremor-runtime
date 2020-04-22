@@ -110,7 +110,7 @@ impl Location {
             line,
             column,
             absolute,
-            unit_id: 0, // FIXME unit_id cpp
+            unit_id: 0,
         }
     }
 

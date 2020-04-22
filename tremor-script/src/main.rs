@@ -46,7 +46,7 @@ mod utils;
 #[macro_use]
 extern crate rental;
 
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::highlighter::{Highlighter, Term as TermHighlighter};
 use crate::path::load as load_module_path;
 use crate::pos::{Span, Spanned};

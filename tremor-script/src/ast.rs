@@ -18,9 +18,9 @@ pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
-use crate::errors::*;
+use crate::errors::{error_generic, error_no_consts, error_no_locals, Result};
 use crate::impl_expr2;
-use crate::interpreter::*;
+use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
 use crate::registry::{
@@ -239,6 +239,7 @@ impl<'script> Default for Docs<'script> {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct Helper<'script, 'registry>
 where
     'script: 'registry,
@@ -1003,7 +1004,9 @@ pub(crate) enum PredicatePattern<'script> {
 
 impl<'script> PredicatePattern<'script> {
     pub fn key(&self) -> &KnownKey<'script> {
-        use PredicatePattern::*;
+        use PredicatePattern::{
+            ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+        };
         match self {
             TildeEq { key, .. }
             | Bin { key, .. }
@@ -1015,7 +1018,9 @@ impl<'script> PredicatePattern<'script> {
     }
 
     fn lhs(&self) -> &Cow<'script, str> {
-        use PredicatePattern::*;
+        use PredicatePattern::{
+            ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+        };
         match self {
             TildeEq { lhs, .. }
             | Bin { lhs, .. }

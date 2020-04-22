@@ -14,13 +14,13 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::errors::*;
+use crate::errors::{ErrorKind, Result};
 use crate::{Event, Operator};
 use std::borrow::Cow;
 use tremor_script::interpreter::Env;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt},
+    ast::{InvokeAggrFn, Select, SelectStmt},
     prelude::*,
     query::StmtRental,
 };
@@ -122,9 +122,8 @@ impl Operator for TrickleSimpleSelect {
                     return Ok(vec![]);
                 };
             } else {
-                return tremor_script::errors::query_guard_not_bool(
-                    &stmt, guard, &test, &node_meta,
-                )?;
+                let s: &Select = &stmt;
+                return tremor_script::errors::query_guard_not_bool(s, guard, &test, &node_meta)?;
             };
         }
 
@@ -142,9 +141,8 @@ impl Operator for TrickleSimpleSelect {
                     return Ok(vec![]);
                 };
             } else {
-                return tremor_script::errors::query_guard_not_bool(
-                    &stmt, guard, &test, &node_meta,
-                )?;
+                let s: &Select = &stmt;
+                return tremor_script::errors::query_guard_not_bool(s, guard, &test, &node_meta)?;
             };
         }
 

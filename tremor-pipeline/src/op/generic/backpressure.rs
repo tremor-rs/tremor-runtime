@@ -25,7 +25,7 @@
 //! The 1st additional output is used to route data that was decided to
 //! be discarded.
 
-use crate::errors::*;
+use crate::errors::{ErrorKind, Result};
 use crate::{ConfigImpl, Event, Operator};
 use std::borrow::Cow;
 use tremor_script::prelude::*;
@@ -107,18 +107,18 @@ impl Backpressure {
 }
 
 op!(BackpressureFactory(node) {
-    if let Some(map) = &node.config {
-        let config: Config = Config::new(map)?;
-        if config.outputs.is_empty() {
-            error!("No outputs supplied for backpressure operators");
-            return Err(ErrorKind::MissingOpConfig(node.id.to_string()).into());
-        };
-        // convert backoff to ns
-        Ok(Box::new(Backpressure::from(config)))
-    } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+if let Some(map) = &node.config {
+    let config: Config = Config::new(map)?;
+    if config.outputs.is_empty() {
+        error!("No outputs supplied for backpressure operators");
+        return Err(ErrorKind::MissingOpConfig(node.id.to_string()).into());
+    };
+    // convert backoff to ns
+    Ok(Box::new(Backpressure::from(config)))
+} else {
+    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
-    }});
+}});
 
 impl Operator for Backpressure {
     fn on_event(

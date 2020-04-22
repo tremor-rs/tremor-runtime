@@ -15,7 +15,7 @@
 // Note: We ignore the is_* functions for coverage as they effectively are
 // only lists
 
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 #[cfg_attr(
     feature = "cargo-clippy",
     allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
@@ -679,7 +679,7 @@ impl<'input> CharLocations<'input> {
                 line: 1,
                 column: 1,
                 absolute: input.start_index().to_usize(),
-                unit_id: 0, // FIXME cpp
+                unit_id: 0,
             },
             chars: input.src().chars().peekable(),
         }
@@ -1128,45 +1128,42 @@ impl<'input> Preprocessor {
                         match fs::File::open(&file_path) {
                             Ok(mut file) => {
                                 let mut s = String::new();
-                                match file.read_to_string(&mut s) {
-                                    _size => {
-                                        s.push(' ');
-                                        let s = Preprocessor::preprocess(
-                                            &module_path,
-                                            file_path.as_os_str(),
-                                            &mut s,
-                                            inner_cu,
-                                            include_stack,
-                                        )?;
-                                        let y = s
-                                            .into_iter()
-                                            .filter_map(|x| x.map(|x| format!("{}", x.value)).ok())
-                                            .collect::<Vec<String>>()
-                                            .join("");
-                                        input.push_str(&format!(
-                                            "#!line 0 0 0 {} {}\n",
-                                            inner_cu,
-                                            &file_path2.to_string_lossy()
-                                        ));
-                                        input.push_str(&format!("mod {} with\n", &alias));
-                                        input.push_str(&format!(
-                                            "#!line 0 0 0 {} {}\n",
-                                            inner_cu,
-                                            &file_path2.to_string_lossy()
-                                        ));
-                                        input.push_str(&format!("{}\n", y.trim()));
-                                        input.push_str("end;\n");
-                                        input.push_str(&format!(
-                                            "#!line {} {} {} {} {}\n",
-                                            span2.end.absolute,
-                                            span2.end.line + 1,
-                                            0,
-                                            cu,
-                                            file_name.to_string_lossy(),
-                                        ));
-                                    }
-                                }
                                 file.read_to_string(&mut s)?;
+
+                                s.push(' ');
+                                let s = Preprocessor::preprocess(
+                                    &module_path,
+                                    file_path.as_os_str(),
+                                    &mut s,
+                                    inner_cu,
+                                    include_stack,
+                                )?;
+                                let y = s
+                                    .into_iter()
+                                    .filter_map(|x| x.map(|x| format!("{}", x.value)).ok())
+                                    .collect::<Vec<String>>()
+                                    .join("");
+                                input.push_str(&format!(
+                                    "#!line 0 0 0 {} {}\n",
+                                    inner_cu,
+                                    &file_path2.to_string_lossy()
+                                ));
+                                input.push_str(&format!("mod {} with\n", &alias));
+                                input.push_str(&format!(
+                                    "#!line 0 0 0 {} {}\n",
+                                    inner_cu,
+                                    &file_path2.to_string_lossy()
+                                ));
+                                input.push_str(&format!("{}\n", y.trim()));
+                                input.push_str("end;\n");
+                                input.push_str(&format!(
+                                    "#!line {} {} {} {} {}\n",
+                                    span2.end.absolute,
+                                    span2.end.line + 1,
+                                    0,
+                                    cu,
+                                    file_name.to_string_lossy(),
+                                ));
                             }
                             Err(e) => {
                                 return Err(e.into());

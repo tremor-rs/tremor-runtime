@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-use crate::errors::*;
+use crate::errors::{Error, Result};
 use chrono::{DateTime, NaiveDateTime};
 
 #[allow(clippy::cast_sign_loss)]

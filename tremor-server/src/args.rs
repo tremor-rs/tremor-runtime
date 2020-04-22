@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap;
-
 use clap::{App, Arg};
 
-pub fn parse<'a>() -> clap::App<'a, 'a> {
+pub fn parse<'a>() -> App<'a, 'a> {
     App::new("tremor-runtime")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Simple command line consumer")

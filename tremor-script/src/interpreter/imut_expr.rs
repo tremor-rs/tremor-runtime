@@ -17,8 +17,14 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::ast::*;
-use crate::errors::*;
+use crate::ast::{
+    BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
+    LocalPath, Merge, Patch, Path, Recur, Segment, UnaryExpr, ARGS_CONST_ID,
+};
+use crate::errors::{
+    error_bad_key, error_decreasing_range, error_invalid_unary, error_missing_effector,
+    error_need_obj, error_need_str, error_no_clause_hit, error_oops, Result,
+};
 use crate::interpreter::value_to_index;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR};
 use crate::stry;
@@ -448,8 +454,6 @@ where
                             return Ok(Cow::Borrowed(&FALSE));
                         }
                     } else {
-                        // FIXME: Indexing into something that isn't an array: should this return
-                        // false, or return an error?
                         return Ok(Cow::Borrowed(&FALSE));
                     }
                 }
@@ -480,9 +484,6 @@ where
                             continue;
                         }
                     } else {
-                        // FIXME: Indexing into something that isn't an array: should this return
-                        // false, or return an error? (Should probably have the same answer as the
-                        // same question a couple of lines higher in this function.)
                         return Ok(Cow::Borrowed(&FALSE));
                     }
                 }
@@ -679,7 +680,6 @@ where
         }
 
         unsafe {
-            // FIXME?
             let invocable: &mut TremorAggrFnWrapper =
                 mem::transmute(&env.aggrs[expr.aggr_id].invocable);
             let r = invocable.emit().map(Cow::Owned).map_err(|e| {

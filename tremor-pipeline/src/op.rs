@@ -21,7 +21,7 @@ pub mod runtime;
 pub mod trickle;
 
 use super::{Event, NodeConfig};
-use crate::errors::*;
+use crate::errors::Result;
 use halfbrown::HashMap;
 use regex::Regex;
 use std::borrow::Cow;

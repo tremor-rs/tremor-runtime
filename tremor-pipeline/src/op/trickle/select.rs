@@ -14,11 +14,11 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::interpreter::Env;
@@ -26,7 +26,10 @@ use tremor_script::query::StmtRentalWrapper;
 use tremor_script::utils::sorsorted_serialize;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID, WINDOW_CONST_ID},
+    ast::{
+        InvokeAggrFn, Select, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID,
+        WINDOW_CONST_ID,
+    },
     prelude::*,
     query::StmtRental,
 };
@@ -465,9 +468,8 @@ impl Operator for TrickleSelect {
                     return Ok(vec![]);
                 };
             } else {
-                return tremor_script::errors::query_guard_not_bool(
-                    &stmt, guard, &test, &node_meta,
-                )?;
+                let s: &Select = &stmt;
+                return tremor_script::errors::query_guard_not_bool(s, guard, &test, &node_meta)?;
             };
         }
 
@@ -513,11 +515,9 @@ impl Operator for TrickleSelect {
                         return Ok(vec![]);
                     }
                 } else {
+                    let s: &Select = &stmt;
                     return tremor_script::errors::query_guard_not_bool(
-                        stmt.borrow(),
-                        guard,
-                        &test,
-                        &node_meta,
+                        s, guard, &test, &node_meta,
                     )?;
                 }
             }
@@ -576,7 +576,6 @@ impl Operator for TrickleSelect {
                         )
                     });
                 let window_event = this_group.window.on_event(&event)?;
-                // FIXME
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the inital frame
                 // on a second frame, we have the coordinate with the first we have a problem as we
@@ -634,11 +633,9 @@ impl Operator for TrickleSelect {
                                 continue;
                             }
                         } else {
+                            let s: &Select = &stmt;
                             return tremor_script::errors::query_guard_not_bool(
-                                stmt.borrow(),
-                                guard,
-                                &test,
-                                &node_meta,
+                                s, guard, &test, &node_meta,
                             )?;
                         }
                     }
@@ -831,11 +828,9 @@ impl Operator for TrickleSelect {
                             continue;
                         }
                     } else {
+                        let s: &Select = &stmt;
                         return tremor_script::errors::query_guard_not_bool(
-                            stmt.borrow(),
-                            guard,
-                            &test,
-                            &node_meta,
+                            s, guard, &test, &node_meta,
                         )?;
                     }
                 }
@@ -1368,8 +1363,6 @@ mod test {
 
         let next = try_enqueue(&mut op, event)?;
 
-        // FIXME TODO - would be nicer to get error output in tests
-        // syntax highlighted in capturable form for assertions
         assert_eq!(None, next);
         Ok(())
     }

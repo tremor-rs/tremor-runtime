@@ -13,10 +13,14 @@
 // limitations under the License.
 
 pub(crate) mod raw;
-use super::raw::*;
-use super::*;
+use super::raw::BaseExpr;
+use super::{
+    error_generic, error_no_consts, error_no_locals, AggrRegistry, Builder, Cow, EventPath,
+    HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
+    Registry, Result, Script, Serialize, Stmts, Upable, Value, Warning,
+};
 use crate::impl_expr2;
-use raw::*;
+use raw::WindowDefnRaw;
 
 /// The Constant ID of the `window` constant
 pub const WINDOW_CONST_ID: usize = 0;

@@ -17,8 +17,6 @@ use crate::tremor_fn;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 
-// ALLOW: Until we have u64 support in clippy
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test::assert(ctx, desc, expected, got) {
         if expected == got {

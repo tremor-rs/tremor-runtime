@@ -14,7 +14,7 @@
 
 mod artefact;
 
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::url::TremorURL;
 use async_std::sync::{self, channel};
 use async_std::task;

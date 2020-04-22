@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // NOTE: we use a lot of arguments here, we are aware of that but tough luck
-// FIXME: investigate if re-writing would make code better
-// FIXME possible optimisations:
+// NOTE: investigate if re-writing would make code better
+// NOTE possible optimisations:
 // * P001 [x] re-write `let x = merge x of ... end` to a mutable merge that does not require cloing `x`
 // * P002 [x] don't construct data for expressions that return value is never used
 // * P003 [x] don't clone as part of a match statement (we should never ever mutate in case or when)
@@ -22,8 +22,8 @@
 // * P005 [x] turn literals into BorrowedValues so we don't need to re-cast them - constants could be pre-laoded
 // * P008 [x] We should not need to clone values in the for comprehension twice.
 
-// FIXME todo
-// * 101 [ ] `%{x > 3}` and other comparisons
+// NOTE todo
+// * 101 [x] `%{x > 3}` and other comparisons
 // * 102 [x] Remove the need for `()` around when clauses that contain binary ops
 
 #![allow(clippy::too_many_arguments)]
@@ -34,8 +34,17 @@ mod expr;
 mod imut_expr;
 
 pub(crate) use self::expr::Cont;
-use crate::ast::*;
-use crate::errors::*;
+use crate::ast::{
+    ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, GroupBy, GroupByInt, ImutExprInt,
+    InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, RecordPattern,
+    Segment, TuplePattern, UnaryOpKind,
+};
+use crate::errors::{
+    error_array_out_of_bound, error_bad_array_index, error_bad_key, error_decreasing_range,
+    error_guard_not_bool, error_invalid_binary, error_invalid_bitshift, error_need_arr,
+    error_need_int, error_need_obj, error_need_str, error_oops, error_patch_key_exists,
+    error_patch_merge_type_conflict, error_patch_update_key_missing, Result,
+};
 use crate::stry;
 use crate::EventContext;
 use simd_json::borrowed::Value;
@@ -132,7 +141,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     // FIXME Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
     // across builtin types if/when extending for 'lt' and 'gt' variants
     //
-    use Value::*;
+    use Value::{Array, Object, Static, String};
     let error = std::f64::EPSILON;
     match (lhs, rhs) {
         (Object(l), Object(r)) => {
@@ -218,15 +227,15 @@ where
 {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use BinOpKind::*;
-    use Value::*;
+    use BinOpKind::{
+        Add, And, BitAnd, BitOr, BitXor, Div, Eq, Gt, Gte, LBitShift, Lt, Lte, Mod, Mul, NotEq, Or,
+        RBitShiftSigned, RBitShiftUnsigned, Sub, Xor,
+    };
+    use Value::{Static, String};
     match (&op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
 
-        // FIXME - do we want this?
-        // This is to make sure that == in a expression
-        // and a record pattern behaves the same.
         (Eq, l, r) => Ok(static_bool!(val_eq(l, r))),
 
         (NotEq, l, r) =>
@@ -360,7 +369,7 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
 ) -> Option<Cow<'run, Value<'event>>> {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use UnaryOpKind::*;
+    use UnaryOpKind::{BitNot, Minus, Not, Plus};
     if let Some(x) = val.as_f64() {
         match &op {
             Minus => Some(Cow::Owned(Value::from(-x))),
@@ -1266,7 +1275,6 @@ where
     }
 }
 
-//FIXME Do we really want this here?
 impl<'script> GroupBy<'script> {
     /// Creates groups based on an event.
     pub fn generate_groups<'run, 'event>(
@@ -1288,7 +1296,6 @@ impl<'script> GroupBy<'script> {
     }
 }
 
-//FIXME Do we really want this here?
 impl<'script> GroupByInt<'script> {
     pub(crate) fn generate_groups<'run, 'event>(
         &'script self,

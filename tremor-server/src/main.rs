@@ -40,12 +40,10 @@ extern crate log;
 
 mod args;
 
-use crate::errors::*;
+use crate::errors::{Error, Result};
 use crate::system::World;
 use crate::url::TremorURL;
 use async_std::task;
-use env_logger;
-use serde_yaml;
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use simd_json;
 
 #[derive(Clone)]
 pub struct JSON {}

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Helper;
-use crate::errors::*;
+use crate::errors::Result;
 
 pub(crate) trait Upable<'script> {
     type Target;

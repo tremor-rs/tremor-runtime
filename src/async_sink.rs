@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::errors::Result;
 use crossbeam_channel::Receiver;
 use std::collections::VecDeque;
 use std::error;

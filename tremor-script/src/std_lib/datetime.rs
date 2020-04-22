@@ -19,7 +19,7 @@
     clippy::cast_possible_wrap
 )]
 
-use crate::datetime::*;
+use crate::datetime::{_parse, has_tz};
 use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn};
 use chrono::{offset::Utc, DateTime, Datelike, NaiveDateTime, SubsecRound, Timelike};

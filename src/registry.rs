@@ -36,7 +36,7 @@
 /// ┌─────────────────┐
 /// │    Registry     │ (instance registry)
 /// └─────────────────┘
-use crate::errors::*;
+use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::repository::{
     Artefact, ArtefactId, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact,

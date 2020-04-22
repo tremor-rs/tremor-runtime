@@ -69,8 +69,7 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-use crate::errors::*;
-use tremor_pipeline;
+use crate::errors::Result;
 
 pub(crate) type OnRampVec = Vec<OnRamp>;
 pub(crate) type OffRampVec = Vec<OffRamp>;

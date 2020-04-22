@@ -18,21 +18,10 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::async_sink;
-use base64;
-use chrono;
-use elastic;
-use error_chain::*;
-use grok;
+use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
-use log4rs;
-use rdkafka;
-use rental;
-use rmp_serde;
-use serde_yaml;
-use std;
+
 use tremor_influx as influx;
-use tremor_pipeline;
-use url;
 
 impl Clone for Error {
     fn clone(&self) -> Self {

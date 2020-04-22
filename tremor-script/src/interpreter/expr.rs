@@ -16,8 +16,14 @@ use super::{
     merge_values, patch_value, resolve, set_local_shadow, test_guard, test_predicate_expr, Env,
     ExecOpts, LocalStack, NULL,
 };
-use crate::ast::*;
-use crate::errors::*;
+use crate::ast::{
+    BaseExpr, Comprehension, EmitExpr, EventPath, Expr, ImutExprInt, Match, Merge, Patch, Path,
+    Segment,
+};
+use crate::errors::{
+    error_assign_array, error_assign_to_const, error_bad_key, error_invalid_assign_target,
+    error_missing_effector, error_need_obj, error_no_clause_hit, error_oops, Result,
+};
 use crate::registry::RECUR_PTR;
 use crate::stry;
 use simd_json::prelude::*;

@@ -50,8 +50,7 @@ pub fn load(registry: &mut Registry) {
                 let mut a = a.clone(); // TODO: this is silly.
                 //ALLOW: We know this has an element
                 let second = a.pop().unwrap();
-                //ALLOW: We know this has an element
-                if let Value::String(first) = a.pop().unwrap() {
+                if let Some(Value::String(first)) = a.pop() {
                     Ok((first, second))
                 } else {
                     Err(to_runtime_error(format!("The first element of the tuple needs to be a string: {:?}", a)))

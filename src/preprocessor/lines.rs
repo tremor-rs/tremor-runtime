@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Preprocessor;
-use crate::errors::*;
+use crate::errors::Result;
 use std::cmp::min;
 
 #[derive(Clone)]

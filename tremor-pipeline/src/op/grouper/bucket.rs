@@ -61,7 +61,7 @@
 //! }
 //! ```
 
-use crate::errors::*;
+use crate::errors::{ErrorKind, Result};
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;

@@ -26,16 +26,19 @@
 #![allow(clippy::must_use_candidate)]
 
 use crate::query::Query; // {Query, Return};
-pub use crate::registry::{registry, Registry, TremorFn, TremorFnWrapper};
 use chrono::{Timelike, Utc};
 use clap::{App, Arg};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use tremor_pipeline::errors::*;
+use tremor_pipeline::errors::{Error, ErrorKind, Result};
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::path::load as load_module_path;
-use tremor_script::*;
+use tremor_script::{
+    lexer, query,
+    registry::{self, Registry},
+    LineValue, Object, Script, ValueAndMeta,
+};
 
 #[allow(clippy::cast_sign_loss)]
 pub fn nanotime() -> u64 {

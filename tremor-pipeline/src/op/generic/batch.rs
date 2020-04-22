@@ -43,26 +43,26 @@ pub fn empty() -> LineValue {
 }
 
 op!(BatchFactory(node) {
-    if let Some(map) = &node.config {
-        let config: Config = Config::new(map)?;
-        let max_delay_ns = if let Some(max_delay_ms) = config.timeout {
-            Some(max_delay_ms * 1_000_000)
-        } else {
-            None
-        };
-        Ok(Box::new(Batch {
-            event_id: 0,
-            data: empty(),
-            len: 0,
-            config,
-            max_delay_ns,
-            first_ns: 0,
-            id: node.id.clone(),
-        }))
+if let Some(map) = &node.config {
+    let config: Config = Config::new(map)?;
+    let max_delay_ns = if let Some(max_delay_ms) = config.timeout {
+        Some(max_delay_ms * 1_000_000)
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        None
+    };
+    Ok(Box::new(Batch {
+        event_id: 0,
+        data: empty(),
+        len: 0,
+        config,
+        max_delay_ns,
+        first_ns: 0,
+        id: node.id.clone(),
+    }))
+} else {
+    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
 
-    }});
+}});
 
 impl Operator for Batch {
     fn on_event(

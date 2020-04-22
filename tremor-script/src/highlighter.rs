@@ -14,7 +14,7 @@
 use crate::ast::Warning;
 use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
-use crate::pos::*;
+use crate::pos::Location;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::io::Write;

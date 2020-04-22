@@ -15,7 +15,10 @@
 // Don't cover this file it's only simple helpers
 #![cfg_attr(tarpaulin, skip)]
 
-use super::*;
+use super::{
+    BinOpKind, EventPath, Invoke, InvokeAggr, InvokeAggrFn, LocalPath, MetadataPath, Segment,
+    StatePath, UnaryOpKind,
+};
 use std::fmt;
 
 impl<'script> fmt::Debug for InvokeAggrFn<'script> {
@@ -32,7 +35,7 @@ impl<'script> PartialEq for InvokeAggrFn<'script> {
 
 impl<'script> PartialEq for Segment<'script> {
     fn eq(&self, other: &Self) -> bool {
-        use Segment::*;
+        use Segment::{Element, Id, Idx, Range};
         match (self, other) {
             (Id { mid: id1, .. }, Id { mid: id2, .. }) => id1 == id2,
             (Idx { idx: idx1, .. }, Idx { idx: idx2, .. }) => idx1 == idx2,
@@ -130,7 +133,6 @@ impl fmt::Display for UnaryOpKind {
 impl<'script> PartialEq for Invoke<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.mid == other.mid && self.module == other.module && self.fun == other.fun
-        //&& self.args == other.args FIXME why??!?
     }
 }
 
@@ -146,7 +148,6 @@ impl PartialEq for InvokeAggr {
             && self.module == other.module
             && self.fun == other.fun
             && self.aggr_id == other.aggr_id
-        //&& self.args == other.args FIXME why??!?
     }
 }
 

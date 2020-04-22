@@ -15,8 +15,8 @@
 // Don't cover this file it's only getters
 #![cfg_attr(tarpaulin, skip)]
 
-use super::raw::*;
-use super::*;
+use super::raw::{GroupBy, GroupByInt, ImutExprRaw, PathRaw, TestExprRaw};
+use super::{Expr, ImutExprInt, InvokeAggr, NodeMetas, Path, Segment, TestExpr};
 use crate::pos::{Location, Range};
 
 #[doc(hidden)]

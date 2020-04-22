@@ -14,8 +14,8 @@
 
 use crate::common_cow;
 use indexmap::IndexMap;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_yaml;
 use std::borrow::Cow;
 
 pub(crate) type ID = String;
