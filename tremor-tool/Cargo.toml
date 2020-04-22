@@ -15,7 +15,7 @@ serde_json = "1"
 simd-json = {version = "0.3", features = ["known-key"]}
 serde_yaml = "0.8"
 clap = { version = "2", features = ["yaml"] }
-http = "0.1"
+http = "0.2"
 dirs = "2"
 serde = "1"
 halfbrown="0.1"

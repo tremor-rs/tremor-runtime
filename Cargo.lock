@@ -4261,7 +4261,7 @@ name = "tremor-api"
 version = "0.7.3"
 dependencies = [
  "hashbrown 0.7.1",
- "http 0.1.21",
+ "http 0.2.1",
  "http-types",
  "serde",
  "serde_derive",
@@ -4367,7 +4367,7 @@ dependencies = [
  "hashbrown 0.7.1",
  "hdrhistogram",
  "hostname",
- "http 0.1.21",
+ "http 0.2.1",
  "hyper 0.10.16",
  "hyper-rustls",
  "indexmap",
@@ -4476,7 +4476,7 @@ dependencies = [
  "clap",
  "dirs 2.0.2",
  "halfbrown",
- "http 0.1.21",
+ "http 0.2.1",
  "http-types",
  "serde",
  "serde_derive",
