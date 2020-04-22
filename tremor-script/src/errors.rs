@@ -179,6 +179,7 @@ impl ErrorKind {
             | InvalidBitshift(outer, inner)
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
+            | InvalidRecur(outer, inner)
             | InvalidConst(outer, inner)
             | InvalidMod(outer, inner)
             | InvalidFn(outer, inner)
