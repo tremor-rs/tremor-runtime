@@ -45,6 +45,7 @@ pub(crate) mod dflt;
 pub mod errors;
 /// Tremor function library
 pub mod functions;
+#[cfg(feature = "gcp")]
 pub(crate) mod google;
 pub(crate) mod lifecycle;
 /// Runtime metrics helper
