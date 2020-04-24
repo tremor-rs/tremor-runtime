@@ -67,6 +67,15 @@ extern crate serde_derive;
 
 use crate::registry::Registry;
 
+/// Default recursion limit
+pub const RECURSION_LIMIT: u32 = 1024;
+/// recursion limit
+///
+#[inline]
+pub fn recursion_limit() -> u32 {
+    RECURSION_LIMIT
+}
+
 /// Get a nanosecond timestamp
 #[allow(clippy::cast_sign_loss)]
 fn nanotime() -> u64 {

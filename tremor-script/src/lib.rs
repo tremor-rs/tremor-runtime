@@ -80,9 +80,19 @@ pub use crate::registry::{
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
+
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 pub use simd_json::value::borrowed::Object;
 pub use simd_json::value::borrowed::Value;
+
+/// Default recursion limit
+pub static mut RECURSION_LIMIT: u32 = 1024;
+
+/// recursion limit
+#[inline]
+pub fn recursion_limit() -> u32 {
+    unsafe { RECURSION_LIMIT }
+}
 
 /// Combined struct for an event value and metadata
 #[derive(Clone, Debug, PartialEq, Serialize)]
