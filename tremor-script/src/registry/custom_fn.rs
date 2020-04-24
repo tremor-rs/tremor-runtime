@@ -26,7 +26,6 @@ use std::borrow::Cow;
 const RECUR_STR: &str = "recur";
 pub(crate) const RECUR_PTR: Option<*const u8> = Some(RECUR_STR.as_ptr());
 pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed(RECUR_STR));
-const RECURSION_LIMIT: u32 = 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct CustomFn<'script> {
@@ -150,8 +149,9 @@ impl<'script> CustomFn<'script> {
             consts: env.consts,
             aggrs: &NO_AGGRS,
             meta: env.meta,
+            recursion_limit: env.recursion_limit,
         };
-        let mut recursion_count = 0;
+        let mut recursion_depth = 0;
         'recur: loop {
             let mut exprs = self.body.iter().peekable();
             let mut no_event = Value::null();
@@ -175,8 +175,8 @@ impl<'script> CustomFn<'script> {
                             return Ok(v.into_owned());
                         }
                         Cont::Drop => {
-                            recursion_count += 1;
-                            if recursion_count == RECURSION_LIMIT {
+                            recursion_depth += 1;
+                            if recursion_depth == env.recursion_limit {
                                 mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
                                 return Err(FunctionError::Error(Box::new(
                                     "recursion limit reached".into(),

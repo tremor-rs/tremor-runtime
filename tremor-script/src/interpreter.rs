@@ -89,6 +89,8 @@ where
     pub aggrs: &'run [InvokeAggrFn<'script>],
     /// Node metadata
     pub meta: &'run NodeMetas,
+    /// Maximal recursion depth in custom functions
+    pub recursion_limit: u32,
 }
 
 /// Local variable stack
@@ -1323,6 +1325,7 @@ impl<'script> GroupByInt<'script> {
             context: ctx,
             aggrs: &NO_AGGRS,
             meta: node_meta,
+            recursion_limit: crate::recursion_limit(),
         };
         match self {
             GroupByInt::Expr { expr, .. } => {

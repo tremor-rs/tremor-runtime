@@ -115,6 +115,7 @@ impl Operator for TrickleSimpleSelect {
                 consts: &consts,
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
+                recursion_limit: tremor_script::recursion_limit(),
             };
             let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
@@ -134,6 +135,7 @@ impl Operator for TrickleSimpleSelect {
                 consts: &consts,
                 aggrs: &NO_AGGRS,
                 meta: &node_meta,
+                recursion_limit: tremor_script::recursion_limit(),
             };
             let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {

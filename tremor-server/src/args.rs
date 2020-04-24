@@ -77,4 +77,11 @@ pub fn parse<'a>() -> App<'a, 'a> {
                 .takes_value(true)
                 .default_value("tremor"),
         )
+        .arg(
+            Arg::with_name("recursion-limit")
+                .long("recursion-limit")
+                .help("recursion limit")
+                .takes_value(true)
+                .default_value("1024"),
+        )
 }

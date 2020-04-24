@@ -465,6 +465,7 @@ where
             consts: &self.consts,
             aggrs: &self.aggregates,
             meta: &self.node_meta,
+            recursion_limit: crate::recursion_limit(),
         };
 
         while let Some(expr) = exprs.next() {

@@ -190,6 +190,17 @@ async fn run_dun() -> Result<()> {
         metrics::INSTANCE = forget_s;
     }
 
+    unsafe {
+        // We know that recursion-limit will only get set once at
+        // the very beginning nothing can access it yet,
+        // this makes it allowable to use unsafe here.
+        let l: u32 = matches
+            .value_of("recursion-limit")
+            .and_then(|l| l.parse().ok())
+            .ok_or_else(|| Error::from("invalid recursion limit"))?;
+        tremor_script::RECURSION_LIMIT = l;
+    }
+
     let storage_directory = matches
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);

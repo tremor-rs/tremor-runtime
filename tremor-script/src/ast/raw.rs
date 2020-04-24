@@ -548,6 +548,7 @@ impl<'script> ImutExprInt<'script> {
                         consts: &NO_CONSTS,
                         aggrs: &NO_AGGRS,
                         meta: &helper.meta,
+                        recursion_limit: crate::recursion_limit(),
                     };
 
                     let v = i
