@@ -553,15 +553,21 @@ FnDecl: AnyFnRaw<'input> = {
 }
 
 FnCases: Vec<PredicateClauseRaw<'input>> = {
-    <cases:FnCases_> <start:@L> "default" <exprs:Effectors> <end:@L> => {
+    <cases:FnCaseClauses> <default:FnCaseDefault> => {
         let mut cases = cases;
-        cases.push(PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end} );
+        cases.push(default);
         cases
     },
-    <start:@L> "default" <exprs:Effectors> <end:@L> => {
+    <start:@L> <default:FnCaseDefault> => {
         let mut cases = Vec::new();
-        cases.push(PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end} );
+        cases.push(default);
         cases
+    }
+}
+
+FnCaseDefault: PredicateClauseRaw<'input> = {
+    <start:@L> "default" <exprs:Effectors> <end:@L> => {
+        PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end}
     }
 }
 
@@ -578,9 +584,9 @@ FnCase: PredicateClauseRaw<'input> = {
     },
 }
 
-FnCases_: Vec<PredicateClauseRaw<'input>> = {
+FnCaseClauses: Vec<PredicateClauseRaw<'input>> = {
     <e:FnCase> => vec![e],
-    <v:FnCases_> <e:FnCase> => {
+    <v:FnCaseClauses> <e:FnCase> => {
         let mut v = v;
         v.push(e);
         v
