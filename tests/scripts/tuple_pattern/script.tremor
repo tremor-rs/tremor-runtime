@@ -1,0 +1,10 @@
+use std::string;
+
+match string::split(event, "/") of
+  case %("snot") => 0
+  case %("snot", ...) => 1
+  case %("api", _, "badger", ...) => 2
+  case %("") => 3
+  case %("badger", "snot") => 4
+  default => string::split(event, "/")
+end

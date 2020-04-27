@@ -145,6 +145,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     //INSERT
+    tuple_pattern,
     pattern_cmp,
     pass_args,
     escape_in_extractor,
