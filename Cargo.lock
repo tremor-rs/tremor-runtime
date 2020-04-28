@@ -1386,7 +1386,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "url 1.7.2",
- "yup-oauth2",
+ "yup-oauth2 1.0.12",
 ]
 
 [[package]]
@@ -1401,7 +1401,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "url 1.7.2",
- "yup-oauth2",
+ "yup-oauth2 1.0.12",
 ]
 
 [[package]]
@@ -1681,9 +1681,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71f7b2e5858ab9e19771dc361159f09ee5031734a6f7471fe0947db0238d92b7"
 dependencies = [
  "hyper 0.10.16",
- "rustls",
+ "rustls 0.13.1",
  "webpki",
  "webpki-roots",
+]
+
+[[package]]
+name = "hyper-tls"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a800d6aa50af4b5850b2b0f659625ce9504df908e9733b635720483be26174f"
+dependencies = [
+ "bytes 0.4.12",
+ "futures 0.1.29",
+ "hyper 0.12.35",
+ "native-tls",
+ "tokio-io",
 ]
 
 [[package]]
@@ -3284,6 +3297,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b7891791343c75b73ed9a18cadcafd8c8563d11a88ebe2d87f5b8a3182654d9"
+dependencies = [
+ "base64 0.9.3",
+ "log 0.4.8",
+ "ring",
+ "sct",
+ "untrusted",
+ "webpki",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4327,7 +4354,7 @@ dependencies = [
  "tungstenite",
  "url 2.1.1",
  "xz2",
- "yup-oauth2",
+ "yup-oauth2 2.0.4",
 ]
 
 [[package]]
@@ -4866,5 +4893,26 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "url 1.7.2",
+]
+
+[[package]]
+name = "yup-oauth2"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28c7c3fc05f3946306f95537fd4057213739e60b435a438605464ec519bf34d"
+dependencies = [
+ "base64 0.10.1",
+ "chrono",
+ "futures 0.1.29",
+ "hyper 0.12.35",
+ "hyper-tls",
+ "itertools 0.8.2",
+ "log 0.3.9",
+ "rustls 0.14.0",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio-threadpool",
  "url 1.7.2",
 ]
