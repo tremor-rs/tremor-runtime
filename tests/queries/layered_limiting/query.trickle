@@ -2,9 +2,7 @@ define grouper::bucket operator bucket;
 
 define script layer1
 script
-  mod record with
-    intrinsic fn contains(record, key) as record::contains;
-  end;
+  use std::record;
   let $class = "default";
   let $dimensions = match record::contains(event, "application") of
     case true => event.application
@@ -16,9 +14,7 @@ end;
 
 define script layer2
 script
-  mod record with
-    intrinsic fn contains(record, key) as record::contains;
-  end;
+  use std::record;
   match record::contains(event, "host") of
     case true => let $dimensions = event.host
     default => null
