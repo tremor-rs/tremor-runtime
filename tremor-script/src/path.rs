@@ -52,7 +52,7 @@ impl ModulePath {
     }
     /// Load module path
     pub fn load() -> Self {
-        load_(std::env::var("TREMOR_PATH").ok())
+        load_(&std::env::var("TREMOR_PATH").unwrap_or(String::from("/opt/local/tremor/lib")))
     }
 }
 
@@ -61,26 +61,23 @@ pub fn load() -> ModulePath {
     ModulePath::load()
 }
 
-fn load_(tremor_path: Option<String>) -> ModulePath {
-    if let Some(value) = tremor_path {
-        let mounts: Vec<String> = value
-            .split(':')
-            .filter_map(|target| {
-                if let Ok(meta) = std::fs::metadata(target) {
-                    if meta.is_dir() {
-                        Some(target.replace("//", "/"))
-                    } else {
-                        None
-                    }
+fn load_(tremor_path: &str) -> ModulePath {
+    let mounts: Vec<String> = tremor_path
+        .split(':')
+        .filter_map(|target| {
+            if let Ok(meta) = std::fs::metadata(target) {
+                if meta.is_dir() {
+                    Some(target.replace("//", "/"))
                 } else {
-                    None // Ignore configured elements that are not directories
+                    None
                 }
-            })
-            .collect();
-        ModulePath { mounts }
-    } else {
-        ModulePath { mounts: vec![] }
-    }
+            } else {
+                None // Ignore configured elements that are not directories
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    ModulePath { mounts }
 }
 
 #[cfg(test)]
@@ -90,7 +87,7 @@ mod tests {
     #[test]
     fn test_default_module_path() {
         let empty: Vec<String> = vec![];
-        assert_eq!(empty, load_(None).mounts)
+        assert_eq!(empty, load_("").mounts)
     }
 
     #[test]
@@ -101,7 +98,7 @@ mod tests {
         let tremor_path = format!("{}", d.display());
         let empty: Vec<String> = vec![];
 
-        let mp = load_(Some(tremor_path));
+        let mp = load_(&tremor_path);
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
         assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);
@@ -124,7 +121,7 @@ mod tests {
         let tremor_path = format!("{}:snot:badger:/horse", d.display());
         let empty: Vec<String> = vec![];
 
-        let mp = load_(Some(tremor_path));
+        let mp = load_(&tremor_path);
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
         assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);
