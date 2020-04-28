@@ -9,9 +9,7 @@ nodes:
     op: runtime::tremor
     config:
       script: |
-        mod record with
-          intrinsic fn contains(record, key) as record::contains;
-        end; 
+        use std::record;
         let $class = "default";
         let $dimensions = match record::contains(event, "application") of
           case true => event.application
@@ -25,9 +23,7 @@ nodes:
     op: runtime::tremor
     config:
       script: |
-        mod record with
-          intrinsic fn contains(record, key) as record::contains;
-        end; 
+        use std::record;
         match record::contains(event, "host") of
           case true => let $dimensions = event.host
           default => null
@@ -37,8 +33,8 @@ nodes:
   - id: b2
     op: grouper::bucket
 links:
-  in: [ r1 ]
-  r1: [ b1 ]
-  b1: [ r2 ]
-  r2: [ b2 ]
-  b2: [ out ]
+  in: [r1]
+  r1: [b1]
+  b1: [r2]
+  r2: [b2]
+  b2: [out]

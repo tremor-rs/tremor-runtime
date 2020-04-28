@@ -36,6 +36,7 @@ macro_rules! test_cases {
                 let mut file = File::open(pipeline_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
+                std::env::set_var("TREMOR_PATH", "tremor-script/lib");
                 let config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(&contents)?;
                 let pipeline = tremor_pipeline::build_pipeline(config)?;
                 let mut pipeline = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
