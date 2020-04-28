@@ -1,6 +1,6 @@
 [package]
 name = "tremor-script"
-version = "0.7.7"
+version = "0.8.0-rc.0"
 description = "Tremor Script Interpreter"
 authors = ["The Tremor Team"]
 edition = "2018"
