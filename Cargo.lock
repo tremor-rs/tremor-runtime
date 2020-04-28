@@ -4293,7 +4293,7 @@ dependencies = [
  "hdrhistogram",
  "hostname",
  "http-types",
- "hyper 0.10.16",
+ "hyper 0.12.35",
  "hyper-rustls",
  "indexmap",
  "lazy_static",
