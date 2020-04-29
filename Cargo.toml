@@ -77,7 +77,7 @@ postgres = { version = "0.17.3", features = ["with-serde_json-1", "with-chrono-0
 postgres-protocol = "0.5" 
 tokio-postgres = "0.5"
 
-# kafka. cmake is the encouraged way to build this and also the one that works on windows.
+# kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 rdkafka = { version = "0.23", features = ["cmake-build"] }
 
 # crononome
@@ -98,6 +98,13 @@ grok = "1"
 version = "0.10"
 default-features = false
 
+# prefer to compile openssl and statically link to it, for musl builds
+# not needed for alpine based builds (which is the only thing working right now)
+# so disabled for now
+#
+# TODO this is matching non-musl enevironments too, for some reason. fix
+#[target.'cfg(target_env = "musl")'.dependencies]
+#openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 matches = "0.1"
