@@ -21,6 +21,10 @@ then
   TARGET_ROOT=target.vsc
 else
   TARGET_ROOT=target
+  if [ ! -z $TREMOR_TARGET ]
+  then
+    TARGET_ROOT="target/${TREMOR_TARGET}"
+  fi
 fi
 
 if [ "${TREMOR_MODE}" = "debug" ]
