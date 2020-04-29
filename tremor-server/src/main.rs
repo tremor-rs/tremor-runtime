@@ -25,13 +25,13 @@
 )]
 #![allow(clippy::must_use_candidate)]
 
-#[cfg(feature = "mimalloc")]
+#[cfg(feature = "allocator-mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-#[cfg(feature = "snmalloc")]
+#[cfg(feature = "allocator-snmalloc")]
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-#[cfg(feature = "jemalloc")]
+#[cfg(feature = "allocator-jemalloc")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 

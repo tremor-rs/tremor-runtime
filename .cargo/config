@@ -1,2 +1,26 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+
+# flags that should be applied on all builds
+#
+# need to copy these for any specific target overrides, since cargo does not treat
+# these flags as cumulative: https://github.com/rust-lang/cargo/issues/5376
+rustflags = [
+  # for simd-json: https://github.com/simd-lite/simd-json#cpu-target
+  # TODO specify only for simdjson dep
+  "-C", "target-cpu=native",
+]
+
+#[target.'cfg(target_env = "musl")']
+#rustflags = [
+#  "-C", "target-cpu=native",
+
+#  # force static binaries
+#  # this is the default rustc behavior for the musl target, but distros
+#  # based on musl (eg: alipine) disable this by default (via patches to rust)
+#  # this is to produce static binaries on those platforms
+#  #
+#  # TODO better to handle this via RUSTFLAGS? then we can override
+#  # both target-cpu and this in one shot, and also distros maintain
+#  # their behaviour
+#  "-C", "target-feature=+crt-static",
+#]
