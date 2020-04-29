@@ -20,9 +20,6 @@ name = "ahash"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0989268a37e128d4d7a8028f1c60099430113fdbc70419010601ce51a228e4fe"
-dependencies = [
- "const-random",
-]
 
 [[package]]
 name = "aho-corasick"
@@ -1476,7 +1473,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c12499524b5585419ab2f51545a19b842263a373580a83c0eb98a0142a260a10"
 dependencies = [
  "fxhash",
- "hashbrown 0.7.1",
+ "hashbrown 0.7.2",
  "serde",
 ]
 
@@ -1492,9 +1489,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479e9d9a1a3f8c489868a935b557ab5710e3e223836da2ecd52901d88935cb56"
+checksum = "96282e96bfcd3da0d3aa9938bedf1e50df3269b6db08b4876d2da0bb1a0841cf"
 dependencies = [
  "ahash 0.3.2",
  "autocfg 1.0.0",
@@ -4304,7 +4301,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.8.0"
 dependencies = [
- "hashbrown 0.7.1",
+ "hashbrown 0.7.2",
  "http-types",
  "serde",
  "serde_derive",
@@ -4405,7 +4402,7 @@ dependencies = [
  "google-storage1",
  "grok",
  "halfbrown",
- "hashbrown 0.7.1",
+ "hashbrown 0.7.2",
  "hdrhistogram",
  "hostname",
  "http-types",
