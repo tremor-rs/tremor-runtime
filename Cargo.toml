@@ -88,9 +88,9 @@ cron = "0.6.0"
 google-storage1 = { version = "1", optional = true }
 google-pubsub1 = { version = "1", optional = true }
 hyper-rustls = { version = "0.20", optional = true } # chan't update this because of google
-yup-oauth2 = { version = "1", optional = true } # can't update this because of google
+yup-oauth2 = { version = "4", optional = true } # can't update this because of google
 
-hyper = { version = "0.10", optional = true }  # chan't update this because of google
+hyper = { version = "0.13", optional = true }  # chan't update this because of google
 
 # logstash grok patterns
 grok = "1"
