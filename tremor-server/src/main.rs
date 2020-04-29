@@ -153,11 +153,11 @@ async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 //         Err(e) => Ok(e.into()),
 //     }
 // }
-fn fix_tide(r: api::Result<tide::Response>) -> tide::Response {
-    match r {
+fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
+    Ok(match r {
         Ok(r) => r,
         Err(e) => e.into(),
-    }
+    })
 }
 
 #[cfg_attr(tarpaulin, skip)]
