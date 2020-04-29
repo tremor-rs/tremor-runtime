@@ -17,7 +17,7 @@ env_logger = "0.7.1"
 log = "0.4"
 log4rs = "0.11.0"
 async-std = { version = "1", features = ["unstable"] }
-tide = "0.7"
+tide = "0.8"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
