@@ -1130,6 +1130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "float-cmp"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "499a1bfa03d254b047e7e5c1fc8dd23a8cf6b344a8eb7e622ae4bc76bfac8e68"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fluent_builder"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3586,7 +3595,7 @@ version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8892cbc7f17815ba0a590010a174c883909d1178bc55e7ae59699a0f5a49e136"
 dependencies = [
- "float-cmp",
+ "float-cmp 0.6.0",
  "halfbrown",
  "serde",
  "serde_json",
@@ -4451,7 +4460,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain 0.12.2",
- "float-cmp",
+ "float-cmp 0.7.0",
  "glob 0.3.0",
  "grok",
  "halfbrown",
@@ -4699,7 +4708,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d6d457369e99a16ba357ebeb2ba187ff9a472f4ba3594bc525e092049ef95d0"
 dependencies = [
- "float-cmp",
+ "float-cmp 0.6.0",
  "halfbrown",
  "itoa",
  "ryu",
