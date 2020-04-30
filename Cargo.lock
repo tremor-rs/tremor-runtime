@@ -4563,7 +4563,7 @@ dependencies = [
  "tungstenite",
  "url 2.1.1",
  "xz2",
- "yup-oauth2 4.1.0",
+ "yup-oauth2 4.1.1",
 ]
 
 [[package]]
@@ -5107,12 +5107,13 @@ dependencies = [
 
 [[package]]
 name = "yup-oauth2"
-version = "4.1.0"
+version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63a25a8a41c499ed51eb0c974f853fe411c4655cafd166f9d942e625faa2138"
+checksum = "00177ff799a837f8ff600d0118eb699d51cceadd2b14863602f86ec838962d24"
 dependencies = [
  "base64 0.11.0",
  "chrono",
+ "futures 0.3.4",
  "http 0.2.1",
  "hyper 0.13.5",
  "hyper-rustls 0.19.1",
