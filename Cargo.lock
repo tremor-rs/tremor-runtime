@@ -1626,7 +1626,7 @@ dependencies = [
  "async-std",
  "futures 0.3.4",
  "http-types",
- "isahc 0.9.1",
+ "isahc",
  "js-sys",
  "log 0.4.8",
  "wasm-bindgen",
@@ -1863,27 +1863,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "isahc"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c45d8c41e6f0b5aa495fd2577e6068e100f57eb87c4b353b0dab20bb53a56035"
-dependencies = [
- "bytes 0.4.12",
- "crossbeam-channel 0.4.2",
- "crossbeam-utils 0.7.2",
- "curl",
- "curl-sys",
- "futures-channel",
- "futures-io",
- "futures-util",
- "http 0.1.21",
- "lazy_static",
- "log 0.4.8",
- "slab",
- "sluice",
 ]
 
 [[package]]
@@ -3898,17 +3877,15 @@ checksum = "2d67a5a62ba6e01cb2192ff309324cb4875d0c451d55fe2319433abe7a05a8ee"
 
 [[package]]
 name = "surf"
-version = "2.0.0-alpha.1"
+version = "2.0.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7ffc31048aeffca26607cc74b475299bf0ea4b4e5aa389f2f5a4e4d53d43a56"
+checksum = "d72c302d4a24b2c9d412f1fe5edd892946778d33c423bba087c6c10deeb656ff"
 dependencies = [
  "async-std",
  "encoding_rs",
  "futures 0.3.4",
  "http-client",
  "http-types",
- "isahc 0.8.2",
- "js-sys",
  "log 0.4.8",
  "mime 0.3.16",
  "mime_guess",
@@ -3917,8 +3894,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded 0.6.1",
  "url 2.1.1",
- "wasm-bindgen",
- "wasm-bindgen-futures",
  "web-sys",
 ]
 
