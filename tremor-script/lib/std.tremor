@@ -19,3 +19,4 @@ use std::range;
 use std::re;
 use std::record;
 use std::string;
+use std::url;

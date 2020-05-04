@@ -30,6 +30,7 @@ mod string;
 mod system;
 mod test;
 mod r#type;
+mod url;
 mod win;
 
 use crate::registry::{Aggr as AggrRegistry, Registry};
@@ -52,6 +53,7 @@ pub fn load(registry: &mut Registry) {
     system::load(registry);
     test::load(registry);
     r#type::load(registry);
+    url::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
