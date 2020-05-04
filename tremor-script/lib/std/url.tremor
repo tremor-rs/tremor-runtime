@@ -1,0 +1,11 @@
+### The url module contains functions to work on urls
+
+## Returns a url encoded UTF-8 string
+##
+## Returns a `string`
+intrinsic fn encode(str) as url::encode;
+
+## Returns a decoded UTF-8 url encoded string
+##
+## Returns a `string`
+intrinsic fn decode(str) as url::decode;
