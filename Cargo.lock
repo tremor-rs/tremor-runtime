@@ -2789,9 +2789,9 @@ dependencies = [
 
 [[package]]
 name = "postgres"
-version = "0.17.2"
+version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18741b59a558e4dfdb9c968e8126dccbefd6a16bf54e3bc5668d420b4c4ed71b"
+checksum = "a08e48317fe57088aa1ff4a84a88a8401aee565f4ae5c201aa18d11c573ce350"
 dependencies = [
  "bytes 0.5.4",
  "fallible-iterator",
