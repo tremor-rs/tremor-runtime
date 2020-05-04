@@ -44,6 +44,7 @@ impl Offramp for Exit {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(Value::Static(StaticNode::I64(status))) = value.get("exit") {
                 #[allow(clippy::cast_possible_truncation)]
+                // ALLOW: this is the supposed to exit
                 std::process::exit(*status as i32);
             } else {
                 return Err("Unexpected event received in exit offramp".into());
