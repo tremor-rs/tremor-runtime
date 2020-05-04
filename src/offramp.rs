@@ -30,6 +30,7 @@ use std::thread;
 mod blackhole;
 mod debug;
 mod elastic;
+mod exit;
 mod file;
 #[cfg(feature = "gcp")]
 mod gcs;
@@ -87,6 +88,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "blackhole" => blackhole::Blackhole::from_config(config),
         "debug" => debug::Debug::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
+        "exit" => exit::Exit::from_config(config),
         "file" => file::File::from_config(config),
         #[cfg(feature = "gcp")]
         "gcs" => gcs::GCS::from_config(config),
