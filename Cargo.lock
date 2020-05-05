@@ -1141,9 +1141,9 @@ dependencies = [
 
 [[package]]
 name = "float-cmp"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "499a1bfa03d254b047e7e5c1fc8dd23a8cf6b344a8eb7e622ae4bc76bfac8e68"
+checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
 dependencies = [
  "num-traits",
 ]
@@ -4463,7 +4463,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain 0.12.2",
- "float-cmp 0.7.0",
+ "float-cmp 0.8.0",
  "glob 0.3.0",
  "grok",
  "halfbrown",
