@@ -35,7 +35,7 @@ error-chain="0.12"
 futures = "0.3"
 hashbrown = { version = "0.7", features = ["serde"] }
 hostname = "0.3"
-log4rs = "0.11"
+log4rs = "0.12"
 mio = {version = "0.7", features = ["udp", "tcp", "os-poll"]}
 rand = "0.7"
 regex = "1.3"
