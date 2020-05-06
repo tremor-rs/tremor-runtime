@@ -56,6 +56,7 @@ pub mod prelude;
 pub mod query;
 /// Function registry
 pub mod registry;
+/// Tremor Script
 pub mod script;
 mod std_lib;
 mod tilde;

@@ -797,6 +797,7 @@ impl fmt::Display for CompilationUnit {
     }
 }
 
+/// Tracks set of included files in a given logical compilation unit
 pub struct IncludeStack {
     elements: Vec<CompilationUnit>,
     pub(crate) cus: Vec<CompilationUnit>,
@@ -815,10 +816,12 @@ impl IncludeStack {
         self.elements.pop();
     }
 
+    /// Returns set of compilation units
     pub fn into_cus(self) -> Vec<CompilationUnit> {
         self.cus
     }
 
+    /// Pushes a a compilation unit onto the include stack
     pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
         let e = CompilationUnit::from_file(Path::new(file))?;
         if self.contains(&e) {
@@ -881,6 +884,7 @@ impl<'input> Preprocessor {
     }
 
     #[allow(clippy::too_many_lines)]
+    /// Preprocess a possibly nested set of related sources into a single compilation unit
     pub fn preprocess<S: AsRef<OsStr> + ?Sized>(
         module_path: &ModulePath,
         file_name: &S,
