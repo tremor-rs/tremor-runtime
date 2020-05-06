@@ -56,7 +56,7 @@ log = "0.4"
 serde_derive = "1"
 lazy_static = "1"
 halfbrown = "0.1"
-libflate = "0.1"
+libflate = "1.0"
 snap = "1"
 lz4 = "1.23.1"
 # will be in new graph
