@@ -20,8 +20,7 @@ use simd_json::BorrowedValue;
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (url::decode(ctx, s: String) {
-            let ss = s.to_string();
-            let ds = percent_decode_str(&ss).decode_utf8();
+            let ds = percent_decode_str(&s).decode_utf8();
             if let Ok(decoded) = ds {
                 Ok(BorrowedValue::from(decoded.to_string()))
             } else {
