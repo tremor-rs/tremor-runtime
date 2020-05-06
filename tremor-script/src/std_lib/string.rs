@@ -157,6 +157,11 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::from(_input.split(sep).map(|v| Value::from(v.to_string())).collect::<Vec<_>>()))
             }),
         )
+        .insert(
+            tremor_const_fn! (string::contains(_context, _input: String, _contains: String) {
+                Ok(Value::from(_input.contains(&_contains.to_string())))
+            }),
+        )
         .insert(TremorFnWrapper::new(
             "string".to_string(),
             "format".to_string(),
@@ -265,5 +270,18 @@ mod test {
         let v1 = Value::from("this is a test");
         let v2 = Value::from(" ");
         assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]))
+    }
+
+    #[test]
+    fn contains() {
+        let f = fun("string", "contains");
+        let v1 = Value::from("hello snot badger");
+        let v2 = Value::from("snot");
+        let v3 = Value::from("gnot");
+        assert_val!(f(&[&v1, &v2]), Value::from(true));
+        assert_val!(f(&[&v1, &v3]), Value::from(false));
+        let v1 = Value::from("snot badger");
+        let v2 = Value::from("snot badger");
+        assert_val!(f(&[&v1, &v2]), Value::from(true));
     }
 }
