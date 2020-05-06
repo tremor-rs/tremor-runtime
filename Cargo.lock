@@ -4473,6 +4473,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "matches",
+ "percent-encoding 2.1.0",
  "pretty_assertions",
  "rand 0.7.3",
  "regex",

@@ -54,6 +54,7 @@ sketches-ddsketch = "0.1.1"
 xz2 = "0.1"
 url = "2"
 tremor-influx = { version = "0.1" }
+percent-encoding = "2.1"
 
 [build-dependencies]
 lalrpop = "0.18"
