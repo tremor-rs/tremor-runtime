@@ -3,7 +3,7 @@ onramp:
     type: file
     config:
       source: {in}
-      close_on_done: true
+      close_on_done: false
 
 offramp:
   - id: out
