@@ -91,3 +91,8 @@ intrinsic fn substr(input, start, `end`) as string::substr;
 ##
 ## Returns a `string`
 intrinsic fn split(input, separator) as string::split;
+
+## Returns if the input string contains another string or not.
+##
+## Returns a `bool`
+intrinsic fn contains(input, string) as string::contains;
