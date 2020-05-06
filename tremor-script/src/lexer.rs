@@ -797,7 +797,7 @@ impl fmt::Display for CompilationUnit {
     }
 }
 
-pub(crate) struct IncludeStack {
+pub struct IncludeStack {
     elements: Vec<CompilationUnit>,
     pub(crate) cus: Vec<CompilationUnit>,
 }
@@ -881,7 +881,7 @@ impl<'input> Preprocessor {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn preprocess<S: AsRef<OsStr> + ?Sized>(
+    pub fn preprocess<S: AsRef<OsStr> + ?Sized>(
         module_path: &ModulePath,
         file_name: &S,
         input: &'input mut std::string::String,
