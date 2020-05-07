@@ -262,9 +262,9 @@ checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 
 [[package]]
 name = "base64"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5ca2cd0adc3f48f9e9ea5a6bbdf9ccc0bfade884847e484d452414c7ccffb3"
+checksum = "53d1ccbaf7d9ec9537465a97bf19edc1a4e158ecb49fc16178202238c569cc42"
 
 [[package]]
 name = "bindgen"
@@ -2780,7 +2780,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f611afe4d1407ebe7f3ced1ffc66f730fac1b1c13085e230a8cdcb921e97710"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "byteorder",
  "bytes 0.5.4",
  "fallible-iterator",
@@ -4353,7 +4353,7 @@ dependencies = [
 name = "tremor-pipeline"
 version = "0.8.0"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "criterion",
  "error-chain 0.12.2",
  "halfbrown",
@@ -4394,7 +4394,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "async-tungstenite",
- "base64 0.12.0",
+ "base64 0.12.1",
  "byteorder",
  "bytes 0.5.4",
  "chrono",
@@ -4453,7 +4453,7 @@ dependencies = [
 name = "tremor-script"
 version = "0.8.0"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "chrono",
  "cidr-utils",
  "clap",
@@ -4995,7 +4995,7 @@ version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "749192b9464694a95dbaf0586e845c835b315e38d491aa2766a8477aaadb48ec"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "chrono",
  "futures 0.3.4",
  "http 0.2.1",
