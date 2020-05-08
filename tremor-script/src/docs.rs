@@ -14,8 +14,9 @@
 
 // Structs here are currently for use in tremor-language-server (where they are
 // dependencies for the build script as well as the package -- hence they are
-// bundled here for common use). These can be eventually utilized from tremor-script,
-// as part of structured documentation and automatic doc generation.
+// bundled here for common use). These can be eventually deprecated, once all
+// the functionality here is migrated to the ast doc structs (introduced in
+// v0.8).
 
 use std::fmt;
 
@@ -32,13 +33,11 @@ pub struct FunctionSignatureDoc {
 
 impl fmt::Display for FunctionSignatureDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}({}) -> {}",
-            self.full_name,
-            self.args.join(", "),
-            self.result
-        )
+        let r = write!(f, "{}({})", self.full_name, self.args.join(", "));
+        if !self.result.is_empty() {
+            write!(f, " -> {}", self.result)?;
+        }
+        r
     }
 }
 
