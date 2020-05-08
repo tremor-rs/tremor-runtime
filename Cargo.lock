@@ -3970,9 +3970,9 @@ dependencies = [
 
 [[package]]
 name = "tide"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4550383fb8536883f99c2fa66f56e1fab3594dfa1724f6b2732bbc81f11d91ba"
+checksum = "cf955af2fe3c761498002bd8d0b677795a262a62fc761968d5de7e4de7912a99"
 dependencies = [
  "async-sse",
  "async-std",
@@ -3983,6 +3983,7 @@ dependencies = [
  "http-types",
  "kv-log-macro",
  "mime 0.3.16",
+ "mime_guess",
  "route-recognizer",
  "serde",
  "serde_json",
