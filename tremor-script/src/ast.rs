@@ -149,9 +149,12 @@ struct Function<'script> {
 /// Documentaiton from constant
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstDoc<'script> {
-    name: Cow<'script, str>,
-    doc: Option<String>,
-    value_type: ValueType,
+    /// Constant name
+    pub name: Cow<'script, str>,
+    /// Constant documentation
+    pub doc: Option<String>,
+    /// Constant value type
+    pub value_type: ValueType,
 }
 
 impl<'script> ToString for ConstDoc<'script> {
@@ -174,17 +177,24 @@ impl<'script> ToString for ConstDoc<'script> {
 /// Documentaiton from function
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDoc<'script> {
-    name: Cow<'script, str>,
-    args: Vec<Cow<'script, str>>,
-    doc: Option<String>,
-    open: bool,
+    /// Function name
+    pub name: Cow<'script, str>,
+    /// Function arguments
+    pub args: Vec<Cow<'script, str>>,
+    /// Function documentation
+    pub doc: Option<String>,
+    /// Whether the function is open or not
+    // TODO clarify what open exactly is
+    pub open: bool,
 }
 
 /// Documentaiton from a module
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ModDoc<'script> {
-    name: Cow<'script, str>,
-    doc: Option<String>,
+    /// Module name
+    pub name: Cow<'script, str>,
+    /// Module documentation
+    pub doc: Option<String>,
 }
 
 impl<'script> ModDoc<'script> {
