@@ -262,9 +262,9 @@ checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 
 [[package]]
 name = "base64"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5ca2cd0adc3f48f9e9ea5a6bbdf9ccc0bfade884847e484d452414c7ccffb3"
+checksum = "53d1ccbaf7d9ec9537465a97bf19edc1a4e158ecb49fc16178202238c569cc42"
 
 [[package]]
 name = "bindgen"
@@ -2023,15 +2023,21 @@ checksum = "99e85c08494b21a9054e7fe1374a732aeadaff3980b6990b94bfd3a70f690005"
 
 [[package]]
 name = "libflate"
-version = "0.1.27"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9135df43b1f5d0e333385cb6e7897ecd1a43d7d11b91ac003f4d2c2d2401fdd"
+checksum = "a1fbe6b967a94346446d37ace319ae85be7eca261bb8149325811ac435d35d64"
 dependencies = [
  "adler32",
  "crc32fast",
+ "libflate_lz77",
  "rle-decode-fast",
- "take_mut",
 ]
+
+[[package]]
+name = "libflate_lz77"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3286f09f7d4926fc486334f28d8d2e6ebe4f7f9994494b6dab27ddfad2c9b11b"
 
 [[package]]
 name = "libloading"
@@ -2774,7 +2780,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f611afe4d1407ebe7f3ced1ffc66f730fac1b1c13085e230a8cdcb921e97710"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "byteorder",
  "bytes 0.5.4",
  "fallible-iterator",
@@ -3544,9 +3550,9 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.8.11"
+version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "691b17f19fc1ec9d94ec0b5864859290dff279dbd7b03f017afda54eb36c3c35"
+checksum = "16c7a592a1ec97c9c1c68d75b6e537dcbf60c7618e038e7841e00af1d9ccf0c4"
 dependencies = [
  "dtoa",
  "linked-hash-map",
@@ -3861,12 +3867,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "take_mut"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f764005d11ee5f36500a149ace24e00e3da98b0158b3e2d53a7495660d3f4d60"
-
-[[package]]
 name = "tempdir"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3970,9 +3970,9 @@ dependencies = [
 
 [[package]]
 name = "tide"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4550383fb8536883f99c2fa66f56e1fab3594dfa1724f6b2732bbc81f11d91ba"
+checksum = "cf955af2fe3c761498002bd8d0b677795a262a62fc761968d5de7e4de7912a99"
 dependencies = [
  "async-sse",
  "async-std",
@@ -3983,6 +3983,7 @@ dependencies = [
  "http-types",
  "kv-log-macro",
  "mime 0.3.16",
+ "mime_guess",
  "route-recognizer",
  "serde",
  "serde_json",
@@ -4353,7 +4354,7 @@ dependencies = [
 name = "tremor-pipeline"
 version = "0.8.0"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "criterion",
  "error-chain 0.12.2",
  "halfbrown",
@@ -4394,7 +4395,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "async-tungstenite",
- "base64 0.12.0",
+ "base64 0.12.1",
  "byteorder",
  "bytes 0.5.4",
  "chrono",
@@ -4451,9 +4452,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "chrono",
  "cidr-utils",
  "clap",
@@ -4473,6 +4474,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "matches",
+ "percent-encoding 2.1.0",
  "pretty_assertions",
  "rand 0.7.3",
  "regex",
@@ -4994,7 +4996,7 @@ version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "749192b9464694a95dbaf0586e845c835b315e38d491aa2766a8477aaadb48ec"
 dependencies = [
- "base64 0.12.0",
+ "base64 0.12.1",
  "chrono",
  "futures 0.3.4",
  "http 0.2.1",
