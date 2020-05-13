@@ -232,8 +232,8 @@ where
         }
         h.finalize()
     }
-    /// Formats an error within this script
 
+    /// Formats an error within this script
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {

@@ -333,7 +333,7 @@ where
          * as immutable and mem::transmute it to mutable where needed.
          *
          * We do this since there is no way to tell rust that it's safe
-         * to borrow immuatble out of something that's mutable even if
+         * to borrow immutable out of something that's mutable even if
          * we clone data out.
          *
          * This is safe because:
