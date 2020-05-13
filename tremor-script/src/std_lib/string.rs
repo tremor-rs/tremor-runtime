@@ -55,7 +55,7 @@ pub fn load(registry: &mut Registry) {
                 let mut iter = format.chars().enumerate();
                 while let Some((pos, char)) = iter.next() {
                     match char {
-                        '{'  => match iter.next() {
+                        '{' => match iter.next() {
                             Some((_, '}')) => if let Some(arg) = arg_stack.pop() {
                                 if let Some(s) = arg.as_str() {
                                     out.push_str(&s);
@@ -69,13 +69,13 @@ pub fn load(registry: &mut Registry) {
                                 out.push('{');
                             }
                             _ => {
-                                return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
+                                return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
                             }
                         },
                         '}' => if let Some((_, '}')) =  iter.next() {
                             out.push('}')
                         } else {
-                            return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
+                            return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
                         },
                         c => out.push(c),
                     }
@@ -173,11 +173,6 @@ pub fn load(registry: &mut Registry) {
 mod test {
     use crate::registry::{fun, FunctionError};
     use simd_json::BorrowedValue as Value;
-    macro_rules! assert_val {
-        ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(Value::from($r)))
-        };
-    }
 
     #[test]
     fn replace() {
