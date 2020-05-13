@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // cases:
-//  1) Invalid 'glob/regex' => Does not compiule
+//  1) Invalid 'glob/regex' => Does not compile
 //  2) Fatal/bug during extraction => return Error
 
 //  3) Is OK, but does not match. i.e. re|(?P<snot>bla*)| / <- "cake" => valid no match next case statement Ok({})
