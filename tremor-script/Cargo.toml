@@ -57,7 +57,7 @@ tremor-influx = { version = "0.1" }
 percent-encoding = "2.1"
 
 [build-dependencies]
-lalrpop = "0.18"
+lalrpop = "0.19"
 matches = "0.1.8"
 
 [dev-dependencies]
