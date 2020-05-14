@@ -219,9 +219,14 @@ error_chain! {
                 display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
 
-        InvalidStatsD {
+        InvalidStatsDEvent(e: String) {
             description("Invalid statsd metric")
-                display("Invalid statsd metric")
+                display("Invalid statsd event: {}", e)
+        }
+
+        InvalidStatsD(m: String) {
+            description("Invalid statsd metric")
+                display("Invalid statsd metric: \"{}\"", m)
         }
 
 
