@@ -38,12 +38,12 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(m) = value.get("metric").and_then(|v| v.as_str()) {
         r.push_str(&m);
     } else {
-        return Err(ErrorKind::InvalidStatsDEvent(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
     };
     let t = if let Some(s) = value.get("type").and_then(|v| v.as_str()) {
         s
     } else {
-        return Err(ErrorKind::InvalidStatsDEvent(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
     };
     if let Some(val) = value.get("value") {
         r.push(':');
@@ -59,10 +59,10 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
         if val.is_i64() || val.is_f64() {
             r.push_str(&val.encode());
         } else {
-            return Err(ErrorKind::InvalidStatsDEvent(value.to_string()).into());
+            return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
         }
     } else {
-        return Err(ErrorKind::InvalidStatsDEvent(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
     };
 
     r.push('|');
@@ -73,7 +73,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
         if val.is_i64() || val.is_f64() {
             r.push_str(&val.encode());
         } else {
-            return Err(ErrorKind::InvalidStatsDEvent(value.to_string()).into());
+            return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
         }
     }
 
