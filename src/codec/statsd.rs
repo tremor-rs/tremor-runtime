@@ -86,7 +86,6 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         Minus,
         None,
     };
-   
     let mut d = data.iter().enumerate().peekable();
     let mut m = Object::with_capacity(4);
     let value_start: usize;
@@ -170,9 +169,8 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 return Err(ErrorKind::InvalidStatsD.into());
             }
         }
-
         None => (),
-		Some((_, b'\n')) => (),
+        Some((_, b'\n')) => (),
         _ => return Err(ErrorKind::InvalidStatsD.into()),
 
     };
