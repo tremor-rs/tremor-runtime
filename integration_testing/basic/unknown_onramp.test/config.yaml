@@ -1,12 +1,13 @@
 onramp:
   - id: in
     type: bad_onramp
+    sleep_on_done: 500
 
 offramp:
   - id: out
     type: file
     config:
-      file: {out}
+      file: "{out}"
 
 pipeline:
   - id: main
@@ -19,11 +20,11 @@ pipeline:
       - id: p
         op: passthrough
     links:
-      in: [ p ]
-      p: [ out ]
+      in: [p]
+      p: [out]
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
