@@ -30,6 +30,8 @@ pub struct Config {
     pub source: String,
     #[serde(default = "dflt::d_false")]
     pub close_on_done: bool,
+    #[serde(default = "dflt::d")]
+    pub sleep_on_done: u64,
 }
 
 impl ConfigImpl for Config {}
@@ -109,7 +111,7 @@ fn onramp_loop(
     }
 
     //TODO: This is super gugly:
-    thread::sleep(Duration::from_millis(500));
+    thread::sleep(Duration::from_millis(config.sleep_on_done));
     if config.close_on_done {
         // ALLOW: This is on purpose, close when done tells the onramp to terminate when it's done with sending it's data - this is for one off's
         process::exit(0);

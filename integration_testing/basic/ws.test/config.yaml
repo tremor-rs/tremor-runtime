@@ -3,8 +3,9 @@ onramp:
     type: file
     codec: json
     config:
-      source: {in}
+      source: "{in}"
       close_on_done: true
+      sleep_on_done: 1000
   - id: ws-in
     type: ws
     codec: json
@@ -22,7 +23,7 @@ offramp:
     type: file
     codec: json
     config:
-      file: {out}
+      file: "{out}"
 
 pipeline:
   - id: main
@@ -38,16 +39,15 @@ pipeline:
           script: |
             event;
     links:
-      in: [ r ]
-      r: [ out ]
+      in: [r]
+      r: [out]
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/ws-out/{instance}/in"]
   - id: server
     links:
-      '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
-
+      "/onramp/ws-in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
