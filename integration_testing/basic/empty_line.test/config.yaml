@@ -2,14 +2,15 @@ onramp:
   - id: in
     type: file
     config:
-      source: {in}
+      source: "{in}"
       close_on_done: true
+      sleep_on_done: 500
 
 offramp:
   - id: out
     type: file
     config:
-      file: {out}
+      file: "{out}"
 
 pipeline:
   - id: main
@@ -29,12 +30,12 @@ pipeline:
       - id: b
         op: grouper::bucket
     links:
-      in: [ r ]
-      r: [ b ]
-      b: [ out ]
+      in: [r]
+      r: [b]
+      b: [out]
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
