@@ -4,7 +4,7 @@ onramp:
     config:
       source: "{in}"
       close_on_done: false
-      sleep_on_done: 500
+      sleep_on_done: 1000
 
 offramp:
   - id: out
