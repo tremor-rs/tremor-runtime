@@ -22,7 +22,8 @@
 
 use crate::offramp::prelude::*;
 use halfbrown::HashMap;
-use simd_json::StaticNode;
+use std::thread;
+use std::time::Duration;
 use tremor_script::prelude::*;
 
 pub struct Exit {
@@ -42,10 +43,13 @@ impl offramp::Impl for Exit {
 impl Offramp for Exit {
     fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for (value, _meta) in event.value_meta_iter() {
-            if let Some(Value::Static(StaticNode::I64(status))) = value.get("exit") {
+            if let Some(status) = value.get("exit").and_then(Value::as_i32) {
+                if let Some(delay) = value.get("delay").and_then(Value::as_u64) {
+                    thread::sleep(Duration::from_millis(delay));
+                }
                 #[allow(clippy::cast_possible_truncation)]
                 // ALLOW: this is the supposed to exit
-                std::process::exit(*status as i32);
+                std::process::exit(status);
             } else {
                 return Err("Unexpected event received in exit offramp".into());
             }
