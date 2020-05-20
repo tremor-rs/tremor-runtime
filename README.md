@@ -61,12 +61,13 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 
 Note that sice the image is building tremor in release mode it requires some serious resources, we recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
+
 ### Local builds
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for centos, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
-
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for centos, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.  
+**NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`  
 For a more detailed guide on local builds, please refer to the [tremor development docs](https://docs.tremor.rs/development/quick-start/).
 
 ## Running locally
