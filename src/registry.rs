@@ -36,7 +36,7 @@
 /// ┌─────────────────┐
 /// │    Registry     │ (instance registry)
 /// └─────────────────┘
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::repository::{
     Artefact, ArtefactId, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact,
@@ -138,28 +138,28 @@ where
         task::spawn(async move {
             loop {
                 match rx.recv().await {
-                    Some(Msg::SerializeServants(r)) => r.send(self.values()).await,
-                    Some(Msg::FindServant(r, id)) => {
+                    Ok(Msg::SerializeServants(r)) => r.send(self.values()).await,
+                    Ok(Msg::FindServant(r, id)) => {
                         r.send(
                             A::servant_id(&id)
                                 .map(|id| self.find(id).and_then(|v| v.resolution.clone())),
                         )
                         .await
                     }
-                    Some(Msg::PublishServant(r, id, s)) => {
+                    Ok(Msg::PublishServant(r, id, s)) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.publish(id, s).map(|p| p.state)),
                         )
                         .await
                     }
 
-                    Some(Msg::UnpublishServant(r, id)) => {
+                    Ok(Msg::UnpublishServant(r, id)) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.unpublish(id).map(|p| p.state)),
                         )
                         .await
                     }
-                    Some(Msg::Transition(r, mut id, new_state)) => {
+                    Ok(Msg::Transition(r, mut id, new_state)) => {
                         id.trim_to_instance();
                         let res = match self.find_mut(id) {
                             Some(s) => s.transition(new_state).map(|s| s.state),
@@ -168,7 +168,7 @@ where
 
                         r.send(res).await
                     }
-                    None => info!("Terminating repositry"),
+                    Err(e) => info!("Terminating repositry {}", e),
                 }
             }
         });
@@ -228,9 +228,7 @@ impl Registries {
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = channel(1);
         self.pipeline.send(Msg::FindServant(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Publishes a pipeline
     pub async fn publish_pipeline(
@@ -242,9 +240,7 @@ impl Registries {
         self.pipeline
             .send(Msg::PublishServant(tx, id.clone(), servant))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// unpublishes a pipeline
@@ -253,9 +249,7 @@ impl Registries {
         self.pipeline
             .send(Msg::UnpublishServant(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Transitions a pipeline
@@ -268,9 +262,7 @@ impl Registries {
         self.pipeline
             .send(Msg::Transition(tx, id.clone(), new_state))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Finds an onramp
     pub async fn find_onramp(
@@ -279,9 +271,7 @@ impl Registries {
     ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = channel(1);
         self.onramp.send(Msg::FindServant(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Publishes an onramp
     pub async fn publish_onramp(
@@ -293,9 +283,7 @@ impl Registries {
         self.onramp
             .send(Msg::PublishServant(tx, id.clone(), servant))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Usnpublishes an onramp
     pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
@@ -303,9 +291,7 @@ impl Registries {
         self.onramp
             .send(Msg::UnpublishServant(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     #[cfg(test)]
@@ -318,9 +304,7 @@ impl Registries {
         self.onramp
             .send(Msg::Transition(tx, id.clone(), new_state))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Finds an onramp
@@ -330,9 +314,7 @@ impl Registries {
     ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = channel(1);
         self.offramp.send(Msg::FindServant(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Publishes an offramp
@@ -345,9 +327,7 @@ impl Registries {
         self.offramp
             .send(Msg::PublishServant(tx, id.clone(), servant))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Unpublishes an offramp
     pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
@@ -355,9 +335,7 @@ impl Registries {
         self.offramp
             .send(Msg::UnpublishServant(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     #[cfg(test)]
@@ -370,9 +348,7 @@ impl Registries {
         self.offramp
             .send(Msg::Transition(tx, id.clone(), new_state))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Finds a binding
     pub async fn find_binding(
@@ -381,9 +357,7 @@ impl Registries {
     ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = channel(1);
         self.binding.send(Msg::FindServant(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     /// Publishes a binding
     pub async fn publish_binding(
@@ -395,9 +369,7 @@ impl Registries {
         self.binding
             .send(Msg::PublishServant(tx, id.clone(), servant))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unpublishes a binding
@@ -406,9 +378,7 @@ impl Registries {
         self.binding
             .send(Msg::UnpublishServant(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     #[cfg(test)]
@@ -421,8 +391,6 @@ impl Registries {
         self.binding
             .send(Msg::Transition(tx, id.clone(), new_state))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 }

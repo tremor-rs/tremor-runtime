@@ -138,7 +138,7 @@ async fn onramp_loop(
 
                 task::spawn(handle_connection(loop_tx.clone(), stream, preprocessors));
             },
-            msg = loop_rx.recv().fuse() => if let Some(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) = msg {
+            msg = loop_rx.recv().fuse() => if let Ok(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) = msg {
                 id += 1;
                 send_event(
                     &pipelines,
@@ -152,7 +152,7 @@ async fn onramp_loop(
                 );
 
             },
-            msg = rx.recv().fuse() => if let Some(msg) = msg {
+            msg = rx.recv().fuse() => if let Ok(msg) = msg {
                 match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
                     PipeHandlerResult::Retry | PipeHandlerResult::Normal => continue,
                     PipeHandlerResult::Terminate => break,
