@@ -1511,11 +1511,11 @@ dependencies = [
 
 [[package]]
 name = "hdrhistogram"
-version = "7.0.0"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30473369d16f9df5aefc9708bd165e0dbaca7405179257678b549774d2af9f41"
+checksum = "b3c22708574c44e924720c5b3a116326c688e6d532f438c77c007ec8768644f9"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.12.1",
  "byteorder",
  "crossbeam-channel 0.4.2",
  "flate2",
