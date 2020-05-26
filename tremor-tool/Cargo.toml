@@ -17,6 +17,6 @@ clap = { version = "2", features = ["yaml"] }
 dirs = "2"
 serde = "1"
 halfbrown="0.1"
-async-std = "1"
+async-std = "1.5"
 surf = "=2.0.0-alpha.2"
-http-types = "1.2"
+http-types = "1.3"

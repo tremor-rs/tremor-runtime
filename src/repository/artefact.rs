@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::codec;
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Result};
 use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
@@ -258,9 +258,7 @@ impl Artefact for OfframpArtefact {
                 },
             ))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
     async fn link(
         &self,
@@ -362,9 +360,7 @@ impl Artefact for OnrampArtefact {
                 },
             ))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     async fn link(
