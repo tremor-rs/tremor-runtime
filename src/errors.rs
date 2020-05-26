@@ -18,6 +18,7 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::async_sink;
+use async_std::sync;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
 
@@ -151,13 +152,14 @@ error_chain! {
         RegexError(regex::Error);
         WsError(tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
+        AsyncRecvError(sync::RecvError);
     }
 
     errors {
-        AsyncRecvError {
-            description("Failed to recive from a task")
-                display("Failed to recive from a task")
-        }
+        // AsyncRecvError(e: channel::RecvError) {
+        //     description("Failed to recive from a task")
+        //         display("Failed to recive from a task")
+        // }
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)

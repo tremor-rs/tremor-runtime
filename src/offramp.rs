@@ -144,11 +144,11 @@ impl Manager {
             info!("Onramp manager started");
             loop {
                 match rx.recv().await {
-                    Some(ManagerMsg::Stop) => {
+                    Ok(ManagerMsg::Stop) => {
                         info!("Stopping onramps...");
                         break;
                     }
-                    Some(ManagerMsg::Create(
+                    Ok(ManagerMsg::Create(
                         r,
                         Create {
                             codec,
@@ -227,7 +227,7 @@ impl Manager {
                         });
                         r.send(Ok(tx)).await
                     }
-                    None => {
+                    Err(e) => {
                         info!("Stopping onramps...");
                         break;
                     }

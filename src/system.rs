@@ -652,8 +652,7 @@ type: stderr
                 pipeline::Create { id, config },
             ))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
+        //.ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
     }
 }
