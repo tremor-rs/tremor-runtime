@@ -476,11 +476,12 @@ dependencies = [
 
 [[package]]
 name = "cidr-utils"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "086cc6d0bff6a1df966ee283bb63a6847dd1f6484d0e0ab6aab44f1c10b5103c"
+checksum = "cb12ab7bf03caa851a9cf9bd6a87d9b196d05ed738a312c357c4f822ff9956ee"
 dependencies = [
  "debug-helper",
+ "enum-ordinalize",
  "lazy_static",
  "regex",
 ]
@@ -1016,6 +1017,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd8d03faa7fe0c1431609dfad7bbe827af30f82e1e2ae6f7ee4fca6bd764bc28"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum-ordinalize"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d06f2ad28be2174a108c29425212ab669080ee656504ea46f9252ac612f21ca9"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+ "proc-macro2 1.0.10",
+ "quote 1.0.3",
+ "syn 1.0.17",
 ]
 
 [[package]]
@@ -2417,6 +2431,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f26e041cd983acbc087e30fcba770380cfa352d0e392e175b2344ebaf7ea0602"
 dependencies = [
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
+dependencies = [
+ "autocfg 1.0.0",
+ "num-integer",
+ "num-traits",
 ]
 
 [[package]]
