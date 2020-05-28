@@ -15,16 +15,19 @@ use crate::errors::{Error, Result};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorURL;
+use crate::utils::nanotime;
 use crate::{offramp, onramp};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::{bounded, Sender as CbSender};
 use simd_json::prelude::*;
+use simd_json::BorrowedValue;
 use std::borrow::Cow;
-use std::fmt;
-use std::thread;
-use tremor_pipeline::Event;
+use std::time::Duration;
+use std::{fmt, thread};
+use tremor_pipeline::{Event, ExecutableGraph, SignalKind};
 
+const TICK_MS: u64 = 1000;
 pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
 
 /// Address for a a pipeline
@@ -86,6 +89,68 @@ pub(crate) struct Manager {
     qsize: usize,
 }
 
+#[inline]
+fn send_events(
+    eventset: &mut Vec<(Cow<'static, str>, Event)>,
+    dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>,
+) -> Result<()> {
+    for (output, event) in eventset.drain(..) {
+        if let Some(dest) = dests.get(&output) {
+            let len = dest.len();
+            //We know we have len, so grabbing len - 1 elementsis safe
+            for (id, offramp) in unsafe { dest.get_unchecked(..len - 1) } {
+                offramp.send_event(
+                    id.instance_port()
+                        .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
+                        .clone()
+                        .into(),
+                    event.clone(),
+                )?;
+            }
+            //We know we have len, so grabbing the last elementsis safe
+            let (id, offramp) = unsafe { dest.get_unchecked(len - 1) };
+            offramp.send_event(
+                id.instance_port()
+                    .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
+                    .clone()
+                    .into(),
+                event,
+            )?;
+        };
+    }
+    Ok(())
+}
+
+#[inline]
+async fn handle_insight(
+    insight: Event,
+    pipeline: &mut ExecutableGraph,
+    onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
+) {
+    let insight = pipeline.contraflow(insight);
+    let (_e, m) = insight.data.parts();
+    if m.get("trigger")
+        .and_then(ValueTrait::as_bool)
+        .unwrap_or_default()
+    {
+        println!("trigger");
+        for (_k, o) in onramps {
+            o.send(onramp::Msg::Trigger).await
+        }
+    //this is a trigger event
+    } else if m
+        .get("restore")
+        .and_then(ValueTrait::as_bool)
+        .unwrap_or_default()
+    {
+        for (_k, o) in onramps {
+            o.send(onramp::Msg::Restore).await
+        }
+
+        //this is a trigger event
+    }
+}
+
 impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
@@ -115,41 +180,6 @@ impl Manager {
 
     #[allow(clippy::too_many_lines)]
     fn start_pipeline(&self, req: Create) -> Result<Addr> {
-        #[inline]
-        fn send_events(
-            eventset: &mut Vec<(Cow<'static, str>, Event)>,
-            dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>,
-        ) -> Result<()> {
-            for (output, event) in eventset.drain(..) {
-                if let Some(dest) = dests.get(&output) {
-                    let len = dest.len();
-                    //We know we have len, so grabbing len - 1 elementsis safe
-                    for (id, offramp) in unsafe { dest.get_unchecked(..len - 1) } {
-                        offramp.send_event(
-                            id.instance_port()
-                                .ok_or_else(|| {
-                                    Error::from(format!("missing instance port in {}.", id))
-                                })?
-                                .clone()
-                                .into(),
-                            event.clone(),
-                        )?;
-                    }
-                    //We know we have len, so grabbing the last elementsis safe
-                    let (id, offramp) = unsafe { dest.get_unchecked(len - 1) };
-                    offramp.send_event(
-                        id.instance_port()
-                            .ok_or_else(|| {
-                                Error::from(format!("missing instance port in {}.", id))
-                            })?
-                            .clone()
-                            .into(),
-                        event,
-                    )?;
-                };
-            }
-            Ok(())
-        }
         let config = req.config;
         let id = req.id.clone();
         let mut dests: halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>> =
@@ -161,6 +191,21 @@ impl Manager {
         let mut pid = req.id.clone();
         pid.trim_to_instance();
         pipeline.id = pid.to_string();
+        let tick_tx = tx.clone();
+        task::spawn(async move {
+            let mut e = Event {
+                is_batch: false,
+                id: 0,
+                data: (BorrowedValue::null(), BorrowedValue::object()).into(),
+                ingest_ns: nanotime(),
+                origin_uri: None,
+                kind: Some(SignalKind::Tick),
+            };
+            while tick_tx.send(Msg::Signal(e.clone())).is_ok() {
+                task::sleep(Duration::from_millis(TICK_MS)).await;
+                e.ingest_ns = nanotime()
+            }
+        });
         thread::Builder::new()
             .name(format!("pipeline-{}", id.clone()))
             .spawn(move || {
@@ -178,33 +223,15 @@ impl Manager {
                             }
                         }
                         Msg::Insight(insight) => {
-                            let insight = pipeline.contraflow(insight);
-                            let (e, _m) = insight.data.parts();
-                            if e.get("trigger")
-                                .and_then(ValueTrait::as_bool)
-                                .unwrap_or_default()
-                            {
-                                for (_k, o) in &onramps {
-                                    task::block_on(o.send(onramp::Msg::Trigger))
-                                }
-                                //this is a trigger event
-                            }
-                            if e.get("restore")
-                                .and_then(ValueTrait::as_bool)
-                                .unwrap_or_default()
-                            {
-                                for (_k, o) in &onramps {
-                                    task::block_on(o.send(onramp::Msg::Restore))
-                                }
-
-                            //this is a trigger event
-                            } else {
-                                // this is no special event
-                            }
+                            task::block_on(handle_insight(insight, &mut pipeline, &onramps))
                         }
                         Msg::Signal(signal) => match pipeline.enqueue_signal(signal, &mut eventset)
                         {
-                            Ok(()) => {
+                            Ok(insights) => {
+                                for insight in insights {
+                                    task::block_on(handle_insight(insight, &mut pipeline, &onramps))
+                                }
+
                                 if let Err(e) = send_events(&mut eventset, &dests) {
                                     error!("Failed to send event: {}", e)
                                 }

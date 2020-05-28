@@ -40,13 +40,14 @@ impl ConfigImpl for Config {}
 #[derive(Clone)]
 pub struct Blaster {
     pub config: Config,
+    id: String,
     data: Vec<u8>,
     acc: Acc,
     origin_uri: tremor_pipeline::EventOriginUri,
 }
 
 impl onramp::Impl for Blaster {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = File::open(&config.source)?;
@@ -71,6 +72,7 @@ impl onramp::Impl for Blaster {
                 data,
                 acc: Acc::default(),
                 origin_uri,
+                id: id.to_string(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -138,15 +140,18 @@ impl Onramp for Blaster {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = self.clone();
-        let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
-        thread::Builder::new()
-            .name(format!("onramp-blaster-{}", "???"))
-            .spawn(move || task::block_on(manager.run()))?;
-        Ok(tx)
+        SourceManager::start(
+            self.id(),
+            self.clone(),
+            codec,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
-
+    fn id(&self) -> &str {
+        &self.id
+    }
     fn default_codec(&self) -> &str {
         "json"
     }

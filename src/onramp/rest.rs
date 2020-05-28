@@ -64,7 +64,7 @@ pub struct Rest {
 }
 
 impl onramp::Impl for Rest {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(_id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self { config }))
@@ -228,7 +228,7 @@ fn onramp_loop(
             let s = HttpServer::new(move || {
                 App::new()
                     .register_data(data.clone())
-                    //.service(web::resource("/*").to(handler))
+                    //.service(web::resource("/ *").to(handler))
             })
             .bind(host);
 

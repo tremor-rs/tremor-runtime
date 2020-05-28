@@ -17,7 +17,6 @@ use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token};
 use serde_yaml::Value;
 use std::io::{ErrorKind, Read};
-use std::thread;
 use std::time::Duration;
 
 const ONRAMP: Token = Token(0);
@@ -35,6 +34,7 @@ impl ConfigImpl for Config {}
 
 pub struct Tcp {
     pub config: Config,
+    onramp_id: String,
 }
 
 pub struct Int {
@@ -51,7 +51,8 @@ pub struct Int {
 }
 
 impl Int {
-    fn from_config(config: Config) -> Result<Self> {
+    fn from_config(config: &Config) -> Result<Self> {
+        let config = config.clone();
         let poll = Poll::new()?;
         let events = Events::with_capacity(1024);
         // initializing with a single None entry, since we match the indices of this
@@ -75,10 +76,13 @@ impl Int {
 }
 
 impl onramp::Impl for Tcp {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self { config }))
+            Ok(Box::new(Self {
+                config,
+                onramp_id: id.to_string(),
+            }))
         } else {
             Err("Missing config for tcp onramp".into())
         }
@@ -108,7 +112,7 @@ impl Source for Int {
             return Ok(SourceReply::StartStream(id));
         }
 
-        if let Some(event) = self.events.iter().skip(self.event_offset).next() {
+        if let Some(event) = self.events.iter().nth(self.event_offset) {
             self.event_offset += 1;
             match event.token() {
                 ONRAMP => {
@@ -163,7 +167,7 @@ impl Source for Int {
                     if let Some(id) = self.new_streams.pop() {
                         Ok(SourceReply::StartStream(id))
                     } else {
-                        Ok(SourceReply::Empty)
+                        Ok(SourceReply::Empty(10))
                     }
                 }
                 token => {
@@ -219,7 +223,7 @@ impl Source for Int {
                             "Failed to retrieve tcp client connection for token: {}",
                             token.0
                         );
-                        Ok(SourceReply::Empty)
+                        Ok(SourceReply::Empty(10))
                     }
                 }
             }
@@ -228,7 +232,7 @@ impl Source for Int {
                 .poll(&mut self.events, Some(Duration::from_millis(10)))?;
             self.event_offset = 0;
 
-            Ok(SourceReply::Empty)
+            Ok(SourceReply::Empty(10))
         }
     }
 
@@ -255,16 +259,14 @@ impl Onramp for Tcp {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(self.config.clone())?;
-        let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
-        thread::Builder::new()
-            .name(format!("onramp-tcp-{}", self.config.port))
-            .spawn(move || task::block_on(manager.run()))?;
-        Ok(tx)
+        let source = Int::from_config(&self.config)?;
+        SourceManager::start(self.id(), source, codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn id(&self) -> &str {
+        &self.onramp_id
     }
 }

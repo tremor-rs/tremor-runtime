@@ -123,7 +123,11 @@ impl Elastic {
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
+    fn enqueue_send_future(
+        &mut self,
+        output: Option<Value<'static>>,
+        payload: Vec<u8>,
+    ) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = bounded(1);
@@ -134,13 +138,23 @@ impl Elastic {
             .collect();
         self.pool.execute(move || {
             let r = Self::flush(&destination.client, payload);
-            let mut m = Object::new();
+            let mut m = Value::object_with_capacity(2);
+            if let Some(o) = output {
+                if m.insert("backpressure-output", o).is_err() {
+                    unreachable!()
+                };
+            };
+
             if let Ok(t) = r {
-                m.insert("time".into(), t.into());
+                if m.insert("time", t).is_err() {
+                    unreachable!()
+                };
             } else {
                 // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
-                m.insert("error".into(), "Failed to send to ES".into());
+                if m.insert("error", "Failed to send to ES").is_err() {
+                    unreachable!()
+                };
             };
             let insight = Event {
                 is_batch: false,
@@ -167,7 +181,7 @@ impl Elastic {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
+    fn maybe_enque(&mut self, output: Option<Value<'static>>, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -200,7 +214,7 @@ impl Elastic {
                 Err("Dropped data due to es overload".into())
             }
             _ => {
-                if self.enqueue_send_future(payload).is_err() {
+                if self.enqueue_send_future(output, payload).is_err() {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request to elastic");
                     Err("Failed to enqueue send request to elastic".into())
@@ -218,8 +232,12 @@ impl Offramp for Elastic {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
         let mut payload = Vec::with_capacity(4096);
+        let mut output = None;
 
         for (value, meta) in event.value_meta_iter() {
+            if output.is_none() {
+                output = meta.get("backpressure-output").map(Value::clone_static);
+            }
             let index = meta
                 .get("index")
                 .and_then(Value::as_str)
@@ -250,7 +268,7 @@ impl Offramp for Elastic {
             value.write(&mut payload)?;
             payload.push(b'\n');
         }
-        self.maybe_enque(payload)
+        self.maybe_enque(output, payload)
     }
     fn default_codec(&self) -> &str {
         "json"

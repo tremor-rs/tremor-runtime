@@ -27,68 +27,60 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
+#[derive(Clone)]
 pub struct Metronome {
     pub config: Config,
+    origin_uri: EventOriginUri,
+    duration: Duration,
+    id: u64,
+    onramp_id: String,
 }
 
 impl onramp::Impl for Metronome {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self { config }))
+            let origin_uri = EventOriginUri {
+                scheme: "tremor-metronome".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![config.interval.to_string()],
+            };
+            let duration = Duration::from_millis(config.interval);
+            Ok(Box::new(Self {
+                config,
+                origin_uri,
+                duration,
+                id: 0,
+                onramp_id: id.to_string(),
+            }))
         } else {
             Err("Missing config for metronome onramp".into())
         }
     }
 }
 
-fn onramp_loop(
-    rx: &Receiver<onramp::Msg>,
-    config: &Config,
-    mut preprocessors: Preprocessors,
-    mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampReporter,
-) -> Result<()> {
-    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
-    let mut id = 0;
-
-    let origin_uri = tremor_pipeline::EventOriginUri {
-        scheme: "tremor-metronome".to_string(),
-        host: hostname(),
-        port: None,
-        path: vec![config.interval.to_string()],
-    };
-
-    loop {
-        match task::block_on(handle_pipelines(
-            false,
-            &rx,
-            &mut pipelines,
-            &mut metrics_reporter,
-        ))? {
-            PipeHandlerResult::Retry => continue,
-            PipeHandlerResult::Terminate => return Ok(()),
-            _ => (), // fixme .unwrap()
-        }
-
-        thread::sleep(Duration::from_millis(config.interval));
-        let data =
-            simd_json::to_vec(&json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": id}));
-        let mut ingest_ns = nanotime();
-        if let Ok(data) = data {
-            send_event(
-                &pipelines,
-                &mut preprocessors,
-                &mut codec,
-                &mut metrics_reporter,
-                &mut ingest_ns,
-                &origin_uri,
-                id,
-                data,
-            );
-        }
-        id += 1;
+#[async_trait::async_trait()]
+impl Source for Metronome {
+    async fn read(&mut self) -> Result<SourceReply> {
+        task::sleep(self.duration).await;
+        let data = simd_json::to_vec(
+            &json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": self.id}),
+        )?;
+        self.id += 1;
+        Ok(SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data,
+            stream: 0,
+        })
     }
+
+    async fn init(&mut self) -> Result<SourceState> {
+        Ok(SourceState::Connected)
+    }
+
+    fn trigger_breaker(&mut self) {}
+    fn restore_breaker(&mut self) {}
 }
 
 #[async_trait::async_trait]
@@ -99,17 +91,20 @@ impl Onramp for Metronome {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let config = self.config.clone();
-        let (tx, rx) = channel(1);
-        let codec = codec::lookup(codec)?;
-        let preprocessors = make_preprocessors(&preprocessors)?;
-        thread::Builder::new()
-            .name(format!("onramp-metronome-{}", "???"))
-            .spawn(move || onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter))?;
-        Ok(tx)
+        SourceManager::start(
+            self.id(),
+            self.clone(),
+            codec,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {
         "json"
+    }
+    fn id(&self) -> &str {
+        &self.onramp_id
     }
 }
