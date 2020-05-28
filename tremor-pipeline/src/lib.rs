@@ -63,7 +63,7 @@ pub(crate) mod op;
 /// Tools to turn tremor query into pipelines
 pub mod query;
 
-pub use op::{ConfigImpl, InitializableOperator, Operator};
+pub use op::{ConfigImpl, InitializableOperator, Operator, SignalResponse};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type PortIndexMap =
     HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
@@ -255,6 +255,8 @@ pub enum SignalKind {
     // Step, TODO ( into, over, to next breakpoint )
     /// Control
     Control,
+    /// Periodic Tick
+    Tick,
 }
 
 /// Configuration for a node
@@ -316,9 +318,8 @@ impl Operator for OperatorNode {
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        self.op.on_signal(signal)?;
-        Ok(vec![])
+    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+        self.op.on_signal(signal)
     }
 
     fn handles_contraflow(&self) -> bool {
@@ -590,18 +591,19 @@ impl ExecutableGraph {
         self.contraflow = (*self.contraflow)
             .iter()
             .filter(|id| {
-                self.graph
+                !self
+                    .graph
                     .get(**id)
                     .map(|n| n.skippable())
                     .unwrap_or_default()
             })
             .cloned()
             .collect();
-
         self.signalflow = (*self.signalflow)
             .iter()
             .filter(|id| {
-                self.graph
+                !self
+                    .graph
                     .get(**id)
                     .map(|n| n.skippable())
                     .unwrap_or_default()
@@ -752,7 +754,12 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                self.signalflow(event)?;
+                let mut insights = Vec::new();
+                self.signalflow(event, &mut insights)?;
+                if !insights.is_empty() {
+                    error!("Emitted signals can't trigger counterflow")
+                }
+
                 return Ok(!self.stack.is_empty());
             }
 
@@ -873,24 +880,31 @@ impl ExecutableGraph {
         insight
     }
     /// Enque a signal
-    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        self.signalflow(signal)?;
-        self.run(returns)?;
-        Ok(())
+    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<Vec<Event>> {
+        let mut insights = Vec::with_capacity(16);
+        if self.signalflow(signal, &mut insights)? {
+            self.run(returns)?;
+        }
+        Ok(insights)
     }
 
-    fn signalflow(&mut self, mut signal: Event) -> Result<()> {
+    fn signalflow(&mut self, mut signal: Event, insights: &mut Vec<Event>) -> Result<bool> {
+        let mut has_events = false;
         for idx in 0..self.signalflow.len() {
             let i = self.signalflow[idx];
-            let res = {
+            let (res, cf) = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 op.on_signal(&mut signal)?
             };
+            if let Some(cf) = cf {
+                insights.push(cf);
+            }
+            has_events = has_events || !res.is_empty();
             self.enqueue_events(i, res);
             // We shouldn't call run in signal flow it should just enqueue
             // self.run(returns)?
         }
-        Ok(())
+        Ok(has_events)
     }
 }
 
@@ -932,10 +946,8 @@ impl Pipeline {
             }
             graph.push(op);
         }
-
         // since contraflow is the reverse we need to reverse it.
         contraflow.reverse();
-
         //pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 
         let mut port_indexes = HashMap::new();

@@ -23,7 +23,6 @@ use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::collections::BinaryHeap;
 use std::fmt;
 use std::str::FromStr;
-use std::time::Duration;
 
 #[derive(Deserialize)]
 pub struct CronEntry {
@@ -84,11 +83,12 @@ pub struct Crononome {
     pub config: Config,
     origin_uri: tremor_pipeline::EventOriginUri,
     cq: ChronomicQueue,
+    onramp_id: String,
     id: u64,
 }
 
 impl onramp::Impl for Crononome {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = tremor_pipeline::EventOriginUri {
@@ -101,6 +101,7 @@ impl onramp::Impl for Crononome {
             Ok(Box::new(Self {
                 origin_uri,
                 config,
+                onramp_id: id.to_string(),
                 id: 0,
                 cq: ChronomicQueue::default(),
             }))
@@ -303,13 +304,19 @@ impl Source for Crononome {
                 stream: 0,
             })
         } else {
-            task::sleep(Duration::from_millis(100)).await;
-            Ok(SourceReply::Empty)
+            Ok(SourceReply::Empty(100))
         }
     }
 
     async fn init(&mut self) -> Result<SourceState> {
-        for entry in &self.config.entries {
+        for entry in &mut self.config.entries {
+            if entry.parse().is_err() {
+                return Err(format!(
+                    "Bad configuration in crononome - expression {} is illegal",
+                    entry.name
+                )
+                .into());
+            }
             self.cq.enqueue(&entry);
         }
         Ok(SourceState::Connected)
@@ -327,28 +334,22 @@ impl Onramp for Crononome {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = self.clone();
-
-        for entry in &mut self.config.entries {
-            if entry.parse().ok().is_none() {
-                return Err(format!(
-                    "Bad configuration in crononome - expression {} is illegal",
-                    entry.name
-                )
-                .into());
-            }
-        }
-
-        let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
-        thread::Builder::new()
-            .name(format!("onramp-crononome-{}", "???"))
-            .spawn(move || task::block_on(manager.run()))?;
-        Ok(tx)
+        SourceManager::start(
+            self.id(),
+            self.clone(),
+            codec,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {
         "json"
+    }
+
+    fn id(&self) -> &str {
+        &self.onramp_id
     }
 }
 

@@ -96,7 +96,11 @@ impl Rest {
         Ok(d)
     }
 
-    fn enqueue_send_future(&mut self, payload: Vec<u8>) -> Result<()> {
+    fn enqueue_send_future(
+        &mut self,
+        output: Option<Value<'static>>,
+        payload: Vec<u8>,
+    ) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
         let destination = self.config.endpoints[self.client_idx].clone();
         let (tx, rx) = bounded(1);
@@ -108,12 +112,21 @@ impl Rest {
             .collect();
         task::spawn(async move {
             let r = Self::flush(&destination, config, payload).await;
-            let mut m = Object::new();
+            let mut m = Value::object_with_capacity(2);
+            if let Some(o) = output {
+                if m.insert("backpressure-output", o).is_err() {
+                    unreachable!()
+                };
+            };
             if let Ok(t) = r {
-                m.insert("time".into(), t.into());
+                if m.insert("time", t).is_err() {
+                    unreachable!()
+                };
             } else {
                 error!("REST offramp error: {:?}", r);
-                m.insert("error".into(), "Failed to send".into());
+                if m.insert("error", "Failed to send").is_err() {
+                    unreachable!()
+                }
             };
             let insight = Event {
                 is_batch: false,
@@ -140,7 +153,7 @@ impl Rest {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, payload: Vec<u8>) -> Result<()> {
+    fn maybe_enque(&mut self, output: Option<Value<'static>>, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -175,7 +188,7 @@ impl Rest {
                 Err("Dropped data due to overload".into())
             }
             _ => {
-                if self.enqueue_send_future(payload).is_err() {
+                if self.enqueue_send_future(output, payload).is_err() {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request");
                     Err("Failed to enqueue send request".into())
@@ -190,12 +203,16 @@ impl Rest {
 impl Offramp for Rest {
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         let mut payload = Vec::with_capacity(4096);
-        for value in event.value_iter() {
+        let mut output = None;
+        for (value, meta) in event.value_meta_iter() {
+            if output.is_none() {
+                output = meta.get("backpressure-output").map(Value::clone_static);
+            }
             let mut raw = codec.encode(value)?;
             payload.append(&mut raw);
             payload.push(b'\n');
         }
-        self.maybe_enque(payload)
+        self.maybe_enque(output, payload)
     }
     fn default_codec(&self) -> &str {
         "json"

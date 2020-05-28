@@ -139,7 +139,7 @@ impl Operator for Batch {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
         if let Some(delay_ns) = self.max_delay_ns {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
@@ -157,12 +157,12 @@ impl Operator for Batch {
                     is_batch: true,
                 };
                 self.event_id += 1;
-                Ok(vec![("out".into(), event)])
+                Ok((vec![("out".into(), event)], None))
             } else {
-                Ok(vec![])
+                Ok((vec![], None))
             }
         } else {
-            Ok(vec![])
+            Ok((vec![], None))
         }
     }
 }

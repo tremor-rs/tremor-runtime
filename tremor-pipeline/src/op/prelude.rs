@@ -14,7 +14,7 @@
 
 pub use super::*;
 pub use crate::errors::*;
-pub use crate::{Event, Operator};
+pub use crate::{Event, Operator, SignalResponse};
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;
 pub use std::borrow::Cow;

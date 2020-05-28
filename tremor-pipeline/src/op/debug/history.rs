@@ -79,7 +79,7 @@ impl Operator for EventHistory {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
         let id = signal.id;
         let (_, meta) = signal.data.parts();
 
@@ -102,7 +102,7 @@ impl Operator for EventHistory {
                 }
             }
         };
-        Ok(vec![])
+        Ok((vec![], None))
     }
 }
 

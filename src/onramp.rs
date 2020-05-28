@@ -23,6 +23,7 @@ use async_std::task::{self, JoinHandle};
 use crossbeam_channel::Sender as CbSender;
 use serde_yaml::Value;
 use std::fmt;
+use std::time::Duration;
 use tremor_pipeline::EventOriginUri;
 
 mod blaster;
@@ -42,7 +43,7 @@ mod ws;
 pub(crate) type Sender = sync::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
-    fn from_config(config: &Option<Value>) -> Result<Box<dyn Onramp>>;
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +65,10 @@ pub(crate) trait Onramp: Send {
         metrics_reporter: RampReporter,
     ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
+
+    fn id(&self) -> &str {
+        "onramp"
+    }
 }
 
 pub(crate) enum SourceState {
@@ -79,7 +84,7 @@ pub(crate) enum SourceReply {
     StartStream(usize),
     EndStream(usize),
     StateChange(SourceState),
-    Empty,
+    Empty(u64),
 }
 #[async_trait::async_trait]
 pub(crate) trait Source {
@@ -106,7 +111,7 @@ where
 
 impl<T> SourceManager<T>
 where
-    T: Source,
+    T: Source + Send + 'static,
 {
     async fn new(
         mut source: T,
@@ -134,6 +139,22 @@ where
             tx,
         ))
     }
+
+    async fn start(
+        name: &str,
+        source: T,
+        codec: &str,
+        preprocessors: &[String],
+        metrics_reporter: RampReporter,
+    ) -> Result<onramp::Addr> {
+        let (manager, tx) =
+            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
+        thread::Builder::new()
+            .name(format!("src-{}", name))
+            .spawn(move || task::block_on(manager.run()))?;
+        Ok(tx)
+    }
+
     pub(crate) async fn run(mut self) -> Result<()> {
         let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
 
@@ -203,7 +224,10 @@ where
                         }
                     }
                     SourceReply::StateChange(SourceState::Disconnected) => return Ok(()),
-                    SourceReply::StateChange(SourceState::Connected) | SourceReply::Empty => (),
+                    SourceReply::StateChange(SourceState::Connected) => (),
+                    SourceReply::Empty(sleep_ms) => {
+                        task::sleep(Duration::from_millis(sleep_ms)).await
+                    }
                 }
             }
         }
@@ -212,21 +236,21 @@ where
 
 // just a lookup
 #[cfg_attr(tarpaulin, skip)]
-pub(crate) fn lookup(name: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+pub(crate) fn lookup(name: &str, id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
     match name {
-        "blaster" => blaster::Blaster::from_config(config),
-        "file" => file::File::from_config(config),
+        "blaster" => blaster::Blaster::from_config(id, config),
+        "file" => file::File::from_config(id, config),
         #[cfg(feature = "gcp")]
-        "gsub" => gsub::GSub::from_config(config),
-        "kafka" => kafka::Kafka::from_config(config),
-        "postgres" => postgres::Postgres::from_config(config),
-        "metronome" => metronome::Metronome::from_config(config),
-        "crononome" => crononome::Crononome::from_config(config),
-        "udp" => udp::Udp::from_config(config),
-        "tcp" => tcp::Tcp::from_config(config),
+        "gsub" => gsub::GSub::from_config(id, config),
+        "kafka" => kafka::Kafka::from_config(id, config),
+        "postgres" => postgres::Postgres::from_config(id, config),
+        "metronome" => metronome::Metronome::from_config(id, config),
+        "crononome" => crononome::Crononome::from_config(id, config),
+        "udp" => udp::Udp::from_config(id, config),
+        "tcp" => tcp::Tcp::from_config(id, config),
         // "rest" => rest::Rest::from_config(config),
-        "ws" => ws::Ws::from_config(config),
-        _ => Err(format!("Onramp {} not known", name).into()),
+        "ws" => ws::Ws::from_config(id, config),
+        _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
     }
 }
 

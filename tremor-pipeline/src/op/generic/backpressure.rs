@@ -26,7 +26,7 @@
 //! be discarded.
 
 use crate::errors::{ErrorKind, Result};
-use crate::{ConfigImpl, Event, Operator};
+use crate::{ConfigImpl, Event, Operator, SignalResponse};
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 
@@ -93,17 +93,15 @@ fn d_outputs() -> Vec<String> {
     vec![String::from("out")]
 }
 
-impl Backpressure {
-    pub fn next_backoff(&self, current: u64) -> u64 {
-        let mut b = 0;
-        for backoff in &self.steps {
-            b = *backoff;
-            if b > current {
-                break;
-            }
+pub fn next_backoff(steps: &[u64], current: u64) -> u64 {
+    let mut b = 0;
+    for backoff in steps {
+        b = *backoff;
+        if b > current {
+            break;
         }
-        b
     }
+    b
 }
 
 op!(BackpressureFactory(node) {
@@ -156,29 +154,79 @@ impl Operator for Backpressure {
     fn handles_contraflow(&self) -> bool {
         true
     }
+    fn handles_signal(&self) -> bool {
+        true
+    }
 
+    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+        let now = signal.ingest_ns;
+        let mut is_open = false;
+        let mut was_closed = true;
+
+        for o in &mut self.outputs {
+            was_closed = was_closed && o.backoff > 0;
+            if o.backoff > 0 && o.next < now {
+                is_open = true;
+                o.backoff = 0;
+                o.next = 0;
+            }
+        }
+
+        let cf = if was_closed && is_open {
+            let e = Event {
+                is_batch: false,
+                id: 0,
+                data: (Value::null(), Value::object()).into(),
+                ingest_ns: now,
+                origin_uri: None,
+                kind: None,
+            };
+            let (_, meta) = e.data.parts();
+
+            if meta.insert("restore", true).is_err() {
+                error!("Failed to restore circuit breaker");
+            };
+
+            Some(e)
+        } else {
+            None
+        };
+        Ok((vec![], cf))
+    }
     fn on_contraflow(&mut self, insight: &mut Event) {
-        let meta = &insight.data.suffix().meta();
+        let (_, meta) = insight.data.parts();
+
         if let Some(output) = meta.get("backpressure-output").and_then(Value::as_str) {
-            for (i, o) in self.outputs.iter().enumerate() {
+            let mut any_available = false;
+            let Backpressure {
+                ref mut outputs,
+                ref steps,
+                ..
+            } = *self;
+            for o in outputs.iter_mut() {
                 if o.output == output {
                     if meta.get("error").and_then(Value::as_str).is_some() {
-                        let backoff = self.next_backoff(o.backoff);
-                        self.outputs[i].backoff = backoff;
-                        self.outputs[i].next = insight.ingest_ns + backoff;
+                        let backoff = next_backoff(steps, o.backoff);
+                        o.backoff = backoff;
+                        o.next = insight.ingest_ns + backoff;
                     } else if let Some(v) = meta.get("time").and_then(Value::cast_f64) {
                         if v > self.config.timeout {
-                            let backoff = self.next_backoff(o.backoff);
-                            self.outputs[i].backoff = backoff;
-                            self.outputs[i].next = insight.ingest_ns + backoff;
+                            let backoff = next_backoff(steps, o.backoff);
+                            o.backoff = backoff;
+                            o.next = insight.ingest_ns + backoff;
                         } else {
-                            self.outputs[i].backoff = 0;
-                            self.outputs[i].next = 0;
+                            o.backoff = 0;
+                            o.next = 0;
                         }
                     }
-                    return;
                 }
+                any_available = any_available || o.backoff == 0;
             }
+            if any_available && meta.insert("restore", true).is_err() {
+                error!("Failed to restore circuit breaker");
+            } else if meta.insert("trigger", true).is_err() {
+                error!("Failed to trigger circuit breaker");
+            };
         }
     }
 }

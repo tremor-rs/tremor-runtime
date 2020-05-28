@@ -27,6 +27,10 @@ use regex::Regex;
 use std::borrow::Cow;
 use tremor_script::Value;
 
+/// Response type for `on_singnal`, the first element are events to ben send
+/// from it the second element is an optional counterflow.
+pub type SignalResponse = (Vec<(Cow<'static, str>, Event)>, Option<Event>);
+
 /// The operator trait, this reflects the functionality of an operator in the
 /// pipeline graph
 #[allow(unused_variables)]
@@ -46,9 +50,9 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
     /// Handle singal events, defaults to returning an empty vector.
-    fn on_signal(&mut self, signal: &mut Event) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
         // Make the trait signature nicer
-        Ok(vec![])
+        Ok((vec![], None))
     }
 
     /// Defines if the operatoir shold be called on the contraflow, defaults

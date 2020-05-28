@@ -333,7 +333,14 @@ impl Artefact for OnrampArtefact {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let stream = onramp::lookup(&self.binding_type, &self.config)?;
+        let artefact_id = servant_id
+            .artefact()
+            .unwrap_or_else(|| String::from("onramp"));
+        let instance_id = servant_id
+            .instance()
+            .unwrap_or_else(|| String::from("onramp"));
+        let id = format!("{}.{}", artefact_id, instance_id);
+        let stream = onramp::lookup(&id, &self.binding_type, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
             codec.clone()
         } else {
