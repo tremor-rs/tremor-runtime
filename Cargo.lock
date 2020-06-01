@@ -1741,9 +1741,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "0.13.5"
+version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96816e1d921eca64d208a85aab4f7798455a8e34229ee5a88c935bdee1b78b14"
+checksum = "a6e7655b9594024ad0ee439f3b5a7299369dc2a3f459b47c696f9ff676f9aa1f"
 dependencies = [
  "bytes 0.5.4",
  "futures-channel",
@@ -1755,8 +1755,8 @@ dependencies = [
  "httparse",
  "itoa",
  "log 0.4.8",
- "net2",
  "pin-project",
+ "socket2",
  "time",
  "tokio 0.2.21",
  "tower-service",
@@ -1783,7 +1783,7 @@ dependencies = [
  "bytes 0.5.4",
  "ct-logs",
  "futures-util",
- "hyper 0.13.5",
+ "hyper 0.13.6",
  "log 0.4.8",
  "rustls",
  "rustls-native-certs",
@@ -4471,7 +4471,7 @@ dependencies = [
  "hdrhistogram",
  "hostname",
  "http-types",
- "hyper 0.13.5",
+ "hyper 0.13.6",
  "hyper-rustls",
  "indexmap",
  "lazy_static",
@@ -5076,7 +5076,7 @@ dependencies = [
  "chrono",
  "futures 0.3.5",
  "http 0.2.1",
- "hyper 0.13.5",
+ "hyper 0.13.6",
  "hyper-rustls",
  "log 0.4.8",
  "percent-encoding 2.1.0",
