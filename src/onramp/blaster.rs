@@ -45,6 +45,11 @@ pub struct Blaster {
     acc: Acc,
     origin_uri: tremor_pipeline::EventOriginUri,
 }
+impl std::fmt::Debug for Blaster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Blaster")
+    }
+}
 
 impl onramp::Impl for Blaster {
     fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
@@ -128,8 +133,6 @@ impl Source for Blaster {
         self.acc.consuming = self.acc.elements.clone();
         Ok(SourceState::Connected)
     }
-    fn trigger_breaker(&mut self) {}
-    fn restore_breaker(&mut self) {}
 }
 
 #[async_trait::async_trait]

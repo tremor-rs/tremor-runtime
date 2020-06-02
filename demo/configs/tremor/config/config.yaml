@@ -44,7 +44,7 @@ offramp:
       endpoints:
         - http://influx:8086/write?db=tremor
       headers:
-        'Client': 'Tremor'
+        "Client": "Tremor"
 
 pipeline:
   - id: loadgen-info
@@ -54,7 +54,7 @@ pipeline:
       outputs:
         - out
     nodes:
-      - id: r                                    # We run a tremor_script script with two rules on it
+      - id: r # We run a tremor_script script with two rules on it
         op: runtime::tremor
         config:
           script: |
@@ -63,9 +63,15 @@ pipeline:
               case %{ short_message ~= glob|*info*| } => emit
               default => drop
             end
+      - id: bp
+        op: generic::backpressure
+        config:
+          timeout: 100
+
     links:
-      in: [ r ]
-      r: [ out ]
+      in: [r]
+      r: [bp]
+      bp: [out]
   - id: loadgen-error
     interface:
       inputs:
@@ -73,7 +79,7 @@ pipeline:
       outputs:
         - out
     nodes:
-      - id: r                                    # We run a tremor_script script with two rules on it
+      - id: r # We run a tremor_script script with two rules on it
         op: runtime::tremor
         config:
           script: |
@@ -82,8 +88,8 @@ pipeline:
               default => drop
             end
     links:
-      in: [ r ]
-      r: [ out ]
+      in: [r]
+      r: [out]
   - id: enrich
     interface:
       inputs:
@@ -95,6 +101,7 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
+            use tremor::system;
             let event.tags.host = system::hostname();
             emit
       - id: batch
@@ -102,9 +109,9 @@ pipeline:
         config:
           count: 50
     links:
-      in: [ runtime ]
-      runtime: [ batch ]
-      batch: [ out ]
+      in: [runtime]
+      runtime: [batch]
+      batch: [out]
   - id: demo
     interface:
       inputs:
@@ -112,7 +119,7 @@ pipeline:
       outputs:
         - out
     nodes:
-      - id: runtime                                    # We run a tremor_script script with two rules on it
+      - id: runtime # We run a tremor_script script with two rules on it
         op: runtime::tremor
         config:
           script: |
@@ -134,40 +141,44 @@ pipeline:
             let $class = "default";
             let $rate = 90;
             emit
-      - id: bucket                                    # Now we limit how much each class is allowed to send per second
+      - id: bucket # Now we limit how much each class is allowed to send per second
         op: grouper::bucket
-      - id: bp                                        # Apply back pressure, every time a response is over 100ms we bump the backoff
+      - id: bp # Apply back pressure, every time a response is over 100ms we bump the backoff
         op: generic::backpressure
         config:
           timeout: 100
-      - id: batch                                     # Batch to 50 events at a time and send them at once
+      - id: batch # Batch to 50 events at a time and send them at once
         op: generic::batch
         config:
           count: 50
     links:
-      in: [ runtime ]
-      runtime: [ bucket ]
-      bucket: [ bp ]
-      bp: [ batch ]
-      batch: [ out ]
+      in: [runtime]
+      runtime: [bucket]
+      bucket: [bp]
+      bp: [batch]
+      batch: [out]
 
 binding:
   - id: loadgen-info
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen-info/{instance}/in' ]
-      '/pipeline/loadgen-info/{instance}/out': [ '/offramp/kafka-info/{instance}/in' ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/loadgen-info/{instance}/in"]
+      "/pipeline/loadgen-info/{instance}/out":
+        ["/offramp/kafka-info/{instance}/in"]
   - id: loadgen-error
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/loadgen-error/{instance}/in' ]
-      '/pipeline/loadgen-error/{instance}/out': [ '/offramp/kafka-error/{instance}/in' ]
+      "/onramp/blaster/{instance}/out":
+        ["/pipeline/loadgen-error/{instance}/in"]
+      "/pipeline/loadgen-error/{instance}/out":
+        ["/offramp/kafka-error/{instance}/in"]
   - id: demo
     links:
-      '/onramp/kafka-in/{instance}/out': [ '/pipeline/demo/{instance}/in' ]
-      '/pipeline/demo/{instance}/out': [ '/offramp/elastic/{instance}/in'  ]
+      "/onramp/kafka-in/{instance}/out": ["/pipeline/demo/{instance}/in"]
+      "/pipeline/demo/{instance}/out": ["/offramp/elastic/{instance}/in"]
   - id: metrics
     links:
-      '/pipeline/system::metrics/system/out': [ '/pipeline/enrich/system/in' ]
-      '/pipeline/enrich/system/out': [ '/offramp/influxdb/system/in', '/offramp/system::stdout/system/in' ]
+      "/pipeline/system::metrics/system/out": ["/pipeline/enrich/system/in"]
+      "/pipeline/enrich/system/out":
+        ["/offramp/influxdb/system/in", "/offramp/system::stdout/system/in"]
 
 mapping:
   /binding/loadgen-info/loadgen:

@@ -186,7 +186,7 @@ impl Operator for Backpressure {
             if meta.insert("restore", true).is_err() {
                 error!("Failed to restore circuit breaker");
             };
-
+            dbg!("CF Restore", &meta);
             Some(e)
         } else {
             None
@@ -196,38 +196,44 @@ impl Operator for Backpressure {
     fn on_contraflow(&mut self, insight: &mut Event) {
         let (_, meta) = insight.data.parts();
 
-        if let Some(output) = meta.get("backpressure-output").and_then(Value::as_str) {
-            let mut any_available = false;
-            let Backpressure {
-                ref mut outputs,
-                ref steps,
-                ..
-            } = *self;
-            for o in outputs.iter_mut() {
-                if o.output == output {
-                    if meta.get("error").and_then(Value::as_str).is_some() {
+        let output = meta
+            .get("backpressure-output")
+            .and_then(Value::as_str)
+            .unwrap_or("out");
+        let mut any_available = false;
+        let Backpressure {
+            ref mut outputs,
+            ref steps,
+            ..
+        } = *self;
+        for o in outputs.iter_mut() {
+            if o.output == output {
+                if meta.get("error").and_then(Value::as_str).is_some() {
+                    let backoff = next_backoff(steps, o.backoff);
+                    o.backoff = backoff;
+                    o.next = insight.ingest_ns + backoff;
+                } else if let Some(v) = meta.get("time").and_then(Value::cast_f64) {
+                    if v > self.config.timeout {
                         let backoff = next_backoff(steps, o.backoff);
                         o.backoff = backoff;
                         o.next = insight.ingest_ns + backoff;
-                    } else if let Some(v) = meta.get("time").and_then(Value::cast_f64) {
-                        if v > self.config.timeout {
-                            let backoff = next_backoff(steps, o.backoff);
-                            o.backoff = backoff;
-                            o.next = insight.ingest_ns + backoff;
-                        } else {
-                            o.backoff = 0;
-                            o.next = 0;
-                        }
+                    } else {
+                        o.backoff = 0;
+                        o.next = 0;
                     }
                 }
-                any_available = any_available || o.backoff == 0;
             }
-            if any_available && meta.insert("restore", true).is_err() {
-                error!("Failed to restore circuit breaker");
-            } else if meta.insert("trigger", true).is_err() {
-                error!("Failed to trigger circuit breaker");
-            };
+            any_available = any_available || o.backoff == 0;
         }
+
+        if !any_available {
+            dbg!("triggered");
+        }
+        if any_available && meta.insert("restore", true).is_err() {
+            error!("Failed to restore circuit breaker");
+        } else if !any_available && meta.insert("trigger", true).is_err() {
+            error!("Failed to trigger circuit breaker");
+        };
     }
 }
 

@@ -90,8 +90,8 @@ pub(crate) enum SourceReply {
 pub(crate) trait Source {
     async fn read(&mut self) -> Result<SourceReply>;
     async fn init(&mut self) -> Result<SourceState>;
-    fn trigger_breaker(&mut self);
-    fn restore_breaker(&mut self);
+    fn trigger_breaker(&mut self) {}
+    fn restore_breaker(&mut self) {}
 }
 
 pub(crate) struct SourceManager<T>
@@ -111,7 +111,7 @@ where
 
 impl<T> SourceManager<T>
 where
-    T: Source + Send + 'static,
+    T: Source + Send + 'static + std::fmt::Debug,
 {
     async fn new(
         mut source: T,
@@ -174,10 +174,14 @@ where
                 PipeHandlerResult::Terminate => return Ok(()),
                 PipeHandlerResult::Normal => (),
                 PipeHandlerResult::Trigger => {
+                    dbg!("triggered");
+                    println!("for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
                 PipeHandlerResult::Restore => {
+                    dbg!("restored");
+                    println!("for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
                 }

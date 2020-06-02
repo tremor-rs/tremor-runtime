@@ -86,6 +86,11 @@ pub struct Crononome {
     onramp_id: String,
     id: u64,
 }
+impl std::fmt::Debug for Crononome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Crononome")
+    }
+}
 
 impl onramp::Impl for Crononome {
     fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
@@ -321,9 +326,6 @@ impl Source for Crononome {
         }
         Ok(SourceState::Connected)
     }
-
-    fn trigger_breaker(&mut self) {}
-    fn restore_breaker(&mut self) {}
 }
 
 #[async_trait::async_trait]

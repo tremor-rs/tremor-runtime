@@ -50,10 +50,10 @@ xz2 = "0.1"
 url = "2"
 tremor-influx = { path = "../tremor-influx" } # FIXME tremor-influx v0.2
 percent-encoding = "2.1"
+matches = "0.1.8"
 
 [build-dependencies]
 lalrpop = "0.19"
-matches = "0.1.8"
 
 [dev-dependencies]
 criterion = "0.3"
