@@ -139,7 +139,7 @@ pub trait Highlighter {
     fn set_color(&mut self, _spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
         Ok(())
     }
-    /// rfsets all formating
+    /// resets all formatting
     fn reset(&mut self) -> std::result::Result<(), std::io::Error> {
         Ok(())
     }
@@ -150,14 +150,23 @@ pub trait Highlighter {
     /// get the raw writer
     fn get_writer(&mut self) -> &mut Self::W;
 
-    /// highlights a token stream
+    /// highlights a token stream without line numbers
+    fn highlight_no_linenos(
+        &mut self,
+        file: Option<&str>,
+        tokens: &[TokenSpan],
+    ) -> std::result::Result<(), std::io::Error> {
+        self.highlight_errors2(false, file, &tokens.iter().collect::<Vec<_>>(), None)
+    }
+
+    /// highlights a token stream with line numbers
     fn highlight(
         &mut self,
         file: Option<&str>,
         tokens: &[TokenSpan],
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors2(file, &tokens.iter().collect::<Vec<_>>(), None)?;
-        self.finalize()
+        self.highlight_errors2(true, file, &tokens.iter().collect::<Vec<_>>(), None)?;
+        Ok(())
     }
 
     /// highlights a runtime error
@@ -170,14 +179,14 @@ pub trait Highlighter {
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
-        //self.highlight_errors(&extracted, error)
-        self.highlight_errors2(file, &extracted, error)
+        self.highlight_errors2(true, file, &extracted, error)
     }
 
     /// highlights compile time errors
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors2(
         &mut self,
+        emit_linenos: bool,
         file: Option<&str>,
         tokens: &[&TokenSpan],
         error: Option<Error>,
@@ -261,7 +270,11 @@ pub trait Highlighter {
                     self.reset()?;
                 }
                 self.set_color(ColorSpec::new().set_bold(true))?;
-                write!(self.get_writer(), "{:5} | ", line)?;
+                if emit_linenos {
+                    write!(self.get_writer(), "{:5} | ", line)?;
+                } else {
+                    write!(self.get_writer(), "      | ")?;
+                }
                 self.reset()?;
             }
 

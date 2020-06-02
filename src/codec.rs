@@ -33,6 +33,8 @@ mod prelude {
 
 /// The codec trait, to encode and decode data
 pub trait Codec: Send + Sync {
+    /// The canonical name for this codec
+    fn name(&self) -> std::string::String;
     /// Decode a binary, into an Value
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
     /// Encodes a Value into a binary

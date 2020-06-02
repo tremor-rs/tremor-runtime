@@ -28,7 +28,7 @@
 
 mod decoder;
 mod encoder;
-mod errors;
+pub mod errors;
 
 pub use decoder::decode;
 pub use encoder::encode;

@@ -95,87 +95,87 @@ fn main() -> Result<()> {
         .about("Tremor interpreter")
         .arg(
             Arg::with_name("SCRIPT")
-                .help("The script to execute")
+                .about("The script to execute")
                 .required(true)
                 .index(1),
         )
         .arg(
             Arg::with_name("process")
                 .long("process")
-                .help("Processes each line on stdin through the script"),
+                .about("Processes each line on stdin through the script"),
         )
         .arg(
             Arg::with_name("lex")
-                .short("l")
+                .short('l')
                 .long("lex")
-                .help("Prints the lexemes"),
+                .about("Prints the lexemes"),
         )
         .arg(
             Arg::with_name("ENCODING")
                 .long("encoding")
                 .takes_value(true)
-                .help("The codec to decode events from stdin from"),
+                .about("The codec to decode events from stdin from"),
         )
         .arg(
             Arg::with_name("event")
-                .short("e")
+                .short('e')
                 .takes_value(true)
                 .multiple(true)
-                .help("The event to load."),
+                .about("The event to load."),
         )
         .arg(
             Arg::with_name("string")
                 .long("string")
                 .takes_value(true)
-                .help("A string to load."),
+                .about("A string to load."),
         )
         .arg(
             Arg::with_name("highlight-source")
-                .short("s")
+                .short('s')
                 .takes_value(false)
-                .help("Prints the highlighted script."),
+                .about("Prints the highlighted script."),
         )
         .arg(
             Arg::with_name("highlight-preprocess-source")
                 .long("pre-process")
                 .takes_value(false)
-                .help("Prints the highlighted preprocessed script."),
+                .about("Prints the highlighted preprocessed script."),
         )
         .arg(
             Arg::with_name("print-ast")
-                .short("a")
+                .short('a')
                 .takes_value(false)
-                .help("Prints the ast highlighted."),
+                .about("Prints the ast highlighted."),
         )
         .arg(
             Arg::with_name("print-ast-raw")
-                .short("r")
+                .short('r')
                 .takes_value(false)
-                .help("Prints the ast with no highlighting."),
+                .about("Prints the ast with no highlighting."),
         )
         .arg(
             Arg::with_name("print-result-raw")
-                .short("x")
+                .short('x')
                 .takes_value(false)
-                .help("Prints the result with no highlighting."),
+                .about("Prints the result with no highlighting."),
         )
         .arg(
             Arg::with_name("quiet")
-                .short("q")
+                .short('q')
                 .takes_value(false)
-                .help("Do not print the result."),
+                .about("Do not print the result."),
         )
         .arg(
             Arg::with_name("replay-influx")
                 .takes_value(false)
-                .help("Replays a file containing influx line protocol."),
+                .about("Replays a file containing influx line protocol."),
         )
         .arg(
             Arg::with_name("docs")
-                .short("d")
+                .short('d')
                 .long("docs")
                 .takes_value(true)
-                .help("Prints docs for a script."),
+                .about("Prints docs for a script."),
         )
         .get_matches();
 

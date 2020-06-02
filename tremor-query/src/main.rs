@@ -57,70 +57,70 @@ fn main() -> Result<()> {
         .about("Tremor interpreter")
         .arg(
             Arg::with_name("SCRIPT")
-                .help("The script to execute")
+                .about("The script to execute")
                 .required(true)
                 .index(1),
         )
         .arg(
             Arg::with_name("event")
-                .short("e")
+                .short('e')
                 .multiple(true)
                 .takes_value(true)
-                .help("The event to load."),
+                .about("The event to load."),
         )
         .arg(
             Arg::with_name("string")
                 .long("string")
                 .takes_value(true)
-                .help("A string to load."),
+                .about("A string to load."),
         )
         .arg(
             Arg::with_name("replay-influx")
                 .long("replay-influx")
                 .takes_value(true)
-                .help("Replays a file containing influx line protocol."),
+                .about("Replays a file containing influx line protocol."),
         )
         .arg(
             Arg::with_name("output")
                 .long("output")
                 .takes_value(true)
-                .help("Output to select from."),
+                .about("Output to select from."),
         )
         .arg(
             Arg::with_name("highlight-source")
-                .short("s")
+                .short('s')
                 .takes_value(false)
-                .help("Prints the highlighted script."),
+                .about("Prints the highlighted script."),
         )
         .arg(
             Arg::with_name("highlight-preprocess-source")
-                .short("p")
+                .short('p')
                 .takes_value(false)
-                .help("Prints the highlighted preprocessed script."),
+                .about("Prints the highlighted preprocessed script."),
         )
         .arg(
             Arg::with_name("print-ast")
-                .short("a")
+                .short('a')
                 .takes_value(false)
-                .help("Prints the ast highlighted."),
+                .about("Prints the ast highlighted."),
         )
         .arg(
             Arg::with_name("print-ast-raw")
-                .short("r")
+                .short('r')
                 .takes_value(false)
-                .help("Prints the ast with no highlighting."),
+                .about("Prints the ast with no highlighting."),
         )
         .arg(
             Arg::with_name("print-result-raw")
-                .short("x")
+                .short('x')
                 .takes_value(false)
-                .help("Prints the result with no highlighting."),
+                .about("Prints the result with no highlighting."),
         )
         .arg(
             Arg::with_name("quiet")
-                .short("q")
+                .short('q')
                 .takes_value(false)
-                .help("Do not print the result."),
+                .about("Do not print the result."),
         )
         .get_matches();
 

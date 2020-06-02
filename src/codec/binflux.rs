@@ -162,6 +162,10 @@ impl BInflux {
 }
 
 impl Codec for BInflux {
+    fn name(&self) -> std::string::String {
+        "binflux".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
             Self::decode(&raw[0])

@@ -129,6 +129,10 @@ impl Lines {
 }
 
 impl Preprocessor for Lines {
+    fn name(&self) -> String {
+        "lines".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         // split incoming bytes by specifed line separator
         let mut events: Vec<Vec<u8>> = data

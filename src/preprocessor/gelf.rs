@@ -128,6 +128,10 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
 }
 
 impl Preprocessor for GELF {
+    fn name(&self) -> String {
+        "gelf".to_string()
+    }
+
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {

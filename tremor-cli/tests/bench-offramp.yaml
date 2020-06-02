@@ -1,0 +1,6 @@
+id: blackhole
+type: blackhole
+config:
+  warmup_secs: 10
+  stop_after_secs: 40
+  significant_figures: 2

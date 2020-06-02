@@ -183,14 +183,8 @@ mod test {
 
     fn port_is_free(port: u16) -> bool {
         match TcpListener::bind(format!("127.0.0.1:{}", port)) {
-            Ok(_x) => {
-                dbg!(&_x);
-                true
-            }
-            _otherwise => {
-                dbg!(&_otherwise);
-                false
-            }
+            Ok(_x) => true,
+            _otherwise => false,
         }
     }
 
@@ -208,7 +202,6 @@ mod test {
         #[allow(dead_code)]
         fn new() -> Self {
             let port = find_free_port(9000..10000).expect("could not find free port");
-            dbg!(&port);
             TcpRecorder {
                 port,
                 listener: TcpListener::bind(format!("localhost:{}", port))

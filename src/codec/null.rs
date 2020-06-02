@@ -18,6 +18,10 @@ use super::prelude::*;
 pub struct Null {}
 
 impl Codec for Null {
+    fn name(&self) -> String {
+        "null".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         Ok(Some(LineValue::new(vec![data], |_| Value::null().into())))
     }
@@ -40,8 +44,8 @@ mod test {
         let mut codec = Null {};
         let as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw, 0);
-
-        let _ = dbg!(as_json);
+        assert!(as_json.is_ok());
+        as_json?;
 
         Ok(())
     }

@@ -432,7 +432,7 @@ where
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
     /// Import definitions
-    imports: Imports<'script>,
+    pub imports: Imports<'script>,
     /// Expressions of the script
     pub(crate) exprs: Exprs<'script>,
     /// Constants defined in this script

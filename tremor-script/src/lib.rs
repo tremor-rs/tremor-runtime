@@ -29,7 +29,8 @@
 /// The Tremor Script AST
 pub mod ast;
 mod compat;
-mod ctx;
+/// Context struct for tremor-script
+pub mod ctx;
 mod datetime;
 /// Tremor script function doc helper
 pub mod docs;
