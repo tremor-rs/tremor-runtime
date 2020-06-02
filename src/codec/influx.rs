@@ -57,6 +57,10 @@ impl From<std::str::Utf8Error> for RentalSnot {
 }
 
 impl Codec for Influx {
+    fn name(&self) -> String {
+        "influx".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
             // This is safe as from_utf8 does not change the memory locaiton

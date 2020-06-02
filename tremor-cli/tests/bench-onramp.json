@@ -1,0 +1,7 @@
+{
+  "config": {
+    "source": "demo/data/data.json.xz"
+  },
+  "id": "blaster",
+  "type": "blaster"
+}

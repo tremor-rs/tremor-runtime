@@ -18,6 +18,10 @@ use super::prelude::*;
 pub struct YAML {}
 
 impl Codec for YAML {
+    fn name(&self) -> String {
+        "yaml".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(vec![data], |data| {
             serde_yaml::from_slice::<simd_json::OwnedValue>(&data[0])

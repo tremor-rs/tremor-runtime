@@ -14,7 +14,7 @@
 
 mod gelf;
 pub(crate) use gelf::GELF;
-pub mod lines;
+pub(crate) mod lines;
 
 use crate::errors::Result;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
@@ -25,12 +25,18 @@ use std::io::{self, Read};
 
 //pub type Lines = lines::Lines;
 
+/// A set of preprocessors
 pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
+
+/// Preprocessor trait
 pub trait Preprocessor: Sync + Send {
+    /// Canonical name for this preprocessor
+    fn name(&self) -> String;
+    /// process data
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
-// just a lookup
+/// Lookup a preprocessor implementation via its unique id
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
@@ -79,12 +85,15 @@ impl SliceTrim for [u8] {
     }
 }
 
-pub use lines::Lines;
+pub(crate) use lines::Lines;
 
 #[derive(Default, Debug, Clone)]
-pub struct FilterEmpty {}
+pub(crate) struct FilterEmpty {}
 
 impl Preprocessor for FilterEmpty {
+    fn name(&self) -> String {
+        "remove-empty".to_string()
+    }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         if data.is_empty() {
             Ok(vec![])
@@ -95,16 +104,24 @@ impl Preprocessor for FilterEmpty {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Nulls {}
+pub(crate) struct Nulls {}
 impl Preprocessor for Nulls {
+    fn name(&self) -> String {
+        "nulls".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct ExtractIngresTs {}
+pub(crate) struct ExtractIngresTs {}
 impl Preprocessor for ExtractIngresTs {
+    fn name(&self) -> String {
+        "extract-ingress-ts".to_string()
+    }
+
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Cursor;
         *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
@@ -113,16 +130,24 @@ impl Preprocessor for ExtractIngresTs {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Base64 {}
+pub(crate) struct Base64 {}
 impl Preprocessor for Base64 {
+    fn name(&self) -> String {
+        "base64".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::decode(&data)?])
     }
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Gzip {}
+pub(crate) struct Gzip {}
 impl Preprocessor for Gzip {
+    fn name(&self) -> String {
+        "gzip".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
         let mut decoder = MultiDecoder::new(&data[..])?;
@@ -133,8 +158,12 @@ impl Preprocessor for Gzip {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Zlib {}
+pub(crate) struct Zlib {}
 impl Preprocessor for Zlib {
+    fn name(&self) -> String {
+        "zlib".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Decoder;
         let mut decoder = Decoder::new(&data[..])?;
@@ -145,8 +174,12 @@ impl Preprocessor for Zlib {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Xz2 {}
+pub(crate) struct Xz2 {}
 impl Preprocessor for Xz2 {
+    fn name(&self) -> String {
+        "xz2".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use xz2::read::XzDecoder as Decoder;
         let mut decoder = Decoder::new(data);
@@ -157,8 +190,12 @@ impl Preprocessor for Xz2 {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Snappy {}
+pub(crate) struct Snappy {}
 impl Preprocessor for Snappy {
+    fn name(&self) -> String {
+        "snappy".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use snap::read::FrameDecoder;
         let mut rdr = FrameDecoder::new(data);
@@ -170,8 +207,12 @@ impl Preprocessor for Snappy {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Lz4 {}
+pub(crate) struct Lz4 {}
 impl Preprocessor for Lz4 {
+    fn name(&self) -> String {
+        "lz4".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::Decoder;
         let mut decoder = Decoder::new(data)?;
@@ -182,8 +223,12 @@ impl Preprocessor for Lz4 {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Decompress {}
+pub(crate) struct Decompress {}
 impl Preprocessor for Decompress {
+    fn name(&self) -> String {
+        "decompress".to_string()
+    }
+
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let r = match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => {
@@ -233,11 +278,15 @@ impl Preprocessor for Decompress {
     }
 }
 #[derive(Clone, Default, Debug)]
-pub struct LengthPrefix {
+pub(crate) struct LengthPrefix {
     len: Option<usize>,
     buffer: BytesMut,
 }
 impl Preprocessor for LengthPrefix {
+    fn name(&self) -> String {
+        "length-prefix".to_string()
+    }
+
     #[allow(clippy::cast_possible_truncation)]
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         self.buffer.extend(data);
@@ -427,7 +476,6 @@ mod test {
     }
 
     fn decode_magic(data: &[u8]) -> &'static str {
-        dbg!(&data.get(0..6));
         match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
             Some(&[0x78, _, _, _, _, _]) => "zlib",

@@ -20,6 +20,10 @@ use std::str;
 pub struct StatsD {}
 
 impl Codec for StatsD {
+    fn name(&self) -> String {
+        "statsd".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(vec![data], |raw| {
             decode(&raw[0], ingest_ns).map(ValueAndMeta::from)

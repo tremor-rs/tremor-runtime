@@ -12,7 +12,7 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-clap = "2.33.3"
+clap = { version = "3.0.0-beta.1", features = [ "yaml", "color" ] }
 halfbrown = "0.1"
 simd-json = {version = "0.3", features = ["known-key"]}
 chrono = "0.4"

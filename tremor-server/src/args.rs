@@ -14,15 +14,15 @@
 
 use clap::{App, Arg};
 
-pub fn parse<'a>() -> App<'a, 'a> {
+pub fn parse<'a>() -> App<'a> {
     App::new("tremor-runtime")
         .version(option_env!("CARGO_PKG_VERSION").unwrap_or(""))
         .about("Simple command line consumer")
         .arg(
             Arg::with_name("config")
                 .long("config")
-                .short("c")
-                .help("config file to load")
+                .short('c')
+                .about("config file to load")
                 .takes_value(true)
                 .min_values(1)
                 .max_values(10000) // there is no 'as many as you want' but this comes close
@@ -31,8 +31,8 @@ pub fn parse<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("query")
                 .long("query")
-                .short("q")
-                .help("query file to load")
+                .short('q')
+                .about("query file to load")
                 .takes_value(true)
                 .min_values(1)
                 .max_values(10000) // there is no 'as many as you want' but this comes close
@@ -41,46 +41,46 @@ pub fn parse<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("storage-directory")
                 .long("storage-directory")
-                .short("d")
-                .help("Directory where changed configs get stored.")
+                .short('d')
+                .about("Directory where changed configs get stored.")
                 .takes_value(true)
                 .required(false),
         )
         .arg(
             Arg::with_name("no-api")
                 .long("no-api")
-                .short("o")
-                .help("Disables API and other TCP endpoints.")
+                .short('o')
+                .about("Disables API and other TCP endpoints.")
                 .required(false),
         )
         .arg(
             Arg::with_name("host")
                 .long("host")
-                .short("h")
-                .help("host to listen to")
+                .short('h')
+                .about("host to listen to")
                 .takes_value(true)
                 .default_value("0.0.0.0:9898"),
         )
         .arg(
             Arg::with_name("logger")
                 .long("logger-config")
-                .short("l")
-                .help("log4rs configuration file")
+                .short('l')
+                .about("log4rs configuration file")
                 .takes_value(true)
                 .required(false),
         )
         .arg(
             Arg::with_name("instance")
                 .long("instance")
-                .short("i")
-                .help("instance id")
+                .short('i')
+                .about("instance id")
                 .takes_value(true)
                 .default_value("tremor"),
         )
         .arg(
             Arg::with_name("recursion-limit")
                 .long("recursion-limit")
-                .help("recursion limit")
+                .about("recursion limit")
                 .takes_value(true)
                 .default_value("1024"),
         )

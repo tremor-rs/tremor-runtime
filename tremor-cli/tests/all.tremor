@@ -1,0 +1,9 @@
+use std::test;
+
+fn testSomething() with
+  test::assert("snot", true, true)
+end;
+
+{
+  "test foo bar baz": testSomething()
+}

@@ -13,7 +13,7 @@ tremor-pipeline = { path = "../tremor-pipeline" }
 serde_derive = "1"
 simd-json = {version = "0.3", features = ["known-key"]}
 serde_yaml = "0.8"
-clap = { version = "2", features = ["yaml"] }
+clap = { package = "clap-v3", version = "3.0.0-beta.1", features = [ "yaml", "color" ] }
 dirs = "3"
 serde = "1"
 halfbrown="0.1"

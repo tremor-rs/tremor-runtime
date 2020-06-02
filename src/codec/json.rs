@@ -18,6 +18,10 @@ use super::prelude::*;
 pub struct JSON {}
 
 impl Codec for JSON {
+    fn name(&self) -> String {
+        "json".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(vec![data], |data| {
             simd_json::to_borrowed_value(&mut data[0]).map(ValueAndMeta::from)

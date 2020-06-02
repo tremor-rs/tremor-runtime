@@ -18,14 +18,19 @@ pub(crate) use gelf::GELF;
 use crate::errors::{Error, Result};
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
+/// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::io::Write;
 
+/// Postprocessor trait
 pub trait Postprocessor: Send {
+    /// Canonical name of the postprocessor
+    fn name(&self) -> String;
+    /// process data
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
-// just a lookup
+/// Lookup a postprocessor via its unique id
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     match name {
@@ -44,8 +49,12 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 }
 
 #[derive(Default)]
-pub struct Lines {}
+pub(crate) struct Lines {}
 impl Postprocessor for Lines {
+    fn name(&self) -> String {
+        "lines".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         // padding capacity with 1 to account for the new line char we will be pushing
         let mut framed: Vec<u8> = Vec::with_capacity(data.len() + 1);
@@ -56,16 +65,24 @@ impl Postprocessor for Lines {
 }
 
 #[derive(Default)]
-pub struct Base64 {}
+pub(crate) struct Base64 {}
 impl Postprocessor for Base64 {
+    fn name(&self) -> String {
+        "base64".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         Ok(vec![base64::encode(&data).as_bytes().to_vec()])
     }
 }
 
 #[derive(Default)]
-pub struct Gzip {}
+pub(crate) struct Gzip {}
 impl Postprocessor for Gzip {
+    fn name(&self) -> String {
+        "gzip".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
 
@@ -76,8 +93,12 @@ impl Postprocessor for Gzip {
 }
 
 #[derive(Default)]
-pub struct Zlib {}
+pub(crate) struct Zlib {}
 impl Postprocessor for Zlib {
+    fn name(&self) -> String {
+        "zlib".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         let mut encoder = Encoder::new(Vec::new())?;
@@ -87,8 +108,12 @@ impl Postprocessor for Zlib {
 }
 
 #[derive(Default)]
-pub struct Xz2 {}
+pub(crate) struct Xz2 {}
 impl Postprocessor for Xz2 {
+    fn name(&self) -> String {
+        "xz2".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), 9);
@@ -98,8 +123,12 @@ impl Postprocessor for Xz2 {
 }
 
 #[derive(Default)]
-pub struct Snappy {}
+pub(crate) struct Snappy {}
 impl Postprocessor for Snappy {
+    fn name(&self) -> String {
+        "snappy".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use snap::write::FrameEncoder;
         let mut writer = FrameEncoder::new(vec![]);
@@ -112,8 +141,12 @@ impl Postprocessor for Snappy {
 }
 
 #[derive(Default)]
-pub struct Lz4 {}
+pub(crate) struct Lz4 {}
 impl Postprocessor for Lz4 {
+    fn name(&self) -> String {
+        "lz4".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         let buffer = Vec::<u8>::new();
@@ -123,8 +156,12 @@ impl Postprocessor for Lz4 {
     }
 }
 
-pub struct AttachIngresTS {}
+pub(crate) struct AttachIngresTS {}
 impl Postprocessor for AttachIngresTS {
+    fn name(&self) -> String {
+        "attach-ingress-ts".to_string()
+    }
+
     fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(ingres_ns)?;
@@ -135,8 +172,12 @@ impl Postprocessor for AttachIngresTS {
 }
 
 #[derive(Clone, Default)]
-pub struct LengthPrefix {}
+pub(crate) struct LengthPrefix {}
 impl Postprocessor for LengthPrefix {
+    fn name(&self) -> String {
+        "length-prefix".to_string()
+    }
+
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(data.len() as u64)?;

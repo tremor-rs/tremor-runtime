@@ -13,7 +13,7 @@ tremor-api = { path = "../tremor-api" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-script = { path = "../tremor-script" }
 serde_yaml = "0.8"
-clap = { version = "2", features = ["yaml"] }
+clap = { version = "3.0.0-beta.1", features = [ "yaml", "color" ] }
 env_logger = "0.7.1"
 log = "0.4"
 log4rs = "0.13.0"

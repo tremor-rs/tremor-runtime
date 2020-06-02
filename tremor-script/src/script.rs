@@ -72,9 +72,12 @@ where
 #[derive(Debug)]
 pub struct Script {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
-    pub(crate) script: rentals::Script,
-    source: String,
-    warnings: Vec<Warning>,
+    /// Rental for the runnable script
+    pub script: rentals::Script,
+    /// Source code for this script
+    pub source: String,
+    /// A set of warnings if any
+    pub warnings: Vec<Warning>,
 }
 
 impl Script {
@@ -85,15 +88,18 @@ impl Script {
 }
 
 rental! {
-    mod rentals {
+    #[allow(missing_docs)]
+    /// Rental for the script/interpreter for tremor-script
+    pub mod rentals {
         use crate::ast;
         use std::borrow::Cow;
         use serde::Serialize;
         use std::sync::Arc;
         use std::marker::Send;
 
+        /// Script rental
         #[rental_mut(covariant,debug)]
-        pub(crate) struct Script{
+        pub struct Script{
             script: Box<String>, // Fake
             parsed: ast::Script<'script>
         }
@@ -111,6 +117,7 @@ where
         file_name: &str,
         script: String,
         reg: &Registry,
+        // args: Option<Vec<&str>>,
         // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
     ) -> std::result::Result<Self, CompilerError> {
         let mut include_stack = lexer::IncludeStack::default();
@@ -165,7 +172,8 @@ where
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .filter_map(Result::ok)
             .collect();
-        h.highlight(None, &tokens)
+        h.highlight(None, &tokens)?;
+        io::Result::Ok(())
     }
 
     /// Preprocessesa and highlights a script with a given highlighter.

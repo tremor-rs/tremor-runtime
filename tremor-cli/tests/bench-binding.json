@@ -1,0 +1,11 @@
+{
+  "id": "default",
+  "links": {
+    "/onramp/blaster/{instance}/out": [
+      "/pipeline/main/{instance}/in"
+    ],
+    "/pipeline/main/{instance}/out": [
+      "/offramp/blackhole/{instance}/in"
+    ]
+  }
+}

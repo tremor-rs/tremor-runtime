@@ -19,6 +19,10 @@ use simd_json::{self, BorrowedValue as Value};
 pub struct String {}
 
 impl Codec for String {
+    fn name(&self) -> std::string::String {
+        "string".to_string()
+    }
+
     fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
         LineValue::try_new(vec![data], |data| {
             Ok(Value::from(std::str::from_utf8(data[0].as_slice())?).into())
@@ -51,8 +55,7 @@ mod test {
         let mut codec = String {};
         let as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw, 0);
-
-        let _ = dbg!(as_json);
+         assert!(as_json.is_ok());
 
         Ok(())
     }

@@ -331,13 +331,13 @@ impl<'input> Token<'input> {
         if self.is_keyword() || self.is_symbol() || self.is_ignorable() {
             format!("{}", self)
         } else {
-            format!("{:?}", self)
+            format!("{}", std::any::type_name::<Self>())
         }
     }
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     #[cfg_attr(tarpaulin, skip)]
-    pub(crate) fn is_ignorable(&self) -> bool {
+    pub fn is_ignorable(&self) -> bool {
         match *self {
             Token::SingleLineComment(_)
             | Token::Whitespace(_)
