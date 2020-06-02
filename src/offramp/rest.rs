@@ -74,7 +74,7 @@ impl Rest {
         c = c.body_bytes(&payload);
         for (k, v) in config.headers {
             use http_types::headers::HeaderName;
-            match HeaderName::from_ascii(k.as_str().as_bytes().to_vec()) {
+            match HeaderName::from_bytes(k.as_str().as_bytes().to_vec()) {
                 Ok(h) => {
                     c = c.set_header(h, v.as_str());
                 }

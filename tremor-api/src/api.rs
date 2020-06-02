@@ -15,7 +15,6 @@
 pub use http_types::headers;
 pub use http_types::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 pub use tide::Response;
 use tremor_runtime::errors::{Error as TremorError, ErrorKind};
 use tremor_runtime::system::World;
@@ -135,7 +134,7 @@ impl ToString for ResourceType {
 pub fn content_type(req: &Request) -> Option<ResourceType> {
     match req
         .header(&headers::CONTENT_TYPE)
-        .and_then(|v| v.first())
+        .map(headers::HeaderValues::last)
         .map(headers::HeaderValue::as_str)
     {
         Some("application/yaml") => Some(ResourceType::Yaml),
@@ -146,11 +145,9 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
 
 pub fn accept(req: &Request) -> ResourceType {
     // TODO implement correctly / RFC compliance
-    match "Accept"
-        .try_into()
-        .ok()
-        .and_then(|h| req.header(&h))
-        .and_then(|v| v.first())
+    match req
+        .header(headers::ACCEPT)
+        .map(headers::HeaderValues::last)
         .map(headers::HeaderValue::as_str)
     {
         Some("application/yaml") => ResourceType::Yaml,
