@@ -21,7 +21,7 @@ use futures::StreamExt;
 use halfbrown::HashMap;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
-use rdkafka::consumer::stream_consumer::StreamConsumer;
+use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
 use rdkafka::consumer::{Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::Message;
@@ -58,13 +58,71 @@ impl ConfigImpl for Config {}
 
 pub struct Kafka {
     pub config: Config,
+    id: String,
+}
+
+pub struct KafkaInt {
+    config: Config,
+    onramp_id: String,
+    stream: Option<rentals::MessageStream>,
+    origin_uri: EventOriginUri,
+}
+
+impl std::fmt::Debug for KafkaInt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Kafka")
+    }
+}
+
+rental! {
+    pub mod rentals {
+        use super::{LoggingConsumerContext, LoggingConsumer};
+        use rdkafka::consumer::stream_consumer;
+
+        #[rental(covariant)]
+        pub struct MessageStream {
+            consumer: Box<LoggingConsumer>,
+            stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>,
+        }
+    }
+}
+#[allow(dead_code)]
+impl rentals::MessageStream {
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
+    unsafe fn mut_suffix(
+        &self,
+    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext> {
+        std::mem::transmute(self.suffix())
+    }
+}
+
+impl KafkaInt {
+    fn from_config(config: &Config, id: &str) -> Self {
+        let origin_uri = tremor_pipeline::EventOriginUri {
+            scheme: "tremor-kafka".to_string(),
+            // picking the first host for these
+            host: "not-connected".to_string(),
+            port: None,
+            path: vec![],
+        };
+
+        Self {
+            config: config.clone(),
+            onramp_id: id.to_string(),
+            stream: None,
+            origin_uri,
+        }
+    }
 }
 
 impl onramp::Impl for Kafka {
-    fn from_config(_id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self { config }))
+            Ok(Box::new(Self {
+                config,
+                id: id.to_string(),
+            }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -85,163 +143,148 @@ impl ConsumerContext for LoggingConsumerContext {
         };
     }
 }
-
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
-async fn onramp_loop(
-    rx: Receiver<onramp::Msg>,
-    config: &Config,
-    mut preprocessors: Preprocessors,
-    mut codec: Box<dyn Codec>,
-    mut metrics_reporter: RampReporter,
-) -> Result<()> {
-    let context = LoggingConsumerContext;
-    let mut client_config = ClientConfig::new();
-    let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
-    let tid = task::current().id();
-    info!("Starting kafka onramp");
-    let client_config = client_config
-        .set("group.id", &config.group_id)
-        .set("client.id", &format!("tremor-{}-{:?}", hostname(), tid))
-        .set("bootstrap.servers", &config.brokers.join(","))
-        .set("enable.partition.eof", "false")
-        .set("session.timeout.ms", "6000")
-        // Commit automatically every 5 seconds.
-        .set("enable.auto.commit", "true")
-        .set("auto.commit.interval.ms", "5000")
-        // but only commit the offsets explicitly stored via `consumer.store_offset`.
-        .set("enable.auto.offset.store", "true")
-        .set_log_level(RDKafkaLogLevel::Debug);
-
-    let client_config = if let Some(options) = config.rdkafka_options.clone() {
-        options
-            .iter()
-            .fold(client_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
-    } else {
-        client_config
-    };
-
-    let client_config = client_config.to_owned();
-    let consumer: LoggingConsumer = client_config.create_with_context(context)?;
-
-    let topics: Vec<&str> = config
-        .topics
-        .iter()
-        .map(std::string::String::as_str)
-        .collect();
-
-    let first_broker: Vec<&str> = config.brokers[0].split(':').collect();
-    let mut origin_uri = tremor_pipeline::EventOriginUri {
-        scheme: "tremor-kafka".to_string(),
-        // picking the first host for these
-        host: first_broker[0].to_string(),
-        port: match first_broker.get(1) {
-            Some(n) => Some(n.parse()?),
-            None => None,
-        },
-        path: vec![],
-    };
-
-    let mut stream = consumer.start();
-
-    info!("[kafka] subscribing to: {:?}", topics);
-    // This is terribly ugly, thank you rdkafka!
-    // We need to do this because:
-    // - subscribing to a topic that does not exist will brick the whole consumer
-    // - subscribing to a topic that does not exist will claim to succeed
-    // - getting the metadata of a topic that does not exist will claim to succeed
-    // - The only indication of it missing is in the metadata, in the topics list
-    //   in the errors ...
-    //
-    // This is terrible :/
-    let mut id = 0;
-    let mut good_topics = Vec::new();
-    for topic in topics {
-        match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
-            Ok(m) => {
-                let errors: Vec<_> = m
-                    .topics()
-                    .iter()
-                    .map(rdkafka::metadata::MetadataTopic::error)
-                    .collect();
-                match errors.as_slice() {
-                    [None] => good_topics.push(topic),
-                    [Some(e)] => error!(
-                        "Kafka error for topic '{}': {:?}. Not subscribing!",
-                        topic, e
-                    ),
-                    _ => error!(
-                        "Unknown kafka error for topic '{}'. Not subscribing!",
-                        topic
-                    ),
-                }
-            }
-            Err(e) => error!("Kafka error for topic '{}': {}. Not subscribing!", topic, e),
-        };
-    }
-
-    match consumer.subscribe(&good_topics) {
-        Ok(()) => info!("Subscribed to topics: {:?}", good_topics),
-        Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
-    };
-
-    // We do this twice so we don't consume a message from kafka and then wait
-    // as this could lead to timeouts
-    loop {
-        match task::block_on(handle_pipelines(
-            false,
-            &rx,
-            &mut pipelines,
-            &mut metrics_reporter,
-        ))? {
-            PipeHandlerResult::Retry => continue,
-            PipeHandlerResult::Terminate => return Ok(()),
-            _ => break, // fixme .unwrap()
-        }
-    }
-    while let Some(m) = stream.next().await {
-        loop {
-            match task::block_on(handle_pipelines(
-                false,
-                &rx,
-                &mut pipelines,
-                &mut metrics_reporter,
-            ))? {
-                PipeHandlerResult::Retry => continue,
-                PipeHandlerResult::Terminate => return Ok(()),
-                _ => break, // fixme .unwrap()
-            }
-        }
-        if let Ok(m) = m {
-            if let Some(data) = m.payload_view::<[u8]>() {
-                if let Ok(data) = data {
-                    id += 1;
-                    let mut ingest_ns = nanotime();
+#[async_trait::async_trait()]
+impl Source for KafkaInt {
+    async fn read(&mut self) -> Result<SourceReply> {
+        if let Some(stream) = self
+            .stream
+            .as_mut()
+            .map(|stream| unsafe { stream.mut_suffix() })
+        {
+            if let Some(Ok(m)) = stream.next().await {
+                if let Some(Ok(data)) = m.payload_view::<[u8]>() {
+                    let mut origin_uri = self.origin_uri.clone();
                     origin_uri.path = vec![
                         m.topic().to_string(),
                         m.partition().to_string(),
                         m.offset().to_string(),
                     ];
-                    send_event(
-                        &pipelines,
-                        &mut preprocessors,
-                        &mut codec,
-                        &mut metrics_reporter,
-                        &mut ingest_ns,
-                        &origin_uri,
-                        id,
-                        data.to_vec(),
-                    );
+                    Ok(SourceReply::Data {
+                        origin_uri: origin_uri,
+                        data: data.to_vec(),
+                        stream: 0,
+                    })
                 } else {
-                    error!("failed to fetch data from kafka")
+                    error!("Failed to fetch kafka message.");
+                    Ok(SourceReply::Empty(100))
                 }
             } else {
-                error!("Failed to fetch kafka message.");
+                Ok(SourceReply::Empty(100))
             }
+        } else {
+            Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
-    Ok(())
+    async fn init(&mut self) -> Result<SourceState> {
+        let context = LoggingConsumerContext;
+        let mut client_config = ClientConfig::new();
+        let tid = task::current().id();
+
+        // Get the correct origin url
+        let first_broker: Vec<&str> = if let Some(broker) = self.config.brokers.first() {
+            broker.split(':').collect()
+        } else {
+            return Err(format!("No brokers provided for Kafka onramp {}", self.onramp_id).into());
+        };
+        self.origin_uri = tremor_pipeline::EventOriginUri {
+            scheme: "tremor-kafka".to_string(),
+            // picking the first host for these
+            host: first_broker[0].to_string(),
+            port: match first_broker.get(1) {
+                Some(n) => Some(n.parse()?),
+                None => None,
+            },
+            path: vec![],
+        };
+
+        info!("Starting kafka onramp {}", self.onramp_id);
+        // Setting up the configuration with default and then overwriting
+        // them with custom settings.
+        let client_config = client_config
+            .set("group.id", &self.config.group_id)
+            .set(
+                "client.id",
+                &format!("tremor-{}-{}-{:?}", hostname(), self.onramp_id, tid),
+            )
+            .set("bootstrap.servers", &self.config.brokers.join(","))
+            .set("enable.partition.eof", "false")
+            .set("session.timeout.ms", "6000")
+            // Commit automatically every 5 seconds.
+            .set("enable.auto.commit", "true")
+            .set("auto.commit.interval.ms", "5000")
+            // but only commit the offsets explicitly stored via `consumer.store_offset`.
+            .set("enable.auto.offset.store", "true")
+            .set_log_level(RDKafkaLogLevel::Debug);
+
+        let client_config = if let Some(options) = self.config.rdkafka_options.clone() {
+            options
+                .iter()
+                .fold(client_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
+        } else {
+            client_config
+        };
+
+        let client_config = client_config.to_owned();
+
+        // Set up the the consumer
+        let consumer: LoggingConsumer = client_config.create_with_context(context)?;
+
+        // Handle topics
+        let topics: Vec<&str> = self
+            .config
+            .topics
+            .iter()
+            .map(std::string::String::as_str)
+            .collect();
+        info!("[kafka] subscribing to: {:?}", topics);
+
+        // This is terribly ugly, thank you rdkafka!
+        // We need to do this because:
+        // - subscribing to a topic that does not exist will brick the whole consumer
+        // - subscribing to a topic that does not exist will claim to succeed
+        // - getting the metadata of a topic that does not exist will claim to succeed
+        // - The only indication of it missing is in the metadata, in the topics list
+        //   in the errors ...
+        //
+        // This is terrible :/
+
+        let mut good_topics = Vec::new();
+        for topic in topics {
+            match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
+                Ok(m) => {
+                    let errors: Vec<_> = m
+                        .topics()
+                        .iter()
+                        .map(rdkafka::metadata::MetadataTopic::error)
+                        .collect();
+                    match errors.as_slice() {
+                        [None] => good_topics.push(topic),
+                        [Some(e)] => error!(
+                            "Kafka error for topic '{}': {:?}. Not subscribing!",
+                            topic, e
+                        ),
+                        _ => error!(
+                            "Unknown kafka error for topic '{}'. Not subscribing!",
+                            topic
+                        ),
+                    }
+                }
+                Err(e) => error!("Kafka error for topic '{}': {}. Not subscribing!", topic, e),
+            };
+        }
+
+        match consumer.subscribe(&good_topics) {
+            Ok(()) => info!("Subscribed to topics: {:?}", good_topics),
+            Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
+        };
+
+        let stream = rentals::MessageStream::new(Box::new(consumer), |consumer| consumer.start());
+        self.stream = Some(stream);
+
+        Ok(SourceState::Connected)
+    }
 }
 
 #[async_trait::async_trait]
@@ -252,19 +295,12 @@ impl Onramp for Kafka {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = channel(1);
-        let config = self.config.clone();
-        let codec = codec::lookup(&codec)?;
-        let preprocessors = make_preprocessors(&preprocessors)?;
-        task::Builder::new()
-            .name(format!("onramp-kafka-{}", "???"))
-            .spawn(async move {
-                if let Err(e) =
-                    onramp_loop(rx, &config, preprocessors, codec, metrics_reporter).await
-                {
-                    error!("[Onramp] Error: {}", e)
-                }
-            })?;
+        let source = KafkaInt::from_config(&self.config, &self.id);
+        let (manager, tx) =
+            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
+        thread::Builder::new()
+            .name(format!("on-kafka-{}", self.id))
+            .spawn(move || task::block_on(manager.run()))?;
         Ok(tx)
     }
     fn default_codec(&self) -> &str {

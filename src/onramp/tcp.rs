@@ -49,7 +49,11 @@ pub struct Int {
     returned_tokens: Vec<usize>,
     new_streams: Vec<usize>,
 }
-
+impl std::fmt::Debug for Int {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Tcp")
+    }
+}
 impl Int {
     fn from_config(config: &Config) -> Result<Self> {
         let config = config.clone();
@@ -246,9 +250,6 @@ impl Source for Int {
 
         Ok(SourceState::Connected)
     }
-
-    fn trigger_breaker(&mut self) {}
-    fn restore_breaker(&mut self) {}
 }
 
 #[async_trait::async_trait]

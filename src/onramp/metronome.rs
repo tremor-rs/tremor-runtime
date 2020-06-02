@@ -27,7 +27,7 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Metronome {
     pub config: Config,
     origin_uri: EventOriginUri,
@@ -78,9 +78,6 @@ impl Source for Metronome {
     async fn init(&mut self) -> Result<SourceState> {
         Ok(SourceState::Connected)
     }
-
-    fn trigger_breaker(&mut self) {}
-    fn restore_breaker(&mut self) {}
 }
 
 #[async_trait::async_trait]

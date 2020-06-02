@@ -365,7 +365,7 @@ mod test {
             kind: None,
         };
 
-        let mut r = op.on_signal(&mut signal).expect("failed to run pipeline");
+        let (mut r, _) = op.on_signal(&mut signal).expect("failed to run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);

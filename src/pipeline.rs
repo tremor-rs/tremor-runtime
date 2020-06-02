@@ -129,20 +129,22 @@ async fn handle_insight(
 ) {
     let insight = pipeline.contraflow(insight);
     let (_e, m) = insight.data.parts();
-    if m.get("trigger")
+    if dbg!(&m)
+        .get("trigger")
         .and_then(ValueTrait::as_bool)
         .unwrap_or_default()
     {
-        println!("trigger");
+        dbg!("trigger");
         for (_k, o) in onramps {
             o.send(onramp::Msg::Trigger).await
         }
     //this is a trigger event
-    } else if m
+    } else if dbg!(&m)
         .get("restore")
         .and_then(ValueTrait::as_bool)
         .unwrap_or_default()
     {
+        dbg!("restore");
         for (_k, o) in onramps {
             o.send(onramp::Msg::Restore).await
         }

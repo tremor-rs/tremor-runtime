@@ -146,12 +146,14 @@ impl Elastic {
             };
 
             if let Ok(t) = r {
+                println!("Elastic search ok: {:?}", t);
                 if m.insert("time", t).is_err() {
                     unreachable!()
                 };
             } else {
                 // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
+                println!("Elastic search error: {:?}", r);
                 if m.insert("error", "Failed to send to ES").is_err() {
                     unreachable!()
                 };

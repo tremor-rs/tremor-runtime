@@ -340,7 +340,7 @@ impl Artefact for OnrampArtefact {
             .instance()
             .unwrap_or_else(|| String::from("onramp"));
         let id = format!("{}.{}", artefact_id, instance_id);
-        let stream = onramp::lookup(&id, &self.binding_type, &self.config)?;
+        let stream = onramp::lookup(&self.binding_type, &id, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
             codec.clone()
         } else {
