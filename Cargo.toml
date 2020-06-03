@@ -5,6 +5,10 @@ description = "Tremor Runtime"
 authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
+readme = "README.md"
+homepage = "https://www.tremor.rs"
+documentation = "https://docs.tremor.rs"
+repository = "https://github.com/wayfair-tremor/tremor-runtime"
 
 [workspace]
 
@@ -121,3 +125,32 @@ gpc = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hype
 
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
+
+# for use during deb packaging, via cargo-deb
+# https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
+[package.metadata.deb]
+name = "tremor-server"
+section = "net"
+depends = "$auto"
+maintainer-scripts = "distribution/debian/maintainer-scripts/"
+assets = [
+  # target path will be automatically corrected when cross-compiling
+  ["target/release/tremor-server", "usr/bin/", "755"],
+  ["README.md", "usr/share/doc/tremor/", "644"],
+  ["LICENSE", "usr/share/doc/tremor/", "644"],
+  # need to specify each directory contents since only actual file entries are allowed here
+  ["packaging/distribution/etc/tremor/*", "/etc/tremor/", "644"],
+  ["packaging/distribution/etc/tremor/config/*", "/etc/tremor/config/", "644"],
+  # TODO enable this after some example cleanup
+  #["demo/examples/*", "/etc/tremor/config/examples/", "644"],
+  ["packaging/distribution/etc/systemd/system/*", "/etc/systemd/system/", "644"],
+]
+conf-files = [
+  # these files won't be overwritten when the package is upgraded
+  "/etc/tremor/logger.yaml",
+]
+# TODO generate this automatically as part of deb packaging (from README intro)
+# and place in "extended-description-file"
+extended-description = """\
+Tremor is an early stage event processing system for unstructured data with rich support for structural pattern matching, filtering and transformation.
+"""

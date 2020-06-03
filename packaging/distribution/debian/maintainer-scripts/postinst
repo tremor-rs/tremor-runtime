@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# exit the script when a command fails
+set -o errexit
+
+adduser --system --group --no-create-home --quiet tremor
+
+mkdir -p /var/log/tremor
+chown -R tremor:tremor /var/log/tremor

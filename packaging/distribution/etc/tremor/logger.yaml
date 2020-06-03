@@ -1,0 +1,25 @@
+# For details, see https://docs.tremor.rs/operations/configuration/
+---
+
+# Scan this file for changes every 30 seconds
+refresh_rate: 30 seconds
+
+appenders:
+  file:
+    kind: file
+    path: "/var/log/tremor/tremor.log"
+    encoder:
+      pattern: "{d} {l} {M} - {m}{n}"
+
+root:
+  level: warn
+  appenders:
+    - file
+
+loggers:
+  # for logs from tremor directly
+  tremor_runtime:
+    level: info
+    appenders:
+      - file
+    additive: false
