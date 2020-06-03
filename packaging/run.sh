@@ -57,7 +57,7 @@ while getopts hf: opt; do
   esac
 done
 shift "$((OPTIND-1))"
-TARGET=$@
+TARGET="$@"
 
 if [ -z "$TARGET" ]; then
   print_help
