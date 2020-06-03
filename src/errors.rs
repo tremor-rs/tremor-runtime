@@ -71,6 +71,12 @@ impl From<http_types::Error> for Error {
     }
 }
 
+impl From<glob::PatternError> for Error {
+    fn from(e: glob::PatternError) -> Self {
+        Self::from(format!("{}", e))
+    }
+}
+
 #[cfg(feature = "gcp")]
 impl From<google_storage1::Error> for Error {
     fn from(e: google_storage1::Error) -> Self {
