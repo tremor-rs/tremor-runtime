@@ -22,14 +22,9 @@ tide = "0.9"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
-# TODO remove. for local snmalloc testing
-#snmalloc-rs = { path = "../snmalloc-rs", optional = true }
 
 [features]
 default = ["allocator-snmalloc"]
-# TODO remove
-#default = ["allocator-jemalloc"]
-#default = ["allocator-mimalloc"]
 allocator-snmalloc = ["snmalloc-rs"]
 allocator-jemalloc = ["jemallocator"]
 allocator-mimalloc = ["mimalloc"]
