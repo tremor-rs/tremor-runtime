@@ -1,8 +1,8 @@
-# TODO remove. for testing only
-#[build]
-#xargo = false
-#xargo = true
+# Configuration for cross (https://github.com/rust-embedded/cross),
+# for easy cross compilation and testing
 
+# useful to pass these environment variables into the build environment from
+# the calling shell
 [build.env]
 passthrough = [
     "RUST_BACKTRACE",
@@ -10,30 +10,31 @@ passthrough = [
     "RUSTFLAGS",
 ]
 
-# use with:
-# RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=native" cross build -p tremor-server --target=x86_64-unknown-linux-musl
-[target.x86_64-unknown-linux-musl]
+# For the targets below, override cross's default images with our own, since our
+# dependencies like snmalloc do not build successfuly there currently. So we
+# bring our own images with all the setup done for working builds.
 #
-# has very old ubuntu and causes multiple build issues. stay away
-#image = "clux/muslrust:latest"
-#
-# has recent-ish ubuntu  but does not have static libs needed for final snmalloc
-# linking (libatomic and libstdc++)
-#image = "ekidd/rust-musl-builder:stable"
-#
-# based on cross fork with latest musl-cross-make (needed for snmalloc to compile)
-# fails currently on final linking even with modified snmalloc build script to
-# find static version of libatomic and libstdc++
-image = "tremorproject/tremor-musl-builder-cross:latest"
+# For details on the image implementation, refer to the contents of
+# packaging/builder-images directory.
 
-# use with:
-# RUSTFLAGS="-C target-feature=+crt-static -C target-cpu=native" cross build -p tremor-server --target=x86_64-alpine-linux-musl
+[target.x86_64-unknown-linux-musl]
+# has latest musl-cross-make (needed for snmalloc to compile)
+# fails currently on final linking even with modified snmalloc build script to
+# find static version of libatomic and libstdc++. With clang as the c++ compiler,
+# but to keep this image simple, we don't use it for now.
 #
+# TODO check with snmalloc-rs folks to see if there's a way around the snmalloc
+# linking issues seen here.
+image = "tremorproject/tremor-builder:x86_64-unknown-linux-musl"
+
 # cross here is expected to be installed via:
 #   cargo install --git https://github.com/anupdhml/cross.git --branch custom_target_fixes
 # has fixes for this custom target to work
 [target.x86_64-alpine-linux-musl]
-# TODO see if we can make this work without setting this
-xargo = false
-#xargo = true
-image = "tremorproject/tremor-musl-builder-alpine:latest"
+xargo = false # cross uses xargo for non-standard targets normally, but we don't want that here
+# the before-mentioned linking issues (with x86_64-unknown-linux-musl) don't occur here,
+# when using alpine's patched rustc (https://git.alpinelinux.org/aports/tree/community/rust).
+image = "tremorproject/tremor-builder:x86_64-alpine-linux-musl"
+
+[target.x86_64-unknown-linux-gnu]
+image = "tremorproject/tremor-builder:x86_64-unknown-linux-gnu"
