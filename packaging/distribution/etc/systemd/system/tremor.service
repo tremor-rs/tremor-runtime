@@ -1,0 +1,14 @@
+[Unit]
+Description=Tremor
+Documentation=https://docs.tremor.rs
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+User=tremor
+Group=tremor
+ExecStart=/usr/bin/tremor-server --logger-config /etc/tremor/logger.yaml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
