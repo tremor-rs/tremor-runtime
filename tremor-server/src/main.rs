@@ -213,8 +213,7 @@ async fn run_dun() -> Result<()> {
         Some(files) => files.map(String::from).collect(),
         // read from default query file(s) now (returns empty if these paths don't exist too)
         None => glob::glob("/etc/tremor/config/*.trickle")?
-            .filter_map(std::result::Result::ok)
-            .map(|p| p.display().to_string())
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
             .collect(),
     };
     if !query_files.is_empty() {
@@ -229,8 +228,7 @@ async fn run_dun() -> Result<()> {
         Some(files) => files.map(String::from).collect(),
         // read from default config file(s) now (returns empty if these paths don't exist too)
         None => glob::glob("/etc/tremor/config/*.yaml")?
-            .filter_map(std::result::Result::ok)
-            .map(|p| p.display().to_string())
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
             .collect(),
     };
     if !config_files.is_empty() {

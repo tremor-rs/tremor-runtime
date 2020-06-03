@@ -21,7 +21,7 @@ passthrough = [
 # has latest musl-cross-make (needed for snmalloc to compile)
 # fails currently on final linking even with modified snmalloc build script to
 # find static version of libatomic and libstdc++. With clang as the c++ compiler,
-# but to keep this image simple, we don't use it for now.
+# this works, but to keep this image simple, we don't use it for now.
 #
 # TODO check with snmalloc-rs folks to see if there's a way around the snmalloc
 # linking issues seen here.

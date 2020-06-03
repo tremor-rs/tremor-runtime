@@ -119,7 +119,7 @@ gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hype
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
 
-# for use during deb packaging, via cargo-deb
+# for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
 [package.metadata.deb]
 name = "tremor-server"
