@@ -78,7 +78,7 @@ if [[ "$TARGET" == *"alpine-linux-musl"* ]]; then
   # is the default rustc behavior for musl targets, but alpine disables it by
   # default (via patches to rust).
   echo "Ensuring static builds for alpine-linux-musl targets..."
-  CUSTOM_RUSTFLAGS+=("-C" "target-feature=+crt-static")
+  CUSTOM_RUSTFLAGS+=("-C" "target-feature=+crt-static,+avx,+avx2,+sse4.2")
 fi
 
 export RUSTFLAGS="${RUSTFLAGS} ${CUSTOM_RUSTFLAGS[@]}"
