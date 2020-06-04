@@ -11,6 +11,13 @@ For CI or local use, packaging is best done via the [project Makefile](../Makefi
 ```bash
 make builder-images && make packages # from project root
 ```
+
+Or to package for a specific target only (across all release formats):
+
+```bash
+make builder-image-x86_64-unknown-linux-gnu && make package-x86_64-unknown-linux-gnu
+```
+
 Resulting artifacts will be available in the directory `packaging/out`, relative to project root. Enjoy!
 
 Note: once we have the builder images successfuly pushed to [docker hub](https://hub.docker.com/r/tremorproject/tremor-builder), just `make packages` will suffice (the images will be pulled in automatically as part of project build).
@@ -30,7 +37,7 @@ Other examples:
 * bash
 * git
 * cargo
-* docker (to build the [builder-images](builder-images) only)
+* docker
 * dpkg, ldd (optionally, to auto-infer dynamic lib dependencies during debian packaging, via [cargo-deb](https://github.com/mmstick/cargo-deb#installation))
 
 The setup here was tested successfully from linux (ubuntu) environments, but it should work well in other environments too, as long as the above requirements are met.
