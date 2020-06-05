@@ -9,20 +9,18 @@ The main packaging functionality here is exposed via [run.sh](run.sh) -- please 
 For CI or local use, packaging is best done via the [project Makefile](../Makefile), which has convenient (make) targets defined for doing it against all the supported rustc targets as well as package formats.
 
 ```bash
-make builder-images && make packages # from project root
+make packages # from project root
 ```
 
 Or to package for a specific target only (across all release formats):
 
 ```bash
-make builder-image-x86_64-unknown-linux-gnu && make package-x86_64-unknown-linux-gnu
+make package-x86_64-unknown-linux-gnu # from project root
 ```
 
 Resulting artifacts will be available in the directory `packaging/out`, relative to project root. Enjoy!
 
-Note: once we have the builder images successfuly pushed to [docker hub](https://hub.docker.com/r/tremorproject/tremor-builder), just `make packages` will suffice (the images will be pulled in automatically as part of project build).
-
-Other examples:
+Other examples, using the scripts here directly:
 
 ```bash
 # produce packages of all supported formats (using glibc based binaries) for x86_64 linux
@@ -31,6 +29,8 @@ Other examples:
 # produce archive (using musl based binaries) for x86_64 linux
 ./cross_build.sh x86_64-alpine-linux-musl && ./run.sh -f archive x86_64-alpine-linux-musl
 ```
+
+If you need to build the docker images used during the cross build process, please refer to the documentation on [builder-images](./builder-images).
 
 ### Requirements
 

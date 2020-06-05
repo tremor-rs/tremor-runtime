@@ -9,7 +9,8 @@
 
 
 function package_archive {
-  local archive_name="${BIN_NAME}-${VERSION}-${TARGET}"
+  # aligning the naming convention here with what cargo-deb uses for deb packages
+  local archive_name="${BIN_NAME}_${VERSION}_${TARGET}"
   local archive_extension="tar.gz" # TODO support zip here once we package for windows too
   local archive_file="${PACKAGES_DIR}/${archive_name}.${archive_extension}"
 
