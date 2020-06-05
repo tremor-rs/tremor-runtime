@@ -35,9 +35,10 @@ pub trait Preprocessor: Sync + Send {
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         // TODO once preprocessors allow configuration, remove multiple entries for lines here
-        "lines" => Ok(Box::new(Lines::new('\n', 1_048_576))),
-        "lines-null" => Ok(Box::new(Lines::new('\0', 1_048_576))),
-        "lines-pipe" => Ok(Box::new(Lines::new('|', 1_048_576))),
+        "lines" => Ok(Box::new(Lines::new('\n', 1_048_576, true))),
+        "lines-null" => Ok(Box::new(Lines::new('\0', 1_048_576, true))),
+        "lines-pipe" => Ok(Box::new(Lines::new('|', 1_048_576, true))),
+        "lines-from-datagram" => Ok(Box::new(Lines::new('\n', 0, false))),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
