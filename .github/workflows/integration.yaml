@@ -18,8 +18,8 @@ jobs:
         run: sudo apt-get install -y libssl1.0-dev libssl1.0
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           override: true
+          profile: minimal
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run Integration Tests
@@ -41,8 +41,8 @@ jobs:
         run: go get github.com/landoop/coyote
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           override: true
+          profile: minimal
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run curl tests
