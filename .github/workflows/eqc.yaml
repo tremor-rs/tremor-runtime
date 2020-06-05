@@ -22,8 +22,8 @@ jobs:
         run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
           override: true
+          profile: minimal
       - name: Build
         run: cargo build -p tremor-server -p tremor-tool
       - name: Run eqc tests
