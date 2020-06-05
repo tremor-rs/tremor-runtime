@@ -333,12 +333,8 @@ impl Artefact for OnrampArtefact {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let artefact_id = servant_id
-            .artefact()
-            .unwrap_or_else(|| String::from("onramp"));
-        let instance_id = servant_id
-            .instance()
-            .unwrap_or_else(|| String::from("onramp"));
+        let artefact_id = servant_id.artefact().unwrap_or("onramp");
+        let instance_id = servant_id.instance().unwrap_or("onramp");
         let id = format!("{}.{}", artefact_id, instance_id);
         let stream = onramp::lookup(&self.binding_type, &id, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
@@ -474,25 +470,28 @@ impl Artefact for Binding {
             // TODO: It should be validated ahead of time that every mapping has an instance!
             // * is a port
             // *  is a combination of on and offramp
-            if let Some(mut instance) = src.instance().clone() {
+            if let Some(inst) = src.instance() {
+                let mut instance = String::new();
                 for (map_name, map_replace) in &mappings {
                     let mut f = String::from("%7B");
                     f.push_str(map_name.as_str());
                     f.push_str("%7D");
-                    instance = instance.as_str().replace(f.as_str(), map_replace.as_str());
+                    instance = inst.replace(f.as_str(), map_replace.as_str());
                 }
                 let mut from = src.clone();
                 from.set_instance(instance.to_owned());
                 let mut tos: Vec<TremorURL> = Vec::new();
                 for dst in dsts {
                     // TODO: It should be validated ahead of time that every mapping has an instance!
-                    if let Some(mut instance) = dst.instance().clone() {
+                    if let Some(inst) = dst.instance().clone() {
+                        let mut instance = String::new();
+
                         // Thisbecause it is an URL we have to use escape codes
                         for (map_name, map_replace) in &mappings {
                             let mut f = String::from("%7B");
                             f.push_str(map_name.as_str());
                             f.push_str("%7D");
-                            instance = instance.as_str().replace(f.as_str(), map_replace.as_str());
+                            instance = inst.replace(f.as_str(), map_replace.as_str());
                         }
                         let mut to = dst.clone();
                         to.set_instance(instance);
@@ -551,9 +550,11 @@ impl Artefact for Binding {
                 .link_pipeline(
                     &from,
                     vec![(
-                        from.instance_port().ok_or_else(|| {
-                            Error::from(format!("{} is missing an instnace port", from))
-                        })?,
+                        from.instance_port()
+                            .ok_or_else(|| {
+                                Error::from(format!("{} is missing an instnace port", from))
+                            })?
+                            .to_string(),
                         to.clone(),
                     )]
                     .into_iter()
@@ -591,9 +592,11 @@ impl Artefact for Binding {
                 .link_onramp(
                     &from,
                     vec![(
-                        from.instance_port().ok_or_else(|| {
-                            Error::from(format!("{} is missing an instnace port", from))
-                        })?,
+                        from.instance_port()
+                            .ok_or_else(|| {
+                                Error::from(format!("{} is missing an instnace port", from))
+                            })?
+                            .to_string(),
                         to,
                     )]
                     .into_iter()
@@ -632,9 +635,11 @@ impl Artefact for Binding {
                 let mut mappings = HashMap::new();
                 for p in to {
                     mappings.insert(
-                        from.instance_port().ok_or_else(|| {
-                            Error::from(format!("{} is missing an instnace port", from))
-                        })?,
+                        from.instance_port()
+                            .ok_or_else(|| {
+                                Error::from(format!("{} is missing an instnace port", from))
+                            })?
+                            .to_string(),
                         p.clone(),
                     );
                 }
@@ -646,7 +651,7 @@ impl Artefact for Binding {
                 for to in tos {
                     let mut mappings = HashMap::new();
                     if let Some(port) = from.instance_port() {
-                        mappings.insert(port, to.clone());
+                        mappings.insert(port.to_string(), to.clone());
                     } else {
                         error!("{} is missing an instnace port", from)
                     }

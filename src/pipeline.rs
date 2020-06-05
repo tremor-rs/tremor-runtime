@@ -72,6 +72,19 @@ impl Dest {
         }
         Ok(())
     }
+    pub fn send_signal(&self, signal: Event) -> Result<()> {
+        match self {
+            Self::Offramp(addr) => addr.send(offramp::Msg::Signal(signal))?,
+            Self::Pipeline(addr) => {
+                // Each pipeline has their own ticks, we don't
+                // want to propagate them
+                if signal.kind != Some(SignalKind::Tick) {
+                    addr.addr.send(Msg::Signal(signal))?
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct Create {
@@ -102,7 +115,7 @@ fn send_events(
                 offramp.send_event(
                     id.instance_port()
                         .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
-                        .clone()
+                        .to_string()
                         .into(),
                     event.clone(),
                 )?;
@@ -112,11 +125,32 @@ fn send_events(
             offramp.send_event(
                 id.instance_port()
                     .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
-                    .clone()
+                    .to_string()
                     .into(),
                 event,
             )?;
         };
+    }
+    Ok(())
+}
+
+#[inline]
+fn send_signal(
+    own_id: &TremorURL,
+    signal: Event,
+    dests: &halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>,
+) -> Result<()> {
+    let mut offramps = dests.values().flatten();
+    let first = offramps.next();
+    for (id, offramp) in offramps {
+        if id != own_id {
+            offramp.send_signal(signal.clone())?;
+        }
+    }
+    if let Some((id, offramp)) = first {
+        if id != own_id {
+            offramp.send_signal(signal)?;
+        }
     }
     Ok(())
 }
@@ -227,9 +261,14 @@ impl Manager {
                         Msg::Insight(insight) => {
                             task::block_on(handle_insight(insight, &mut pipeline, &onramps))
                         }
-                        Msg::Signal(signal) => match pipeline.enqueue_signal(signal, &mut eventset)
+                        Msg::Signal(signal) => match pipeline
+                            .enqueue_signal(signal.clone(), &mut eventset)
                         {
                             Ok(insights) => {
+                                if let Err(e) = send_signal(&id, signal, &dests) {
+                                    error!("Failed to send signal: {}", e)
+                                }
+
                                 for insight in insights {
                                     task::block_on(handle_insight(insight, &mut pipeline, &onramps))
                                 }

@@ -52,6 +52,7 @@ pub enum Msg {
         event: Event,
         input: Cow<'static, str>,
     },
+    Signal(Event),
     Connect {
         id: TremorURL,
         addr: pipeline::Addr,
@@ -69,13 +70,14 @@ pub type Addr = CbSender<Msg>;
 // overlying object with lifetimes.
 // We also can't pass in Box<dyn Codec> as that would try to move it out of
 // borrowed contest
-#[allow(clippy::borrowed_box)]
+#[allow(clippy::borrowed_box, unused_variables)]
 pub trait Offramp: Send {
     fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
     fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event) -> Result<()>;
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
+    fn on_signal(&mut self, signal: Event) {}
 }
 
 pub trait Impl {
@@ -174,6 +176,7 @@ impl Manager {
                             info!("[Offramp::{}] started", offramp_id);
                             for m in rx {
                                 match m {
+                                    Msg::Signal(signal) => offramp.on_signal(signal),
                                     Msg::Event { event, input } => {
                                         metrics_reporter.periodic_flush(event.ingest_ns);
 

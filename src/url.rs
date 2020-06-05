@@ -238,17 +238,17 @@ impl TremorURL {
     }
 
     /// Retrives the instance
-    pub fn instance(&self) -> Option<String> {
-        self.instance.clone()
+    pub fn instance(&self) -> Option<&str> {
+        self.instance.as_ref().map(String::as_str)
     }
 
     /// Retrives the artefact
-    pub fn artefact(&self) -> Option<String> {
-        self.artefact.clone()
+    pub fn artefact(&self) -> Option<&str> {
+        self.artefact.as_ref().map(String::as_str)
     }
     /// Retrives the port
-    pub fn instance_port(&self) -> Option<String> {
-        self.instance_port.clone()
+    pub fn instance_port(&self) -> Option<&str> {
+        self.instance_port.as_ref().map(String::as_str)
     }
     /// Retrives the type
     pub fn resource_type(&self) -> Option<ResourceType> {
@@ -307,9 +307,9 @@ mod test {
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
-        assert_eq!(Some("main".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("main"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
         Ok(())
     }
 
@@ -319,9 +319,9 @@ mod test {
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
-        assert_eq!(Some("main".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("main"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
         Ok(())
     }
 
@@ -329,7 +329,7 @@ mod test {
     fn from_onramp_id() -> Result<()> {
         let url = TremorURL::from_onramp_id("test")?;
         assert_eq!(Some(ResourceType::Onramp), url.resource_type());
-        assert_eq!(Some("test".to_owned()), url.artefact());
+        assert_eq!(Some("test"), url.artefact());
         Ok(())
     }
 
@@ -337,7 +337,7 @@ mod test {
     fn from_offramp_id() -> Result<()> {
         let url = TremorURL::from_offramp_id("test")?;
         assert_eq!(Some(ResourceType::Offramp), url.resource_type());
-        assert_eq!(Some("test".to_owned()), url.artefact());
+        assert_eq!(Some("test"), url.artefact());
         Ok(())
     }
 
@@ -356,8 +356,8 @@ mod test {
         assert_eq!(Scope::Type, url.scope());
         assert_eq!(None, url.resource_type());
         assert_eq!(None, url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
         Ok(())
     }
 
@@ -366,9 +366,9 @@ mod test {
         let url = TremorURL::parse("pipe/01/in")?;
         assert_eq!(Scope::Artefact, url.scope());
         assert_eq!(None, url.resource_type());
-        assert_eq!(Some("pipe".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("pipe"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
         Ok(())
     }
 
@@ -377,23 +377,23 @@ mod test {
         let url = TremorURL::parse("binding/pipe/01/in")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Binding), url.resource_type());
-        assert_eq!(Some("pipe".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("pipe"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
 
         let url = TremorURL::parse("onramp/id/01/out")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Onramp), url.resource_type());
-        assert_eq!(Some("id".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("out".to_owned()), url.instance_port());
+        assert_eq!(Some("id"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("out"), url.instance_port());
 
         let url = TremorURL::parse("offramp/id/01/in")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Offramp), url.resource_type());
-        assert_eq!(Some("id".to_owned()), url.artefact());
-        assert_eq!(Some("01".to_owned()), url.instance());
-        assert_eq!(Some("in".to_owned()), url.instance_port());
+        assert_eq!(Some("id"), url.artefact());
+        assert_eq!(Some("01"), url.instance());
+        assert_eq!(Some("in"), url.instance_port());
 
         Ok(())
     }

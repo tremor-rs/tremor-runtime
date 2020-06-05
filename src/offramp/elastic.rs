@@ -272,6 +272,11 @@ impl Offramp for Elastic {
         }
         self.maybe_enque(output, payload)
     }
+
+    fn on_signal(&mut self, event: Event) {
+        dbg!(event.ingest_ns);
+    }
+
     fn default_codec(&self) -> &str {
         "json"
     }
