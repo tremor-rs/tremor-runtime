@@ -25,11 +25,12 @@ struct BindingWrap {
 pub async fn list_artefact(req: Request) -> Result<Response> {
     let repo = &req.state().world.repo;
 
-    let result: Vec<String> = repo
+    let result: Vec<_> = repo
         .list_bindings()
         .await
         .iter()
         .filter_map(tremor_runtime::url::TremorURL::artefact)
+        .map(String::from)
         .collect();
     reply(req, result, false, StatusCode::Ok).await
 }
@@ -77,6 +78,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .instances
             .iter()
             .filter_map(tremor_runtime::url::TremorURL::instance)
+            .map(String::from)
             .collect(),
     };
 
