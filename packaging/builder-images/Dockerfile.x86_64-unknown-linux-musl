@@ -8,6 +8,10 @@ FROM rust:${RUST_VERSION}-buster
 # this setup borrowed from https://github.com/rust-embedded/cross/blob/v0.2.0/docker/musl.sh#L44
 # not using cross's default image there directly since that has older gcc (6.4)
 # which does not work for our dependencies like snmalloc
+#
+# once https://github.com/rust-embedded/cross/issues/432 is resolved, we can
+# probably get rid of this and base our image from the relevant cross default
+# image here (rustembedded/cross:x86_64-unknown-linux-musl).
 RUN temp_dir=$(mktemp -d) \
   && cd $temp_dir \
   && curl -L https://github.com/richfelker/musl-cross-make/archive/v0.9.9.tar.gz | tar --strip-components=1 -xz \

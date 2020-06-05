@@ -29,7 +29,8 @@ image = "tremorproject/tremor-builder:x86_64-unknown-linux-musl"
 
 # cross here is expected to be installed via:
 #   cargo install --git https://github.com/anupdhml/cross.git --branch custom_target_fixes
-# has fixes for this custom target to work
+# has fixes for this custom target to work. PR tracking the upstream merge:
+#   https://github.com/rust-embedded/cross/pull/431
 [target.x86_64-alpine-linux-musl]
 xargo = false # cross uses xargo for non-standard targets normally, but we don't want that here
 # the before-mentioned linking issues (with x86_64-unknown-linux-musl) don't occur here,
