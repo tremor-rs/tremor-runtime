@@ -51,20 +51,22 @@ impl Lines {
 	
         //return true if is there is no limit on max length of the data fragment	    
         if self.max_length == 0 {
-            true;				
+			true				
+        } else {
+	      	if v.len() <= self.max_length {
+            	true
+	        } else {
+	            warn!(
+	                "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
+	                v.len(),
+	                self.max_length,
+	                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
+	            );
+	            false
+	        }
         }
  
-        if v.len() <= self.max_length {
-            true
-        } else {
-            warn!(
-                "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
-                v.len(),
-                self.max_length,
-                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
-            );
-            false
-        }
+        
     }
 
     fn save_fragment(&mut self, v: &[u8]) {
@@ -137,11 +139,11 @@ impl Preprocessor for Lines {
             .map(Vec::from)
             .collect();
 
-        if let Some(last_event) = events.pop() {
+        //check if buffering of the last data fragment after the line separator is required.
+		if self.is_buffered {
+        	if let Some(last_event) = events.pop() {
 			
-			//check if buffering of the last data fragment after the line separator is required.
-			if self.is_buffered {
-				// if incoming data had at least one line separator boundary (anywhere)
+			    // if incoming data had at least one line separator boundary (anywhere)
 	            // AND if the preprocessor has memory of line fragment from earlier,
 	            // reconstruct the first event fully (by adding the buffer contents to it)
 	            if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
@@ -157,6 +159,7 @@ impl Preprocessor for Lines {
             
         }
 
+        
         Ok(events
             .into_iter()
             .filter(|event| !event.is_empty() && self.is_valid_line(event))

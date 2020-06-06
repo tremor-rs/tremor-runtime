@@ -448,6 +448,67 @@ mod test {
     }
 
     #[test]
+    fn test_lines_no_buffer_no_maxlength() -> Result<()> {
+        // Fake ingest_ns 
+        let mut ingest_ns = 0u64;
+
+  		let test_data = get_data_for_test_lines_no_buffer_no_maxlength();
+		for case in &test_data {
+			let inbound = case.0;
+        	let outbound_1 = case.1;
+        	let outbound_2 = case.2;
+
+			let  r = crate::preprocessor::Lines::new('\n', 0, false)
+                .process(&mut ingest_ns, inbound);
+        
+	        let  out = &r?;
+	        // Assert preporcessor output is as expected
+	        assert!(2 == out.len(),"Test case : {} => expected output = {}, actual output = {}", case.3, "2", out.len());
+	        assert!(outbound_1 == out[0].as_slice(),"Test case : {} => expected output = \"{}\", actual output = \"{}\"", case.3, std::str::from_utf8(outbound_1).unwrap(), std::str::from_utf8(out[0].as_slice()).unwrap());
+	        assert!(outbound_2 == out[1].as_slice(),"Test case : {} => expected output = \"{}\", actual output = \"{}\"", case.3, std::str::from_utf8(outbound_2).unwrap(), std::str::from_utf8(out[1].as_slice()).unwrap());
+	 	}
+        
+		Ok(())
+    }
+
+    fn get_data_for_test_lines_no_buffer_no_maxlength() -> [(&'static [u8], &'static [u8], &'static [u8], &'static str); 5] {
+        [
+            (
+                b"snot\nbadger",
+                b"snot",
+                b"badger",
+                "0"
+            ),
+			(
+                b"snot\nbadger\n",
+                b"snot",
+                b"badger",
+                "1"
+            ),
+			(
+                b"snot\nbadger\n\n",
+                b"snot",
+                b"badger",
+                "2"
+            ),
+			(
+                b"snot\n\nbadger",
+                b"snot",
+                b"badger",
+                "3"
+            ),
+			(
+                b"\nsnot\nbadger",
+                b"snot",
+                b"badger",
+                "4"
+            )
+		]
+    }
+
+    
+
+    #[test]
     fn test_base64() -> Result<()> {
         let int = "snot badger".as_bytes();
         let enc = "c25vdCBiYWRnZXI=".as_bytes();
