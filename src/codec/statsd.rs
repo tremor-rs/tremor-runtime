@@ -163,14 +163,12 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         Some((_, b'|')) => {
             if let Some((sample_start, b'@')) = d.next() {
                 let s = str::from_utf8(&data[sample_start + 1..])?;
-                let v: f64 = s.trim().parse()?;
+                let v: f64 = s.parse()?;
                 m.insert("sample_rate".into(), Value::from(v));
             } else {
                 return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into());
             }
         }
-        Some((_,b'\n')) => (),
-        Some((_,b'\r')) => (),
         None => (),
         _ => return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into()),
     };
@@ -315,4 +313,6 @@ mod test {
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
     }
+
+    
 }

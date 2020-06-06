@@ -19,7 +19,7 @@ use std::cmp::min;
 #[derive(Clone)]
 pub struct Lines {
     separator: u8,
-    max_length: usize, //set to 0 if no limit to max length of the data fragments
+    max_length: usize, //set to 0 if no limit for length of the data fragments
     // to keep track of line fragments when partial data comes through
     fragment_length: usize,
     buffer: Vec<u8>,
