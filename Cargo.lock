@@ -4016,9 +4016,9 @@ checksum = "502d53007c02d7605a05df1c1a73ee436952781653da5d0bf57ad608f66932c1"
 
 [[package]]
 name = "surf"
-version = "2.0.0-alpha.3"
+version = "2.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deb9687a166a5ef439f55b38b26af3907569a2e47c4863f3a6b6ae975c64bb87"
+checksum = "68bf1412b095b3a54da6ec3a969e2663cb3cf535652cd97c02e99443a400fd7d"
 dependencies = [
  "async-std",
  "encoding_rs",
