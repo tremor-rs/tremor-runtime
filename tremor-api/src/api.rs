@@ -15,7 +15,6 @@
 pub use http_types::headers;
 pub use http_types::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 pub use tide::Response;
 use tremor_runtime::errors::{Error as TremorError, ErrorKind};
 use tremor_runtime::system::World;
@@ -71,10 +70,17 @@ impl Error {
 impl Into<Response> for Error {
     fn into(self) -> Response {
         match self {
-            Error::Generic(c, d) => Response::new(c).body_string(d),
-            Error::JSON(c, d) => Response::new(c)
-                .body_string(d)
-                .set_header(headers::CONTENT_TYPE, ResourceType::Json.to_string()),
+            Error::Generic(c, d) => {
+                let mut r = Response::new(c);
+                r.set_body(d);
+                r
+            }
+            Error::JSON(c, d) => {
+                let mut r = Response::new(c);
+                r.insert_header(headers::CONTENT_TYPE, ResourceType::Json.to_string());
+                r.set_body(d);
+                r
+            }
         }
     }
 }
@@ -135,7 +141,7 @@ impl ToString for ResourceType {
 pub fn content_type(req: &Request) -> Option<ResourceType> {
     match req
         .header(&headers::CONTENT_TYPE)
-        .and_then(|v| v.first())
+        .map(headers::HeaderValues::last)
         .map(headers::HeaderValue::as_str)
     {
         Some("application/yaml") => Some(ResourceType::Yaml),
@@ -146,11 +152,9 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
 
 pub fn accept(req: &Request) -> ResourceType {
     // TODO implement correctly / RFC compliance
-    match "Accept"
-        .try_into()
-        .ok()
-        .and_then(|h| req.header(&h))
-        .and_then(|v| v.first())
+    match req
+        .header(headers::ACCEPT)
+        .map(headers::HeaderValues::last)
         .map(headers::HeaderValue::as_str)
     {
         Some("application/yaml") => ResourceType::Yaml,
@@ -191,13 +195,19 @@ pub fn serialize<T: Serialize>(
     ok_code: StatusCode,
 ) -> std::result::Result<Response, crate::Error> {
     match t {
-        ResourceType::Yaml => Ok(Response::new(ok_code)
-            .body_string(serde_yaml::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string())),
+        ResourceType::Yaml => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.set_body(serde_yaml::to_string(d)?);
+            Ok(r)
+        }
 
-        ResourceType::Json => Ok(Response::new(ok_code)
-            .body_string(simd_json::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string())),
+        ResourceType::Json => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.set_body(simd_json::to_string(d)?);
+            Ok(r)
+        }
     }
 }
 

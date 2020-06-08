@@ -18,7 +18,7 @@ tremor-influx = { path = "../tremor-influx" }
 lazy_static = "1"
 window = { git = "https://github.com/wayfair-tremor/window.git" }
 indexmap = { version = "1", features=["serde-1"] }
-lru = "0.4"
+lru = "0.5"
 halfbrown = "0.1"
 log = "0.4"
 rental = "0.5"

@@ -42,3 +42,4 @@ perf.data*
 logger-*
 tremor.log
 docs
+/packaging/out/

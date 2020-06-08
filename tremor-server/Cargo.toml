@@ -16,13 +16,15 @@ clap = { version = "2", features = ["yaml"] }
 env_logger = "0.7.1"
 log = "0.4"
 log4rs = "0.12.0"
-async-std = { version = "1", features = ["unstable"] }
-tide = "0.8"
+glob = "0.3"
+async-std = { version = "1.6", features = ["unstable"] }
+tide = "0.10"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
 
 [features]
-default = ["snmalloc"]
-snmalloc = ["snmalloc-rs"]
-jemalloc = ["jemallocator"]
+default = ["allocator-snmalloc"]
+allocator-snmalloc = ["snmalloc-rs"]
+allocator-jemalloc = ["jemallocator"]
+allocator-mimalloc = ["mimalloc"]

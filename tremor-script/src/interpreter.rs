@@ -83,7 +83,7 @@ where
 {
     /// Context of the event
     pub context: &'run EventContext,
-    /// Constatns
+    /// Constants
     pub consts: &'run [Value<'event>],
     /// Aggregates
     pub aggrs: &'run [InvokeAggrFn<'script>],
@@ -637,7 +637,7 @@ where
             }
         }
     } else {
-        // If one of the two isn't a map we can't merge so we simplhy
+        // If one of the two isn't a map we can't merge so we simply
         // write the replacement into the target.
         // NOTE: We got to clone here since we're duplicating values
         *value = replacement.clone();

@@ -2,8 +2,9 @@ onramp:
   - id: in
     type: file
     config:
-      source: {in}
+      source: "{in}"
       close_on_done: true
+      sleep_on_done: 500
 
 offramp:
   - id: out
@@ -20,11 +21,11 @@ pipeline:
       - id: p
         op: passthrough
     links:
-      in: [ p ]
-      p: [ out ]
+      in: [p]
+      p: [out]
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

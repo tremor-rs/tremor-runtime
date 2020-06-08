@@ -71,6 +71,12 @@ impl From<http_types::Error> for Error {
     }
 }
 
+impl From<glob::PatternError> for Error {
+    fn from(e: glob::PatternError) -> Self {
+        Self::from(format!("{}", e))
+    }
+}
+
 #[cfg(feature = "gcp")]
 impl From<google_storage1::Error> for Error {
     fn from(e: google_storage1::Error) -> Self {
@@ -151,13 +157,10 @@ error_chain! {
         RegexError(regex::Error);
         WsError(tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
+        AsyncRecvError(async_std::sync::RecvError);
     }
 
     errors {
-        AsyncRecvError {
-            description("Failed to recive from a task")
-                display("Failed to recive from a task")
-        }
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)

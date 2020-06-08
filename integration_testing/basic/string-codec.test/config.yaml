@@ -3,14 +3,15 @@ onramp:
     type: file
     codec: string
     config:
-      source: {in}
+      source: "{in}"
       close_on_done: true
+      sleep_on_done: 500
 
 offramp:
   - id: out
     type: file
     config:
-      file: {out}
+      file: "{out}"
 
 pipeline:
   - id: main
@@ -31,12 +32,11 @@ pipeline:
             end;
             event
     links:
-      in: [ r ]
-      r: [ out ]
+      in: [r]
+      r: [out]
 
 binding:
   - id: test
     links:
-      '/onramp/in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/out/{instance}/in' ]
-
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

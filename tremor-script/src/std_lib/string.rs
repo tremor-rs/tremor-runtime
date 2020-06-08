@@ -55,7 +55,7 @@ pub fn load(registry: &mut Registry) {
                 let mut iter = format.chars().enumerate();
                 while let Some((pos, char)) = iter.next() {
                     match char {
-                        '{'  => match iter.next() {
+                        '{' => match iter.next() {
                             Some((_, '}')) => if let Some(arg) = arg_stack.pop() {
                                 if let Some(s) = arg.as_str() {
                                     out.push_str(&s);
@@ -69,13 +69,13 @@ pub fn load(registry: &mut Registry) {
                                 out.push('{');
                             }
                             _ => {
-                                return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
+                                return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
                             }
                         },
                         '}' => if let Some((_, '}')) =  iter.next() {
                             out.push('}')
                         } else {
-                            return  Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
+                            return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
                         },
                         c => out.push(c),
                     }
@@ -171,13 +171,8 @@ pub fn load(registry: &mut Registry) {
 
 #[cfg(test)]
 mod test {
-    use crate::registry::fun;
+    use crate::registry::{fun, FunctionError};
     use simd_json::BorrowedValue as Value;
-    macro_rules! assert_val {
-        ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(Value::from($r)))
-        };
-    }
 
     #[test]
     fn replace() {
@@ -185,8 +180,13 @@ mod test {
         let v1 = Value::from("this is a test");
         let v2 = Value::from("test");
         let v3 = Value::from("cake");
+        assert_val!(f(&[&v1, &v2, &v3]), "this is a cake");
 
-        assert_val!(f(&[&v1, &v2, &v3]), "this is a cake")
+        let v1 = Value::from("this is a test with test present twice");
+        assert_val!(
+            f(&[&v1, &v2, &v3]),
+            "this is a cake with cake present twice"
+        );
     }
 
     #[test]
@@ -194,22 +194,52 @@ mod test {
         let f = fun("string", "is_empty");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
+
         let v = Value::from("");
-        assert_val!(f(&[&v]), true)
+        assert_val!(f(&[&v]), true);
     }
 
     #[test]
     fn len() {
         let f = fun("string", "len");
+
+        let v = Value::from("");
+        assert_val!(f(&[&v]), 0);
+
         let v = Value::from("this is a test");
-        assert_val!(f(&[&v]), 14)
+        assert_val!(f(&[&v]), 14);
+
+        let v = Value::from("this is another test ♥");
+        assert_val!(f(&[&v]), 22);
+    }
+
+    #[test]
+    fn bytes() {
+        let f = fun("string", "bytes");
+
+        let v = Value::from("");
+        assert_val!(f(&[&v]), 0);
+
+        let v = Value::from("this is a test");
+        assert_val!(f(&[&v]), 14);
+
+        let v = Value::from("this is another test ♥");
+        assert_val!(f(&[&v]), 24);
     }
 
     #[test]
     fn trim() {
         let f = fun("string", "trim");
+
+        let v = Value::from("   ");
+        assert_val!(f(&[&v]), "");
+
         let v = Value::from(" this is a test ");
-        assert_val!(f(&[&v]), "this is a test")
+        assert_val!(f(&[&v]), "this is a test");
+
+        // Non-breaking spaces, i.e., non-ASCII whitespace
+        let v = Value::from("\u{00A0}\u{00A0}this is a test\u{00A0}\u{00A0}");
+        assert_val!(f(&[&v]), "this is a test");
     }
 
     #[test]
@@ -283,5 +313,43 @@ mod test {
         let v1 = Value::from("snot badger");
         let v2 = Value::from("snot badger");
         assert_val!(f(&[&v1, &v2]), Value::from(true));
+    }
+
+    #[test]
+    fn format() {
+        let f = fun("string", "format");
+        let v1 = Value::from("a string with {}");
+        let v2 = Value::from("more text");
+        let v3 = Value::from(123);
+        assert_val!(f(&[&v1, &v2]), Value::from("a string with more text"));
+        assert_val!(f(&[&v1, &v3]), Value::from("a string with 123"));
+
+        // Format string missing
+        match f(&[&v3]) {
+            Err(FunctionError::RuntimeError { error, .. }) => {
+                assert_eq!(error, "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{}\", 1)`");
+            }
+            // ALLOW: panicking is the idiomatic way to signal failure in tests
+            _any_other_result => panic!("Call should have failed: format string missing"),
+        }
+
+        // Too few arguments for format string
+        // TODO: this error message isn't as helpful as it could be
+        match f(&[&v1]) {
+            Err(FunctionError::RuntimeError { error, .. }) => {
+                assert_eq!(error, "the arguments passed to the format function are less than the `{}` specifiers in the format string. The placeholder at 14 can not be filled");
+            }
+            // ALLOW: panicking is the idiomatic way to signal failure in tests
+            _any_other_result => panic!("Call should have failed: too few arguments provided"),
+        }
+
+        // Too many arguments for format string
+        match f(&[&v1, &v2, &v3]) {
+            Err(FunctionError::RuntimeError { error, .. }) => {
+                assert_eq!(error, "too many parameters passed. Ensure that you have the same number of {} in your format string");
+            }
+            // ALLOW: panicking is the idiomatic way to signal failure in tests
+            _any_other_result => panic!("Call should have failed: too many arguments provided"),
+        }
     }
 }

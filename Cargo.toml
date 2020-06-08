@@ -5,6 +5,10 @@ description = "Tremor Runtime"
 authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
+readme = "README.md"
+homepage = "https://www.tremor.rs"
+documentation = "https://docs.tremor.rs"
+repository = "https://github.com/wayfair-tremor/tremor-runtime"
 
 [workspace]
 
@@ -24,7 +28,7 @@ lto = true
 opt-level = 3
 
 [dependencies]
-async-std = {version = "1.5", features = ["unstable"]}
+async-std = {version = "1.6", features = ["unstable"]}
 async-trait = "0.1"
 base64 = "0.12"
 bytes = "0.5"
@@ -33,6 +37,7 @@ chrono = "0.4"
 elastic = "0.21.0-pre.5"
 error-chain="0.12"
 futures = "0.3"
+glob = "0.3"
 hashbrown = { version = "0.7", features = ["serde"] }
 hostname = "0.3"
 log4rs = "0.12"
@@ -40,8 +45,8 @@ mio = {version = "0.7", features = ["udp", "tcp", "os-poll"]}
 rand = "0.7"
 regex = "1.3"
 rental = "0.5"
-surf = "=2.0.0-alpha.2"
-http-types = "1.2"
+surf = "=2.0.0-alpha.4"
+http-types = "2.2"
 rmp-serde = "0.14"
 serde = "1"
 serde_yaml = "0.8"
@@ -49,7 +54,7 @@ simd-json = {version = "0.3", features = ["known-key"]}
 threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "2.1"
-async-tungstenite = { version = "0.4.2", features = ["async-std-runtime"] }
+async-tungstenite = { version = "0.5.0", features = ["async-std-runtime"] }
 
 
 log = "0.4"
@@ -59,7 +64,6 @@ halfbrown = "0.1"
 libflate = "1.0"
 snap = "1"
 lz4 = "1.23.1"
-# will be in new graph
 tremor-script = { path = "tremor-script" }
 tremor-influx = { path = "tremor-influx" }
 indexmap = { version = "1", features = [ "serde-1" ] }
@@ -78,7 +82,7 @@ postgres = { version = "0.17.3", features = ["with-serde_json-1", "with-chrono-0
 postgres-protocol = "0.5" 
 tokio-postgres = "0.5"
 
-# kafka. cmake is the encouraged way to build this and also the one that works on windows.
+# kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 rdkafka = { version = "0.23", features = ["cmake-build"] }
 
 # crononome
@@ -99,7 +103,6 @@ grok = "1"
 version = "0.10"
 default-features = false
 
-
 [dev-dependencies]
 matches = "0.1"
 # criterion = "0.2"
@@ -111,7 +114,36 @@ env_logger = "0.7"
 default = []
 
 # Experimental suport for google cloud APIs
-gpc = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
+gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
 
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
+
+# for use during debian packaging, via cargo-deb
+# https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
+[package.metadata.deb]
+name = "tremor-server"
+section = "net"
+depends = "$auto"
+maintainer-scripts = "distribution/debian/maintainer-scripts/"
+assets = [
+  # target path will be automatically corrected when cross-compiling
+  ["target/release/tremor-server", "usr/bin/", "755"],
+  ["README.md", "usr/share/doc/tremor/", "644"],
+  ["LICENSE", "usr/share/doc/tremor/", "644"],
+  # need to specify each directory contents since only actual file entries are allowed here
+  ["packaging/distribution/etc/tremor/*", "/etc/tremor/", "644"],
+  ["packaging/distribution/etc/tremor/config/*", "/etc/tremor/config/", "644"],
+  # TODO enable this after some example cleanup
+  #["demo/examples/*", "/etc/tremor/config/examples/", "644"],
+  ["packaging/distribution/etc/systemd/system/*", "/etc/systemd/system/", "644"],
+]
+conf-files = [
+  # these files won't be overwritten when the package is upgraded
+  "/etc/tremor/logger.yaml",
+]
+# TODO generate this automatically as part of deb packaging (from README intro)
+# and place in "extended-description-file"
+extended-description = """\
+Tremor is an early stage event processing system for unstructured data with rich support for structural pattern matching, filtering and transformation.
+"""
