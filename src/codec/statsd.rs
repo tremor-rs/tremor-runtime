@@ -38,12 +38,12 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(m) = value.get("metric").and_then(|v| v.as_str()) {
         r.push_str(&m);
     } else {
-        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsD.into());
     };
     let t = if let Some(s) = value.get("type").and_then(|v| v.as_str()) {
         s
     } else {
-        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsD.into());
     };
     if let Some(val) = value.get("value") {
         r.push(':');
@@ -59,10 +59,10 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
         if val.is_i64() || val.is_f64() {
             r.push_str(&val.encode());
         } else {
-            return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
+            return Err(ErrorKind::InvalidStatsD.into());
         }
     } else {
-        return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
+        return Err(ErrorKind::InvalidStatsD.into());
     };
 
     r.push('|');
@@ -73,7 +73,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
         if val.is_i64() || val.is_f64() {
             r.push_str(&val.encode());
         } else {
-            return Err(ErrorKind::InvalidStatsDRecord(value.to_string()).into());
+            return Err(ErrorKind::InvalidStatsD.into());
         }
     }
 
@@ -99,7 +99,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 break;
             }
             Some(_) => (),
-            None => return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into()),
+            None => return Err(ErrorKind::InvalidStatsD.into()),
         }
     }
     let sign = match d.peek() {
@@ -123,7 +123,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 break;
             }
             Some(_) => (),
-            None => return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into()),
+            None => return Err(ErrorKind::InvalidStatsD.into()),
         }
     }
     match d.next() {
@@ -134,7 +134,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
             if let Some((j, b's')) = d.next() {
                 m.insert("type".into(), str::from_utf8(&data[i..=j])?.into())
             } else {
-                return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into());
+                return Err(ErrorKind::InvalidStatsD.into());
             }
         }
         Some((i, b'g')) => {
@@ -149,7 +149,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                     } else if let Some(v) = value.as_f64() {
                         Value::from(-v)
                     } else {
-                        return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into());
+                        return Err(ErrorKind::InvalidStatsD.into());
                     };
                     m.insert("action".into(), "sub".into());
                 }
@@ -157,7 +157,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
             };
             m.insert("type".into(), str::from_utf8(&data[i..=i])?.into())
         }
-        _ => return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into()),
+        _ => return Err(ErrorKind::InvalidStatsD.into()),
     };
     match d.next() {
         Some((_, b'|')) => {
@@ -166,11 +166,11 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 let v: f64 = s.parse()?;
                 m.insert("sample_rate".into(), Value::from(v));
             } else {
-                return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into());
+                return Err(ErrorKind::InvalidStatsD.into());
             }
         }
         None => (),
-        _ => return Err(ErrorKind::InvalidStatsD(str::from_utf8(&data[0..])?.into()).into()),
+        _ => return Err(ErrorKind::InvalidStatsD.into()),
     };
     m.insert("value".into(), value);
     Ok(Value::from(m))
@@ -313,6 +313,4 @@ mod test {
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
     }
-
-    
 }
