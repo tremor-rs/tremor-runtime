@@ -48,25 +48,22 @@ impl Lines {
     }
 
     fn is_valid_line(&self, v: &[u8]) -> bool {
-	
-        //return true if is there is no limit on max length of the data fragment	    
+        //return true if is there is no limit on max length of the data fragment
         if self.max_length == 0 {
-			true				
-        } else {
-	      	if v.len() <= self.max_length {
-            	true
-	        } else {
-	            warn!(
-	                "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
-	                v.len(),
-	                self.max_length,
-	                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
-	            );
-	            false
-	        }
+            return true;
         }
- 
-        
+
+        if v.len() <= self.max_length {
+            true
+        } else {
+            warn!(
+                "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
+                v.len(),
+                self.max_length,
+                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
+            );
+            false
+        }
     }
 
     fn save_fragment(&mut self, v: &[u8]) {
@@ -140,26 +137,23 @@ impl Preprocessor for Lines {
             .collect();
 
         //check if buffering of the last data fragment after the line separator is required.
-		if self.is_buffered {
-        	if let Some(last_event) = events.pop() {
-			
-			    // if incoming data had at least one line separator boundary (anywhere)
-	            // AND if the preprocessor has memory of line fragment from earlier,
-	            // reconstruct the first event fully (by adding the buffer contents to it)
-	            if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
-	                self.complete_fragment(&mut events[0]);
-	            }
-	
-	            // if the incoming data did not end in a line boundary, last event is actually
-	            // a fragment so we need to remmeber it for later (when more data arrives)
-	            if !last_event.is_empty() {
-	                self.save_fragment(&last_event);
-	            }
-			}
-            
+        if self.is_buffered {
+            if let Some(last_event) = events.pop() {
+                // if incoming data had at least one line separator boundary (anywhere)
+                // AND if the preprocessor has memory of line fragment from earlier,
+                // reconstruct the first event fully (by adding the buffer contents to it)
+                if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
+                    self.complete_fragment(&mut events[0]);
+                }
+
+                // if the incoming data did not end in a line boundary, last event is actually
+                // a fragment so we need to remmeber it for later (when more data arrives)
+                if !last_event.is_empty() {
+                    self.save_fragment(&last_event);
+                }
+            }
         }
 
-        
         Ok(events
             .into_iter()
             .filter(|event| !event.is_empty() && self.is_valid_line(event))

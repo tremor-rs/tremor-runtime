@@ -70,10 +70,17 @@ impl Error {
 impl Into<Response> for Error {
     fn into(self) -> Response {
         match self {
-            Error::Generic(c, d) => Response::new(c).body_string(d),
-            Error::JSON(c, d) => Response::new(c)
-                .body_string(d)
-                .set_header(headers::CONTENT_TYPE, ResourceType::Json.to_string()),
+            Error::Generic(c, d) => {
+                let mut r = Response::new(c);
+                r.set_body(d);
+                r
+            }
+            Error::JSON(c, d) => {
+                let mut r = Response::new(c);
+                r.insert_header(headers::CONTENT_TYPE, ResourceType::Json.to_string());
+                r.set_body(d);
+                r
+            }
         }
     }
 }
@@ -188,13 +195,19 @@ pub fn serialize<T: Serialize>(
     ok_code: StatusCode,
 ) -> std::result::Result<Response, crate::Error> {
     match t {
-        ResourceType::Yaml => Ok(Response::new(ok_code)
-            .body_string(serde_yaml::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string())),
+        ResourceType::Yaml => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.set_body(serde_yaml::to_string(d)?);
+            Ok(r)
+        }
 
-        ResourceType::Json => Ok(Response::new(ok_code)
-            .body_string(simd_json::to_string(d)?)
-            .set_header(headers::CONTENT_TYPE, t.to_string())),
+        ResourceType::Json => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.set_body(simd_json::to_string(d)?);
+            Ok(r)
+        }
     }
 }
 
