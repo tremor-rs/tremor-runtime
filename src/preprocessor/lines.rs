@@ -51,7 +51,7 @@ impl Lines {
         //return true if is there is no limit on max length of the data fragment
         if self.max_length == 0 {
             return true;
-        }  
+        }
 
         if v.len() <= self.max_length {
             true
