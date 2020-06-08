@@ -25,13 +25,13 @@
 )]
 #![allow(clippy::must_use_candidate)]
 
-#[cfg(feature = "mimalloc")]
+#[cfg(feature = "allocator-mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-#[cfg(feature = "snmalloc")]
+#[cfg(feature = "allocator-snmalloc")]
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-#[cfg(feature = "jemalloc")]
+#[cfg(feature = "allocator-jemalloc")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
@@ -170,6 +170,7 @@ async fn run_dun() -> Result<()> {
     // Logging
 
     if let Some(logger_config) = matches.value_of("logger") {
+        eprintln!("Reading logger config file: {}", logger_config);
         log4rs::init_file(logger_config, log4rs::file::Deserializers::default())?;
     } else {
         env_logger::init();
@@ -208,15 +209,33 @@ async fn run_dun() -> Result<()> {
     let (world, handle) = World::start(64, storage_directory).await?;
 
     // We load queries first since those are only pipelines.
-    if let Some(query_files) = matches.values_of("query") {
+    let query_files: Vec<String> = match matches.values_of("query") {
+        Some(files) => files.map(String::from).collect(),
+        // read from default query file(s) now (returns empty if these paths don't exist too)
+        None => glob::glob("/etc/tremor/config/*.trickle")?
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
+            .collect(),
+    };
+    if !query_files.is_empty() {
+        eprintln!("Reading the query files: {}", query_files.join(","));
+        info!("Reading the query files: {}", query_files.join(","));
         for query_file in query_files {
-            load_query_file(&world, query_file).await?;
+            load_query_file(&world, &query_file).await?;
         }
     }
 
-    if let Some(config_files) = matches.values_of("config") {
+    let config_files: Vec<String> = match matches.values_of("config") {
+        Some(files) => files.map(String::from).collect(),
+        // read from default config file(s) now (returns empty if these paths don't exist too)
+        None => glob::glob("/etc/tremor/config/*.yaml")?
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
+            .collect(),
+    };
+    if !config_files.is_empty() {
+        eprintln!("Reading the config files: {}", config_files.join(","));
+        info!("Reading the config files: {}", config_files.join(","));
         for config_file in config_files {
-            load_file(&world, config_file).await?;
+            load_file(&world, &config_file).await?;
         }
     }
 

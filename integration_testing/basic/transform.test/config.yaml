@@ -2,14 +2,15 @@ onramp:
   - id: in
     type: file
     config:
-      source: { in }
+      source: "{in}"
       close_on_done: true
+      sleep_on_done: 500
 
 offramp:
   - id: out
     type: file
     config:
-      file: { out }
+      file: "{out}"
 pipeline:
   - id: main
     interface:

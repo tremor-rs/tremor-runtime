@@ -35,7 +35,7 @@ mod datetime;
 pub mod docs;
 /// Errors
 pub mod errors;
-/// Grok implementaiton
+/// Grok implementation
 pub mod grok;
 /// Tremor Script highlighter
 pub mod highlighter;
@@ -211,7 +211,7 @@ impl rentals::Value {
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
-        pub struct ScrewRental {
+        struct ScrewRental {
             pub parsed: ValueAndMeta<'static>,
             pub raw: Vec<Vec<u8>>,
         }
@@ -292,7 +292,7 @@ impl Serialize for LineValue {
     }
 }
 
-/// An error ocured while deserializing
+/// An error occurred while deserializing
 /// a value into an Event.
 pub enum LineValueDeserError {
     /// The value was missing the `value` key

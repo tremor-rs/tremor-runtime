@@ -38,12 +38,6 @@ mod test {
     use crate::registry::fun;
     use simd_json::BorrowedValue as Value;
 
-    macro_rules! assert_val {
-        ($e:expr, $r:expr) => {
-            assert_eq!($e, Ok(Value::from($r)))
-        };
-    }
-
     #[test]
     fn range() {
         let f = fun("range", "range");

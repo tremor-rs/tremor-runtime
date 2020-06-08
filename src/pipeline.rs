@@ -93,15 +93,13 @@ impl Manager {
             info!("Pipeline manager started");
             loop {
                 match rx.recv().await {
-                    Some(ManagerMsg::Stop) => {
+                    Ok(ManagerMsg::Stop) => {
                         info!("Stopping onramps...");
                         break;
                     }
-                    Some(ManagerMsg::Create(r, create)) => {
-                        r.send(self.start_pipeline(create)).await
-                    }
-                    None => {
-                        info!("Stopping onramps...");
+                    Ok(ManagerMsg::Create(r, create)) => r.send(self.start_pipeline(create)).await,
+                    Err(e) => {
+                        info!("Stopping onramps... {}", e);
                         break;
                     }
                 }

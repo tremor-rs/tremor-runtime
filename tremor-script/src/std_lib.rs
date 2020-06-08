@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(test)]
+macro_rules! assert_val {
+    ($e:expr, $r:expr) => {
+        assert_eq!($e, Ok(Value::from($r)))
+    };
+}
+
 mod array;
 mod chash;
 mod datetime;

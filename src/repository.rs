@@ -14,7 +14,7 @@
 
 mod artefact;
 
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use crate::url::TremorURL;
 use async_std::sync::{self, channel};
 use async_std::task;
@@ -156,13 +156,13 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
         task::spawn(async move {
             loop {
                 match rx.recv().await {
-                    Some(Msg::ListArtefacts(r)) => r.send(self.keys()).await,
-                    Some(Msg::SerializeArtefacts(r)) => r.send(self.values()).await,
-                    Some(Msg::FindArtefact(r, id)) => {
+                    Ok(Msg::ListArtefacts(r)) => r.send(self.keys()).await,
+                    Ok(Msg::SerializeArtefacts(r)) => r.send(self.values()).await,
+                    Ok(Msg::FindArtefact(r, id)) => {
                         r.send(A::artefact_id(&id).map(|id| self.find(id).cloned()))
                             .await
                     }
-                    Some(Msg::PublishArtefact(r, id, sys, a)) => {
+                    Ok(Msg::PublishArtefact(r, id, sys, a)) => {
                         r.send(
                             A::artefact_id(&id).and_then(|id| {
                                 self.publish(id, sys, a).map(std::clone::Clone::clone)
@@ -170,11 +170,11 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                         )
                         .await
                     }
-                    Some(Msg::UnpublishArtefact(r, id)) => {
+                    Ok(Msg::UnpublishArtefact(r, id)) => {
                         r.send(A::artefact_id(&id).and_then(|id| self.unpublish(id)))
                             .await
                     }
-                    Some(Msg::RegisterInstance(r, a_id, s_id)) => {
+                    Ok(Msg::RegisterInstance(r, a_id, s_id)) => {
                         r.send(
                             A::artefact_id(&a_id)
                                 .and_then(|aid| Ok((aid, A::servant_id(&s_id)?)))
@@ -184,7 +184,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                         )
                         .await
                     }
-                    Some(Msg::UnregisterInstance(r, a_id, s_id)) => {
+                    Ok(Msg::UnregisterInstance(r, a_id, s_id)) => {
                         r.send(
                             A::artefact_id(&a_id)
                                 .and_then(|a_id| Ok((a_id, A::servant_id(&s_id)?)))
@@ -194,7 +194,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                         )
                         .await
                     }
-                    None => info!("Terminating repositry"),
+                    Err(e) => info!("Terminating repositry {}", e),
                 }
             }
         });
@@ -255,9 +255,7 @@ impl Repositories {
     ) -> Result<Option<RepoWrapper<PipelineArtefact>>> {
         let (tx, rx) = channel(1);
         self.pipeline.send(Msg::FindArtefact(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Publish a pipeline
@@ -271,9 +269,7 @@ impl Repositories {
         self.pipeline
             .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unpublish a pipeline
@@ -282,9 +278,7 @@ impl Repositories {
         self.pipeline
             .send(Msg::UnpublishArtefact(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Bind a pipeline
@@ -293,9 +287,7 @@ impl Repositories {
         self.pipeline
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unbinds a pipeline
@@ -304,9 +296,7 @@ impl Repositories {
         self.pipeline
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// List onramps
@@ -327,9 +317,7 @@ impl Repositories {
     pub async fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
         let (tx, rx) = channel(1);
         self.onramp.send(Msg::FindArtefact(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Publish onramp
@@ -343,9 +331,7 @@ impl Repositories {
         self.onramp
             .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unpublish an onramp
@@ -354,9 +340,7 @@ impl Repositories {
         self.onramp
             .send(Msg::UnpublishArtefact(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Binds an onramp
@@ -365,9 +349,7 @@ impl Repositories {
         self.onramp
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unbinds an onramp
@@ -376,9 +358,7 @@ impl Repositories {
         self.onramp
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// List offramps
@@ -402,9 +382,7 @@ impl Repositories {
     ) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
         let (tx, rx) = channel(1);
         self.offramp.send(Msg::FindArtefact(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Publishes an offramp
@@ -418,9 +396,7 @@ impl Repositories {
         self.offramp
             .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unpublishes an offramp
@@ -429,9 +405,7 @@ impl Repositories {
         self.offramp
             .send(Msg::UnpublishArtefact(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Binds an offramp
@@ -440,9 +414,7 @@ impl Repositories {
         self.offramp
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unbinds an offramp
@@ -451,9 +423,7 @@ impl Repositories {
         self.offramp
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Lists bindings
@@ -477,9 +447,7 @@ impl Repositories {
     ) -> Result<Option<RepoWrapper<BindingArtefact>>> {
         let (tx, rx) = channel(1);
         self.binding.send(Msg::FindArtefact(tx, id.clone())).await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Publish a binding
@@ -493,9 +461,7 @@ impl Repositories {
         self.binding
             .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unpublishes a binding
@@ -504,9 +470,7 @@ impl Repositories {
         self.binding
             .send(Msg::UnpublishArtefact(tx, id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Binds a binding
@@ -515,9 +479,7 @@ impl Repositories {
         self.binding
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 
     /// Unbinds a binding
@@ -526,9 +488,7 @@ impl Repositories {
         self.binding
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await;
-        rx.recv()
-            .await
-            .ok_or_else(|| Error::from(ErrorKind::AsyncRecvError))?
+        rx.recv().await?
     }
 }
 
@@ -536,6 +496,7 @@ impl Repositories {
 mod test {
     use super::*;
     use crate::config;
+    use crate::errors::Error;
     use crate::url::TremorURL;
     use serde_yaml;
 
