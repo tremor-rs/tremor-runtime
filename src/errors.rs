@@ -222,14 +222,9 @@ error_chain! {
                 display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
 
-        InvalidStatsDRecord(e: String) {
-            description("Invalid statsd record")
-                display("Invalid statsd record: {}", e)
-        }
-
-        InvalidStatsD(m: String) {
+        InvalidStatsD {
             description("Invalid statsd metric")
-                display("Invalid statsd metric: \"{}\"", m)
+                display("Invalid statsd metric")
         }
 
 
