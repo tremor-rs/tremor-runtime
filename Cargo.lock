@@ -160,7 +160,7 @@ dependencies = [
  "async-std",
  "byte-pool",
  "futures-core",
- "http-types 2.2.0",
+ "http-types",
  "httparse",
  "lazy_static",
  "log 0.4.8",
@@ -181,12 +181,12 @@ dependencies = [
 
 [[package]]
 name = "async-sse"
-version = "2.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6de73294dd1287b32b10f4c884186446353048f183071dff38c1481f82c053b3"
+checksum = "aff0a3074c2c3cfd76417f6e03d5c99822d3ef37387af891e4a8bf46447ca870"
 dependencies = [
  "async-std",
- "http-types 1.3.1",
+ "http-types",
  "log 0.4.8",
  "memchr",
  "pin-project-lite",
@@ -912,12 +912,6 @@ dependencies = [
  "vcpkg",
  "winapi 0.3.8",
 ]
-
-[[package]]
-name = "data-encoding"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72aa14c04dfae8dd7d8a2b1cb7ca2152618cd01336dbfe704b8dcbf8d41dbd69"
 
 [[package]]
 name = "debug-helper"
@@ -1751,30 +1745,13 @@ dependencies = [
  "async-native-tls",
  "async-std",
  "futures 0.3.5",
- "http-types 2.2.0",
+ "http-types",
  "isahc",
  "js-sys",
  "log 0.4.8",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "http-types"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49d9f44462c2e59d5d5826e7ba74b121ee2fb0ff091ef849692694f1d77aaf50"
-dependencies = [
- "anyhow",
- "async-std",
- "cookie 0.12.0",
- "infer",
- "omnom",
- "pin-project-lite",
- "serde",
- "serde_json",
- "url 2.1.1",
 ]
 
 [[package]]
@@ -2638,15 +2615,6 @@ name = "object"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cbca9424c482ee628fa549d9c812e2cd22f1180b9222c9200fdfa6eb31aecb2"
-
-[[package]]
-name = "omnom"
-version = "2.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6b216cee2e0d6e680f73158d15468c80b39e571c11669cd90556f9a644e9fd3"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "once_cell"
@@ -3667,18 +3635,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_qs"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43eef44996bbe16e99ac720e1577eefa16f7b76b5172165c98ced20ae9903e1"
-dependencies = [
- "data-encoding",
- "error-chain 0.12.2",
- "percent-encoding 1.0.1",
- "serde",
-]
-
-[[package]]
 name = "serde_urlencoded"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4024,7 +3980,7 @@ dependencies = [
  "encoding_rs",
  "futures 0.3.5",
  "http-client",
- "http-types 2.2.0",
+ "http-types",
  "log 0.4.8",
  "mime 0.3.16",
  "mime_guess",
@@ -4183,22 +4139,19 @@ dependencies = [
 
 [[package]]
 name = "tide"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9620c27936f084db0613d82507e3c6e8be64cb1a26e0c721a2796b5a8c7a515"
+checksum = "ac8627766650efc0665f63ea88687839109a373a7a7b7013c48ffa40df98c48c"
 dependencies = [
  "async-h1",
  "async-sse",
  "async-std",
  "femme",
- "http-types 2.2.0",
+ "http-types",
  "kv-log-macro",
- "mime 0.3.16",
- "mime_guess",
  "route-recognizer",
  "serde",
  "serde_json",
- "serde_qs",
 ]
 
 [[package]]
@@ -4599,7 +4552,7 @@ name = "tremor-api"
 version = "0.8.0"
 dependencies = [
  "hashbrown 0.7.2",
- "http-types 2.2.0",
+ "http-types",
  "serde",
  "serde_derive",
  "serde_yaml",
@@ -4703,7 +4656,7 @@ dependencies = [
  "hashbrown 0.7.2",
  "hdrhistogram",
  "hostname",
- "http-types 2.2.0",
+ "http-types",
  "hyper 0.13.6",
  "hyper-rustls",
  "indexmap",
@@ -4811,7 +4764,7 @@ dependencies = [
  "clap",
  "dirs 2.0.2",
  "halfbrown",
- "http-types 2.2.0",
+ "http-types",
  "serde",
  "serde_derive",
  "serde_yaml",
