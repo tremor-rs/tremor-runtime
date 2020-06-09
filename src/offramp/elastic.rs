@@ -159,12 +159,9 @@ impl Elastic {
                 };
             };
             let insight = Event {
-                is_batch: false,
-                id: 0,
                 data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
-                origin_uri: None,
-                kind: None,
+                ..std::default::Default::default()
             };
 
             for (pid, p) in pipelines {
@@ -190,12 +187,9 @@ impl Elastic {
                 m.insert("error".into(), "Dropped data due to es overload".into());
 
                 let insight = Event {
-                    is_batch: false,
-                    id: 0,
                     data: (Value::null(), m).into(),
                     ingest_ns: nanotime(),
-                    origin_uri: None,
-                    kind: None,
+                    ..std::default::Default::default()
                 };
 
                 let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
@@ -273,8 +267,9 @@ impl Offramp for Elastic {
         self.maybe_enque(output, payload)
     }
 
-    fn on_signal(&mut self, event: Event) {
+    fn on_signal(&mut self, event: Event) -> Option<Event> {
         dbg!(event.ingest_ns);
+        None
     }
 
     fn default_codec(&self) -> &str {

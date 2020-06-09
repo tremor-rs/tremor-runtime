@@ -137,6 +137,32 @@ impl TrickleOperator {
                             id: common_cow(&op.id),
                         })
                     }
+                    ("generic", "wal") => {
+                        op::generic::WalFactory::new_boxed().from_node(&NodeConfig {
+                            id: "we need to clean up this entire creation code".into(),
+                            kind: crate::NodeKind::Operator,
+                            op_type: "generic::wal".into(),
+                            config: op.params.clone().map(|v| {
+                                serde_yaml::Value::from(
+                                    v.iter()
+                                        .filter_map(|(k, v)| {
+                                            let mut v = v.encode();
+                                            Some((
+                                                serde_yaml::Value::from(k.as_str()),
+                                                simd_json::serde::from_str::<serde_yaml::Value>(
+                                                    &mut v,
+                                                )
+                                                .ok()?,
+                                            ))
+                                        })
+                                        .collect::<serde_yaml::Mapping>(),
+                                )
+                            }),
+                            defn: None,
+                            node: None,
+                        })?
+                    }
+
                     ("generic", "counter") => Box::new(op::generic::counter::Counter {}),
                     ("grouper", "bucket") => Box::new(op::grouper::bucket::Grouper {
                         buckets: HashMap::new(),

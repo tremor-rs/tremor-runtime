@@ -1,0 +1,78 @@
+# Test a realistic workflow including json encoding and decoding
+# and connect both the pass and the overflow output to the
+# blackhole to acount for the data
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: json
+    config:
+      source: ./demo/data/data.json.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    codec: json
+    config:
+      warmup_secs: 10
+      stop_after_secs: 100
+      significant_figures: 2
+
+binding:
+  - id: bench
+    links:
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: wal
+        op: generic::wal
+        config:
+          dir: wal
+          read_count: 10
+          max_elements: 100
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            use std::array;
+            match event.application of
+              case "app1" => let $class = "applog_app1",  let $rate = 1250, let $dimension = event.application, emit event
+              case "app2" => let $class = "applog_app1",  let $rate = 2500, let $dimension = event.application, emit event
+              case "app3" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
+              case "app4" => let $class = "applog_app1",  let $rate = 750, let $dimension = event.application, emit event
+              case "app5" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
+              default => null
+            end;
+            match event.index_type of
+              case "applog_app6" => let $class = "applog_app6", let $rate = 4500, let $dimensions = event.logger_name, emit event
+              case "syslog_app1" => let $class = "syslog_app1", let $rate = 2500, let $dimensions = event.syslog_hostname, emit event
+              default => null
+            end;
+            match array::contains(event.tags, "tag1") of
+              case true => let $class = "syslog_app2", let $rate = 125, let $dimensions = event.syslog_hostname, emit event
+              default => null
+            end;
+            match event.index_type of
+              case "syslog_app3" => let $class = "syslog_app3", let $rate = 1750, let $dimensions = event.syslog_hostname
+              case "syslog_app4" => let $class = "syslog_app4", let $rate = 7500, let $dimensions = event.syslog_hostname
+              case "syslog_app5" => let $class = "syslog_app5", let $rate = 125, let $dimensions = event.syslog_hostname
+              case "syslog_app6" => let $class = "syslog_app6", let $rate = 3750, let $dimensions = event.syslog_hostname
+              default => let $class = "default", let $rate = 250
+            end;
+            event;
+      - id: group
+        op: grouper::bucket
+    links:
+      in: [wal]
+      wal: [runtime]
+      runtime: [group]
+      group: [out]
+      group/overflow: [out]

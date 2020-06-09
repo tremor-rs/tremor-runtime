@@ -67,12 +67,10 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
-                        origin_uri: None,
                         id: id as u64,
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
-                        kind: None,
-                        is_batch: false,
+                        ..std::default::Default::default()
                     };
                     let mut r = Vec::new();
                     pipeline.enqueue("in", event, &mut r)?;

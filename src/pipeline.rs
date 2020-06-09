@@ -25,7 +25,7 @@ use simd_json::BorrowedValue;
 use std::borrow::Cow;
 use std::time::Duration;
 use std::{fmt, thread};
-use tremor_pipeline::{Event, ExecutableGraph, SignalKind};
+use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 1000;
 pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
@@ -162,22 +162,13 @@ async fn handle_insight(
     onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
 ) {
     let insight = pipeline.contraflow(insight);
-    let (_e, m) = insight.data.parts();
-    if dbg!(&m)
-        .get("trigger")
-        .and_then(ValueTrait::as_bool)
-        .unwrap_or_default()
-    {
+    if insight.cb == Some(CBAction::Trigger) {
         dbg!("trigger");
         for (_k, o) in onramps {
             o.send(onramp::Msg::Trigger).await
         }
     //this is a trigger event
-    } else if dbg!(&m)
-        .get("restore")
-        .and_then(ValueTrait::as_bool)
-        .unwrap_or_default()
-    {
+    } else if insight.cb == Some(CBAction::Restore) {
         dbg!("restore");
         for (_k, o) in onramps {
             o.send(onramp::Msg::Restore).await
@@ -230,12 +221,10 @@ impl Manager {
         let tick_tx = tx.clone();
         task::spawn(async move {
             let mut e = Event {
-                is_batch: false,
-                id: 0,
                 data: (BorrowedValue::null(), BorrowedValue::object()).into(),
                 ingest_ns: nanotime(),
-                origin_uri: None,
                 kind: Some(SignalKind::Tick),
+                ..std::default::Default::default()
             };
             while tick_tx.send(Msg::Signal(e.clone())).is_ok() {
                 task::sleep(Duration::from_millis(TICK_MS)).await;
