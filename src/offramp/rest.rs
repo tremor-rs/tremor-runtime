@@ -129,12 +129,9 @@ impl Rest {
                 }
             };
             let insight = Event {
-                is_batch: false,
-                id: 0,
                 data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
-                origin_uri: None,
-                kind: None,
+                ..std::default::Default::default()
             };
 
             for (pid, p) in pipelines {
@@ -163,12 +160,9 @@ impl Rest {
                 );
 
                 let insight = Event {
-                    is_batch: false,
-                    id: 0,
                     data: (Value::null(), m).into(),
                     ingest_ns: nanotime(),
-                    origin_uri: None,
-                    kind: None,
+                    ..std::default::Default::default()
                 };
 
                 let pipelines: Vec<(TremorURL, pipeline::Addr)> = self

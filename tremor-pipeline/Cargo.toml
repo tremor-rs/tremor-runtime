@@ -7,6 +7,7 @@ edition = "2018"
 license = "Apache-2.0"
 
 [dependencies]
+byteorder = "1"
 serde = "1"
 serde_derive = "1"
 simd-json = {version = "0.3", features = ["known-key"] }
@@ -23,6 +24,7 @@ halfbrown = "0.1"
 log = "0.4"
 rental = "0.5"
 regex = "1"
+sled = "0.31"
 
 [dev-dependencies]
 criterion = "0.3"

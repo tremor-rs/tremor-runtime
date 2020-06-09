@@ -23,6 +23,7 @@ use crate::{Event, OpConfig};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::{bounded, Sender as CbSender};
+use hashbrown::HashMap;
 use std::borrow::Cow;
 use std::fmt;
 use std::thread;
@@ -77,7 +78,9 @@ pub trait Offramp: Send {
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
-    fn on_signal(&mut self, signal: Event) {}
+    fn on_signal(&mut self, signal: Event) -> Option<Event> {
+        None
+    }
 }
 
 pub trait Impl {
@@ -143,7 +146,6 @@ impl Manager {
 
     pub fn start(self) -> (JoinHandle<bool>, Sender) {
         let (tx, rx) = channel(64);
-
         let h = task::spawn(async move {
             info!("Onramp manager started");
             loop {
@@ -173,10 +175,25 @@ impl Manager {
                         let (tx, rx) = bounded(self.qsize);
                         let offramp_id = id.clone();
                         thread::spawn(move || {
+                            let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
                             info!("[Offramp::{}] started", offramp_id);
                             for m in rx {
                                 match m {
-                                    Msg::Signal(signal) => offramp.on_signal(signal),
+                                    Msg::Signal(signal) => {
+                                        if let Some(insight) = offramp.on_signal(signal) {
+                                            for p in pipelines.values() {
+                                                if let Err(e) = p
+                                                    .addr
+                                                    .send(pipeline::Msg::Insight(insight.clone()))
+                                                {
+                                                    error!(
+                                                        "[Offramp::{}] Counterflow error: {}",
+                                                        offramp_id, e
+                                                    );
+                                                };
+                                            }
+                                        }
+                                    }
                                     Msg::Event { event, input } => {
                                         metrics_reporter.periodic_flush(event.ingest_ns);
 
@@ -205,6 +222,7 @@ impl Manager {
                                                 "[Offramp::{}] Connecting pipeline {}",
                                                 offramp_id, id
                                             );
+                                            pipelines.insert(id.clone(), addr.clone());
                                             offramp.add_pipeline(id, addr);
                                         }
                                     }
@@ -213,6 +231,7 @@ impl Manager {
                                             "[Offramp::{}] Disconnecting pipeline {}",
                                             offramp_id, id
                                         );
+                                        pipelines.remove(&id);
                                         let r = offramp.remove_pipeline(id.clone());
                                         info!(
                                             "[Offramp::{}] Pipeline {} disconnected",

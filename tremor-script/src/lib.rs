@@ -99,17 +99,18 @@ pub fn recursion_limit() -> u32 {
 /// Combined struct for an event value and metadata
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ValueAndMeta<'event> {
-    data: (Value<'event>, Value<'event>),
+    v: Value<'event>,
+    m: Value<'event>,
 }
 
 impl<'event> ValueAndMeta<'event> {
     /// A value from it's parts
     pub fn from_parts(v: Value<'event>, m: Value<'event>) -> Self {
-        Self { data: (v, m) }
+        Self { v, m }
     }
     /// Event value
     pub fn value(&self) -> &Value<'event> {
-        &self.data.0
+        &self.v
     }
     /// Event value forced to borrowd mutable (uses `mem::transmute`)
     ///
@@ -117,34 +118,36 @@ impl<'event> ValueAndMeta<'event> {
     /// This isn't save, use with care and reason about mutability!
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     pub unsafe fn force_value_mut(&self) -> &mut Value<'event> {
-        std::mem::transmute(&self.data.0)
+        std::mem::transmute(&self.v)
     }
     /// Event value
     pub fn value_mut(&mut self) -> &mut Value<'event> {
-        &mut self.data.0
+        &mut self.v
     }
     /// Event metadata
     pub fn meta(&self) -> &Value<'event> {
-        &self.data.1
+        &self.m
     }
     /// Deconstruicts the value into it's parts
     pub fn into_parts(self) -> (Value<'event>, Value<'event>) {
-        self.data
+        (self.v, self.m)
     }
 }
 
 impl<'event> Default for ValueAndMeta<'event> {
     fn default() -> Self {
         ValueAndMeta {
-            data: (Value::object(), Value::object()),
+            v: Value::object(),
+            m: Value::object(),
         }
     }
 }
 
 impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
-    fn from(value: Value<'v>) -> ValueAndMeta<'v> {
+    fn from(v: Value<'v>) -> ValueAndMeta<'v> {
         ValueAndMeta {
-            data: (value, Value::object()),
+            v,
+            m: Value::object(),
         }
     }
 }
@@ -234,36 +237,15 @@ impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
     }
 }
 
-impl
-    From<(
-        simd_json::BorrowedValue<'static>,
-        simd_json::BorrowedValue<'static>,
-    )> for rentals::Value
+impl<T1, T2> From<(T1, T2)> for rentals::Value
+where
+    Value<'static>: From<T1>,
+    Value<'static>: From<T2>,
 {
-    fn from(
-        v: (
-            simd_json::BorrowedValue<'static>,
-            simd_json::BorrowedValue<'static>,
-        ),
-    ) -> Self {
-        Self::new(vec![], |_| ValueAndMeta { data: v })
-    }
-}
-
-impl
-    From<(
-        simd_json::BorrowedValue<'static>,
-        simd_json::value::borrowed::Object<'static>,
-    )> for rentals::Value
-{
-    fn from(
-        v: (
-            simd_json::BorrowedValue<'static>,
-            simd_json::value::borrowed::Object<'static>,
-        ),
-    ) -> Self {
+    fn from((v, m): (T1, T2)) -> Self {
         Self::new(vec![], |_| ValueAndMeta {
-            data: (v.0, Value::from(v.1)),
+            v: Value::from(v),
+            m: Value::from(m),
         })
     }
 }
@@ -281,6 +263,11 @@ impl Clone for LineValue {
             let v = self.suffix();
             ValueAndMeta::from_parts(v.value().clone_static(), v.meta().clone_static())
         })
+    }
+}
+impl Default for LineValue {
+    fn default() -> Self {
+        Self::new(vec![], |_| ValueAndMeta::default())
     }
 }
 
@@ -314,13 +301,14 @@ impl<'de> Deserialize<'de> for LineValue {
         // value.
         // FIXME we should find a way to not do this!
         let r = OwnedValue::deserialize(deserializer)?;
+
         // FIXME after POC
-        let value = if let Some(value) = r.get("value") {
+        let value = if let Some(value) = r.get("v") {
             value
         } else {
             return Err(D::Error::custom("value field missing"));
         };
-        let meta = if let Some(meta) = r.get("meta") {
+        let meta = if let Some(meta) = r.get("m") {
             meta
         } else {
             return Err(D::Error::custom("meta field missing"));

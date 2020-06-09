@@ -137,12 +137,10 @@ mod test {
             id: "badger".into(),
         };
         let event = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
             data: Value::from(json!({"a": 1})).into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut state = Value::null();
 

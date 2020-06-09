@@ -124,9 +124,8 @@ impl Operator for Batch {
                 id: self.event_id,
                 data,
                 ingest_ns: self.first_ns,
-                origin_uri: None,
-                kind: None,
                 is_batch: true,
+                ..std::default::Default::default()
             };
             self.event_id += 1;
             Ok(vec![("out".into(), event)])
@@ -152,9 +151,8 @@ impl Operator for Batch {
                     id: self.event_id,
                     data,
                     ingest_ns: self.first_ns,
-                    origin_uri: None,
-                    kind: None,
                     is_batch: true,
+                    ..std::default::Default::default()
                 };
                 self.event_id += 1;
                 Ok((vec![("out".into(), event)], None))
@@ -187,12 +185,10 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let mut state = Value::null();
@@ -203,12 +199,10 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let mut r = op
@@ -224,12 +218,10 @@ mod test {
         );
 
         let event = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let r = op
@@ -253,12 +245,10 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         println!(
@@ -276,12 +266,10 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
-            origin_uri: None,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let mut r = op
@@ -298,12 +286,10 @@ mod test {
         );
 
         let event = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let r = op
@@ -312,12 +298,10 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 2,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let r = op
@@ -341,12 +325,10 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let mut state = Value::null();
@@ -357,12 +339,10 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let mut signal = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 2_000_000,
-            origin_uri: None,
             data: Value::null().into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let (mut r, _) = op.on_signal(&mut signal).expect("failed to run pipeline");
@@ -374,12 +354,10 @@ mod test {
         assert_eq!(events, vec![event1.data.suffix().value()]);
 
         let event = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let r = op
@@ -388,12 +366,10 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            is_batch: false,
             id: 1,
             ingest_ns: 2,
-            origin_uri: None,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         let r = op

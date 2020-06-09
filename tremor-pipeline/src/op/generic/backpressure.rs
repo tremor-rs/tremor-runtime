@@ -26,7 +26,7 @@
 //! be discarded.
 
 use crate::errors::{ErrorKind, Result};
-use crate::{ConfigImpl, Event, Operator, SignalResponse};
+use crate::op::prelude::*;
 use std::borrow::Cow;
 use tremor_script::prelude::*;
 
@@ -174,19 +174,11 @@ impl Operator for Backpressure {
 
         let cf = if was_closed && is_open {
             let e = Event {
-                is_batch: false,
-                id: 0,
-                data: (Value::null(), Value::object()).into(),
                 ingest_ns: now,
-                origin_uri: None,
-                kind: None,
+                cb: Some(CBAction::Restore),
+                ..std::default::Default::default()
             };
-            let (_, meta) = e.data.parts();
 
-            if meta.insert("restore", true).is_err() {
-                error!("Failed to restore circuit breaker");
-            };
-            dbg!("CF Restore", &meta);
             Some(e)
         } else {
             None
@@ -226,12 +218,12 @@ impl Operator for Backpressure {
             any_available = any_available || o.backoff == 0;
         }
 
-        if !any_available {
-            dbg!("triggered");
-        }
-        if any_available && meta.insert("restore", true).is_err() {
+        if any_available {
+            insight.cb = Some(CBAction::Restore);
             error!("Failed to restore circuit breaker");
-        } else if !any_available && meta.insert("trigger", true).is_err() {
+        } else {
+            dbg!("triggered");
+            insight.cb = Some(CBAction::Trigger);
             error!("Failed to trigger circuit breaker");
         };
     }
@@ -256,12 +248,10 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -273,12 +263,10 @@ mod test {
         // Without a timeout event sent a second event,
         // it too should pass
         let event2 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 2,
             ingest_ns: 2,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -302,12 +290,10 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -323,12 +309,10 @@ mod test {
         m.insert("time".into(), 200.0.into());
         m.insert("backpressure-output".into(), "out".into());
         let mut insight = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         // Verify that we now have a backoff of 1ms
@@ -340,12 +324,10 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 2,
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -357,12 +339,10 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 3,
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -374,12 +354,10 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 3,
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -403,12 +381,10 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 2,
             data: (Value::null(), m).into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         // A contraflow that passes the timeout
@@ -417,12 +393,10 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight_reset = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 2,
             data: (Value::null(), m).into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         // Assert initial state
@@ -459,12 +433,10 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -476,12 +448,10 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event2 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 2,
             ingest_ns: 1_000_001,
             data: Value::from("snot").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -498,12 +468,10 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 1,
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
-            kind: None,
+            ..std::default::Default::default()
         };
 
         // Verify that we now have a backoff of 1ms
@@ -516,12 +484,10 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 2,
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -533,12 +499,10 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 3,
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -550,12 +514,10 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
-            origin_uri: None,
-            is_batch: false,
             id: 3,
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
-            kind: None,
+            ..std::default::Default::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())

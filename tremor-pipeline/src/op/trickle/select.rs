@@ -653,6 +653,7 @@ impl Operator for TrickleSelect {
                             is_batch: event.is_batch,
                             kind: event.kind,
                             data: (result.into_static(), event_meta.clone_static()).into(),
+                            ..std::default::Default::default()
                         },
                     ));
                 } else {
@@ -849,6 +850,7 @@ impl Operator for TrickleSelect {
                         is_batch: event.is_batch,
                         kind: event.kind,
                         data: (result.into_static(), event_meta.clone_static()).into(),
+                        ..std::default::Default::default()
                     },
                 ));
             }
@@ -902,15 +904,13 @@ mod test {
 
     fn test_event(s: u64) -> Event {
         Event {
-            origin_uri: None,
-            is_batch: false,
             id: s,
             ingest_ns: s * 1_000_000_000,
             data: Value::from(json!({
                "h2g2" : 42,
             }))
             .into(),
-            kind: None,
+            ..std::default::Default::default()
         }
     }
 

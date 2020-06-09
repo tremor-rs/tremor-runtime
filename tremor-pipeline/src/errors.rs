@@ -29,6 +29,12 @@ impl From<regex::Error> for Error {
     }
 }
 
+impl From<sled::TransactionError<()>> for Error {
+    fn from(e: sled::TransactionError<()>) -> Self {
+        Self::from(format!("Sled Transaction Error: {:?}", e))
+    }
+}
+
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
@@ -41,6 +47,7 @@ error_chain! {
         UTF8Error(std::str::Utf8Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
+        Sled(sled::Error);
     }
 
     errors {

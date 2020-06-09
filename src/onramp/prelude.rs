@@ -84,13 +84,12 @@ pub(crate) fn send_event(
                     metrics_reporter.increment_out();
 
                     let event = tremor_pipeline::Event {
-                        is_batch: false,
                         id,
                         data,
                         ingest_ns: *ingest_ns,
                         // TODO make origin_uri non-optional here too?
                         origin_uri: Some(origin_uri.clone()),
-                        kind: None,
+                        ..std::default::Default::default()
                     };
 
                     let len = pipelines.len();

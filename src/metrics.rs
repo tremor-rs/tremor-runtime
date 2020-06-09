@@ -109,12 +109,11 @@ impl RampReporter {
 
                 // full metrics payload
                 let metrics_event = tremor_pipeline::Event {
-                    is_batch: false,
                     id: 0,
                     data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                     ingest_ns: timestamp,
                     origin_uri: None, // TODO update
-                    kind: None,
+                    ..std::default::Default::default()
                 };
 
                 if let Err(e) = metrics_addr.addr.send(pipeline::Msg::Event {
