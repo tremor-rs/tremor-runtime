@@ -63,7 +63,7 @@ lazy_static = "1"
 halfbrown = "0.1"
 libflate = "1.0"
 snap = "1"
-lz4 = "1.23.1"
+lz4 = "1.23.2"
 tremor-script = { path = "tremor-script" }
 tremor-influx = { path = "tremor-influx" }
 indexmap = { version = "1", features = [ "serde-1" ] }
