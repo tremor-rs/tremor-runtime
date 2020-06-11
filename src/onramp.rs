@@ -25,6 +25,7 @@ use serde_yaml::Value;
 use std::fmt;
 use std::time::Duration;
 use tremor_pipeline::EventOriginUri;
+use tremor_script::LineValue;
 
 mod blaster;
 mod crononome;
@@ -80,6 +81,10 @@ pub(crate) enum SourceReply {
         origin_uri: EventOriginUri,
         data: Vec<u8>,
         stream: usize,
+    },
+    Structured {
+        origin_uri: EventOriginUri,
+        data: LineValue,
     },
     StartStream(usize),
     EndStream(usize),
@@ -205,6 +210,19 @@ where
                             self.preprocessors.pop();
                         }
                     }
+                    SourceReply::Structured { origin_uri, data } => {
+                        let ingest_ns = nanotime();
+
+                        transmit_event(
+                            &pipelines,
+                            &mut self.metrics_reporter,
+                            data,
+                            ingest_ns,
+                            origin_uri,
+                            id,
+                        );
+                        id += 1;
+                    }
                     SourceReply::Data {
                         origin_uri,
                         data,
@@ -220,7 +238,7 @@ where
                                 &mut self.codec,
                                 &mut self.metrics_reporter,
                                 &mut ingest_ns,
-                                &origin_uri,
+                                origin_uri,
                                 id,
                                 data,
                             );
