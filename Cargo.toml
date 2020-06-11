@@ -54,6 +54,7 @@ threadpool = "1"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "2.1"
 async-tungstenite = { version = "0.8.0", features = ["async-std-runtime"] }
+value-trait = "0.1"
 
 
 log = "0.4"

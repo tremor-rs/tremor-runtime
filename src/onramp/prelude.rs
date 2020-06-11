@@ -23,8 +23,8 @@ pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
 pub(crate) use async_std::sync::{channel, Receiver, Sender};
 pub(crate) use async_std::task;
-pub(crate) use simd_json::json;
 pub(crate) use tremor_pipeline::EventOriginUri;
+use tremor_script::LineValue;
 
 // TODO pub here too?
 use std::mem;
@@ -60,61 +60,71 @@ pub fn handle_pp(
     Ok(data)
 }
 
+pub(crate) fn transmit_event(
+    pipelines: &[(TremorURL, pipeline::Addr)],
+    metrics_reporter: &mut RampReporter,
+    data: LineValue,
+    ingest_ns: u64,
+    origin_uri: tremor_pipeline::EventOriginUri,
+    id: u64,
+) {
+    let event = tremor_pipeline::Event {
+        id,
+        data,
+        ingest_ns,
+        // TODO make origin_uri non-optional here too?
+        origin_uri: Some(origin_uri),
+        ..std::default::Default::default()
+    };
+    if let Some(((input, addr), pipelines)) = pipelines.split_last() {
+        metrics_reporter.periodic_flush(ingest_ns);
+        metrics_reporter.increment_out();
+
+        for (input, addr) in pipelines {
+            if let Some(input) = input.instance_port() {
+                if let Err(e) = addr.addr.send(pipeline::Msg::Event {
+                    input: input.to_string().into(),
+                    event: event.clone(),
+                }) {
+                    error!("[Onramp] failed to send to pipeline: {}", e);
+                }
+            }
+        }
+
+        if let Some(input) = input.instance_port() {
+            if let Err(e) = addr.addr.send(pipeline::Msg::Event {
+                input: input.to_string().into(),
+                event,
+            }) {
+                error!("[Onramp] failed to send to pipeline: {}", e);
+            }
+        }
+    }
+}
+
 // We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(
-    clippy::borrowed_box,
-    clippy::too_many_lines,
-    clippy::too_many_arguments
-)]
+#[allow(clippy::borrowed_box, clippy::too_many_arguments)]
 pub(crate) fn send_event(
     pipelines: &[(TremorURL, pipeline::Addr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     metrics_reporter: &mut RampReporter,
     ingest_ns: &mut u64,
-    origin_uri: &tremor_pipeline::EventOriginUri,
+    origin_uri: tremor_pipeline::EventOriginUri,
     id: u64,
     data: Vec<u8>,
 ) {
     if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
         for d in data {
             match codec.decode(d, *ingest_ns) {
-                Ok(Some(data)) => {
-                    metrics_reporter.periodic_flush(*ingest_ns);
-                    metrics_reporter.increment_out();
-
-                    let event = tremor_pipeline::Event {
-                        id,
-                        data,
-                        ingest_ns: *ingest_ns,
-                        // TODO make origin_uri non-optional here too?
-                        origin_uri: Some(origin_uri.clone()),
-                        ..std::default::Default::default()
-                    };
-
-                    let len = pipelines.len();
-
-                    for (input, addr) in &pipelines[0..len - 1] {
-                        if let Some(input) = input.instance_port() {
-                            if let Err(e) = addr.addr.send(pipeline::Msg::Event {
-                                input: input.to_string().into(),
-                                event: event.clone(),
-                            }) {
-                                error!("[Onramp] failed to send to pipeline: {}", e);
-                            }
-                        }
-                    }
-
-                    let (input, addr) = &pipelines[len - 1];
-                    if let Some(input) = input.instance_port() {
-                        if let Err(e) = addr.addr.send(pipeline::Msg::Event {
-                            input: input.to_string().into(),
-                            event,
-                        }) {
-                            error!("[Onramp] failed to send to pipeline: {}", e);
-                        }
-                    }
-                }
+                Ok(Some(data)) => transmit_event(
+                    pipelines,
+                    metrics_reporter,
+                    data,
+                    *ingest_ns,
+                    origin_uri.clone(),
+                    id,
+                ),
                 Ok(None) => (),
                 Err(e) => {
                     metrics_reporter.increment_error();

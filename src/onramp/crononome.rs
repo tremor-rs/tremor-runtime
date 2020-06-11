@@ -17,20 +17,53 @@ use crate::utils::nanotime;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use serde_yaml::Value;
+use simd_json::prelude::*;
+use simd_json::BorrowedValue;
 use std::clone::Clone;
 use std::cmp::Reverse;
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::collections::BinaryHeap;
+use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct CronEntry {
     pub name: String,
     pub expr: String,
-    #[serde(skip)]
-    pub sched: Option<Schedule>,
     pub payload: Option<Value>,
+}
+
+#[derive(Clone)]
+pub struct CronEntryInt {
+    pub name: String,
+    pub expr: String,
+    pub sched: Schedule,
+    pub payload: Option<BorrowedValue<'static>>,
+}
+
+impl TryFrom<CronEntry> for CronEntryInt {
+    type Error = crate::errors::Error;
+    fn try_from(entry: CronEntry) -> Result<Self> {
+        let payload = if let Some(payload) = entry.payload {
+            let mut payload = simd_json::to_vec(&payload)?;
+            let payload = simd_json::to_borrowed_value(&mut payload)?;
+            Some(payload.into_static())
+        } else {
+            None
+        };
+        Ok(Self {
+            sched: Schedule::from_str(entry.expr.as_str())?,
+            name: entry.name,
+            expr: entry.expr,
+            payload,
+        })
+    }
+}
+impl std::fmt::Debug for CronEntryInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} - {}", self.name, self.expr)
+    }
 }
 
 impl std::fmt::Debug for CronEntry {
@@ -39,35 +72,9 @@ impl std::fmt::Debug for CronEntry {
     }
 }
 
-impl Clone for CronEntry {
-    fn clone(&self) -> Self {
-        let mut fresh = Self {
-            name: self.name.clone(),
-            expr: self.expr.clone(),
-            sched: None,
-            payload: self.payload.clone(),
-        };
-        fresh.parse().ok();
-        fresh
-    }
-}
-
 impl PartialEq for CronEntry {
     fn eq(&self, other: &Self) -> bool {
         self.name.eq(&other.name) && self.expr.eq(&other.expr)
-    }
-}
-
-impl CronEntry {
-    #[allow(dead_code)]
-    fn parse(&mut self) -> std::result::Result<(), cron::error::Error> {
-        match Schedule::from_str(self.expr.as_str()) {
-            Ok(x) => {
-                self.sched = Some(x);
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
     }
 }
 
@@ -234,7 +241,7 @@ impl<I> TemporalPriorityQueue<I> {
 
 #[derive(Debug, Clone)]
 struct ChronomicQueue {
-    tpq: TemporalPriorityQueue<CronEntry>,
+    tpq: TemporalPriorityQueue<CronEntryInt>,
 }
 
 #[allow(dead_code)]
@@ -245,34 +252,18 @@ impl ChronomicQueue {
         }
     }
 
-    pub fn enqueue(&mut self, entry: &CronEntry) {
-        let next = match &entry.sched {
-            Some(x) => x.upcoming(chrono::Utc).take(1).collect(),
-            None => vec![],
-        };
-
-        if let Some(at) = next.get(0) {
-            let mut entry2 = CronEntry {
-                name: entry.name.clone(),
-                expr: entry.expr.clone(),
-                sched: None,
-                payload: entry.payload.clone(),
-            };
-            let x = entry2.parse();
-            // FIXME propagate any errors
-            if x.is_ok() {
-                self.tpq.enqueue(TemporalItem {
-                    at: *at,
-                    what: entry2,
-                });
-            }
+    pub fn enqueue(&mut self, entry: &CronEntryInt) {
+        if let Some(at) = entry.sched.upcoming(chrono::Utc).next() {
+            self.tpq.enqueue(TemporalItem {
+                at,
+                what: entry.clone(),
+            });
         }
-        // No future events for this entry => drop
     }
 
-    pub fn drain(&mut self) -> Vec<(String, Option<Value>)> {
+    pub fn drain(&mut self) -> Vec<(String, Option<BorrowedValue<'static>>)> {
         let due = self.tpq.drain();
-        let mut trigger: Vec<(String, Option<Value>)> = vec![];
+        let mut trigger: Vec<(String, Option<BorrowedValue<'static>>)> = vec![];
         for ti in &due {
             // Enqueue next scheduled event if any
             self.enqueue(&ti.what);
@@ -280,7 +271,7 @@ impl ChronomicQueue {
         }
         trigger
     }
-    pub fn next(&mut self) -> Option<(String, Option<Value>)> {
+    pub fn next(&mut self) -> Option<(String, Option<BorrowedValue<'static>>)> {
         if let Some(ti) = self.tpq.pop() {
             self.enqueue(&ti.what);
             Some((ti.what.name, ti.what.payload))
@@ -293,20 +284,21 @@ impl ChronomicQueue {
 #[async_trait::async_trait()]
 impl Source for Crononome {
     async fn read(&mut self) -> Result<SourceReply> {
-        let ingest_ns = nanotime();
         if let Some(trigger) = self.cq.next() {
-            let data = simd_json::to_vec(
-                &json!({"onramp": "crononome", "ingest_ns": ingest_ns, "id": self.id, "trigger": {
-                        "name": trigger.0,
-                        "payload": trigger.1
-                    },
-                }),
-            )?;
+            let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(4);
+            data.insert("onramp", "crononome")?;
+            data.insert("ingest_ns", nanotime())?;
+            data.insert("id", self.id)?;
+            let mut tr: BorrowedValue<'static> = BorrowedValue::object_with_capacity(2);
+            tr.insert("name", trigger.0)?;
+            if let Some(payload) = trigger.1 {
+                tr.insert("payload", payload)?;
+            }
+            data.insert("trigger", tr)?;
             self.id += 1;
-            Ok(SourceReply::Data {
+            Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
-                data,
-                stream: 0,
+                data: data.into(),
             })
         } else {
             Ok(SourceReply::Empty(100))
@@ -314,15 +306,17 @@ impl Source for Crononome {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
-        for entry in &mut self.config.entries {
-            if entry.parse().is_err() {
-                return Err(format!(
-                    "Bad configuration in crononome - expression {} is illegal",
-                    entry.name
-                )
-                .into());
+        for entry in &self.config.entries {
+            match CronEntryInt::try_from(entry.clone()) {
+                Ok(entry) => self.cq.enqueue(&entry),
+                Err(e) => {
+                    return Err(format!(
+                        "Bad configuration in crononome - expression {} is illegal: {}",
+                        entry.name, e
+                    )
+                    .into())
+                }
             }
-            self.cq.enqueue(&entry);
         }
         Ok(SourceState::Connected)
     }
@@ -359,25 +353,24 @@ impl Onramp for Crononome {
 mod tests {
     use super::*;
     use chrono::{self, DateTime};
+    use std::convert::TryFrom;
     use std::time::Duration;
 
     #[test]
     pub fn test_deserialize_cron_entry() -> Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"* 0 0 * * * *\"}".to_vec();
-        let mut entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
+        let entry = CronEntryInt::try_from(simd_json::from_slice::<CronEntry>(s.as_mut_slice())?)?;
         assert_eq!("test", entry.name);
         assert_eq!("* 0 0 * * * *", entry.expr);
-        entry.parse().ok();
-        assert!(entry.sched.is_some());
         Ok(())
     }
 
     #[test]
     pub fn test_deserialize_cron_entry_error() -> Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"snot snot\"}".to_vec();
-        let mut entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
+        let entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
         assert_eq!("test", entry.name);
-        assert!(entry.parse().ok().is_none());
+        assert!(CronEntryInt::try_from(entry).is_err());
         Ok(())
     }
 
@@ -385,27 +378,22 @@ mod tests {
     pub fn test_tpq_fill_drain() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
-        let mut n1 = TemporalItem {
+        let n1 = TemporalItem {
             at: DateTime::from(std::time::SystemTime::UNIX_EPOCH), // Epoch
-            what: CronEntry {
+            what: CronEntryInt::try_from(CronEntry {
                 name: "a".to_string(),
                 expr: "* * * * * * 1970".to_string(),
-                sched: None,
                 payload: None,
-            },
+            })?,
         };
-        let mut n2 = TemporalItem {
+        let n2 = TemporalItem {
             at: Utc::now(),
-            what: CronEntry {
+            what: CronEntryInt::try_from(CronEntry {
                 name: "b".to_string(),
                 expr: "* * * * * * *".to_string(),
-                sched: None,
                 payload: None,
-            },
+            })?,
         };
-
-        n1.what.parse().ok();
-        n2.what.parse().ok();
 
         tpq.enqueue(n1.clone());
         tpq.enqueue(n2.clone());
@@ -424,27 +412,22 @@ mod tests {
     pub fn test_tpq_fill_pop() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
-        let mut n1 = TemporalItem {
+        let n1 = TemporalItem {
             at: DateTime::from(std::time::SystemTime::UNIX_EPOCH), // Epoch
-            what: CronEntry {
+            what: CronEntryInt::try_from(CronEntry {
                 name: "a".to_string(),
                 expr: "* * * * * * 1970".to_string(),
-                sched: None,
                 payload: None,
-            },
+            })?,
         };
-        let mut n2 = TemporalItem {
+        let n2 = TemporalItem {
             at: Utc::now(),
-            what: CronEntry {
+            what: CronEntryInt::try_from(CronEntry {
                 name: "b".to_string(),
                 expr: "* * * * * * *".to_string(),
-                sched: None,
                 payload: None,
-            },
+            })?,
         };
-
-        n1.what.parse().ok();
-        n2.what.parse().ok();
 
         tpq.enqueue(n1.clone());
         tpq.enqueue(n2.clone());
@@ -464,28 +447,21 @@ mod tests {
     pub fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
-        let mut n1 = CronEntry {
+        let n1 = CronEntryInt::try_from(CronEntry {
             name: "a".to_string(),
             expr: "* * * * * * 1970".to_string(), // Dates before UNIX epoch start invalid
-            sched: None,
             payload: None,
-        };
-        let mut n2 = CronEntry {
+        })?;
+        let n2 = CronEntryInt::try_from(CronEntry {
             name: "b".to_string(),
             expr: "* * * * * * *".to_string(),
-            sched: None,
             payload: None,
-        };
-        let mut n3 = CronEntry {
+        })?;
+        let n3 = CronEntryInt::try_from(CronEntry {
             name: "c".to_string(),
             expr: "* * * * * * 2038".to_string(), // limit is 2038 due to the 2038 problem ( we'll be retired so letting this hang wait! )
-            sched: None,
             payload: None,
-        };
-
-        n1.parse().ok();
-        n2.parse().ok();
-        n3.parse().ok();
+        })?;
 
         cq.enqueue(&n1);
         cq.enqueue(&n2);
@@ -506,28 +482,21 @@ mod tests {
     pub fn test_cq_fill_pop_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
-        let mut n1 = CronEntry {
+        let n1 = CronEntryInt::try_from(CronEntry {
             name: "a".to_string(),
             expr: "* * * * * * 1970".to_string(), // Dates before UNIX epoch start invalid
-            sched: None,
             payload: None,
-        };
-        let mut n2 = CronEntry {
+        })?;
+        let n2 = CronEntryInt::try_from(CronEntry {
             name: "b".to_string(),
             expr: "* * * * * * *".to_string(),
-            sched: None,
             payload: None,
-        };
-        let mut n3 = CronEntry {
+        })?;
+        let n3 = CronEntryInt::try_from(CronEntry {
             name: "c".to_string(),
             expr: "* * * * * * 2038".to_string(), // limit is 2038 due to the 2038 problem ( we'll be retired so letting this hang wait! )
-            sched: None,
             payload: None,
-        };
-
-        n1.parse().ok();
-        n2.parse().ok();
-        n3.parse().ok();
+        })?;
 
         cq.enqueue(&n1);
         cq.enqueue(&n2);

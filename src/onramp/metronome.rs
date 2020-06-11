@@ -16,7 +16,8 @@ use crate::onramp::prelude::*;
 //NOTE: This is required for StreamHander's stream
 use crate::utils::nanotime;
 use serde_yaml::Value;
-use simd_json::json;
+use simd_json::prelude::*;
+use simd_json::BorrowedValue;
 use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -64,14 +65,14 @@ impl onramp::Impl for Metronome {
 impl Source for Metronome {
     async fn read(&mut self) -> Result<SourceReply> {
         task::sleep(self.duration).await;
-        let data = simd_json::to_vec(
-            &json!({"onramp": "metronome", "ingest_ns": nanotime(), "id": self.id}),
-        )?;
+        let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(3);
+        data.insert("onramp", "metronome")?;
+        data.insert("ingest_ns", nanotime())?;
+        data.insert("id", self.id)?;
         self.id += 1;
-        Ok(SourceReply::Data {
+        Ok(SourceReply::Structured {
             origin_uri: self.origin_uri.clone(),
-            data,
-            stream: 0,
+            data: data.into(),
         })
     }
 

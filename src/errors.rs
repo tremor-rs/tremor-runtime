@@ -158,6 +158,8 @@ error_chain! {
         WsError(tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
         AsyncRecvError(async_std::sync::RecvError);
+        JSONAccessError(value_trait::AccessError);
+        CronError(cron::error::Error);
     }
 
     errors {

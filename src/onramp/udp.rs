@@ -120,7 +120,7 @@ fn onramp_loop(
                             &mut codec,
                             &mut metrics_reporter,
                             &mut ingest_ns,
-                            &origin_uri,
+                            origin_uri.clone(),
                             id,
                             buf[0..n].to_vec(),
                         );
