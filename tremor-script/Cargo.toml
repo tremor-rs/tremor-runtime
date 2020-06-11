@@ -50,7 +50,7 @@ cidr-utils = "0.4"
 jumphash = "0.1"
 rand = { version = "0.7", features = ["small_rng"] }
 hdrhistogram = "7"
-sketches-ddsketch = "0.1.1"
+sketches-ddsketch = "0.1.2"
 xz2 = "0.1"
 url = "2"
 tremor-influx = { version = "0.1" }
