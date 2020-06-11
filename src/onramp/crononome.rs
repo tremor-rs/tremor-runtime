@@ -285,6 +285,9 @@ impl ChronomicQueue {
 impl Source for Crononome {
     async fn read(&mut self) -> Result<SourceReply> {
         if let Some(trigger) = self.cq.next() {
+            let mut origin_uri = self.origin_uri.clone();
+            origin_uri.path.push(trigger.0.clone());
+
             let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(4);
             data.insert("onramp", "crononome")?;
             data.insert("ingest_ns", nanotime())?;
@@ -297,7 +300,7 @@ impl Source for Crononome {
             data.insert("trigger", tr)?;
             self.id += 1;
             Ok(SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
+                origin_uri,
                 data: data.into(),
             })
         } else {
