@@ -274,9 +274,12 @@ where
             if !input.starts_with(search) {
                 res.push('\\');
             }
-            res.push_str(&input[..1]);
 
-            input = &input[1..];
+            if !input.is_empty() {
+                res.push_str(&input[..1]);
+                input = &input[1..];
+            }
+
             parse_to_complex(total_idx, res, idx + 2, input, p)
         } else {
             Ok((data.into(), idx))
@@ -309,8 +312,10 @@ where
                 if !input.starts_with(search) {
                     res.push('\\');
                 }
-                res.push_str(&input[..1]);
-                input = &input[1..];
+                if !input.is_empty() {
+                    res.push_str(&input[..1]);
+                    input = &input[1..];
+                }
                 offset += 2;
             } else {
                 res.push_str(&data);
