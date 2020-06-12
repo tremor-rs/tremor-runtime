@@ -18,3 +18,7 @@ pub use crate::{CBAction, Event, Operator};
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;
 pub use std::borrow::Cow;
+
+pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
+pub const IN: Cow<'static, str> = Cow::Borrowed("in");
+pub const ERROR: Cow<'static, str> = Cow::Borrowed("error");

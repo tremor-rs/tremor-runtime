@@ -17,6 +17,7 @@ use crate::url::TremorURL;
 use halfbrown::HashMap;
 use simd_json::json;
 use std::borrow::Cow;
+use tremor_pipeline::Event;
 use tremor_script::prelude::*;
 
 /// Metrics instance name
@@ -108,12 +109,11 @@ impl RampReporter {
                 .into();
 
                 // full metrics payload
-                let metrics_event = tremor_pipeline::Event {
-                    id: 0,
+                let metrics_event = Event {
                     data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                     ingest_ns: timestamp,
                     origin_uri: None, // TODO update
-                    ..std::default::Default::default()
+                    ..Event::default()
                 };
 
                 if let Err(e) = metrics_addr.addr.send(pipeline::Msg::Event {

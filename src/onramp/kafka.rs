@@ -58,17 +58,17 @@ impl ConfigImpl for Config {}
 
 pub struct Kafka {
     pub config: Config,
-    id: String,
+    onramp_id: TremorURL,
 }
 
-pub struct KafkaInt {
+pub struct Int {
     config: Config,
-    onramp_id: String,
+    onramp_id: TremorURL,
     stream: Option<rentals::MessageStream>,
     origin_uri: EventOriginUri,
 }
 
-impl std::fmt::Debug for KafkaInt {
+impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Kafka")
     }
@@ -96,9 +96,9 @@ impl rentals::MessageStream {
     }
 }
 
-impl KafkaInt {
-    fn from_config(config: &Config, id: &str) -> Self {
-        let origin_uri = tremor_pipeline::EventOriginUri {
+impl Int {
+    fn from_config(onramp_id: TremorURL, config: &Config) -> Self {
+        let origin_uri = EventOriginUri {
             scheme: "tremor-kafka".to_string(),
             // picking the first host for these
             host: "not-connected".to_string(),
@@ -108,7 +108,7 @@ impl KafkaInt {
 
         Self {
             config: config.clone(),
-            onramp_id: id.to_string(),
+            onramp_id,
             stream: None,
             origin_uri,
         }
@@ -116,12 +116,12 @@ impl KafkaInt {
 }
 
 impl onramp::Impl for Kafka {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
                 config,
-                id: id.to_string(),
+                onramp_id: id.clone(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -146,7 +146,10 @@ impl ConsumerContext for LoggingConsumerContext {
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
 #[async_trait::async_trait()]
-impl Source for KafkaInt {
+impl Source for Int {
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
     async fn read(&mut self) -> Result<SourceReply> {
         if let Some(stream) = self
             .stream
@@ -162,7 +165,7 @@ impl Source for KafkaInt {
                         m.offset().to_string(),
                     ];
                     Ok(SourceReply::Data {
-                        origin_uri: origin_uri,
+                        origin_uri,
                         data: data.to_vec(),
                         stream: 0,
                     })
@@ -188,7 +191,7 @@ impl Source for KafkaInt {
         } else {
             return Err(format!("No brokers provided for Kafka onramp {}", self.onramp_id).into());
         };
-        self.origin_uri = tremor_pipeline::EventOriginUri {
+        self.origin_uri = EventOriginUri {
             scheme: "tremor-kafka".to_string(),
             // picking the first host for these
             host: first_broker[0].to_string(),
@@ -280,7 +283,7 @@ impl Source for KafkaInt {
             Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
         };
 
-        let stream = rentals::MessageStream::new(Box::new(consumer), |consumer| consumer.start());
+        let stream = rentals::MessageStream::new(Box::new(consumer), StreamConsumer::start);
         self.stream = Some(stream);
 
         Ok(SourceState::Connected)
@@ -295,11 +298,11 @@ impl Onramp for Kafka {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = KafkaInt::from_config(&self.config, &self.id);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         let (manager, tx) =
             SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
-            .name(format!("on-kafka-{}", self.id))
+            .name(self.onramp_id.short_id("src"))
             .spawn(move || task::block_on(manager.run()))?;
         Ok(tx)
     }

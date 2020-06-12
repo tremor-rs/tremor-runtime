@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::common_cow;
+use crate::op::prelude::{IN, OUT};
 use indexmap::IndexMap;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -46,7 +47,7 @@ impl<'de> Deserialize<'de> for InputPort {
             }),
             [id] => Ok(Self {
                 id: common_cow(id),
-                port: "in".into(),
+                port: IN,
                 had_port: false,
             }),
             _ => Err(Error::custom(
@@ -92,7 +93,7 @@ impl<'de> Deserialize<'de> for OutputPort {
             }),
             [id] => Ok(Self {
                 id: common_cow(id),
-                port: "out".into(),
+                port: OUT,
                 had_port: false,
             }),
             _ => Err(Error::custom(

@@ -103,6 +103,28 @@ pub struct ValueAndMeta<'event> {
     m: Value<'event>,
 }
 
+impl<'event> simd_json_derive::Serialize for ValueAndMeta<'event> {
+    fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        writer.write_all(b"{\"v\":")?;
+        self.v.json_write(writer)?;
+        writer.write_all(b",\"m\":")?;
+        self.m.json_write(writer)?;
+        writer.write_all(b"}")
+    }
+}
+
+impl simd_json_derive::Serialize for LineValue {
+    fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        self.rent(|d| d.json_write(writer))
+    }
+}
+
 impl<'event> ValueAndMeta<'event> {
     /// A value from it's parts
     pub fn from_parts(v: Value<'event>, m: Value<'event>) -> Self {

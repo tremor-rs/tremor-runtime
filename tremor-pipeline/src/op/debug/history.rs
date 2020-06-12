@@ -51,7 +51,7 @@ impl Operator for EventHistory {
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let id = event.id;
         let (_, meta) = event.data.parts();
         match meta
@@ -73,13 +73,13 @@ impl Operator for EventHistory {
                 }
             }
         };
-        Ok(vec![("out".into(), event)])
+        Ok(vec![(OUT, event)].into())
     }
 
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
         let id = signal.id;
         let (_, meta) = signal.data.parts();
 
@@ -102,7 +102,7 @@ impl Operator for EventHistory {
                 }
             }
         };
-        Ok((vec![], None))
+        Ok(EventAndInsights::default())
     }
 }
 
@@ -122,7 +122,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let mut state = Value::null();

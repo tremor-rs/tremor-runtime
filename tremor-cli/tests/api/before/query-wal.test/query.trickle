@@ -1,9 +1,10 @@
 define generic::wal operator wal
 with
-   dir = "./integration_testing/basic/query-wal.test/wal",
    read_count = 5,
    max_elements = 100,
+   max_bytes = 1024 * 1024
 end;
+
 create operator wal;
 
 select event from in into wal;

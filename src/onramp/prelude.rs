@@ -23,7 +23,7 @@ pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
 pub(crate) use async_std::sync::{channel, Receiver, Sender};
 pub(crate) use async_std::task;
-pub(crate) use tremor_pipeline::EventOriginUri;
+pub(crate) use tremor_pipeline::{Event, EventOriginUri};
 use tremor_script::LineValue;
 
 // TODO pub here too?
@@ -65,16 +65,16 @@ pub(crate) fn transmit_event(
     metrics_reporter: &mut RampReporter,
     data: LineValue,
     ingest_ns: u64,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: EventOriginUri,
     id: u64,
 ) {
-    let event = tremor_pipeline::Event {
+    let event = Event {
         id,
         data,
         ingest_ns,
         // TODO make origin_uri non-optional here too?
         origin_uri: Some(origin_uri),
-        ..std::default::Default::default()
+        ..Event::default()
     };
     if let Some(((input, addr), pipelines)) = pipelines.split_last() {
         metrics_reporter.periodic_flush(ingest_ns);
@@ -110,7 +110,7 @@ pub(crate) fn send_event(
     codec: &mut Box<dyn Codec>,
     metrics_reporter: &mut RampReporter,
     ingest_ns: &mut u64,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: &tremor_pipeline::EventOriginUri,
     id: u64,
     data: Vec<u8>,
 ) {
@@ -144,6 +144,8 @@ pub(crate) enum PipeHandlerResult {
     Normal,
     Trigger,
     Restore,
+    Ack(u64),
+    Fail(u64),
 }
 
 // Handles pipeline connections for an onramp
@@ -206,23 +208,30 @@ pub(crate) fn handle_pipelines_msg(
             }
             onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
             onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
+            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
+            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
         }
     } else {
         match msg {
-            onramp::Msg::Connect(mut ps) => pipelines.append(&mut ps),
+            onramp::Msg::Connect(mut ps) => {
+                pipelines.append(&mut ps);
+                Ok(PipeHandlerResult::Normal)
+            }
             onramp::Msg::Disconnect { id, tx } => {
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
                     tx.send(true)?;
-                    return Ok(PipeHandlerResult::Terminate);
+                    Ok(PipeHandlerResult::Terminate)
                 } else {
                     tx.send(false)?;
+                    Ok(PipeHandlerResult::Normal)
                 }
             }
-            onramp::Msg::Trigger => return Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => return Ok(PipeHandlerResult::Restore),
-        };
-        Ok(PipeHandlerResult::Normal)
+            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
+            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
+            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+        }
     }
 }
 
@@ -253,6 +262,8 @@ pub(crate) fn handle_pipelines_msg2(
             }
             onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
             onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
+            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
+            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
         }
     } else {
         match msg {
@@ -261,7 +272,8 @@ pub(crate) fn handle_pipelines_msg2(
                     p.1.addr
                         .send(pipeline::Msg::ConnectOnramp(id.clone(), tx.clone()))?;
                 }
-                pipelines.append(&mut ps)
+                pipelines.append(&mut ps);
+                Ok(PipeHandlerResult::Normal)
             }
             onramp::Msg::Disconnect { id, tx } => {
                 for (pid, p) in pipelines.iter() {
@@ -272,14 +284,16 @@ pub(crate) fn handle_pipelines_msg2(
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
                     tx.send(true)?;
-                    return Ok(PipeHandlerResult::Terminate);
+                    Ok(PipeHandlerResult::Terminate)
                 } else {
                     tx.send(false)?;
+                    Ok(PipeHandlerResult::Normal)
                 }
             }
-            onramp::Msg::Trigger => return Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => return Ok(PipeHandlerResult::Restore),
-        };
-        Ok(PipeHandlerResult::Normal)
+            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
+            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
+            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
+            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+        }
     }
 }

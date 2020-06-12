@@ -11,6 +11,7 @@ byteorder = "1"
 serde = "1"
 serde_derive = "1"
 simd-json = {version = "0.3", features = ["known-key"] }
+simd-json-derive = "0.1"
 serde_yaml = "0.8"
 petgraph = "0.5"
 error-chain="0.12"

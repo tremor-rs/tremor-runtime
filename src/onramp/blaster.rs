@@ -40,7 +40,7 @@ impl ConfigImpl for Config {}
 #[derive(Clone)]
 pub struct Blaster {
     pub config: Config,
-    id: String,
+    id: TremorURL,
     data: Vec<u8>,
     acc: Acc,
     origin_uri: tremor_pipeline::EventOriginUri,
@@ -52,7 +52,7 @@ impl std::fmt::Debug for Blaster {
 }
 
 impl onramp::Impl for Blaster {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = File::open(&config.source)?;
@@ -77,7 +77,7 @@ impl onramp::Impl for Blaster {
                 data,
                 acc: Acc::default(),
                 origin_uri,
-                id: id.to_string(),
+                id: id.clone(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -94,6 +94,10 @@ struct Acc {
 
 #[async_trait::async_trait()]
 impl Source for Blaster {
+    fn id(&self) -> &TremorURL {
+        &self.id
+    }
+
     async fn read(&mut self) -> Result<SourceReply> {
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
@@ -143,17 +147,7 @@ impl Onramp for Blaster {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        SourceManager::start(
-            self.id(),
-            self.clone(),
-            codec,
-            preprocessors,
-            metrics_reporter,
-        )
-        .await
-    }
-    fn id(&self) -> &str {
-        &self.id
+        SourceManager::start(self.clone(), codec, preprocessors, metrics_reporter).await
     }
     fn default_codec(&self) -> &str {
         "json"

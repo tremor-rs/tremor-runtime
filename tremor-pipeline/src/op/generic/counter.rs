@@ -30,7 +30,7 @@ impl Operator for Counter {
         _port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         if state.is_null() {
             *state = Value::from(1 as u64);
         } else {
@@ -50,6 +50,6 @@ impl Operator for Counter {
             "event".into() => value.clone_static(),
         });
 
-        Ok(vec![("out".into(), event)])
+        Ok(vec![(OUT, event)].into())
     }
 }

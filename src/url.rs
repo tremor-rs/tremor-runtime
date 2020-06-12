@@ -93,6 +93,12 @@ impl fmt::Display for TremorURL {
 }
 
 impl TremorURL {
+    /// Generates a minimal id of the form "{pfx}-{artefact}.{instance}"
+    pub fn short_id(&self, pfx: &str) -> String {
+        let artefact_id = self.artefact().unwrap_or("-");
+        let instance_id = self.instance().unwrap_or("-");
+        format!("{}-{}.{}", pfx, artefact_id, instance_id)
+    }
     /// Creates an URL from a given onramp id
     pub fn from_onramp_id(id: &str) -> Result<Self> {
         Self::parse(&format!("/onramp/{}", id))
@@ -239,16 +245,16 @@ impl TremorURL {
 
     /// Retrives the instance
     pub fn instance(&self) -> Option<&str> {
-        self.instance.as_ref().map(String::as_str)
+        self.instance.as_deref()
     }
 
     /// Retrives the artefact
     pub fn artefact(&self) -> Option<&str> {
-        self.artefact.as_ref().map(String::as_str)
+        self.artefact.as_deref()
     }
     /// Retrives the port
     pub fn instance_port(&self) -> Option<&str> {
-        self.instance_port.as_ref().map(String::as_str)
+        self.instance_port.as_deref()
     }
     /// Retrives the type
     pub fn resource_type(&self) -> Option<ResourceType> {

@@ -67,7 +67,7 @@ impl Operator for Tremor {
         _in_port: &str,
         state: &mut Value<'static>,
         mut event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let out_port = {
             let context = EventContext::new(event.ingest_ns, event.origin_uri);
             // This lifetimes will be `&'run mut Value<'event>` as that is the
@@ -86,12 +86,12 @@ impl Operator for Tremor {
             // move origin_uri back to event again
             event.origin_uri = context.origin_uri;
             match value {
-                Ok(Return::EmitEvent { port }) => port.map_or_else(|| "out".into(), Cow::Owned),
+                Ok(Return::EmitEvent { port }) => port.map_or(OUT, Cow::Owned),
                 Ok(Return::Emit { value, port }) => {
                     *unwind_event = value;
-                    port.map_or_else(|| "out".into(), Cow::Owned)
+                    port.map_or(OUT, Cow::Owned)
                 }
-                Ok(Return::Drop) => return Ok(vec![]),
+                Ok(Return::Drop) => return Ok(EventAndInsights::default()),
                 Err(ref e) => {
                     let mut o = Value::from(hashmap! {
                         "error".into() => Value::from(self.runtime.format_error(&e)),
@@ -103,11 +103,11 @@ impl Operator for Tremor {
                         // ALLOW: we know this never happens since we swap the event three lines above
                         unreachable!();
                     };
-                    "error".into()
+                    ERROR
                 }
             }
         };
-        Ok(vec![(out_port, event)])
+        Ok(vec![(out_port, event)].into())
     }
 }
 
@@ -140,7 +140,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from(json!({"a": 1})).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut state = Value::null();
 

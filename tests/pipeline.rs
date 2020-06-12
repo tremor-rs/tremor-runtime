@@ -52,7 +52,7 @@ macro_rules! test_cases {
                         id: id as u64,
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
-                        ..std::default::Default::default()
+                        ..Event::default()
                     };
                     let mut r = Vec::new();
                     pipeline.enqueue("in", event, &mut r)?;

@@ -28,8 +28,8 @@ impl Operator for Passthrough {
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
-        Ok(vec![("out".into(), event)])
+    ) -> Result<EventAndInsights> {
+        Ok(vec![(OUT, event)].into())
     }
     fn skippable(&self) -> bool {
         // ALLOW: This is Ok

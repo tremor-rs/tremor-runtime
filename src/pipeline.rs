@@ -20,8 +20,6 @@ use crate::{offramp, onramp};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::{bounded, Sender as CbSender};
-use simd_json::prelude::*;
-use simd_json::BorrowedValue;
 use std::borrow::Cow;
 use std::time::Duration;
 use std::{fmt, thread};
@@ -157,11 +155,12 @@ fn send_signal(
 
 #[inline]
 async fn handle_insight(
+    skip_to: Option<usize>,
     insight: Event,
     pipeline: &mut ExecutableGraph,
     onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
 ) {
-    let insight = pipeline.contraflow(insight);
+    let insight = pipeline.contraflow(dbg!(skip_to), insight);
     if insight.cb == Some(CBAction::Trigger) {
         dbg!("trigger");
         for (_k, o) in onramps {
@@ -174,10 +173,31 @@ async fn handle_insight(
             o.send(onramp::Msg::Restore).await
         }
 
-        //this is a trigger event
+    //this is a trigger event
+    } else if let Some(CBAction::Ack(ack)) = insight.cb {
+        dbg!(ack);
+        for (_k, o) in onramps {
+            o.send(onramp::Msg::Ack(ack)).await
+        }
+    } else if let Some(CBAction::Fail(fail)) = insight.cb {
+        dbg!(fail);
+        for (_k, o) in onramps {
+            o.send(onramp::Msg::Fail(fail)).await
+        }
     }
 }
 
+#[inline]
+async fn handle_insights(
+    pipeline: &mut ExecutableGraph,
+    onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
+) {
+    let mut insights = Vec::with_capacity(pipeline.insights.len());
+    std::mem::swap(&mut insights, &mut pipeline.insights);
+    for (skip_to, insight) in insights.drain(..) {
+        handle_insight(Some(skip_to), insight, pipeline, onramps).await
+    }
+}
 impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
@@ -221,11 +241,11 @@ impl Manager {
         let tick_tx = tx.clone();
         task::spawn(async move {
             let mut e = Event {
-                data: (BorrowedValue::null(), BorrowedValue::object()).into(),
                 ingest_ns: nanotime(),
                 kind: Some(SignalKind::Tick),
-                ..std::default::Default::default()
+                ..Event::default()
             };
+
             while tick_tx.send(Msg::Signal(e.clone())).is_ok() {
                 task::sleep(Duration::from_millis(TICK_MS)).await;
                 e.ingest_ns = nanotime()
@@ -240,6 +260,8 @@ impl Manager {
                         Msg::Event { input, event } => {
                             match pipeline.enqueue(&input, event, &mut eventset) {
                                 Ok(()) => {
+                                    task::block_on(handle_insights(&mut pipeline, &onramps));
+
                                     if let Err(e) = send_events(&mut eventset, &dests) {
                                         error!("Failed to send event: {}", e)
                                     }
@@ -248,26 +270,22 @@ impl Manager {
                             }
                         }
                         Msg::Insight(insight) => {
-                            task::block_on(handle_insight(insight, &mut pipeline, &onramps))
+                            task::block_on(handle_insight(None, insight, &mut pipeline, &onramps))
                         }
-                        Msg::Signal(signal) => match pipeline
-                            .enqueue_signal(signal.clone(), &mut eventset)
-                        {
-                            Ok(insights) => {
+                        Msg::Signal(signal) => {
+                            if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
+                                error!("error: {:?}", e)
+                            } else {
                                 if let Err(e) = send_signal(&id, signal, &dests) {
                                     error!("Failed to send signal: {}", e)
                                 }
-
-                                for insight in insights {
-                                    task::block_on(handle_insight(insight, &mut pipeline, &onramps))
-                                }
+                                task::block_on(handle_insights(&mut pipeline, &onramps));
 
                                 if let Err(e) = send_events(&mut eventset, &dests) {
                                     error!("Failed to send event: {}", e)
                                 }
                             }
-                            Err(e) => error!("error: {:?}", e),
-                        },
+                        }
                         Msg::ConnectOfframp(output, offramp_id, offramp) => {
                             info!(
                                 "[Pipeline:{}] connecting {} to offramp {}",

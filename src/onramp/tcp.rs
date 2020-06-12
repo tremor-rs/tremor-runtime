@@ -34,7 +34,7 @@ impl ConfigImpl for Config {}
 
 pub struct Tcp {
     pub config: Config,
-    onramp_id: String,
+    onramp_id: TremorURL,
 }
 
 pub struct Int {
@@ -48,6 +48,7 @@ pub struct Int {
     /// to keep track of tokens that are returned for re-use (after connection is terminated)
     returned_tokens: Vec<usize>,
     new_streams: Vec<usize>,
+    onramp_id: TremorURL,
 }
 impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -55,7 +56,7 @@ impl std::fmt::Debug for Int {
     }
 }
 impl Int {
-    fn from_config(config: &Config) -> Result<Self> {
+    fn from_config(onramp_id: TremorURL, config: &Config) -> Result<Self> {
         let config = config.clone();
         let poll = Poll::new()?;
         let events = Events::with_capacity(1024);
@@ -75,17 +76,18 @@ impl Int {
             event_offset: 0,
             returned_tokens,
             new_streams: Vec::new(),
+            onramp_id,
         })
     }
 }
 
 impl onramp::Impl for Tcp {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
                 config,
-                onramp_id: id.to_string(),
+                onramp_id: id.clone(),
             }))
         } else {
             Err("Missing config for tcp onramp".into())
@@ -108,6 +110,10 @@ impl TremorTcpConnection {
 
 #[async_trait::async_trait()]
 impl Source for Int {
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
+
     async fn read(&mut self) -> Result<SourceReply> {
         // temporary buffer to keep data read from the tcp socket
         let mut buffer = [0; BUFFER_SIZE_BYTES];
@@ -260,14 +266,11 @@ impl Onramp for Tcp {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(&self.config)?;
-        SourceManager::start(self.id(), source, codec, preprocessors, metrics_reporter).await
+        let source = Int::from_config(self.onramp_id.clone(), &self.config)?;
+        SourceManager::start(source, codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {
         "json"
-    }
-    fn id(&self) -> &str {
-        &self.onramp_id
     }
 }

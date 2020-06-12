@@ -44,7 +44,7 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 impl onramp::Impl for GSub {
-    fn from_config(_id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(_id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self { config }))

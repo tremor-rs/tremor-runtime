@@ -27,7 +27,6 @@
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
-use std::borrow::Cow;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -124,7 +123,7 @@ impl Operator for Backpressure {
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let mut output = None;
         for n in 0..self.outputs.len() {
             let id = (self.next + n) % self.outputs.len();
@@ -145,9 +144,9 @@ impl Operator for Backpressure {
             if let Some(meta) = meta.as_object_mut() {
                 meta.insert("backpressure-output".into(), out.clone().into());
             };
-            Ok(vec![(out.into(), event)])
+            Ok(vec![(out.into(), event)].into())
         } else {
-            Ok(vec![("overflow".into(), event)])
+            Ok(vec![("overflow".into(), event)].into())
         }
     }
 
@@ -158,7 +157,7 @@ impl Operator for Backpressure {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
         let mut is_open = false;
         let mut was_closed = true;
@@ -172,18 +171,15 @@ impl Operator for Backpressure {
             }
         }
 
-        let cf = if was_closed && is_open {
-            let e = Event {
-                ingest_ns: now,
-                cb: Some(CBAction::Restore),
-                ..std::default::Default::default()
-            };
-
-            Some(e)
+        let insights = if was_closed && is_open {
+            vec![Event::cb_restore(now)]
         } else {
-            None
+            vec![]
         };
-        Ok((vec![], cf))
+        Ok(EventAndInsights {
+            insights,
+            ..EventAndInsights::default()
+        })
     }
     fn on_contraflow(&mut self, insight: &mut Event) {
         let (_, meta) = insight.data.parts();
@@ -251,7 +247,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -266,7 +262,7 @@ mod test {
             id: 2,
             ingest_ns: 2,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -293,7 +289,7 @@ mod test {
             id: 1,
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -312,7 +308,7 @@ mod test {
             id: 1,
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         // Verify that we now have a backoff of 1ms
@@ -327,7 +323,7 @@ mod test {
             id: 2,
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -342,7 +338,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -357,7 +353,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -384,7 +380,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             data: (Value::null(), m).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         // A contraflow that passes the timeout
@@ -396,7 +392,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             data: (Value::null(), m).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         // Assert initial state
@@ -424,7 +420,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            outputs: vec!["out".into(), "snot".into()],
+            outputs: vec![OUT, "snot".into()],
         }
         .into();
 
@@ -436,7 +432,7 @@ mod test {
             id: 1,
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event1.clone())
@@ -451,7 +447,7 @@ mod test {
             id: 2,
             ingest_ns: 1_000_001,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -471,7 +467,7 @@ mod test {
             id: 1,
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         // Verify that we now have a backoff of 1ms
@@ -487,7 +483,7 @@ mod test {
             id: 2,
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event2.clone())
@@ -502,7 +498,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())
@@ -517,7 +513,7 @@ mod test {
             id: 3,
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut r = op
             .on_event("in", &mut state, event3.clone())

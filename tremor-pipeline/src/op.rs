@@ -27,9 +27,22 @@ use regex::Regex;
 use std::borrow::Cow;
 use tremor_script::Value;
 
-/// Response type for `on_singnal`, the first element are events to ben send
-/// from it the second element is an optional counterflow.
-pub type SignalResponse = (Vec<(Cow<'static, str>, Event)>, Option<Event>);
+/// Response type for operator callbacks returning both events and insights
+#[derive(Default, Clone)]
+pub struct EventAndInsights {
+    /// Events being returned
+    pub events: Vec<(Cow<'static, str>, Event)>,
+    /// Insights being returned
+    pub insights: Vec<Event>,
+}
+impl From<Vec<(Cow<'static, str>, Event)>> for EventAndInsights {
+    fn from(events: Vec<(Cow<'static, str>, Event)>) -> Self {
+        Self {
+            events,
+            ..Self::default()
+        }
+    }
+}
 
 /// The operator trait, this reflects the functionality of an operator in the
 /// pipeline graph
@@ -42,7 +55,7 @@ pub trait Operator: std::fmt::Debug + Send {
         port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>>;
+    ) -> Result<EventAndInsights>;
 
     /// Defines if the operatoir shold be called on the singalflow, defaults
     /// to `false`. If set to `true`, `on_signal` should also be implemented.
@@ -50,9 +63,9 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
     /// Handle singal events, defaults to returning an empty vector.
-    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
         // Make the trait signature nicer
-        Ok((vec![], None))
+        Ok(EventAndInsights::default())
     }
 
     /// Defines if the operatoir shold be called on the contraflow, defaults

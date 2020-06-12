@@ -161,7 +161,7 @@ impl Elastic {
             let insight = Event {
                 data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
-                ..std::default::Default::default()
+                ..Event::default()
             };
 
             for (pid, p) in pipelines {
@@ -189,7 +189,7 @@ impl Elastic {
                 let insight = Event {
                     data: (Value::null(), m).into(),
                     ingest_ns: nanotime(),
-                    ..std::default::Default::default()
+                    ..Event::default()
                 };
 
                 let pipelines: Vec<(TremorURL, pipeline::Addr)> = self

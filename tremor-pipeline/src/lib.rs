@@ -34,6 +34,7 @@ extern crate log;
 extern crate rental;
 
 use crate::errors::{Error, ErrorKind, Result};
+use crate::op::prelude::IN;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
@@ -62,6 +63,7 @@ mod macros;
 pub(crate) mod op;
 /// Tools to turn tremor query into pipelines
 pub mod query;
+use op::EventAndInsights;
 
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
@@ -126,15 +128,21 @@ pub enum NodeKind {
 }
 
 /// A circuit breaker action
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum CBAction {
     /// The circuit breaker is triggerd and should break
     Trigger,
     /// The circuit breaker is restored and should work again
     Restore,
+    /// Acknowledge delivery of messages up to a given ID.
+    /// All messages prior to and including  this will be considered delivered.
+    Ack(u64),
+    /// Fail backwards to a given ID
+    /// All messages after and including this will be considered non delivered
+    Fail(u64),
 }
 /// A tremor event
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, simd_json_derive::Serialize)]
 pub struct Event {
     /// The event ID
     pub id: u64,
@@ -160,6 +168,41 @@ impl Event {
         ValueMetaIter {
             event: self,
             idx: 0,
+        }
+    }
+    /// Creates a new event to restore a CB
+    pub fn cb_restore(ingest_ns: u64) -> Self {
+        Event {
+            ingest_ns,
+            cb: Some(CBAction::Restore),
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new event to trigger a CB
+    pub fn cb_trigger(ingest_ns: u64) -> Self {
+        Event {
+            ingest_ns,
+            cb: Some(CBAction::Trigger),
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new event to trigger a CB
+    pub fn cb_ack(ingest_ns: u64, id: u64) -> Self {
+        Event {
+            ingest_ns,
+            cb: Some(CBAction::Ack(id)),
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new event to trigger a CB
+    pub fn cb_fail(ingest_ns: u64, id: u64) -> Self {
+        Event {
+            ingest_ns,
+            cb: Some(CBAction::Fail(id)),
+            ..Event::default()
         }
     }
 }
@@ -240,7 +283,7 @@ impl<'value> Iterator for ValueIter<'value> {
 }
 
 /// The kind of signal this is
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum SignalKind {
     // Lifecycle
     /// Init singnal    
@@ -265,6 +308,26 @@ pub struct NodeConfig {
     pub(crate) config: config::ConfigMap,
     pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
     pub(crate) node: Option<Arc<StmtRentalWrapper>>,
+}
+
+impl NodeConfig {
+    /// Creates a NodeConfig from a config struct
+    pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
+    where
+        C: Serialize,
+        Cow<'static, str>: From<I>,
+    {
+        let config = serde_yaml::to_vec(&config)?;
+
+        Ok(NodeConfig {
+            id: id.into(),
+            kind: NodeKind::Operator,
+            op_type: "".into(),
+            config: serde_yaml::from_slice(&config)?,
+            defn: None,
+            node: None,
+        })
+    }
 }
 
 // We ignore stmt on equality and hasing as they're only
@@ -308,14 +371,14 @@ impl Operator for OperatorNode {
         port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         self.op.on_event(port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<crate::op::SignalResponse> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
         self.op.on_signal(signal)
     }
 
@@ -325,6 +388,7 @@ impl Operator for OperatorNode {
     fn on_contraflow(&mut self, contraevent: &mut Event) {
         self.op.on_contraflow(contraevent)
     }
+
     fn metrics(
         &self,
         tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -566,6 +630,8 @@ pub struct ExecutableGraph {
     metrics_idx: usize,
     last_metrics: u64,
     metric_interval: Option<u64>,
+    /// snot
+    pub insights: Vec<(usize, Event)>,
 }
 
 /// The return of a graph execution
@@ -734,8 +800,7 @@ impl ExecutableGraph {
                 self.last_metrics = event.ingest_ns;
             }
         }
-        self.stack
-            .push((self.inputs[stream_name], "in".into(), event));
+        self.stack.push((self.inputs[stream_name], IN, event));
         self.run(returns)
     }
 
@@ -752,12 +817,7 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                let mut insights = Vec::new();
-                self.signalflow(event, &mut insights)?;
-                if !insights.is_empty() {
-                    error!("Emitted signals can't trigger counterflow")
-                }
-
+                self.signalflow(event)?;
                 return Ok(!self.stack.is_empty());
             }
 
@@ -766,8 +826,9 @@ impl ExecutableGraph {
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
             } else {
-                let res = node.on_event(&port, &mut self.state.ops[idx], event)?;
-                for (out_port, _) in &res {
+                let EventAndInsights { events, insights } =
+                    node.on_event(&port, &mut self.state.ops[idx], event)?;
+                for (out_port, _) in &events {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs
                         .get_mut(out_port)
@@ -779,7 +840,10 @@ impl ExecutableGraph {
                             .insert(out_port.clone(), 1);
                     }
                 }
-                self.enqueue_events(idx, res);
+                for insight in insights {
+                    self.insights.push((idx, insight))
+                }
+                self.enqueue_events(idx, events);
             };
             Ok(!self.stack.is_empty())
         } else {
@@ -804,13 +868,13 @@ impl ExecutableGraph {
                 for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".into(),
+                        IN,
                         Event {
                             data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                             ingest_ns: timestamp,
                             // TODO update this to point to tremor instance producing the metrics?
                             origin_uri: None,
-                            ..std::default::Default::default()
+                            ..Event::default()
                         },
                     ));
                 }
@@ -819,13 +883,13 @@ impl ExecutableGraph {
                 for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
-                        "in".into(),
+                        IN,
                         Event {
                             data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
                             ingest_ns: timestamp,
                             // TODO update this to point to tremor instance producing the metrics?
                             origin_uri: None,
-                            ..std::default::Default::default()
+                            ..Event::default()
                         },
                     ));
                 }
@@ -866,35 +930,38 @@ impl ExecutableGraph {
         }
     }
     /// Enque a contraflow insight
-    pub fn contraflow(&mut self, mut insight: Event) -> Event {
+    pub fn contraflow(&mut self, mut skip_to: Option<usize>, mut insight: Event) -> Event {
         for idx in &self.contraflow {
-            let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
-            op.on_contraflow(&mut insight);
+            if skip_to.is_none() {
+                let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
+                op.on_contraflow(&mut insight);
+            } else if skip_to == Some(*idx) {
+                skip_to = None
+            }
         }
         insight
     }
     /// Enque a signal
-    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<Vec<Event>> {
-        let mut insights = Vec::with_capacity(16);
-        if self.signalflow(signal, &mut insights)? {
+    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
+        if self.signalflow(signal)? {
             self.run(returns)?;
         }
-        Ok(insights)
+        Ok(())
     }
 
-    fn signalflow(&mut self, mut signal: Event, insights: &mut Vec<Event>) -> Result<bool> {
+    fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
         let mut has_events = false;
         for idx in 0..self.signalflow.len() {
             let i = self.signalflow[idx];
-            let (res, cf) = {
+            let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 op.on_signal(&mut signal)?
             };
-            if let Some(cf) = cf {
-                insights.push(cf);
+            for cf in insights {
+                self.insights.push((i, cf));
             }
-            has_events = has_events || !res.is_empty();
-            self.enqueue_events(i, res);
+            has_events = has_events || !events.is_empty();
+            self.enqueue_events(i, events);
             // We shouldn't call run in signal flow it should just enqueue
             // self.run(returns)?
         }
@@ -979,6 +1046,7 @@ impl Pipeline {
             contraflow,
             signalflow,
             metric_interval,
+            insights: Vec::new(),
         })
     }
 }
@@ -1010,7 +1078,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from(json!({"snot": "badger"})).into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut results = Vec::new();
         e.enqueue("in", event1, &mut results)
@@ -1052,7 +1120,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::null().into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut results = Vec::new();
         e.enqueue("in", event1, &mut results)
@@ -1073,12 +1141,12 @@ mod test {
         let event1 = Event {
             id: 1,
             ingest_ns: 1,
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let event2 = Event {
             id: 2,
             ingest_ns: 2,
-            ..std::default::Default::default()
+            ..Event::default()
         };
         let mut results = Vec::new();
         e.enqueue("in1", event1, &mut results)
@@ -1162,7 +1230,7 @@ mod test {
         let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         let l = p.config.links.iter().next().expect("no links");
         assert_eq!(
-            (&"in".into(), vec!["out".into()]),
+            (&IN, vec![OUT]),
             (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())
         );
     }

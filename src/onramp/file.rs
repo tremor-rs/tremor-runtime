@@ -40,6 +40,7 @@ impl ConfigImpl for Config {}
 
 pub struct File {
     pub config: Config,
+    onramp_id: TremorURL,
 }
 
 enum ArghDyn {
@@ -60,6 +61,7 @@ struct FileInt {
     pub config: Config,
     lines: ArghDyn,
     origin_uri: EventOriginUri,
+    onramp_id: TremorURL,
 }
 impl std::fmt::Debug for FileInt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -67,7 +69,7 @@ impl std::fmt::Debug for FileInt {
     }
 }
 impl FileInt {
-    async fn from_config(config: Config) -> Result<Self> {
+    async fn from_config(onramp_id: TremorURL, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(FSFile::open(&config.source).await?);
         let ext = Path::new(&config.source)
             .extension()
@@ -87,6 +89,7 @@ impl FileInt {
             path: vec![config.source.clone()],
         };
         Ok(Self {
+            onramp_id,
             config,
             lines,
             origin_uri,
@@ -95,10 +98,13 @@ impl FileInt {
 }
 
 impl onramp::Impl for File {
-    fn from_config(_id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self { config }))
+            Ok(Box::new(Self {
+                config,
+                onramp_id: id.clone(),
+            }))
         } else {
             Err("Missing config for blaster onramp".into())
         }
@@ -107,6 +113,10 @@ impl onramp::Impl for File {
 
 #[async_trait::async_trait()]
 impl Source for FileInt {
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
+
     async fn read(&mut self) -> Result<SourceReply> {
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
@@ -136,7 +146,7 @@ impl Onramp for File {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = FileInt::from_config(self.config.clone()).await?;
+        let source = FileInt::from_config(self.onramp_id.clone(), self.config.clone()).await?;
         let (manager, tx) =
             SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()

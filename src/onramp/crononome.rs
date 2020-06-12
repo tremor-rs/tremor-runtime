@@ -90,7 +90,7 @@ pub struct Crononome {
     pub config: Config,
     origin_uri: tremor_pipeline::EventOriginUri,
     cq: ChronomicQueue,
-    onramp_id: String,
+    onramp_id: TremorURL,
     id: u64,
 }
 impl std::fmt::Debug for Crononome {
@@ -100,7 +100,7 @@ impl std::fmt::Debug for Crononome {
 }
 
 impl onramp::Impl for Crononome {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = tremor_pipeline::EventOriginUri {
@@ -113,7 +113,7 @@ impl onramp::Impl for Crononome {
             Ok(Box::new(Self {
                 origin_uri,
                 config,
-                onramp_id: id.to_string(),
+                onramp_id: id.clone(),
                 id: 0,
                 cq: ChronomicQueue::default(),
             }))
@@ -283,6 +283,10 @@ impl ChronomicQueue {
 
 #[async_trait::async_trait()]
 impl Source for Crononome {
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
+
     async fn read(&mut self) -> Result<SourceReply> {
         if let Some(trigger) = self.cq.next() {
             let mut origin_uri = self.origin_uri.clone();
@@ -333,22 +337,11 @@ impl Onramp for Crononome {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        SourceManager::start(
-            self.id(),
-            self.clone(),
-            codec,
-            preprocessors,
-            metrics_reporter,
-        )
-        .await
+        SourceManager::start(self.clone(), codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {
         "json"
-    }
-
-    fn id(&self) -> &str {
-        &self.onramp_id
     }
 }
 

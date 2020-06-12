@@ -70,7 +70,7 @@ impl Operator for Batch {
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         // TODO: This is ugly
         let Event {
             id,
@@ -125,12 +125,12 @@ impl Operator for Batch {
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
-                ..std::default::Default::default()
+                ..Event::default()
             };
             self.event_id += 1;
-            Ok(vec![("out".into(), event)])
+            Ok(vec![(OUT, event)].into())
         } else {
-            Ok(vec![])
+            Ok(EventAndInsights::default())
         }
     }
 
@@ -138,7 +138,7 @@ impl Operator for Batch {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<SignalResponse> {
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
         if let Some(delay_ns) = self.max_delay_ns {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
@@ -152,15 +152,15 @@ impl Operator for Batch {
                     data,
                     ingest_ns: self.first_ns,
                     is_batch: true,
-                    ..std::default::Default::default()
+                    ..Event::default()
                 };
                 self.event_id += 1;
-                Ok((vec![("out".into(), event)], None))
+                Ok(EventAndInsights::from(vec![(OUT, event)]))
             } else {
-                Ok((vec![], None))
+                Ok(EventAndInsights::default())
             }
         } else {
-            Ok((vec![], None))
+            Ok(EventAndInsights::default())
         }
     }
 }
@@ -188,7 +188,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let mut state = Value::null();
@@ -202,7 +202,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let mut r = op
@@ -221,7 +221,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let r = op
@@ -248,7 +248,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         println!(
@@ -269,7 +269,7 @@ mod test {
             id: 1,
             ingest_ns: 2_000_000,
             data: Value::from("badger").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let mut r = op
@@ -289,7 +289,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let r = op
@@ -301,7 +301,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let r = op
@@ -328,7 +328,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let mut state = Value::null();
@@ -342,7 +342,7 @@ mod test {
             id: 1,
             ingest_ns: 2_000_000,
             data: Value::null().into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let (mut r, _) = op.on_signal(&mut signal).expect("failed to run pipeline");
@@ -357,7 +357,7 @@ mod test {
             id: 1,
             ingest_ns: 1,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let r = op
@@ -369,7 +369,7 @@ mod test {
             id: 1,
             ingest_ns: 2,
             data: Value::from("snot").into(),
-            ..std::default::Default::default()
+            ..Event::default()
         };
 
         let r = op

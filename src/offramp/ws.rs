@@ -21,7 +21,7 @@ use std::time::Duration;
 use tungstenite::protocol::Message;
 use url::Url;
 
-type WsAddr = Sender<WsMessage>;
+type WsAddr = Sender<(u64, WsMessage)>;
 
 enum WsMessage {
     Binary(Vec<u8>),
@@ -42,23 +42,35 @@ pub struct Ws {
     config: Config,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
-    rx: Receiver<Option<WsAddr>>,
+    rx: Receiver<WSResult>,
 }
 
-async fn ws_loop(url: String, offramp_tx: Sender<Option<WsAddr>>) {
+enum WSResult {
+    Connected(WsAddr),
+    Disconnected,
+    Ack(u64),
+    Fail(u64),
+}
+
+impl Default for WSResult {
+    fn default() -> Self {
+        WSResult::Disconnected
+    }
+}
+async fn ws_loop(url: String, offramp_tx: Sender<WSResult>) {
     loop {
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
             ws_stream
         } else {
             error!("Failed to connect to {}, retrying in 1s", url);
-            offramp_tx.send(None).await;
+            offramp_tx.send(WSResult::Disconnected).await;
             task::sleep(Duration::from_secs(1)).await;
             continue;
         };
         let (tx, rx) = channel(64);
-        offramp_tx.send(Some(tx)).await;
+        offramp_tx.send(WSResult::Connected(tx)).await;
 
-        while let Ok(msg) = rx.recv().await {
+        while let Ok((id, msg)) = rx.recv().await {
             let r = match msg {
                 WsMessage::Text(t) => ws_stream.send(Message::Text(t)).await,
                 WsMessage::Binary(t) => ws_stream.send(Message::Binary(t)).await,
@@ -68,7 +80,10 @@ async fn ws_loop(url: String, offramp_tx: Sender<Option<WsAddr>>) {
                     "Websocket send error: {} for endppoint {}, reconnecting",
                     e, url
                 );
+                offramp_tx.send(WSResult::Fail(id)).await;
                 break;
+            } else {
+                offramp_tx.send(WSResult::Ack(id)).await;
             }
         }
     }
@@ -97,22 +112,98 @@ impl offramp::Impl for Ws {
     }
 }
 
+impl Ws {
+    async fn update_ws_state(&mut self, ingest_ns: u64) -> bool {
+        let mut new_connect = false;
+        while !self.rx.is_empty() {
+            match self.rx.recv().await.unwrap_or_default() {
+                WSResult::Connected(addr) => self.addr = Some(addr),
+                WSResult::Disconnected => self.addr = None,
+                WSResult::Ack(id) => {
+                    for p in self.pipelines.values() {
+                        if let Err(e) = p
+                            .addr
+                            .send(pipeline::Msg::Insight(Event::cb_ack(ingest_ns, id)))
+                        {
+                            error!("[WS Offramp] failed to return CB data: {}", e);
+                        }
+                    }
+                }
+                WSResult::Fail(id) => {
+                    for p in self.pipelines.values() {
+                        if let Err(e) = p
+                            .addr
+                            .send(pipeline::Msg::Insight(Event::cb_fail(ingest_ns, id)))
+                        {
+                            error!("[WS Offramp] failed to return CB data: {}", e);
+                        }
+                    }
+                }
+            }
+            new_connect = self.addr.is_some();
+        }
+        new_connect
+    }
+}
 impl Offramp for Ws {
+    fn is_active(&self) -> bool {
+        self.addr.is_some()
+    }
+
+    fn on_signal(&mut self, event: Event) -> Option<Event> {
+        task::block_on(async {
+            let was_connected = self.addr.is_some();
+            let new_connect = self.update_ws_state(event.ingest_ns).await;
+
+            if was_connected && !new_connect {
+                for p in self.pipelines.values() {
+                    if let Err(e) = p
+                        .addr
+                        .send(pipeline::Msg::Insight(Event::cb_trigger(event.ingest_ns)))
+                    {
+                        error!("[WS Offramp] failed to return CB data: {}", e);
+                    }
+                }
+            } else if !was_connected && new_connect {
+                dbg!(was_connected, new_connect);
+                for p in self.pipelines.values() {
+                    if let Err(e) = p
+                        .addr
+                        .send(pipeline::Msg::Insight(Event::cb_restore(event.ingest_ns)))
+                    {
+                        error!("[WS Offramp] failed to return CB data: {}", e);
+                    }
+                }
+            }
+        });
+        None
+    }
+
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         task::block_on(async {
-            while !self.rx.is_empty() {
-                self.addr = self.rx.recv().await.unwrap_or_default();
-            }
+            let was_connected = self.addr.is_some();
+            let new_connect = self.update_ws_state(event.ingest_ns).await;
 
             if let Some(addr) = &self.addr {
+                if new_connect && !was_connected {
+                    dbg!(was_connected, new_connect);
+                    for p in self.pipelines.values() {
+                        if let Err(e) = p
+                            .addr
+                            .send(pipeline::Msg::Insight(Event::cb_restore(event.ingest_ns)))
+                        {
+                            error!("[WS Offramp] failed to return CB data: {}", e);
+                        }
+                    }
+                }
                 for value in event.value_iter() {
                     let raw = codec.encode(value)?;
                     let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
                     for raw in datas {
                         if self.config.binary {
-                            addr.send(WsMessage::Binary(raw)).await;
+                            addr.send((event.id, WsMessage::Binary(raw))).await;
                         } else if let Ok(txt) = String::from_utf8(raw) {
-                            addr.send(WsMessage::Text(txt)).await;
+                            addr.send((event.id, WsMessage::Text(txt))).await;
                         } else {
                             error!("[WS Offramp] Invalid utf8 data for text message");
                             return Err(Error::from("Invalid utf8 data for text message"));
@@ -120,6 +211,22 @@ impl Offramp for Ws {
                     }
                 }
             } else {
+                for p in self.pipelines.values() {
+                    if let Err(e) = p
+                        .addr
+                        .send(pipeline::Msg::Insight(Event::cb_trigger(event.ingest_ns)))
+                    {
+                        error!("[WS Offramp] failed to return CB data: {}", e);
+                    }
+                    for p in self.pipelines.values() {
+                        if let Err(e) = p.addr.send(pipeline::Msg::Insight(Event::cb_fail(
+                            event.ingest_ns,
+                            event.id,
+                        ))) {
+                            error!("[WS Offramp] failed to return CB data: {}", e);
+                        }
+                    }
+                }
                 return Err(Error::from("not connected"));
             };
             Ok(())

@@ -34,11 +34,11 @@ pub struct Metronome {
     origin_uri: EventOriginUri,
     duration: Duration,
     id: u64,
-    onramp_id: String,
+    onramp_id: TremorURL,
 }
 
 impl onramp::Impl for Metronome {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
@@ -53,7 +53,7 @@ impl onramp::Impl for Metronome {
                 origin_uri,
                 duration,
                 id: 0,
-                onramp_id: id.to_string(),
+                onramp_id: id.clone(),
             }))
         } else {
             Err("Missing config for metronome onramp".into())
@@ -63,6 +63,10 @@ impl onramp::Impl for Metronome {
 
 #[async_trait::async_trait()]
 impl Source for Metronome {
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
+
     async fn read(&mut self) -> Result<SourceReply> {
         task::sleep(self.duration).await;
         let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(3);
@@ -89,20 +93,10 @@ impl Onramp for Metronome {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        SourceManager::start(
-            self.id(),
-            self.clone(),
-            codec,
-            preprocessors,
-            metrics_reporter,
-        )
-        .await
+        SourceManager::start(self.clone(), codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {
         "json"
-    }
-    fn id(&self) -> &str {
-        &self.onramp_id
     }
 }

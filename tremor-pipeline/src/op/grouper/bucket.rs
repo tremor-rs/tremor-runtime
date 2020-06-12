@@ -62,6 +62,7 @@
 //! ```
 
 use crate::errors::{ErrorKind, Result};
+use crate::op::prelude::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
@@ -141,7 +142,7 @@ impl Operator for Grouper {
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let meta = event.data.suffix().meta();
         if let Some(class) = meta.get("class").and_then(Value::as_str) {
             let (_, groups) = self
@@ -163,7 +164,7 @@ impl Operator for Grouper {
                     let rate = if let Some(rate) = Rate::from_meta(&meta) {
                         rate
                     } else {
-                        return Ok(vec![("error".into(), event)]);
+                        return Ok(vec![(ERROR, event)].into());
                     };
                     groups.cache.put(
                         dimensions.clone(),
@@ -184,13 +185,13 @@ impl Operator for Grouper {
             };
             if window.inc_t(event.ingest_ns).is_ok() {
                 groups.pass += 1;
-                Ok(vec![("out".into(), event)])
+                Ok(vec![(OUT, event)].into())
             } else {
                 groups.overflow += 1;
-                Ok(vec![("overflow".into(), event)])
+                Ok(vec![("overflow".into(), event)].into())
             }
         } else {
-            Ok(vec![("error".into(), event)])
+            Ok(vec![(ERROR, event)].into())
         }
     }
 
