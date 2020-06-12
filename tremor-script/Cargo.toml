@@ -23,6 +23,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 downcast-rs = "1.2"
 rental = "0.5"
 simd-json = {version = "0.3", features = ["known-key"]}
+simd-json-derive = "0.1"
 error-chain="0.12"
 lalrpop-util = "0.19"
 regex = "1"

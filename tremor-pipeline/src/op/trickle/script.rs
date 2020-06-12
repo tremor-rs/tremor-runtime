@@ -136,7 +136,7 @@ impl Operator for TrickleScript {
         _port: &str,
         state: &mut Value<'static>,
         mut event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
         let data = event.data.suffix();
@@ -161,14 +161,14 @@ impl Operator for TrickleScript {
 
         match value {
             Ok(Return::EmitEvent { port }) => {
-                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
+                Ok(vec![(port.map_or(OUT, Cow::Owned), event)].into())
             }
 
             Ok(Return::Emit { value, port }) => {
                 *unwind_event = value;
-                Ok(vec![(port.map_or_else(|| "out".into(), Cow::Owned), event)])
+                Ok(vec![(port.map_or(OUT, Cow::Owned), event)].into())
             }
-            Ok(Return::Drop) => Ok(vec![]),
+            Ok(Return::Drop) => Ok(EventAndInsights::default()),
             Err(e) => {
                 let mut o = Value::from(hashmap! {
                     "error".into() => Value::from(self.node.head().format_error(&e)),
@@ -177,7 +177,7 @@ impl Operator for TrickleScript {
                 if let Some(error) = unwind_event.as_object_mut() {
                     error.insert("event".into(), o);
                 };
-                Ok(vec![("error".into(), event)])
+                Ok(vec![(ERROR, event)].into())
             }
         }
     }

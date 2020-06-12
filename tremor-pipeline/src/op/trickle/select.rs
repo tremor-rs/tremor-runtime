@@ -15,6 +15,7 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::{Error, ErrorKind, Result};
+use crate::op::prelude::*;
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
@@ -429,7 +430,7 @@ impl Operator for TrickleSelect {
         _port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -466,7 +467,7 @@ impl Operator for TrickleSelect {
             let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
-                    return Ok(vec![]);
+                    return Ok(EventAndInsights::default());
                 };
             } else {
                 let s: &Select = &stmt;
@@ -514,7 +515,7 @@ impl Operator for TrickleSelect {
                 let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                 if let Some(test) = test.as_bool() {
                     if !test {
-                        return Ok(vec![]);
+                        return Ok(EventAndInsights::default());
                     }
                 } else {
                     let s: &Select = &stmt;
@@ -527,7 +528,7 @@ impl Operator for TrickleSelect {
             // We manually drop this here to inform rust that we no longer
             // borrow values from event
             drop(group_values);
-            return Ok(vec![("out".into(), event)]);
+            return Ok(vec![(OUT, event)].into());
         }
         if group_values.is_empty() {
             group_values.push(vec![Value::null()])
@@ -644,7 +645,7 @@ impl Operator for TrickleSelect {
                     }
                     let result = result.into_owned();
                     events.push((
-                        "out".into(),
+                        OUT,
                         Event {
                             id: event.id,
                             ingest_ns: event.ingest_ns,
@@ -653,7 +654,7 @@ impl Operator for TrickleSelect {
                             is_batch: event.is_batch,
                             kind: event.kind,
                             data: (result.into_static(), event_meta.clone_static()).into(),
-                            ..std::default::Default::default()
+                            ..Event::default()
                         },
                     ));
                 } else {
@@ -841,7 +842,7 @@ impl Operator for TrickleSelect {
                     }
                 }
                 events.push((
-                    "out".into(),
+                    OUT,
                     Event {
                         id: event.id,
                         ingest_ns: event.ingest_ns,
@@ -850,12 +851,12 @@ impl Operator for TrickleSelect {
                         is_batch: event.is_batch,
                         kind: event.kind,
                         data: (result.into_static(), event_meta.clone_static()).into(),
-                        ..std::default::Default::default()
+                        ..Event::default()
                     },
                 ));
             }
         }
-        Ok(events)
+        Ok(events.into())
     }
 }
 
@@ -910,7 +911,7 @@ mod test {
                "h2g2" : 42,
             }))
             .into(),
-            ..std::default::Default::default()
+            ..Event::default()
         }
     }
 

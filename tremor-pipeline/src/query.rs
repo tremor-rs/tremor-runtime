@@ -15,6 +15,7 @@
 use crate::config::{InputPort, OutputPort};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::op;
+use crate::op::prelude::{IN, OUT};
 use crate::op::trickle::select::WindowImpl;
 use crate::OperatorNode;
 use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
@@ -137,19 +138,18 @@ impl Query {
             .map(|i| i * 1_000_000_000);
 
         // FIXME compute public streams - do not hardcode
-        let in_s: Cow<'static, str> = "in".into();
         let id = pipe_graph.add_node(NodeConfig {
-            id: in_s.clone(),
+            id: IN,
             kind: NodeKind::Input,
             op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
         });
-        nodes.insert(in_s.clone(), id);
+        nodes.insert(IN, id);
         let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
-        inputs.insert(in_s, id);
+        inputs.insert(IN, id);
 
         // FIXME compute public streams - do not hardcode
         let err: Cow<'static, str> = "err".into();
@@ -167,16 +167,16 @@ impl Query {
         outputs.push(id);
 
         // FIXME compute public streams - do not hardcode
-        let out: Cow<'static, str> = "out".into();
+
         let id = pipe_graph.add_node(NodeConfig {
-            id: out.clone(),
+            id: OUT,
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
             config: None,
             defn: None,
             node: None,
         });
-        nodes.insert(out.clone(), id);
+        nodes.insert(OUT, id);
         let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
@@ -214,12 +214,12 @@ impl Query {
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
-                        port: "out".into(),
+                        port: OUT,
                         had_port: false,
                     };
                     let select_out = OutputPort {
                         id: format!("select_{}", select_num).into(),
-                        port: "out".into(),
+                        port: OUT,
                         had_port: false,
                     };
                     select_num += 1;
@@ -243,7 +243,7 @@ impl Query {
                         }
                         from.id = name.clone();
                         from.had_port = false;
-                        from.port = "out".into();
+                        from.port = OUT;
                     }
                     let mut into = resolve_input_port(&s.into);
                     if into.id == "out" && into.port != "in" {
@@ -264,7 +264,7 @@ impl Query {
                         }
                         into.id = name.clone();
                         into.had_port = false;
-                        into.port = "in".into();
+                        into.port = IN;
                     }
 
                     links.entry(from).or_default().push(select_in.clone());
@@ -471,7 +471,6 @@ impl Query {
                     return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
                 }
             }
-
             // since contraflow is the reverse we need to reverse it.
             contraflow.reverse();
 
@@ -510,6 +509,7 @@ impl Query {
                 contraflow,
                 signalflow,
                 metric_interval,
+                insights: Vec::new(),
             };
             exec.optimize();
 
@@ -637,7 +637,7 @@ pub(crate) fn supported_operators(
         ["generic", "counter"] => CounterFactory::new_boxed().from_node(config)?,
         ["generic", "wal"] => WalFactory::new_boxed().from_node(config)?,
         [namespace, name] => {
-            return Err(ErrorKind::UnknownOp(namespace.to_string(), name.to_string()).into());
+            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }
         _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
     };

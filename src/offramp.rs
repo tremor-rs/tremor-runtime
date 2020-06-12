@@ -19,6 +19,7 @@ use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
+use crate::utils::nanotime;
 use crate::{Event, OpConfig};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
@@ -80,6 +81,9 @@ pub trait Offramp: Send {
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
     fn on_signal(&mut self, signal: Event) -> Option<Event> {
         None
+    }
+    fn is_active(&self) -> bool {
+        true
     }
 }
 
@@ -213,15 +217,30 @@ impl Manager {
                                     Msg::Connect { id, addr } => {
                                         if id == *METRICS_PIPELINE {
                                             info!(
-                                            "[Offramp::{}] Connecting system metrics pipeline {}",
-                                            offramp_id, id
-                                        );
+                                                "[Offramp::{}] Connecting system metrics pipeline {}",
+                                                offramp_id, id
+                                            );
                                             metrics_reporter.set_metrics_pipeline((id, addr));
                                         } else {
                                             info!(
                                                 "[Offramp::{}] Connecting pipeline {}",
                                                 offramp_id, id
                                             );
+                                            let insight = if offramp.is_active() {
+                                                dbg!("restore on connect");
+                                                Event::cb_restore(nanotime())
+                                            } else {
+                                                Event::cb_trigger(nanotime())
+                                            };
+                                            if let Err(e) =
+                                                addr.addr.send(pipeline::Msg::Insight(insight))
+                                            {
+                                                error!(
+                                                    "[Offramp::{}] Could not send initial insight to {}: {}",
+                                                    offramp_id, id, e
+                                                );
+                                            };
+
                                             pipelines.insert(id.clone(), addr.clone());
                                             offramp.add_pipeline(id, addr);
                                         }

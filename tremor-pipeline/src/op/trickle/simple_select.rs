@@ -15,8 +15,8 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::errors::{ErrorKind, Result};
+use crate::op::prelude::*;
 use crate::{Event, Operator};
-use std::borrow::Cow;
 use tremor_script::interpreter::Env;
 use tremor_script::{
     self,
@@ -87,7 +87,7 @@ impl Operator for TrickleSimpleSelect {
         _port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
@@ -120,7 +120,7 @@ impl Operator for TrickleSimpleSelect {
             let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
-                    return Ok(vec![]);
+                    return Ok(EventAndInsights::default());
                 };
             } else {
                 let s: &Select = &stmt;
@@ -140,7 +140,7 @@ impl Operator for TrickleSimpleSelect {
             let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
             if let Some(test) = test.as_bool() {
                 if !test {
-                    return Ok(vec![]);
+                    return Ok(EventAndInsights::default());
                 };
             } else {
                 let s: &Select = &stmt;
@@ -148,7 +148,7 @@ impl Operator for TrickleSimpleSelect {
             };
         }
 
-        Ok(vec![("out".into(), event)])
+        Ok(vec![(OUT, event)].into())
     }
 }
 

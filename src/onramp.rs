@@ -44,7 +44,7 @@ mod ws;
 pub(crate) type Sender = sync::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
-    fn from_config(id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
+    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
 }
 
 #[derive(Clone, Debug)]
@@ -53,6 +53,8 @@ pub enum Msg {
     Disconnect { id: TremorURL, tx: CbSender<bool> },
     Trigger,
     Restore,
+    Ack(u64),
+    Fail(u64),
 }
 
 pub type Addr = sync::Sender<Msg>;
@@ -66,10 +68,6 @@ pub(crate) trait Onramp: Send {
         metrics_reporter: RampReporter,
     ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
-
-    fn id(&self) -> &str {
-        "onramp"
-    }
 }
 
 pub(crate) enum SourceState {
@@ -95,6 +93,7 @@ pub(crate) enum SourceReply {
 pub(crate) trait Source {
     async fn read(&mut self) -> Result<SourceReply>;
     async fn init(&mut self) -> Result<SourceState>;
+    fn id(&self) -> &TremorURL;
     fn trigger_breaker(&mut self) {}
     fn restore_breaker(&mut self) {}
 }
@@ -131,7 +130,7 @@ where
         source.init().await?;
         Ok((
             Self {
-                id: TremorURL::parse("onramp/id/01/out").unwrap(),
+                id: source.id().clone(),
                 pp_template,
                 source,
                 rx,
@@ -146,16 +145,16 @@ where
     }
 
     async fn start(
-        name: &str,
         source: T,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
+        let name = source.id().short_id("src");
         let (manager, tx) =
             SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
-            .name(format!("src-{}", name))
+            .name(name)
             .spawn(move || task::block_on(manager.run()))?;
         Ok(tx)
     }
@@ -175,18 +174,18 @@ where
             )
             .await?
             {
+                PipeHandlerResult::Ack(id) => println!("ack: {}", id),
+                PipeHandlerResult::Fail(id) => println!("fail: {}", id),
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
                 PipeHandlerResult::Normal => (),
                 PipeHandlerResult::Trigger => {
-                    dbg!("triggered");
-                    println!("for: {:?}", self.source);
+                    println!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
                 PipeHandlerResult::Restore => {
-                    dbg!("restored");
-                    println!("for: {:?}", self.source);
+                    println!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
                 }
@@ -238,7 +237,7 @@ where
                                 &mut self.codec,
                                 &mut self.metrics_reporter,
                                 &mut ingest_ns,
-                                origin_uri,
+                                &origin_uri,
                                 id,
                                 data,
                             );
@@ -258,7 +257,11 @@ where
 
 // just a lookup
 #[cfg_attr(tarpaulin, skip)]
-pub(crate) fn lookup(name: &str, id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+pub(crate) fn lookup(
+    name: &str,
+    id: &TremorURL,
+    config: &Option<Value>,
+) -> Result<Box<dyn Onramp>> {
     match name {
         "blaster" => blaster::Blaster::from_config(id, config),
         "file" => file::File::from_config(id, config),

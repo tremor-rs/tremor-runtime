@@ -333,10 +333,7 @@ impl Artefact for OnrampArtefact {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let artefact_id = servant_id.artefact().unwrap_or("onramp");
-        let instance_id = servant_id.instance().unwrap_or("onramp");
-        let id = format!("{}.{}", artefact_id, instance_id);
-        let stream = onramp::lookup(&self.binding_type, &id, &self.config)?;
+        let stream = onramp::lookup(&self.binding_type, &servant_id, &self.config)?;
         let codec = if let Some(codec) = &self.codec {
             codec.clone()
         } else {
@@ -483,7 +480,7 @@ impl Artefact for Binding {
                 let mut tos: Vec<TremorURL> = Vec::new();
                 for dst in dsts {
                     // TODO: It should be validated ahead of time that every mapping has an instance!
-                    if let Some(inst) = dst.instance().clone() {
+                    if let Some(inst) = dst.instance() {
                         let mut instance = String::new();
 
                         // Thisbecause it is an URL we have to use escape codes

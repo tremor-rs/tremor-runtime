@@ -36,7 +36,7 @@ pub struct Udp {
 }
 
 impl onramp::Impl for Udp {
-    fn from_config(_id: &str, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(_id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self { config }))
@@ -120,7 +120,7 @@ fn onramp_loop(
                             &mut codec,
                             &mut metrics_reporter,
                             &mut ingest_ns,
-                            origin_uri.clone(),
+                            &origin_uri,
                             id,
                             buf[0..n].to_vec(),
                         );

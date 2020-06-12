@@ -193,7 +193,33 @@ impl Operator for TrickleOperator {
         port: &str,
         state: &mut Value<'static>,
         event: Event,
-    ) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    ) -> Result<EventAndInsights> {
         self.op.on_event(port, state, event)
+    }
+
+    fn handles_signal(&self) -> bool {
+        self.op.handles_signal()
+    }
+    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
+        self.op.on_signal(signal)
+    }
+
+    fn handles_contraflow(&self) -> bool {
+        self.op.handles_contraflow()
+    }
+    fn on_contraflow(&mut self, contraevent: &mut Event) {
+        self.op.on_contraflow(contraevent)
+    }
+
+    fn metrics(
+        &self,
+        tags: HashMap<Cow<'static, str>, Value<'static>>,
+        timestamp: u64,
+    ) -> Result<Vec<Value<'static>>> {
+        self.op.metrics(tags, timestamp)
+    }
+
+    fn skippable(&self) -> bool {
+        self.op.skippable()
     }
 }

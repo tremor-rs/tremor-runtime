@@ -18,7 +18,7 @@ use std::fmt;
 use url::Url;
 
 /// Event origin URI
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, simd_json_derive::Serialize)]
 pub struct EventOriginUri {
     /// schema part
     pub scheme: String,
