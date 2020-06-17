@@ -44,6 +44,7 @@ use crate::errors::{Error, Result};
 use crate::system::World;
 use crate::url::TremorURL;
 use async_std::task;
+use human_panic::setup_panic;
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
@@ -53,7 +54,6 @@ use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::{self, config, errors, functions, metrics, system, url, version};
-use human_panic::setup_panic;
 
 #[cfg_attr(tarpaulin, skip)]
 async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -298,11 +298,11 @@ async fn run_dun() -> Result<()> {
 #[cfg_attr(tarpaulin, skip)]
 fn main() {
     setup_panic!(Metadata {
-    name: env!("CARGO_PKG_NAME").into(),
-    version: env!("CARGO_PKG_VERSION").into(),
-    authors: "The Tremor Team".into(),
-    homepage: "https://github.com/wayfair-tremor/tremor-runtime".into(),
-});
+        name: env!("CARGO_PKG_NAME").into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        authors: "The Tremor Team".into(),
+        homepage: "https://github.com/wayfair-tremor/tremor-runtime".into(),
+    });
     version::print();
     if let Err(ref e) = task::block_on(run_dun()) {
         error!("error: {}", e);
