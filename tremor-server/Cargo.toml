@@ -7,6 +7,7 @@ edition = "2018"
 license = "Apache-2.0"
 
 [dependencies]
+human-panic="1.0.3"
 tremor-runtime = { path = "../" }
 tremor-api = { path = "../tremor-api" }
 tremor-pipeline = { path = "../tremor-pipeline" }
