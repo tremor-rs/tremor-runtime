@@ -297,6 +297,7 @@ async fn run_dun() -> Result<()> {
 
 #[cfg_attr(tarpaulin, skip)]
 fn main() {
+    // ALLOW: this is a handler, not a panic
     setup_panic!(Metadata {
         name: env!("CARGO_PKG_NAME").into(),
         version: env!("CARGO_PKG_VERSION").into(),
