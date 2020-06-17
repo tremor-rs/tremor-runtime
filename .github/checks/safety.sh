@@ -102,7 +102,7 @@ while getopts hauiprebldxc opt; do
         p)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' "$file" | grep 'panic!(' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'panic!(' > /dev/null
                 then
                     echo "##[error] panic found in $file no, just no!"
                     grep -nH 'panic!(' "$file"
