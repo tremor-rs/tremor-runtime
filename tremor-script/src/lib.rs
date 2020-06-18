@@ -97,23 +97,10 @@ pub fn recursion_limit() -> u32 {
 }
 
 /// Combined struct for an event value and metadata
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize)]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,
     m: Value<'event>,
-}
-
-impl<'event> simd_json_derive::Serialize for ValueAndMeta<'event> {
-    fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
-    where
-        W: std::io::Write,
-    {
-        writer.write_all(b"{\"v\":")?;
-        self.v.json_write(writer)?;
-        writer.write_all(b",\"m\":")?;
-        self.m.json_write(writer)?;
-        writer.write_all(b"}")
-    }
 }
 
 impl simd_json_derive::Serialize for LineValue {
