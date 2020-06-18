@@ -23,7 +23,7 @@ pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
 pub(crate) use async_std::sync::{channel, Receiver, Sender};
 pub(crate) use async_std::task;
-pub(crate) use tremor_pipeline::{Event, EventOriginUri};
+pub(crate) use tremor_pipeline::{CBAction, Event, EventOriginUri};
 use tremor_script::LineValue;
 
 // TODO pub here too?
@@ -142,10 +142,7 @@ pub(crate) enum PipeHandlerResult {
     Terminate,
     Retry,
     Normal,
-    Trigger,
-    Restore,
-    Ack(u64),
-    Fail(u64),
+    Cb(CBAction),
 }
 
 // Handles pipeline connections for an onramp
@@ -206,10 +203,7 @@ pub(crate) fn handle_pipelines_msg(
                 tx.send(true)?;
                 Ok(PipeHandlerResult::Terminate)
             }
-            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
-            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
-            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
         }
     } else {
         match msg {
@@ -227,10 +221,7 @@ pub(crate) fn handle_pipelines_msg(
                     Ok(PipeHandlerResult::Normal)
                 }
             }
-            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
-            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
-            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
         }
     }
 }
@@ -260,10 +251,7 @@ pub(crate) fn handle_pipelines_msg2(
                 tx.send(true)?;
                 Ok(PipeHandlerResult::Terminate)
             }
-            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
-            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
-            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
         }
     } else {
         match msg {
@@ -290,10 +278,7 @@ pub(crate) fn handle_pipelines_msg2(
                     Ok(PipeHandlerResult::Normal)
                 }
             }
-            onramp::Msg::Trigger => Ok(PipeHandlerResult::Trigger),
-            onramp::Msg::Restore => Ok(PipeHandlerResult::Restore),
-            onramp::Msg::Ack(id) => Ok(PipeHandlerResult::Ack(id)),
-            onramp::Msg::Fail(id) => Ok(PipeHandlerResult::Fail(id)),
+            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
         }
     }
 }

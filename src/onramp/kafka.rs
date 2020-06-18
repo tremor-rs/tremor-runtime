@@ -24,8 +24,11 @@ use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
 use rdkafka::consumer::{Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
+use rdkafka::message::BorrowedMessage;
 use rdkafka::Message;
 use serde_yaml::Value;
+use std::collections::BTreeMap;
+use std::mem::transmute;
 use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -66,6 +69,7 @@ pub struct Int {
     onramp_id: TremorURL,
     stream: Option<rentals::MessageStream>,
     origin_uri: EventOriginUri,
+    auto_commit: bool,
 }
 
 impl std::fmt::Debug for Int {
@@ -74,15 +78,28 @@ impl std::fmt::Debug for Int {
     }
 }
 
+pub struct StreamAndMsgs<'consumer> {
+    pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>,
+    pub messages: BTreeMap<u64, BorrowedMessage<'consumer>>,
+}
+
+impl<'consumer> StreamAndMsgs<'consumer> {
+    fn new(stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>) -> Self {
+        Self {
+            stream,
+            messages: BTreeMap::new(),
+        }
+    }
+}
+
 rental! {
     pub mod rentals {
-        use super::{LoggingConsumerContext, LoggingConsumer};
-        use rdkafka::consumer::stream_consumer;
+        use super::{StreamAndMsgs, LoggingConsumer};
 
         #[rental(covariant)]
         pub struct MessageStream {
             consumer: Box<LoggingConsumer>,
-            stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>,
+            stream: StreamAndMsgs<'consumer>
         }
     }
 }
@@ -92,7 +109,12 @@ impl rentals::MessageStream {
     unsafe fn mut_suffix(
         &self,
     ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext> {
-        std::mem::transmute(self.suffix())
+        transmute(&self.suffix().stream)
+    }
+    unsafe fn store_msg<'msg>(&mut self, id: u64, m: BorrowedMessage<'msg>) {
+        self.rent_mut(|s| {
+            s.messages.insert(id, transmute(m));
+        });
     }
 }
 
@@ -106,11 +128,19 @@ impl Int {
             path: vec![],
         };
 
+        let auto_commit = config
+            .rdkafka_options
+            .as_ref()
+            .and_then(|m| m.get("enable.auto.commit"))
+            .map(|v| v == "true")
+            .unwrap_or(true);
+
         Self {
             config: config.clone(),
             onramp_id,
             stream: None,
             origin_uri,
+            auto_commit,
         }
     }
 }
@@ -151,12 +181,9 @@ impl Source for Int {
         &self.onramp_id
     }
     async fn read(&mut self) -> Result<SourceReply> {
-        if let Some(stream) = self
-            .stream
-            .as_mut()
-            .map(|stream| unsafe { stream.mut_suffix() })
-        {
-            if let Some(Ok(m)) = stream.next().await {
+        if let Some(stream) = self.stream.as_mut() {
+            let s = unsafe { stream.mut_suffix() };
+            if let Some(Ok(m)) = s.next().await {
                 if let Some(Ok(data)) = m.payload_view::<[u8]>() {
                     let mut origin_uri = self.origin_uri.clone();
                     origin_uri.path = vec![
@@ -164,9 +191,13 @@ impl Source for Int {
                         m.partition().to_string(),
                         m.offset().to_string(),
                     ];
+                    let data = data.to_vec();
+                    if !self.auto_commit {
+                        unsafe { stream.store_msg(0, m) }
+                    }
                     Ok(SourceReply::Data {
                         origin_uri,
-                        data: data.to_vec(),
+                        data,
                         stream: 0,
                     })
                 } else {
@@ -221,7 +252,7 @@ impl Source for Int {
             .set("enable.auto.offset.store", "true")
             .set_log_level(RDKafkaLogLevel::Debug);
 
-        let client_config = if let Some(options) = self.config.rdkafka_options.clone() {
+        let client_config = if let Some(options) = self.config.rdkafka_options.as_ref() {
             options
                 .iter()
                 .fold(client_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
@@ -283,10 +314,23 @@ impl Source for Int {
             Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
         };
 
-        let stream = rentals::MessageStream::new(Box::new(consumer), StreamConsumer::start);
+        let stream =
+            rentals::MessageStream::new(Box::new(consumer), |c| StreamAndMsgs::new(c.start()));
         self.stream = Some(stream);
 
         Ok(SourceState::Connected)
+    }
+    fn trigger_breaker(&mut self) {}
+    fn restore_breaker(&mut self) {}
+    fn fail(&mut self, id: std::primitive::u64) {
+        let _ = id;
+    }
+    fn ack(&mut self, id: std::primitive::u64) {
+        if self.auto_commit {
+            dbg!(id);
+        } else {
+            dbg!(id);
+        }
     }
 }
 

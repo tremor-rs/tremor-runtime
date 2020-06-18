@@ -23,7 +23,7 @@ use crossbeam_channel::{bounded, Sender as CbSender};
 use std::borrow::Cow;
 use std::time::Duration;
 use std::{fmt, thread};
-use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
+use tremor_pipeline::{Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 1000;
 pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
@@ -161,29 +161,12 @@ async fn handle_insight(
     onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
 ) {
     let insight = pipeline.contraflow(dbg!(skip_to), insight);
-    if insight.cb == Some(CBAction::Trigger) {
-        dbg!("trigger");
+    if let Some(cb) = insight.cb {
+        dbg!(&cb);
         for (_k, o) in onramps {
-            o.send(onramp::Msg::Trigger).await
+            o.send(onramp::Msg::Cb(cb)).await
         }
-    //this is a trigger event
-    } else if insight.cb == Some(CBAction::Restore) {
-        dbg!("restore");
-        for (_k, o) in onramps {
-            o.send(onramp::Msg::Restore).await
-        }
-
-    //this is a trigger event
-    } else if let Some(CBAction::Ack(ack)) = insight.cb {
-        dbg!(ack);
-        for (_k, o) in onramps {
-            o.send(onramp::Msg::Ack(ack)).await
-        }
-    } else if let Some(CBAction::Fail(fail)) = insight.cb {
-        dbg!(fail);
-        for (_k, o) in onramps {
-            o.send(onramp::Msg::Fail(fail)).await
-        }
+        //this is a trigger event
     }
 }
 

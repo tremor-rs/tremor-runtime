@@ -128,7 +128,7 @@ pub enum NodeKind {
 }
 
 /// A circuit breaker action
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum CBAction {
     /// The circuit breaker is triggerd and should break
     Trigger,
