@@ -51,10 +51,7 @@ pub(crate) trait Impl {
 pub enum Msg {
     Connect(Vec<(TremorURL, pipeline::Addr)>),
     Disconnect { id: TremorURL, tx: CbSender<bool> },
-    Trigger,
-    Restore,
-    Ack(u64),
-    Fail(u64),
+    Cb(CBAction),
 }
 
 pub type Addr = sync::Sender<Msg>;
@@ -96,6 +93,12 @@ pub(crate) trait Source {
     fn id(&self) -> &TremorURL;
     fn trigger_breaker(&mut self) {}
     fn restore_breaker(&mut self) {}
+    fn ack(&mut self, id: u64) {
+        let _ = id;
+    }
+    fn fail(&mut self, id: u64) {
+        let _ = id;
+    }
 }
 
 pub(crate) struct SourceManager<T>
@@ -174,17 +177,23 @@ where
             )
             .await?
             {
-                PipeHandlerResult::Ack(id) => println!("ack: {}", id),
-                PipeHandlerResult::Fail(id) => println!("fail: {}", id),
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
                 PipeHandlerResult::Normal => (),
-                PipeHandlerResult::Trigger => {
+                PipeHandlerResult::Cb(CBAction::Fail(id)) => {
+                    println!("fail: {}", id);
+                    self.source.fail(id);
+                }
+                PipeHandlerResult::Cb(CBAction::Ack(id)) => {
+                    println!("ack: {}", id);
+                    self.source.ack(id);
+                }
+                PipeHandlerResult::Cb(CBAction::Trigger) => {
                     println!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
-                PipeHandlerResult::Restore => {
+                PipeHandlerResult::Cb(CBAction::Restore) => {
                     println!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
