@@ -24,7 +24,7 @@ function package_archive {
   echo "Copying files to temporary archive directory: ${temp_archive_dir}"
 
   # main binary
-  mkdir -p "$temp_archive_dir/bin"
+  mkdir -p "${temp_archive_dir}/bin"
   cp -v "$TARGET_BIN" "${temp_archive_dir}/bin"
 
   # support files
@@ -32,6 +32,11 @@ function package_archive {
   cp -vR "${ROOT_DIR}/packaging/distribution/etc/" "${temp_archive_dir}/"
   # TODO enable this after some example cleanup
   #cp -vR "${ROOT_DIR}/demo/examples/" "${temp_archive_dir}/etc/tremor/config/"
+
+  # tremor-script lib
+  # TREMOR_PATH needs to be set to wherever this folder gets extracted to
+  mkdir -p "${temp_archive_dir}/lib"
+  cp -vR "${ROOT_DIR}/tremor-script/lib/" "${temp_archive_dir}/lib/tremor-script/"
 
   echo "Creating archive file: ${archive_file}"
   tar czf $archive_file -C "$TARGET_BUILD_DIR" "$archive_name"
