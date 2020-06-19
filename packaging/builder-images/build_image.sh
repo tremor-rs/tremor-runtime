@@ -6,8 +6,8 @@
 #
 # Meant to be run from the same directory as the script
 #
-# Usage: ./build_image.sh TARGET
-# Example: ./build_image.sh x86_64-unknown-linux-gnu
+# Usage: build_image.sh TARGET
+# Example: build_image.sh x86_64-unknown-linux-gnu
 
 # exit the script when a command fails
 set -o errexit

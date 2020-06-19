@@ -9,6 +9,7 @@ User=tremor
 Group=tremor
 ExecStart=/usr/bin/tremor-server --logger-config /etc/tremor/logger.yaml
 Restart=always
+SyslogIdentifier=tremor
 
 [Install]
 WantedBy=multi-user.target
