@@ -100,7 +100,7 @@ hyper = { version = "0.13", optional = true }  # chan't update this because of g
 grok = "1"
 
 [dependencies.tungstenite]
-version = "0.10"
+version = "0.11"
 default-features = false
 
 [dev-dependencies]
