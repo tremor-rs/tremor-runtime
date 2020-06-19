@@ -244,7 +244,7 @@ dependencies = [
  "futures-util",
  "log 0.4.8",
  "pin-project",
- "tungstenite",
+ "tungstenite 0.10.1",
 ]
 
 [[package]]
@@ -4677,7 +4677,7 @@ dependencies = [
  "tremor-influx 0.1.0",
  "tremor-pipeline",
  "tremor-script",
- "tungstenite",
+ "tungstenite 0.11.0",
  "url 2.1.1",
  "xz2",
  "yup-oauth2 4.1.2",
@@ -4787,6 +4787,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfea31758bf674f990918962e8e5f07071a3161bd7c4138ed23e416e1ac4264e"
 dependencies = [
  "base64 0.11.0",
+ "byteorder",
+ "bytes 0.5.5",
+ "http 0.2.1",
+ "httparse",
+ "input_buffer",
+ "log 0.4.8",
+ "rand 0.7.3",
+ "sha-1",
+ "url 2.1.1",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5c7d464221cb0b538a1cd12f6d9127ed1e6bb7f3ffca98fb3cd4c6e3af8175c"
+dependencies = [
+ "base64 0.12.2",
  "byteorder",
  "bytes 0.5.5",
  "http 0.2.1",
