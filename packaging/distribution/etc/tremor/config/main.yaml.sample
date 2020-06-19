@@ -12,9 +12,9 @@ pipeline:
         - in
       outputs:
         - out
-        - outliers
+        - error
     nodes:
-      - id: r
+      - id: runtime
         op: runtime::tremor
         config:
           script: |
@@ -22,14 +22,18 @@ pipeline:
             let event.hostname = system::hostname();
             event
     links:
-      in: [ r ]
-      r: [ out ]
+      in: [ runtime ]
+      runtime: [ out ]
+      runtime/error: [ error ]
 
 binding:
   - id: default
     links:
       '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/system::stdout/system/in' ]
+      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
+
+      # tremor metrics
       '/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
 mapping:
   /binding/default/01:

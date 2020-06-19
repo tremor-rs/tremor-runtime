@@ -136,6 +136,10 @@ assets = [
   ["packaging/distribution/etc/tremor/config/*", "/etc/tremor/config/", "644"],
   # TODO enable this after some example cleanup
   #["demo/examples/*", "/etc/tremor/config/examples/", "644"],
+  # TODO ideally, we should need to copy only the root tremor-script/lib directory
+  ["tremor-script/lib/*", "/usr/lib/tremor-script/", "644"],
+  ["tremor-script/lib/std/*", "/usr/lib/tremor-script/std/", "644"],
+  ["tremor-script/lib/tremor/*", "/usr/lib/tremor-script/tremor/", "644"],
   # copying systemd service to standard location for debian packages
   ["packaging/distribution/etc/systemd/system/*", "/lib/systemd/system/", "644"],
 ]
@@ -169,5 +173,6 @@ tremor-server = { path = "/usr/bin/tremor-server" }
 "../packaging/distribution/etc/tremor/" = { path = "/etc/tremor/" }
 # TODO enable this after some example cleanup
 #"../demo/examples/" = { path = "/etc/tremor/config/examples/" }
+"../tremor-script/lib/" = { path = "/usr/lib/tremor-script/" }
 # copying systemd service to standard location for rpm packages
 "../packaging/distribution/etc/systemd/system/tremor.service" = { path = "/usr/lib/systemd/system/tremor.service" }
