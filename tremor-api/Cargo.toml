@@ -12,7 +12,7 @@ tremor-runtime = { path = "../" }
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
-hashbrown = { version = "0.7", features = ["serde"] }
+hashbrown = { version = "0.8", features = ["serde"] }
 tide = "0.11"
 http-types = "2.2"
 simd-json = "0.3"
