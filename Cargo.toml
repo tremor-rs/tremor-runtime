@@ -122,21 +122,22 @@ gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hype
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
 [package.metadata.deb]
-name = "tremor-server"
+name = "tremor"
 section = "net"
 depends = "$auto"
-maintainer-scripts = "distribution/debian/maintainer-scripts/"
+maintainer-scripts = "packaging/distribution/debian/maintainer-scripts/"
 assets = [
   # target path will be automatically corrected when cross-compiling
-  ["target/release/tremor-server", "usr/bin/", "755"],
-  ["README.md", "usr/share/doc/tremor/", "644"],
-  ["LICENSE", "usr/share/doc/tremor/", "644"],
+  ["target/release/tremor-server", "/usr/bin/", "755"],
+  ["README.md", "/usr/share/doc/tremor/", "644"],
+  ["LICENSE", "/usr/share/doc/tremor/", "644"],
   # need to specify each directory contents since only actual file entries are allowed here
   ["packaging/distribution/etc/tremor/*", "/etc/tremor/", "644"],
   ["packaging/distribution/etc/tremor/config/*", "/etc/tremor/config/", "644"],
   # TODO enable this after some example cleanup
   #["demo/examples/*", "/etc/tremor/config/examples/", "644"],
-  ["packaging/distribution/etc/systemd/system/*", "/etc/systemd/system/", "644"],
+  # copying systemd service to standard location for debian packages
+  ["packaging/distribution/etc/systemd/system/*", "/lib/systemd/system/", "644"],
 ]
 conf-files = [
   # these files won't be overwritten when the package is upgraded

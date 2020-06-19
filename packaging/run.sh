@@ -69,11 +69,11 @@ if [ -z "$FORMATS" ]; then
   FORMATS="$SUPPORTED_FORMATS"
 fi
 
-BIN_NAME="tremor-server"
+PACKAGE_NAME="tremor"
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-echo "Packaging ${BIN_NAME} for target ${TARGET} in ${FORMATS} formats, from ${ROOT_DIR}"
+echo "Packaging ${PACKAGE_NAME} for target ${TARGET} in ${FORMATS} formats, from ${ROOT_DIR}"
 
 # this move allows us to run this script from anywhere in the repo
 pushd "$ROOT_DIR" > /dev/null
@@ -81,7 +81,7 @@ pushd "$ROOT_DIR" > /dev/null
 ###############################################################################
 
 TARGET_BUILD_DIR="${ROOT_DIR}/target/${TARGET}/release" # we always package for release builds
-TARGET_BIN="$TARGET_BUILD_DIR/${BIN_NAME}"
+TARGET_BIN="${TARGET_BUILD_DIR}/tremor-server"
 
 # assumes that the build's been done first
 if [ ! -f "$TARGET_BIN" ]; then
@@ -95,7 +95,7 @@ echo "Found the target binary: ${TARGET_BIN}"
 # the regex match pattern here is the package version, which is true for most packages)
 VERSION=$(grep --max-count 1 '^version\s*=' Cargo.toml | cut --delimiter '=' -f2 | tr --delete ' ' | tr --delete '"' || true)
 #
-# accurate determination, but depends on remarshal which won't be availale by default
+# accurate determination, but depends on remarshal which won't be available by default
 #VERSION=$(remarshal -i Cargo.toml -of json | jq -r '.package.version')
 
 if [ -z "$VERSION" ]; then

@@ -9,8 +9,7 @@
 
 
 function package_archive {
-  # aligning the naming convention here with what cargo-deb uses for deb packages
-  local archive_name="${BIN_NAME}_${VERSION}_${TARGET}"
+  local archive_name="${PACKAGE_NAME}-${VERSION}-${TARGET}"
   local archive_extension="tar.gz" # TODO support zip here once we package for windows too
   local archive_file="${PACKAGES_DIR}/${archive_name}.${archive_extension}"
 
@@ -35,19 +34,18 @@ function package_archive {
   #cp -vR "${ROOT_DIR}/demo/examples/" "${temp_archive_dir}/etc/tremor/config/"
 
   echo "Creating archive file: ${archive_file}"
-  tar cvzf $archive_file -C "$TARGET_BUILD_DIR" "$archive_name"
+  tar czf $archive_file -C "$TARGET_BUILD_DIR" "$archive_name"
 
   # final cleanup
   rm -rf "$temp_archive_dir"
 
-  # for debugging
-  #
-  #echo "Package info:"
-  #echo "Archive size: $(du -hs "$archive_file" | awk '{print $1}')"
-  #gzip --list "$archive_file"
-  #
-  #echo "Package content:"
-  #tar --gzip --list --verbose --file="$archive_file"
+  # print package details
+  echo "PACKAGE SIZE:"
+  du --human-readable --summarize "$archive_file" | awk '{print $1}'
+  echo "PACKAGE INFO:"
+  gzip --list "$archive_file"
+  echo "PACKAGE CONTENTS:"
+  tar --gzip --list --verbose --file="$archive_file"
 
   echo "Successfully built the archive file: ${archive_file}"
 }
@@ -66,21 +64,21 @@ function package_deb {
   #local deb_file=$(cargo deb --no-build --no-strip --output "$PACKAGES_DIR" --deb-version "$VERSION" --target "$TARGET" | tail -n1)
   # we control stripping as part of the build process separately so don't do it here
   cargo deb --verbose --no-build --no-strip \
+    --target "$TARGET" \
     --output "$PACKAGES_DIR" \
-    --deb-version "$VERSION" \
-    --target "$TARGET"
+    --deb-version "$VERSION"
 
   # final cleanup. directory created by cargo-deb
-  rm -rfv "${ROOT_DIR}/target/${TARGET}/debian/"
+  rm -rf "${ROOT_DIR}/target/${TARGET}/debian/"
 
-  # for debugging
-  #
-  #echo "Package info:"
-  #dpkg --info "$deb_file"
-  #
-  #echo "Package contents:"
-  #dpkg --contents "$deb_file"
+  # print package details
+  local deb_file="${PACKAGES_DIR}/*.deb"
+  echo "PACKAGE SIZE:"
+  du --human-readable --summarize $deb_file | awk '{print $1}'
+  echo "PACKAGE INFO:"
+  dpkg --info $deb_file
+  echo "PACKAGE CONTENTS:"
+  dpkg --contents $deb_file
 
-  #echo "Successfully built the deb file: ${deb_file}"
-  echo "Successfully built the deb file"
+  echo "Successfully built the deb file: ${deb_file}"
 }

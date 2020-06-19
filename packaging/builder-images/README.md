@@ -2,8 +2,7 @@
 
 Docker images meant to be used for compilation across various targets (eg: as part of CI builds during testing of individual commits/PRs, or to produce the final release artifacts). Works well with [cross](https://github.com/rust-embedded/cross), but can be used independent of it too.
 
-We publish these images to [dockerhub](https://hub.docker.com/r/tremorproject/tremor-builder/tags), and they get picked up via [cross configuratio
-n](../../Cross.toml) file at project root, during builds (cross automatically pulls them if not already present). So unless you are making changes to the files here, you won't need to build these images locally.
+We publish these images to [dockerhub](https://hub.docker.com/r/tremorproject/tremor-builder/tags), and they get picked up via [cross configuration](../../Cross.toml) file at project root, during builds (cross automatically pulls them if not already present). So unless you are making changes to the files here, you won't need to build these images locally.
 
 ## Modifications
 
