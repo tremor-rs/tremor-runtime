@@ -18,7 +18,7 @@ RELEASE_TARGETS := \
 # fully static binaries (for easier distribution), but we are seeing up to
 # 25% slowdown for some of our benchmarks with musl builds. So we stick with
 # gnu builds for now.
-RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb
+RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb,rpm
 RELEASE_FORMATS_x86_64-alpine-linux-musl := archive
 #RELEASE_FORMATS_x86_64-unknown-linux-musl := archive
 
