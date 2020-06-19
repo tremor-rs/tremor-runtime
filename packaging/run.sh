@@ -28,7 +28,7 @@ set -o errexit
 # catch exit status for piped commands
 set -o pipefail
 
-SUPPORTED_FORMATS="archive,deb"
+SUPPORTED_FORMATS="archive,deb,rpm"
 
 function print_help {
     cat <<EOF
@@ -125,6 +125,9 @@ for format in ${FORMATS//,/ }; do
         ;;
       deb)
         package_deb
+        ;;
+      rpm)
+        package_rpm
         ;;
       *)
         echo "Unknown package format '${format}'"

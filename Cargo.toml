@@ -148,3 +148,26 @@ conf-files = [
 extended-description = """\
 Tremor is an early stage event processing system for unstructured data with rich support for structural pattern matching, filtering and transformation.
 """
+
+# for use during rpm packaging, via cargo-rpm
+# https://github.com/iqlusioninc/cargo-rpm
+[package.metadata.rpm]
+package = "tremor"
+[package.metadata.rpm.cargo]
+# useful when using cargo rpm itself to build the project (i.e. without the
+# --no-cargo-build flag from `cargo rpm build`)
+buildflags = ["--release"]
+profile = "release"
+[package.metadata.rpm.targets]
+tremor-server = { path = "/usr/bin/tremor-server" }
+# The LHS paths here are relative to the rpm config dir (.rpm at project root).
+# If you add new files here, please make sure to add them to %files section in
+# the rpm spec file (inside .rpm) -- otherwise the rpm packaging will fail.
+[package.metadata.rpm.files]
+"../README.md" = { path = "/usr/share/doc/tremor/README.md" }
+"../LICENSE" = { path = "/usr/share/licenses/tremor/LICENSE" }
+"../packaging/distribution/etc/tremor/" = { path = "/etc/tremor/" }
+# TODO enable this after some example cleanup
+#"../demo/examples/" = { path = "/etc/tremor/config/examples/" }
+# copying systemd service to standard location for rpm packages
+"../packaging/distribution/etc/systemd/system/tremor.service" = { path = "/usr/lib/systemd/system/tremor.service" }

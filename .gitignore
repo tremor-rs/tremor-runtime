@@ -2,7 +2,6 @@
 /target*
 */target*
 **/*.rs.bk
-.rpm
 /window/target*
 /property_testing/target
 local-examples
