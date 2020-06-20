@@ -39,6 +39,7 @@ If you need to build the docker images used during the cross build process, plea
 * cargo
 * docker
 * dpkg, ldd (optionally, to auto-infer dynamic lib dependencies during debian packaging, via [cargo-deb](https://github.com/mmstick/cargo-deb#installation))
+* rpmbuild (for building rpms, via [cargo-rpm](https://github.com/iqlusioninc/cargo-rpm.git))
 
 The setup here was tested successfully from linux (ubuntu) environments, but it should work well in other environments too, as long as the above requirements are met.
 
