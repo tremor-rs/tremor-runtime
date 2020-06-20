@@ -6,3 +6,4 @@ grcov
 .dockerignore
 perf.*
 temp
+packaging/out/

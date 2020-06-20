@@ -143,7 +143,7 @@ fi
 %config(noreplace) %{_sysconfdir}/%{name}/logger.yaml
 %config %{_sysconfdir}/%{name}/config/*
 
-%dir %{_usr}/lib/tremor-script/
-%{_usr}/lib/tremor-script/*
+%dir %{_usr}/lib/tremor
+%{_usr}/lib/tremor/*
 
 %{_unitdir}/tremor.service

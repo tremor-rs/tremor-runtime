@@ -53,7 +53,8 @@ impl ModulePath {
     /// Load module path
     pub fn load() -> Self {
         load_(
-            &std::env::var("TREMOR_PATH").unwrap_or_else(|_| String::from("/opt/local/tremor/lib")),
+            &std::env::var("TREMOR_PATH")
+                .unwrap_or_else(|_| String::from("/usr/lib/tremor/tremor-script")),
         )
     }
 }
