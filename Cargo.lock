@@ -4506,7 +4506,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4608,7 +4608,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-server"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "async-std",
  "clap",
