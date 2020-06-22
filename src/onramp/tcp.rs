@@ -114,7 +114,7 @@ impl Source for Int {
         &self.onramp_id
     }
 
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
         // temporary buffer to keep data read from the tcp socket
         let mut buffer = [0; BUFFER_SIZE_BYTES];
 

@@ -88,7 +88,7 @@ pub(crate) enum SourceReply {
 }
 #[async_trait::async_trait]
 pub(crate) trait Source {
-    async fn read(&mut self) -> Result<SourceReply>;
+    async fn read(&mut self, id: u64) -> Result<SourceReply>;
     async fn init(&mut self) -> Result<SourceState>;
     fn id(&self) -> &TremorURL;
     fn trigger_breaker(&mut self) {}
@@ -105,7 +105,7 @@ pub(crate) struct SourceManager<T>
 where
     T: Source,
 {
-    id: TremorURL,
+    source_id: TremorURL,
     source: T,
     rx: Receiver<onramp::Msg>,
     tx: sync::Sender<onramp::Msg>,
@@ -114,12 +114,193 @@ where
     codec: Box<dyn Codec>,
     metrics_reporter: RampReporter,
     triggered: bool,
+    pipelines: Vec<(TremorURL, pipeline::Addr)>,
+    id: u64,
 }
 
 impl<T> SourceManager<T>
 where
     T: Source + Send + 'static + std::fmt::Debug,
 {
+    fn handle_pp(
+        &mut self,
+        stream: usize,
+        ingest_ns: &mut u64,
+        data: Vec<u8>,
+    ) -> Result<Vec<Vec<u8>>> {
+        let mut data = vec![data];
+        let mut data1 = Vec::new();
+        if let Some(pps) = self.preprocessors.get_mut(stream).and_then(|v| v.as_mut()) {
+            for pp in pps {
+                data1.clear();
+                for (i, d) in data.iter().enumerate() {
+                    match pp.process(ingest_ns, d) {
+                        Ok(mut r) => data1.append(&mut r),
+                        Err(e) => {
+                            error!("Preprocessor[{}] error {}", i, e);
+                            return Err(e);
+                        }
+                    }
+                }
+                std::mem::swap(&mut data, &mut data1);
+            }
+        }
+        Ok(data)
+    }
+    // We are borrowing a dyn box as we don't want to pass ownership.
+    #[allow(clippy::borrowed_box, clippy::too_many_arguments)]
+    fn send_event(
+        &mut self,
+        stream: usize,
+        ingest_ns: &mut u64,
+        origin_uri: &tremor_pipeline::EventOriginUri,
+        data: Vec<u8>,
+    ) {
+        let original_id = self.id;
+        let mut error = false;
+        // FIXME record 1st id for pp data
+        if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
+            for d in data {
+                match self.codec.decode(d, *ingest_ns) {
+                    Ok(Some(data)) => {
+                        error |= self.transmit_event(data, *ingest_ns, origin_uri.clone());
+                    }
+                    Ok(None) => (),
+                    Err(e) => {
+                        self.metrics_reporter.increment_error();
+                        error!("[Codec] {}", e);
+                    }
+                }
+            }
+        } else {
+            // record preprocessor failures too
+            self.metrics_reporter.increment_error();
+        };
+        // We ONLY fail on transmit errors as preprocessor errors might be
+        // problematic
+        if error {
+            self.source.fail(original_id);
+        }
+    }
+    fn handle_pipelines_msg(&mut self, msg: onramp::Msg) -> Result<PipeHandlerResult> {
+        if self.pipelines.is_empty() {
+            match msg {
+                onramp::Msg::Connect(ps) => {
+                    for p in &ps {
+                        if p.0 == *METRICS_PIPELINE {
+                            self.metrics_reporter.set_metrics_pipeline(p.clone());
+                        } else {
+                            p.1.send(pipeline::Msg::ConnectOnramp(
+                                self.source_id.clone(),
+                                self.tx.clone(),
+                            ))?;
+                            self.pipelines.push(p.clone());
+                        }
+                    }
+                    Ok(PipeHandlerResult::Retry)
+                }
+                onramp::Msg::Disconnect { tx, .. } => {
+                    tx.send(true)?;
+                    Ok(PipeHandlerResult::Terminate)
+                }
+                onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+            }
+        } else {
+            match msg {
+                onramp::Msg::Connect(mut ps) => {
+                    for p in &ps {
+                        p.1.send(pipeline::Msg::ConnectOnramp(
+                            self.source_id.clone(),
+                            self.tx.clone(),
+                        ))?;
+                    }
+                    self.pipelines.append(&mut ps);
+                    Ok(PipeHandlerResult::Normal)
+                }
+                onramp::Msg::Disconnect { id, tx } => {
+                    for (pid, p) in self.pipelines.iter() {
+                        if pid == &id {
+                            p.send(pipeline::Msg::DisconnectInput(id.clone()))?;
+                        }
+                    }
+                    self.pipelines.retain(|(pipeline, _)| pipeline != &id);
+                    if self.pipelines.is_empty() {
+                        tx.send(true)?;
+                        Ok(PipeHandlerResult::Terminate)
+                    } else {
+                        tx.send(false)?;
+                        Ok(PipeHandlerResult::Normal)
+                    }
+                }
+                onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+            }
+        }
+    }
+
+    async fn handle_pipelines2(&mut self) -> Result<PipeHandlerResult> {
+        if self.pipelines.is_empty() || self.triggered {
+            let msg = self.rx.recv().await?;
+            self.handle_pipelines_msg(msg)
+        } else if self.rx.is_empty() {
+            Ok(PipeHandlerResult::Normal)
+        } else {
+            let msg = self.rx.recv().await?;
+            self.handle_pipelines_msg(msg)
+        }
+    }
+
+    pub(crate) fn transmit_event(
+        &mut self,
+        data: LineValue,
+        ingest_ns: u64,
+        origin_uri: EventOriginUri,
+    ) -> bool {
+        // We only try to send here since we can't guarantee
+        // that nothing else has send (and overfilled) the pipelines
+        // inbox.
+        // We try to avoid this situation by checking but given
+        // we can't coordinate w/ other onramps we got to
+        // ensure that we are ready to discard messages and prioritize
+        // progress.
+        //
+        // Notably in a Guaranteed delivery scenario those discarded
+        let event = Event {
+            id: self.id,
+            data,
+            ingest_ns,
+            // TODO make origin_uri non-optional here too?
+            origin_uri: Some(origin_uri),
+            ..Event::default()
+        };
+        let mut error = false;
+        self.id += 1;
+        if let Some(((input, addr), pipelines)) = self.pipelines.split_last() {
+            self.metrics_reporter.periodic_flush(ingest_ns);
+            self.metrics_reporter.increment_out();
+
+            for (input, addr) in pipelines {
+                if let Some(input) = input.instance_port() {
+                    if let Err(e) = addr.try_send(pipeline::Msg::Event {
+                        input: input.to_string().into(),
+                        event: event.clone(),
+                    }) {
+                        error!("[Onramp] failed to send to pipeline: {}", e);
+                        error = true;
+                    }
+                }
+            }
+            if let Some(input) = input.instance_port() {
+                if let Err(e) = addr.try_send(pipeline::Msg::Event {
+                    input: input.to_string().into(),
+                    event,
+                }) {
+                    error!("[Onramp] failed to send to pipeline: {}", e);
+                    error = true;
+                }
+            }
+        }
+        error
+    }
     async fn new(
         mut source: T,
         preprocessors: &[String],
@@ -133,7 +314,7 @@ where
         source.init().await?;
         Ok((
             Self {
-                id: source.id().clone(),
+                source_id: source.id().clone(),
                 pp_template,
                 source,
                 rx,
@@ -142,6 +323,8 @@ where
                 codec,
                 metrics_reporter,
                 triggered: false,
+                id: 0,
+                pipelines: Vec::new(),
             },
             tx,
         ))
@@ -163,44 +346,34 @@ where
     }
 
     pub(crate) async fn run(mut self) -> Result<()> {
-        let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
-
-        let mut id = 0;
         loop {
-            match handle_pipelines2(
-                &self.id,
-                &self.tx,
-                &self.rx,
-                &mut pipelines,
-                &mut self.metrics_reporter,
-                self.triggered,
-            )
-            .await?
-            {
+            match self.handle_pipelines2().await? {
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
                 PipeHandlerResult::Normal => (),
                 PipeHandlerResult::Cb(CBAction::Fail(id)) => {
-                    println!("fail: {}", id);
                     self.source.fail(id);
                 }
                 PipeHandlerResult::Cb(CBAction::Ack(id)) => {
-                    println!("ack: {}", id);
                     self.source.ack(id);
                 }
                 PipeHandlerResult::Cb(CBAction::Trigger) => {
-                    println!("triggered for: {:?}", self.source);
+                    // FIXME eprintln!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
                 PipeHandlerResult::Cb(CBAction::Restore) => {
-                    println!("restored for: {:?}", self.source);
+                    // FIXME eprintln!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
                 }
             }
-            if !self.triggered && !pipelines.is_empty() {
-                match self.source.read().await? {
+
+            if !self.triggered
+                && !self.pipelines.is_empty()
+                && self.pipelines.iter().all(|(_, p)| p.ready())
+            {
+                match self.source.read(self.id).await? {
                     SourceReply::StartStream(id) => {
                         while self.preprocessors.len() <= id {
                             self.preprocessors.push(None)
@@ -221,37 +394,15 @@ where
                     SourceReply::Structured { origin_uri, data } => {
                         let ingest_ns = nanotime();
 
-                        transmit_event(
-                            &pipelines,
-                            &mut self.metrics_reporter,
-                            data,
-                            ingest_ns,
-                            origin_uri,
-                            id,
-                        );
-                        id += 1;
+                        self.transmit_event(data, ingest_ns, origin_uri);
                     }
                     SourceReply::Data {
                         origin_uri,
                         data,
                         stream,
                     } => {
-                        if let Some(Some(ref mut preprocessors)) =
-                            self.preprocessors.get_mut(stream)
-                        {
-                            let mut ingest_ns = nanotime();
-                            send_event(
-                                &pipelines,
-                                preprocessors,
-                                &mut self.codec,
-                                &mut self.metrics_reporter,
-                                &mut ingest_ns,
-                                &origin_uri,
-                                id,
-                                data,
-                            );
-                            id += 1;
-                        }
+                        let mut ingest_ns = nanotime();
+                        self.send_event(stream, &mut ingest_ns, &origin_uri, data);
                     }
                     SourceReply::StateChange(SourceState::Disconnected) => return Ok(()),
                     SourceReply::StateChange(SourceState::Connected) => (),

@@ -21,7 +21,7 @@ pub(crate) use crate::preprocessor::{self, Preprocessors};
 pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
-pub(crate) use async_std::sync::{channel, Receiver, Sender};
+pub(crate) use async_std::sync::{channel, Receiver};
 pub(crate) use async_std::task;
 pub(crate) use tremor_pipeline::{CBAction, Event, EventOriginUri};
 use tremor_script::LineValue;
@@ -67,7 +67,17 @@ pub(crate) fn transmit_event(
     ingest_ns: u64,
     origin_uri: EventOriginUri,
     id: u64,
-) {
+) -> Option<u64> {
+    // We only try to send here since we can't guarantee
+    // that nothing else has send (and overfilled) the pipelines
+    // inbox.
+    // We try to avoid this situation by checking but given
+    // we can't coordinate w/ other onramps we got to
+    // ensure that we are ready to discard messages and prioritize
+    // progress.
+    //
+    // Notably in a Guaranteed delivery scenario those discarded
+    let mut result = None;
     let event = Event {
         id,
         data,
@@ -82,24 +92,26 @@ pub(crate) fn transmit_event(
 
         for (input, addr) in pipelines {
             if let Some(input) = input.instance_port() {
-                if let Err(e) = addr.addr.send(pipeline::Msg::Event {
+                if let Err(e) = addr.try_send(pipeline::Msg::Event {
                     input: input.to_string().into(),
                     event: event.clone(),
                 }) {
                     error!("[Onramp] failed to send to pipeline: {}", e);
+                    result = Some(id);
                 }
             }
         }
-
         if let Some(input) = input.instance_port() {
-            if let Err(e) = addr.addr.send(pipeline::Msg::Event {
+            if let Err(e) = addr.try_send(pipeline::Msg::Event {
                 input: input.to_string().into(),
                 event,
             }) {
                 error!("[Onramp] failed to send to pipeline: {}", e);
+                result = Some(id);
             }
         }
     }
+    result
 }
 
 // We are borrowing a dyn box as we don't want to pass ownership.
@@ -117,14 +129,16 @@ pub(crate) fn send_event(
     if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
         for d in data {
             match codec.decode(d, *ingest_ns) {
-                Ok(Some(data)) => transmit_event(
-                    pipelines,
-                    metrics_reporter,
-                    data,
-                    *ingest_ns,
-                    origin_uri.clone(),
-                    id,
-                ),
+                Ok(Some(data)) => {
+                    transmit_event(
+                        pipelines,
+                        metrics_reporter,
+                        data,
+                        *ingest_ns,
+                        origin_uri.clone(),
+                        id,
+                    );
+                }
                 Ok(None) => (),
                 Err(e) => {
                     metrics_reporter.increment_error();
@@ -163,24 +177,6 @@ pub(crate) async fn handle_pipelines(
     }
 }
 // Handles pipeline connections for an onramp
-pub(crate) async fn handle_pipelines2(
-    id: &TremorURL,
-    tx: &Sender<onramp::Msg>,
-    rx: &Receiver<onramp::Msg>,
-    pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
-    metrics_reporter: &mut RampReporter,
-    triggered: bool,
-) -> Result<PipeHandlerResult> {
-    if pipelines.is_empty() || triggered {
-        let msg = rx.recv().await?;
-        handle_pipelines_msg2(id, tx, msg, pipelines, metrics_reporter)
-    } else if rx.is_empty() {
-        Ok(PipeHandlerResult::Normal)
-    } else {
-        let msg = rx.recv().await?;
-        handle_pipelines_msg2(id, tx, msg, pipelines, metrics_reporter)
-    }
-}
 
 pub(crate) fn handle_pipelines_msg(
     msg: onramp::Msg,
@@ -212,63 +208,6 @@ pub(crate) fn handle_pipelines_msg(
                 Ok(PipeHandlerResult::Normal)
             }
             onramp::Msg::Disconnect { id, tx } => {
-                pipelines.retain(|(pipeline, _)| pipeline != &id);
-                if pipelines.is_empty() {
-                    tx.send(true)?;
-                    Ok(PipeHandlerResult::Terminate)
-                } else {
-                    tx.send(false)?;
-                    Ok(PipeHandlerResult::Normal)
-                }
-            }
-            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
-        }
-    }
-}
-
-pub(crate) fn handle_pipelines_msg2(
-    id: &TremorURL,
-    tx: &Sender<onramp::Msg>,
-    msg: onramp::Msg,
-    pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
-    metrics_reporter: &mut RampReporter,
-) -> Result<PipeHandlerResult> {
-    if pipelines.is_empty() {
-        match msg {
-            onramp::Msg::Connect(ps) => {
-                for p in &ps {
-                    if p.0 == *METRICS_PIPELINE {
-                        metrics_reporter.set_metrics_pipeline(p.clone());
-                    } else {
-                        p.1.addr
-                            .send(pipeline::Msg::ConnectOnramp(id.clone(), tx.clone()))?;
-                        pipelines.push(p.clone());
-                    }
-                }
-                Ok(PipeHandlerResult::Retry)
-            }
-            onramp::Msg::Disconnect { tx, .. } => {
-                tx.send(true)?;
-                Ok(PipeHandlerResult::Terminate)
-            }
-            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
-        }
-    } else {
-        match msg {
-            onramp::Msg::Connect(mut ps) => {
-                for p in &ps {
-                    p.1.addr
-                        .send(pipeline::Msg::ConnectOnramp(id.clone(), tx.clone()))?;
-                }
-                pipelines.append(&mut ps);
-                Ok(PipeHandlerResult::Normal)
-            }
-            onramp::Msg::Disconnect { id, tx } => {
-                for (pid, p) in pipelines.iter() {
-                    if pid == &id {
-                        p.addr.send(pipeline::Msg::DisconnectInput(id.clone()))?;
-                    }
-                }
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
                     tx.send(true)?;

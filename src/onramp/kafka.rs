@@ -22,12 +22,13 @@ use halfbrown::HashMap;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
-use rdkafka::consumer::{Consumer, ConsumerContext};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::message::BorrowedMessage;
-use rdkafka::Message;
+use rdkafka::{Message, Offset, TopicPartitionList};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
+use std::collections::HashMap as StdMap;
 use std::mem::transmute;
 use std::time::Duration;
 
@@ -64,12 +65,28 @@ pub struct Kafka {
     onramp_id: TremorURL,
 }
 
+struct MsgOffset {
+    topic: String,
+    partition: i32,
+    offset: Offset,
+}
+impl<'consumer> From<BorrowedMessage<'consumer>> for MsgOffset {
+    fn from(m: BorrowedMessage) -> Self {
+        Self {
+            topic: m.topic().into(),
+            partition: m.partition(),
+            offset: Offset::Offset(m.offset()),
+        }
+    }
+}
+
 pub struct Int {
     config: Config,
     onramp_id: TremorURL,
     stream: Option<rentals::MessageStream>,
     origin_uri: EventOriginUri,
     auto_commit: bool,
+    messages: BTreeMap<u64, MsgOffset>,
 }
 
 impl std::fmt::Debug for Int {
@@ -80,15 +97,11 @@ impl std::fmt::Debug for Int {
 
 pub struct StreamAndMsgs<'consumer> {
     pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>,
-    pub messages: BTreeMap<u64, BorrowedMessage<'consumer>>,
 }
 
 impl<'consumer> StreamAndMsgs<'consumer> {
     fn new(stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>) -> Self {
-        Self {
-            stream,
-            messages: BTreeMap::new(),
-        }
+        Self { stream }
     }
 }
 
@@ -111,10 +124,25 @@ impl rentals::MessageStream {
     ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext> {
         transmute(&self.suffix().stream)
     }
-    unsafe fn store_msg<'msg>(&mut self, id: u64, m: BorrowedMessage<'msg>) {
-        self.rent_mut(|s| {
-            s.messages.insert(id, transmute(m));
-        });
+    unsafe fn commit<'msg>(
+        &mut self,
+        map: StdMap<(String, i32), Offset>,
+        mode: CommitMode,
+    ) -> Result<()> {
+        struct MessageStream {
+            consumer: Box<LoggingConsumer>,
+            stream: StreamAndMsgs<'static>,
+        };
+        let offsets = TopicPartitionList::from_topic_map(&map);
+
+        let s: &mut MessageStream = transmute(self);
+
+        match mode {
+            CommitMode::Async => s.consumer.commit(&offsets, CommitMode::Async)?,
+            CommitMode::Sync => s.consumer.commit(&offsets, CommitMode::Sync)?,
+        }
+
+        Ok(())
     }
 }
 
@@ -141,6 +169,7 @@ impl Int {
             stream: None,
             origin_uri,
             auto_commit,
+            messages: BTreeMap::new(),
         }
     }
 }
@@ -180,7 +209,7 @@ impl Source for Int {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(stream) = self.stream.as_mut() {
             let s = unsafe { stream.mut_suffix() };
             if let Some(Ok(m)) = s.next().await {
@@ -193,7 +222,7 @@ impl Source for Int {
                     ];
                     let data = data.to_vec();
                     if !self.auto_commit {
-                        unsafe { stream.store_msg(0, m) }
+                        self.messages.insert(id, MsgOffset::from(m));
                     }
                     Ok(SourceReply::Data {
                         origin_uri,
@@ -326,10 +355,31 @@ impl Source for Int {
         let _ = id;
     }
     fn ack(&mut self, id: std::primitive::u64) {
-        if self.auto_commit {
-            dbg!(id);
-        } else {
-            dbg!(id);
+        if !self.auto_commit {
+            let mut split = self.messages.split_off(&(id + 1));
+            std::mem::swap(&mut split, &mut self.messages);
+            let mut tm = StdMap::with_capacity(split.len());
+            for (
+                _,
+                MsgOffset {
+                    topic,
+                    partition,
+                    offset,
+                },
+            ) in split.into_iter()
+            {
+                let this_offset = tm.entry((topic, partition)).or_insert(offset);
+                match (this_offset, offset) {
+                    (Offset::Offset(old), Offset::Offset(new)) if *old < new => *old = new,
+                    _ => (),
+                }
+            }
+
+            if let Some(stream) = self.stream.as_mut() {
+                if let Err(e) = unsafe { stream.commit(tm, CommitMode::Async) } {
+                    error!("[kafka] failed to commit message: {}", e)
+                }
+            }
         }
     }
 }

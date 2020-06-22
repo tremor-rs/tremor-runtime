@@ -19,7 +19,7 @@ use crate::utils::nanotime;
 use crate::{offramp, onramp};
 use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
-use crossbeam_channel::{bounded, Sender as CbSender};
+use crossbeam_channel::{bounded, Sender as CbSender, TrySendError};
 use std::borrow::Cow;
 use std::time::Duration;
 use std::{fmt, thread};
@@ -31,8 +31,24 @@ pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
 /// Address for a a pipeline
 #[derive(Clone)]
 pub struct Addr {
-    pub(crate) addr: CbSender<Msg>,
+    addr: CbSender<Msg>,
+    cf_addr: CbSender<CfMsg>,
     pub(crate) id: ServantId,
+}
+
+impl Addr {
+    pub(crate) fn send_insight(&self, event: Event) -> Result<()> {
+        Ok(self.cf_addr.send(CfMsg::Insight(event))?)
+    }
+    pub(crate) fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.addr.send(msg)?)
+    }
+    pub(crate) fn try_send(&self, msg: Msg) -> std::result::Result<(), TrySendError<Msg>> {
+        Ok(self.addr.send(msg)?)
+    }
+    pub(crate) fn ready(&self) -> bool {
+        self.addr.capacity().unwrap_or_default() > self.addr.len()
+    }
 }
 
 impl fmt::Debug for Addr {
@@ -41,6 +57,9 @@ impl fmt::Debug for Addr {
     }
 }
 
+pub(crate) enum CfMsg {
+    Insight(Event),
+}
 #[derive(Debug)]
 pub(crate) enum Msg {
     Event {
@@ -54,7 +73,6 @@ pub(crate) enum Msg {
     DisconnectInput(TremorURL),
     #[allow(dead_code)]
     Signal(Event),
-    Insight(Event),
 }
 
 #[derive(Debug)]
@@ -160,9 +178,8 @@ async fn handle_insight(
     pipeline: &mut ExecutableGraph,
     onramps: &halfbrown::HashMap<TremorURL, onramp::Addr>,
 ) {
-    let insight = pipeline.contraflow(dbg!(skip_to), insight);
+    let insight = pipeline.contraflow(skip_to, insight);
     if let Some(cb) = insight.cb {
-        dbg!(&cb);
         for (_k, o) in onramps {
             o.send(onramp::Msg::Cb(cb)).await
         }
@@ -216,7 +233,10 @@ impl Manager {
             halfbrown::HashMap::new();
         let mut onramps: halfbrown::HashMap<TremorURL, onramp::Addr> = halfbrown::HashMap::new();
         let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
+
         let (tx, rx) = bounded::<Msg>(self.qsize);
+        let (cf_tx, cf_rx) = bounded::<CfMsg>(self.qsize);
+
         let mut pipeline = config.to_executable_graph(tremor_pipeline::buildin_ops)?;
         let mut pid = req.id.clone();
         pid.trim_to_instance();
@@ -239,8 +259,17 @@ impl Manager {
             .spawn(move || {
                 info!("[Pipeline:{}] starting thread.", id);
                 for req in rx {
+                    // FIXME eprintln!("pipeline");
+                    loop {
+                        if let Ok(CfMsg::Insight(insight)) = cf_rx.try_recv() {
+                            task::block_on(handle_insight(None, insight, &mut pipeline, &onramps));
+                        } else {
+                            break;
+                        }
+                    }
                     match req {
                         Msg::Event { input, event } => {
+                            // FIXME eprintln!("event");
                             match pipeline.enqueue(&input, event, &mut eventset) {
                                 Ok(()) => {
                                     task::block_on(handle_insights(&mut pipeline, &onramps));
@@ -251,9 +280,6 @@ impl Manager {
                                 }
                                 Err(e) => error!("error: {:?}", e),
                             }
-                        }
-                        Msg::Insight(insight) => {
-                            task::block_on(handle_insight(None, insight, &mut pipeline, &onramps))
                         }
                         Msg::Signal(signal) => {
                             if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
@@ -292,7 +318,7 @@ impl Manager {
                             }
                         }
                         Msg::ConnectOnramp(onramp_id, onramp) => {
-                            println!("connecting onramp: {}", onramp_id);
+                            // FIXME eprintln!("connecting onramp: {}", onramp_id);
                             onramps.insert(onramp_id, onramp);
                         }
                         Msg::DisconnectOutput(output, to_delete) => {
@@ -306,7 +332,7 @@ impl Manager {
                             }
                         }
                         Msg::DisconnectInput(onramp_id) => {
-                            println!("disconnecting onramp: {}", onramp_id);
+                            // FIXME eprintln!("disconnecting onramp: {}", onramp_id);
                             onramps.remove(&onramp_id);
                         }
                     };
@@ -316,6 +342,7 @@ impl Manager {
         Ok(Addr {
             id: req.id,
             addr: tx,
+            cf_addr: cf_tx,
         })
     }
 }

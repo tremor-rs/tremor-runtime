@@ -65,9 +65,9 @@ pub(crate) fn verbose(
                 | google_storage1::Error::Failure(_)
                 | google_storage1::Error::BadRequest(_)
                 | google_storage1::Error::FieldClash(_)
-                | google_storage1::Error::JsonDecodeError(_, _) => println!("Error: {}", e),
+                | google_storage1::Error::JsonDecodeError(_, _) => error!("Error: {}", e),
             },
-            Ok(res) => println!("Success: {:?}", res),
+            Ok(res) => info!("Success: {:?}", res),
         };
     }
     result

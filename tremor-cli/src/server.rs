@@ -173,15 +173,30 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // TODO: Allow configuring this for offramps and pipelines
     let (world, handle) = World::start(64, storage_directory).await?;
 
-    if let Some(config_files) = matches.values_of("artefacts") {
-        // We process trickle files first
-        for config_file in config_files.clone() {
-            match get_source_kind(config_file) {
-                SourceKind::Trickle => load_query_file(&world, config_file).await?,
-                _ => continue,
-            };
+    // We load queries first since those are only pipelines.
+    let query_files: Vec<String> = match matches.values_of("query") {
+        Some(files) => files.map(String::from).collect(),
+        // read from default query file(s) now (returns empty if these paths don't exist too)
+        None => glob::glob("/etc/tremor/config/*.trickle")?
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
+            .collect(),
+    };
+    if !query_files.is_empty() {
+        info!("Reading the query files: {}", query_files.join(","));
+        for query_file in query_files {
+            load_query_file(&world, &query_file).await?;
         }
-        // We process config files thereafter
+    }
+
+    let config_files: Vec<String> = match matches.values_of("config") {
+        Some(files) => files.map(String::from).collect(),
+        // read from default config file(s) now (returns empty if these paths don't exist too)
+        None => glob::glob("/etc/tremor/config/*.yaml")?
+            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
+            .collect(),
+    };
+    if !config_files.is_empty() {
+        info!("Reading the config files: {}", config_files.join(","));
         for config_file in config_files {
             match get_source_kind(config_file) {
                 SourceKind::Trickle | SourceKind::Tremor => continue,

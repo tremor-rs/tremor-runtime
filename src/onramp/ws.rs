@@ -121,7 +121,7 @@ async fn onramp_loop(
 
     // Create the event loop and TCP listener we'll accept connections on.
     let listener = TcpListener::bind(&addr).await?;
-    println!("Listening on: {}", addr);
+    info!("Listening on: {}", addr);
 
     loop {
         loop {

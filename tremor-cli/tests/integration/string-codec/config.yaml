@@ -5,7 +5,7 @@ onramp:
     config:
       source: "in.json.xz"
       close_on_done: true
-      sleep_on_done: 500
+      sleep_on_done: 5000
 
 offramp:
   - id: out

@@ -85,6 +85,9 @@ pub trait Offramp: Send {
     fn is_active(&self) -> bool {
         true
     }
+    fn auto_ack(&self) -> bool {
+        true
+    }
 }
 
 pub trait Impl {
@@ -186,10 +189,7 @@ impl Manager {
                                     Msg::Signal(signal) => {
                                         if let Some(insight) = offramp.on_signal(signal) {
                                             for p in pipelines.values() {
-                                                if let Err(e) = p
-                                                    .addr
-                                                    .send(pipeline::Msg::Insight(insight.clone()))
-                                                {
+                                                if let Err(e) = p.send_insight(insight.clone()) {
                                                     error!(
                                                         "[Offramp::{}] Counterflow error: {}",
                                                         offramp_id, e
@@ -199,13 +199,44 @@ impl Manager {
                                         }
                                     }
                                     Msg::Event { event, input } => {
-                                        metrics_reporter.periodic_flush(event.ingest_ns);
+                                        let ingest_ns = event.ingest_ns;
+                                        let id = event.id;
+                                        metrics_reporter.periodic_flush(ingest_ns);
 
                                         metrics_reporter.increment_in();
                                         // TODO FIXME implement postprocessors
                                         match offramp.on_event(&codec, input.into(), event) {
-                                            Ok(_) => metrics_reporter.increment_out(),
+                                            Ok(_) => {
+                                                if offramp.auto_ack() {
+                                                    // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
+                                                    for p in pipelines.values() {
+                                                        if let Err(e) = p.send_insight(
+                                                            Event::cb_ack(ingest_ns, id),
+                                                        ) {
+                                                            error!(
+                                                                "[Offramp::{}] Counterflow error: {}",
+                                                                offramp_id, e
+                                                            );
+                                                        };
+                                                    }
+                                                }
+                                                metrics_reporter.increment_out()
+                                            }
                                             Err(e) => {
+                                                if offramp.auto_ack() {
+                                                    // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
+                                                    for p in pipelines.values() {
+                                                        if let Err(e) = p.send_insight(
+                                                            Event::cb_fail(ingest_ns, id),
+                                                        ) {
+                                                            error!(
+                                                                "[Offramp::{}] Counterflow error: {}",
+                                                                offramp_id, e
+                                                            );
+                                                        };
+                                                    }
+                                                }
+
                                                 metrics_reporter.increment_error();
                                                 error!(
                                                     "[Offramp::{}] On Event error: {}",
@@ -227,14 +258,11 @@ impl Manager {
                                                 offramp_id, id
                                             );
                                             let insight = if offramp.is_active() {
-                                                dbg!("restore on connect");
                                                 Event::cb_restore(nanotime())
                                             } else {
                                                 Event::cb_trigger(nanotime())
                                             };
-                                            if let Err(e) =
-                                                addr.addr.send(pipeline::Msg::Insight(insight))
-                                            {
+                                            if let Err(e) = addr.send_insight(insight) {
                                                 error!(
                                                     "[Offramp::{}] Could not send initial insight to {}: {}",
                                                     offramp_id, id, e
