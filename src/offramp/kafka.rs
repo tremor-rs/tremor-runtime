@@ -113,11 +113,18 @@ impl Offramp for Kafka {
             let mut record = FutureRecord::to(&self.topic);
             record = record.payload(&raw);
             //TODO: Key
-            if let Some(ref k) = self.key {
-                task::spawn(self.producer.send(record.key(k.as_str()), 1));
+
+            let record = if let Some(ref k) = self.key {
+                record.key(k.as_str())
             } else {
-                task::spawn(self.producer.send(record, 1));
+                record
             };
+            match self.producer.send_result(record) {
+                Ok(f) => {
+                    task::spawn(f);
+                }
+                Err((e, _)) => error!("[Kafka Offramp] failed to enque message: {}", e),
+            }
         }
         Ok(())
     }
