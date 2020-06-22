@@ -146,7 +146,7 @@ fn main() -> Result<()> {
         Err(e) => {
             let mut h = TermHighlighter::new();
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
+                error!("Error: {}", e);
             };
             // ALLOW: main.rs
             std::process::exit(1);

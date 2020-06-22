@@ -33,7 +33,6 @@ pub struct Metronome {
     pub config: Config,
     origin_uri: EventOriginUri,
     duration: Duration,
-    id: u64,
     onramp_id: TremorURL,
 }
 
@@ -52,7 +51,6 @@ impl onramp::Impl for Metronome {
                 config,
                 origin_uri,
                 duration,
-                id: 0,
                 onramp_id: id.clone(),
             }))
         } else {
@@ -67,13 +65,12 @@ impl Source for Metronome {
         &self.onramp_id
     }
 
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
         task::sleep(self.duration).await;
         let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(3);
         data.insert("onramp", "metronome")?;
         data.insert("ingest_ns", nanotime())?;
-        data.insert("id", self.id)?;
-        self.id += 1;
+        data.insert("id", id)?;
         Ok(SourceReply::Structured {
             origin_uri: self.origin_uri.clone(),
             data: data.into(),

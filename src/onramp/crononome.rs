@@ -91,7 +91,6 @@ pub struct Crononome {
     origin_uri: tremor_pipeline::EventOriginUri,
     cq: ChronomicQueue,
     onramp_id: TremorURL,
-    id: u64,
 }
 impl std::fmt::Debug for Crononome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -114,7 +113,6 @@ impl onramp::Impl for Crononome {
                 origin_uri,
                 config,
                 onramp_id: id.clone(),
-                id: 0,
                 cq: ChronomicQueue::default(),
             }))
         } else {
@@ -287,7 +285,7 @@ impl Source for Crononome {
         &self.onramp_id
     }
 
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(trigger) = self.cq.next() {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.path.push(trigger.0.clone());
@@ -295,14 +293,13 @@ impl Source for Crononome {
             let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(4);
             data.insert("onramp", "crononome")?;
             data.insert("ingest_ns", nanotime())?;
-            data.insert("id", self.id)?;
+            data.insert("id", id)?;
             let mut tr: BorrowedValue<'static> = BorrowedValue::object_with_capacity(2);
             tr.insert("name", trigger.0)?;
             if let Some(payload) = trigger.1 {
                 tr.insert("payload", payload)?;
             }
             data.insert("trigger", tr)?;
-            self.id += 1;
             Ok(SourceReply::Structured {
                 origin_uri,
                 data: data.into(),

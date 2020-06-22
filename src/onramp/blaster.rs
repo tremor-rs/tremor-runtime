@@ -40,7 +40,7 @@ impl ConfigImpl for Config {}
 #[derive(Clone)]
 pub struct Blaster {
     pub config: Config,
-    id: TremorURL,
+    onramp_id: TremorURL,
     data: Vec<u8>,
     acc: Acc,
     origin_uri: tremor_pipeline::EventOriginUri,
@@ -77,7 +77,7 @@ impl onramp::Impl for Blaster {
                 data,
                 acc: Acc::default(),
                 origin_uri,
-                id: id.clone(),
+                onramp_id: id.clone(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -95,10 +95,10 @@ struct Acc {
 #[async_trait::async_trait()]
 impl Source for Blaster {
     fn id(&self) -> &TremorURL {
-        &self.id
+        &self.onramp_id
     }
 
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
             thread::sleep(Duration::from_nanos(ival));

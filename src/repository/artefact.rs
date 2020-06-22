@@ -129,8 +129,6 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Offramp) => {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
                             pipeline
-                                .addr
-                                .clone()
                                 .send(pipeline::Msg::ConnectOfframp(
                                     from.clone().into(),
                                     to.clone(),
@@ -147,8 +145,6 @@ impl Artefact for Pipeline {
                         info!("[Pipeline:{}] Linking port {} to {}", id, from, to);
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
                             pipeline
-                                .addr
-                                .clone()
                                 .send(pipeline::Msg::ConnectPipeline(
                                     from.clone().into(),
                                     to.clone(),
@@ -183,13 +179,11 @@ impl Artefact for Pipeline {
                 match to.resource_type() {
                     Some(ResourceType::Offramp) => {
                         pipeline
-                            .addr
                             .send(pipeline::Msg::DisconnectOutput(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     Some(ResourceType::Pipeline) => {
                         pipeline
-                            .addr
                             .send(pipeline::Msg::DisconnectOutput(from.clone().into(), to))
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }

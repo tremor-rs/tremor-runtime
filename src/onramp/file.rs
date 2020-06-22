@@ -23,7 +23,6 @@ use serde_yaml::Value;
 use std::path::Path;
 use std::process;
 use std::thread;
-use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -117,20 +116,26 @@ impl Source for FileInt {
         &self.onramp_id
     }
 
-    async fn read(&mut self) -> Result<SourceReply> {
+    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 data: line.as_bytes().to_vec(),
                 stream: 0,
             })
-        } else {
-            task::sleep(Duration::from_millis(self.config.sleep_on_done)).await;
+        } else if self.config.sleep_on_done == 0 {
             if self.config.close_on_done {
                 // ALLOW: This is on purpose, close when done tells the onramp to terminate when it's done with sending it's data - this is for one off's
                 process::exit(0);
             }
             Ok(SourceReply::StateChange(SourceState::Disconnected))
+        } else if self.config.sleep_on_done >= 10 {
+            self.config.sleep_on_done -= 10;
+            Ok(SourceReply::Empty(10))
+        } else {
+            let sleep = self.config.sleep_on_done;
+            self.config.sleep_on_done = 0;
+            Ok(SourceReply::Empty(sleep))
         }
     }
     async fn init(&mut self) -> Result<SourceState> {

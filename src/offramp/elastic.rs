@@ -146,14 +146,14 @@ impl Elastic {
             };
 
             if let Ok(t) = r {
-                println!("Elastic search ok: {:?}", t);
+                // FIXME println!("Elastic search ok: {:?}", t);
                 if m.insert("time", t).is_err() {
                     unreachable!()
                 };
             } else {
                 // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
-                println!("Elastic search error: {:?}", r);
+                // FIXME println!("Elastic search error: {:?}", r);
                 if m.insert("error", "Failed to send to ES").is_err() {
                     unreachable!()
                 };
@@ -165,10 +165,7 @@ impl Elastic {
             };
 
             for (pid, p) in pipelines {
-                if p.addr
-                    .send(pipeline::Msg::Insight(insight.clone()))
-                    .is_err()
-                {
+                if p.send_insight(insight.clone()).is_err() {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
@@ -198,10 +195,7 @@ impl Elastic {
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
                 for (pid, p) in pipelines {
-                    if p.addr
-                        .send(pipeline::Msg::Insight(insight.clone()))
-                        .is_err()
-                    {
+                    if p.send_insight(insight.clone()).is_err() {
                         error!("Failed to send contraflow to pipeline {}", pid)
                     };
                 }

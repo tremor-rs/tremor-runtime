@@ -135,10 +135,7 @@ impl Rest {
             };
 
             for (pid, p) in pipelines {
-                if p.addr
-                    .send(pipeline::Msg::Insight(insight.clone()))
-                    .is_err()
-                {
+                if p.send_insight(insight.clone()).is_err() {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
@@ -171,10 +168,7 @@ impl Rest {
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
                 for (pid, p) in pipelines {
-                    if p.addr
-                        .send(pipeline::Msg::Insight(insight.clone()))
-                        .is_err()
-                    {
+                    if p.send_insight(insight.clone()).is_err() {
                         error!("Failed to send contraflow to pipeline {}", pid)
                     };
                 }

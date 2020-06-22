@@ -15,7 +15,7 @@
 use crate::op::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt};
 use simd_json_derive::Serialize;
-use sled::{IVec, Transactional};
+use sled::IVec;
 use std::io::Cursor;
 use std::mem;
 use std::ops::{Add, AddAssign};
@@ -145,8 +145,6 @@ pub struct WAL {
     events_tree: sled::Tree,
     /// state storage (written, etc)
     state_tree: sled::Tree,
-    /// Next index
-    write: Idx,
     /// Next read index
     read: Idx,
     /// The last
@@ -174,13 +172,10 @@ op!(WalFactory(node) {
         let state_tree = wal.open_tree("state")?;
 
         #[allow(clippy::cast_possible_truncation)]
-        let write = state_tree.get("write")?.map(Idx::from).unwrap_or_default();
-        #[allow(clippy::cast_possible_truncation)]
         let read = state_tree.get("read")?.map(Idx::from).unwrap_or_default();
         Ok(Box::new(WAL{
             cnt: events_tree.len() as u64,
             wal,
-            write,
             read,
             confirmed: read,
             events_tree,
@@ -201,7 +196,7 @@ op!(WalFactory(node) {
 });
 
 impl WAL {
-    fn auto_commnit(&mut self, _now: u64) -> Result<bool> {
+    fn auto_commit(&mut self, _now: u64) -> Result<bool> {
         Ok(true)
     }
 
@@ -225,22 +220,19 @@ impl WAL {
             let event = simd_json::from_slice(&mut ev)?;
             events.push((OUT, event))
         }
-        self.auto_commnit(now)?;
+        self.auto_commit(now)?;
         self.gc()?;
         Ok(events)
     }
 
     fn store_event(&mut self, mut event: Event) -> Result<()> {
-        event.id = self.write.into();
+        let id = self.wal.generate_id()?;
+        let write: [u8; 8] = unsafe { mem::transmute(id.to_be()) };
+        event.id = id;
 
         // Sieralize and write the event
         let event_buf = event.json_vec()?;
-        (&self.events_tree, &self.state_tree).transaction(|(events_tree, state_tree)| {
-            events_tree.insert(self.write, event_buf.as_slice())?;
-            state_tree.insert("write", self.write)?;
-            Ok(())
-        })?;
-        self.write += 1;
+        self.events_tree.insert(write, event_buf.as_slice())?;
         self.cnt += 1;
         Ok(())
     }
@@ -249,10 +241,16 @@ impl WAL {
         let mut i = 0;
         for e in self.events_tree.range(..self.confirmed) {
             i += 1;
+            self.cnt -= 1;
             let (idx, _) = e?;
             self.events_tree.remove(idx)?;
         }
-        println!("removed {} elements", i);
+        debug!(
+            "removed {} elements (={}, {}b)",
+            i,
+            self.cnt,
+            self.wal.size_on_disk().unwrap()
+        );
         Ok(i)
     }
 }
@@ -284,6 +282,7 @@ impl Operator for WAL {
                 .ok()
                 .and_then(maybe_parse_ivec)
             {
+                debug!("WAL confirm: {}", confirmed);
                 *confirmed = e.id;
             }
         } else if let Some(CBAction::Fail(fail)) = &mut insight.cb {
