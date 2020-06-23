@@ -104,6 +104,7 @@ where
 
     #[allow(clippy::too_many_lines)]
     #[inline]
+    /// Invokes expression
     pub fn run(
         &'script self,
         opts: ExecOpts,

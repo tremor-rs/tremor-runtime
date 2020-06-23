@@ -217,7 +217,6 @@ where
         }
     };
 
-    h.finalize()?;
     h.reset()?;
 
     Ok(())
@@ -338,13 +337,19 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         .ok_or_else(|| Error::from("No script file provided"))?;
 
     if !matches.is_present("no-highlight") {
-        run_debug(script_file, &mut TermHighlighter::new(), matches)?;
+        let mut h = TermHighlighter::new();
+        match run_debug(script_file, &mut h, matches) {
+            Ok(()) => {
+                h.finalize()?;
+            }
+            Err(_e) => {}
+        };
     } else {
         let mut h = TermNoHighlighter::new();
         match run_debug(script_file, &mut h, matches) {
             Ok(()) => println!("{}", h.to_string()),
             Err(_e) => {}
-        }
+        };
     };
 
     Ok(())

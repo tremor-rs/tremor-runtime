@@ -33,7 +33,7 @@
 mod expr;
 mod imut_expr;
 
-pub(crate) use self::expr::Cont;
+pub use self::expr::Cont;
 use crate::ast::{
     ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, GroupBy, GroupByInt, ImutExprInt,
     InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, RecordPattern,

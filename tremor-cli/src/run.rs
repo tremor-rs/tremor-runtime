@@ -28,7 +28,7 @@ use tremor_runtime::errors::{Error, Result};
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_script::ctx::{EventContext, EventOriginUri};
-use tremor_script::highlighter::Term as TermHighlighter;
+use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::path::load as load_module_path;
 use tremor_script::query::Query;
 use tremor_script::registry;
@@ -275,7 +275,7 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
                         Ok(r) => egress.process(&src, event.clone(), Ok(r)),
                         Err(e) => egress.process(&src, event, Err(e.into())),
                     }?;
-                    return Ok(());
+            return Ok(());
                 },
             )?;
 
@@ -363,6 +363,8 @@ fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
             Ok(())
         },
     )?;
+
+    h.finalize()?;
 
     Ok(())
 }

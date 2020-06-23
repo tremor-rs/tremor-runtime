@@ -32,13 +32,18 @@ use simd_json::value::borrowed::Value;
 use std::borrow::{Borrow, Cow};
 
 #[derive(Debug)]
-pub(crate) enum Cont<'run, 'event>
+/// Continuation context to control program flow
+pub enum Cont<'run, 'event>
 where
     'event: 'run,
 {
+    /// Continue
     Cont(Cow<'run, Value<'event>>),
+    /// Emit with default system supplied port
     Emit(Value<'event>, Option<String>),
+    /// Drop
     Drop,
+    /// Emit with user supplied port
     EmitEvent(Option<String>),
 }
 
@@ -466,6 +471,7 @@ where
     }
 
     #[inline]
+    /// Invokes expression
     pub fn run(
         &'script self,
         opts: ExecOpts,

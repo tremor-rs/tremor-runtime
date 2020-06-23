@@ -50,7 +50,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
         )
         .await?;
 
-    reply(req, result.binding, true, StatusCode::NoContent).await
+    reply(req, result.binding, true, StatusCode::Created).await
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -110,7 +110,7 @@ pub async fn link_servant(req: Request) -> Result<Response> {
 
     let result = world.link_binding(&url, decoded_data).await?.binding;
 
-    reply(req, result, true, StatusCode::NoContent).await
+    reply(req, result, true, StatusCode::Created).await
 }
 
 #[allow(clippy::implicit_hasher)]

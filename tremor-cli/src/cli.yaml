@@ -43,6 +43,7 @@ subcommands:
                   min_values: 1
                   max_values: 10000 # Imposed practical upper limit
                   required: false
+                  multiple: true
               - storage-directory:
                   help: Directory to cache/store runtime type information
                   short: d

@@ -26,6 +26,7 @@ use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
 use tremor_runtime::{self, config, functions, metrics, version};
+use crate::util::{get_source_kind,SourceKind};
 
 #[cfg_attr(tarpaulin, skip)]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -121,6 +122,7 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
 }
 
 fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
+    dbg!(&r);
     Ok(match r {
         Ok(r) => r,
         Err(e) => e.into(),
@@ -172,16 +174,20 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // TODO: Allow configuring this for offramps and pipelines
     let (world, handle) = World::start(64, storage_directory).await?;
 
-    // We load queries first since those are only pipelines.
-    if let Some(query_files) = matches.values_of("query") {
-        for query_file in query_files {
-            load_query_file(&world, query_file).await?;
+    if let Some(config_files) = matches.values_of("artefacts") {
+        // We process trickle files first
+        for config_file in config_files.clone() {
+            match get_source_kind(config_file) {
+                SourceKind::Trickle => load_query_file(&world, config_file).await?,
+                _ => continue,
+            };
         }
-    }
-
-    if let Some(config_files) = matches.values_of("config") {
+        // We process config files thereafter
         for config_file in config_files {
-            load_file(&world, config_file).await?;
+            match get_source_kind(config_file) {
+                SourceKind::Trickle | SourceKind::Tremor => continue,
+                _ => load_file(&world, config_file).await?,
+            };
         }
     }
 
@@ -198,29 +204,29 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     app.at("/binding")
         .get(|r| async { fix_tide(api::binding::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::binding::publish_artefact(r).await) });
-    app.at("/binding/{aid}")
+    app.at("/binding/:aid")
         .get(|r| async { fix_tide(api::binding::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::binding::unpublish_artefact(r).await) });
-    app.at("/binding/{aid}/{sid}")
+    app.at("/binding/:aid/:sid")
         .get(|r| async { fix_tide(api::binding::get_servant(r).await) })
         .post(|r| async { fix_tide(api::binding::link_servant(r).await) })
         .delete(|r| async { fix_tide(api::binding::unlink_servant(r).await) });
     app.at("/pipeline")
         .get(|r| async { fix_tide(api::pipeline::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::pipeline::publish_artefact(r).await) });
-    app.at("/pipeline/{aid}")
+    app.at("/pipeline/:aid")
         .get(|r| async { fix_tide(api::pipeline::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::pipeline::unpublish_artefact(r).await) });
     app.at("/onramp")
         .get(|r| async { fix_tide(api::onramp::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::onramp::publish_artefact(r).await) });
-    app.at("/onramp/{aid}")
+    app.at("/onramp/:aid")
         .get(|r| async { fix_tide(api::onramp::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::onramp::unpublish_artefact(r).await) });
     app.at("/offramp")
         .get(|r| async { fix_tide(api::offramp::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::offramp::publish_artefact(r).await) });
-    app.at("/offramp/{aid}")
+    app.at("/offramp/:aid")
         .get(|r| async { fix_tide(api::offramp::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::offramp::unpublish_artefact(r).await) });
 
