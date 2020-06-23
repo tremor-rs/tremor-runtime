@@ -28,14 +28,21 @@ pub(crate) const RECUR_PTR: Option<*const u8> = Some(RECUR_STR.as_ptr());
 pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed(RECUR_STR));
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) struct CustomFn<'script> {
-    //module: Arc<Script>,
+/// Encapsulates a user defined or standard library function
+pub struct CustomFn<'script> {
+    /// Name
     pub name: Cow<'script, str>,
+    /// Function body
     pub body: Exprs<'script>,
+    /// Nominal arguments
     pub args: Vec<String>,
+    /// True, if the function supports variable arguments
     pub open: bool,
+    /// Locals
     pub locals: usize,
+    /// Is it a const function
     pub is_const: bool,
+    /// Should the function be inlined?
     pub inline: bool,
 }
 

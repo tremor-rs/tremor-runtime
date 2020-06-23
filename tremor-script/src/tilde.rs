@@ -159,37 +159,47 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub(crate) enum Extractor {
+/// Encapsulates supported extractors
+pub enum Extractor {
+    /// Glob recognizer
     Glob {
         rule: String,
         #[serde(skip)]
         compiled: glob::Pattern,
     },
+    /// PCRE recognizer
     Re {
         rule: String,
         #[serde(skip)]
         compiled: Regex,
     },
+    /// Base64 recognizer
     Base64,
+    /// KV ( Key/Value ) recognizer
     Kv(kv::Pattern),
+    /// JSON recognizer
     Json,
+    /// Dissect recognizer
     Dissect {
         rule: String,
         #[serde(skip)]
         compiled: dissect::Pattern,
     },
-
+    /// Grok recognizer
     Grok {
         rule: String,
         #[serde(skip)]
         compiled: GrokPattern,
     },
+    /// CIDR notation recognizer
     Cidr {
         rules: Vec<String>,
         #[serde(skip)]
         range: Option<SnotCombiner>,
     },
+    /// Influx line protocol recognizer
     Influx,
+    /// Datetime recognizer
     Datetime {
         format: String,
         #[serde(skip)]

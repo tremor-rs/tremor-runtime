@@ -22,7 +22,7 @@ use crate::interpreter::Cont;
 use crate::lexer::{self};
 use crate::parser::g as grammar;
 use crate::path::ModulePath;
-use crate::pos::Range;
+use crate::pos::{Spanned,Range};
 use crate::registry::{Aggr as AggrRegistry, Registry};
 use serde::Serialize;
 use simd_json::borrowed::Value;
@@ -176,7 +176,38 @@ where
         io::Result::Ok(())
     }
 
-    /// Preprocessesa and highlights a script with a given highlighter.
+/// Highlights a script range with a given highlighter.
+#[cfg_attr(tarpaulin, skip)]
+pub fn highlight_script_with_range<H: Highlighter>(script: &str, r: Range, h: &mut H) -> io::Result<()> {
+        let mut s = script.to_string();
+        let mut include_stack = lexer::IncludeStack::default();
+        let cu = include_stack.push("test.tremor")?; // FIXME
+
+        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
+            &crate::path::load(),
+            "test.tremor",
+            &mut s,
+            cu,
+            &mut include_stack,
+        )?
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect();
+
+    let tokens: Vec<_> = tokens.into_iter().filter(|t| { 
+        let s = r.0;
+        let e = r.1;
+        // t.span.start.unit_id == s.unit_id && t.span.start.column >=  s.column && t.span.start.line >= s.line &&
+        t.span.start.unit_id == s.unit_id && t.span.start.line >= s.line &&
+        t.span.end.unit_id == e.unit_id && t.span.end.line <= e.line
+    }).collect::<Vec<Spanned<lexer::Token>>>();
+
+    h.highlight(None, &tokens[..])?;
+    io::Result::Ok(())
+}
+
+
+    /// Preprocesses and highlights a script with a given highlighter.
     #[cfg_attr(tarpaulin, skip)]
     pub fn highlight_preprocess_script_with<H: Highlighter>(
         file_name: &str,

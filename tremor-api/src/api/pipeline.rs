@@ -48,7 +48,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
             //ALLOW:  We publish a pipeline we can't ever get anything else back
             _ => unreachable!(),
         })?;
-    reply(req, result, true, StatusCode::NoContent).await
+    reply(req, result, true, StatusCode::Created).await
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {

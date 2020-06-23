@@ -13,7 +13,8 @@
 // limitations under the License.
 
 mod custom_fn;
-pub(crate) use self::custom_fn::{CustomFn, RECUR, RECUR_PTR};
+pub use self::custom_fn::CustomFn;
+pub(crate) use self::custom_fn::{RECUR, RECUR_PTR};
 use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::{best_hint, Error, ErrorKind, Result};
 use crate::utils::hostname as get_hostname;

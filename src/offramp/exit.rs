@@ -48,7 +48,7 @@ impl Offramp for Exit {
                     thread::sleep(Duration::from_millis(delay));
                 }
                 #[allow(clippy::cast_possible_truncation)]
-                // ALLOW: this is the supposed to exit
+                // ALLOW: this is supposed to exit
                 std::process::exit(status);
             } else {
                 return Err("Unexpected event received in exit offramp".into());

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) mod base_expr;
+/// Base definition for expressions
+pub mod base_expr;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
@@ -23,9 +24,8 @@ use crate::impl_expr2;
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
-use crate::registry::{
-    Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
-};
+pub use crate::registry::CustomFn;
+use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
 use crate::script::Return;
 use crate::stry;
 use crate::tilde::Extractor;
@@ -37,6 +37,7 @@ use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;
+
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 struct NodeMeta {
     start: Location,
@@ -434,14 +435,17 @@ pub struct Script<'script> {
     /// Import definitions
     pub imports: Imports<'script>,
     /// Expressions of the script
-    pub(crate) exprs: Exprs<'script>,
+    pub exprs: Exprs<'script>,
     /// Constants defined in this script
     pub consts: Vec<Value<'script>>,
-    aggregates: Vec<InvokeAggrFn<'script>>,
+    /// Aggregate functions
+    pub aggregates: Vec<InvokeAggrFn<'script>>,
     windows: HashMap<String, WindowDecl<'script>>,
     functions: Vec<CustomFn<'script>>,
-    locals: usize,
-    pub(crate) node_meta: NodeMetas,
+    /// Locals
+    pub locals: usize,
+    /// Node metadata
+    pub node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentaiton from the script
     pub docs: Docs<'script>,
@@ -551,33 +555,43 @@ impl<'script> From<&'script str> for Ident<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Field<'script> {
+/// Encapsulation of a record structure field
+pub struct Field<'script> {
+    /// Id
     pub mid: usize,
+    /// Name of the field
     pub name: ImutExprInt<'script>,
+    /// Value expression for the field
     pub value: ImutExprInt<'script>,
 }
 impl_expr2!(Field);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Record<'script> {
+/// Encapsulation of a record structure
+pub struct Record<'script> {
+    /// Id
     pub mid: usize,
+    /// Fields of this record
     pub fields: Fields<'script>,
 }
 impl_expr2!(Record);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct List<'script> {
+/// Encapsulation of a list structure
+pub struct List<'script> {
+    /// Id
     pub mid: usize,
+    /// Value expressions for list elements of this list
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(List);
 
-/// A Literal
+/// A Literal value
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
-    /// MetadataId of this node
+    /// Id
     pub mid: usize,
-    /// Literal Value
+    /// Literal value
     pub value: Value<'script>,
 }
 impl_expr2!(Literal);
@@ -615,26 +629,42 @@ fn path_eq<'script>(path: &Path<'script>, expr: &ImutExprInt<'script>) -> bool {
     path_expr == target_expr
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum Expr<'script> {
+/// Legal expression forms
+pub enum Expr<'script> {
+    /// Match expression
     Match(Box<Match<'script>>),
+    /// In place patch expression
     PatchInPlace(Box<Patch<'script>>),
+    /// In place merge expression
     MergeInPlace(Box<Merge<'script>>),
+    /// Assignment expression
     Assign {
+        /// Id
         mid: usize,
+        /// Target
         path: Path<'script>,
+        /// Value expression
         expr: Box<Expr<'script>>,
     },
-    // Moves
+    /// Assignment from local expression
     AssignMoveLocal {
+        /// Id
         mid: usize,
+        /// Target
         path: Path<'script>,
+        /// Local Index
         idx: usize,
     },
+    /// A structure comprehension
     Comprehension(Box<Comprehension<'script>>),
+    /// A drop expression
     Drop {
+        /// Id
         mid: usize,
     },
+    /// An emit expression
     Emit(Box<EmitExpr<'script>>),
+    /// An immutable expression
     Imut(ImutExprInt<'script>),
 }
 
@@ -646,7 +676,7 @@ impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
 
 /// An immutable expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutExpr<'script>(pub(crate) ImutExprInt<'script>);
+pub struct ImutExpr<'script>(pub ImutExprInt<'script>);
 
 impl<'script> From<Literal<'script>> for ImutExpr<'script> {
     fn from(lit: Literal<'script>) -> Self {
@@ -673,32 +703,55 @@ impl<'script> BaseExpr for ImutExpr<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum ImutExprInt<'script> {
+/// Encapsulates an immutable expression
+pub enum ImutExprInt<'script> {
+    /// Record
     Record(Record<'script>),
+    /// List
     List(List<'script>),
+    /// Binary operation
     Binary(Box<BinExpr<'script>>),
+    /// Unary operation
     Unary(Box<UnaryExpr<'script>>),
+    /// Patch
     Patch(Box<Patch<'script>>),
+    /// Match
     Match(Box<ImutMatch<'script>>),
+    /// Comprehension
     Comprehension(Box<ImutComprehension<'script>>),
+    /// Merge
     Merge(Box<Merge<'script>>),
+    /// Path
     Path(Path<'script>),
+    /// Local
     Local {
-        //id: Cow<'script, str>,
+        /// Local Index
         idx: usize,
+        /// Id
         mid: usize,
+        /// True, if it is declared constant
         is_const: bool,
     },
+    /// Literal
     Literal(Literal<'script>),
+    /// Presence
     Present {
+        /// Path
         path: Path<'script>,
+        /// Id
         mid: usize,
     },
+    /// Function invocation
     Invoke1(Invoke<'script>),
+    /// Function invocation
     Invoke2(Invoke<'script>),
+    /// Function invocation
     Invoke3(Invoke<'script>),
+    /// Function invocation
     Invoke(Invoke<'script>),
+    /// Aggregate Function invocation
     InvokeAggr(InvokeAggr),
+    /// Tail-Recursion
     Recur(Recur<'script>),
 }
 
@@ -710,20 +763,30 @@ fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct EmitExpr<'script> {
+/// Encapsulates an emit expression
+pub struct EmitExpr<'script> {
+    /// Id
     pub mid: usize,
+    /// Value expression
     pub expr: ImutExprInt<'script>,
+    /// Port name
     pub port: Option<ImutExprInt<'script>>,
 }
 impl_expr2!(EmitExpr);
 
 #[derive(Clone, Serialize)]
-pub(crate) struct Invoke<'script> {
+/// Encapsulates a function invocation expression
+pub struct Invoke<'script> {
+    /// Id
     pub mid: usize,
+    /// Module path
     pub module: Vec<String>,
+    /// Function name
     pub fun: String,
+    /// Invocable implementation
     #[serde(skip)]
     pub invocable: Invocable<'script>,
+    /// Arguments
     pub args: ImutExprs<'script>,
 }
 impl_expr2!(Invoke);
@@ -738,8 +801,11 @@ impl<'script> Invoke<'script> {
 }
 
 #[derive(Clone)]
-pub(crate) enum Invocable<'script> {
+/// An invocable expression form
+pub enum Invocable<'script> {
+    /// Reference to a builtin or intrinsic function
     Intrinsic(TremorFnWrapper),
+    /// A user defined or standard library function
     Tremor(CustomFn<'script>),
 }
 
@@ -765,6 +831,7 @@ impl<'script> Invocable<'script> {
             Invocable::Tremor(f) => f.is_const(),
         }
     }
+    /// Invokes this invocable
     pub fn invoke<'event, 'run>(
         &'script self,
         env: &'run Env<'run, 'event, 'script>,
@@ -782,19 +849,29 @@ impl<'script> Invocable<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Recur<'script> {
+/// Encapsulates the tail-recursion entry-point in a tail-recursive function
+pub struct Recur<'script> {
+    /// Id
     pub mid: usize,
+    /// Arity
     pub argc: usize,
+    /// True, if supports variable arguments
     pub open: bool,
+    /// Capture of argument value expressions
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(Recur);
 
 #[derive(Clone, Serialize)]
-pub(crate) struct InvokeAggr {
+/// Encapsulates an Aggregate function invocation
+pub struct InvokeAggr {
+    /// Id
     pub mid: usize,
+    /// Module name
     pub module: String,
+    /// Function name
     pub fun: String,
+    /// Unique Id of this instance
     pub aggr_id: usize,
 }
 
@@ -813,147 +890,233 @@ pub struct InvokeAggrFn<'script> {
 impl_expr2!(InvokeAggrFn);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct TestExpr {
+/// Encapsulates a pluggable extractor expression form
+pub struct TestExpr {
+    /// Id
     pub mid: usize,
+    /// Extractor name
     pub id: String,
+    /// Extractor format
     pub test: String,
+    /// Extractor plugin
     pub extractor: Extractor,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Match<'script> {
+/// Encapsulates a match expression form
+pub struct Match<'script> {
+    /// Id
     pub mid: usize,
+    /// The target of the match
     pub target: ImutExprInt<'script>,
+    /// Patterns to match against the target
     pub patterns: Predicates<'script>,
 }
 impl_expr2!(Match);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ImutMatch<'script> {
+/// Encapsulates an immutable match expression form
+pub struct ImutMatch<'script> {
+    /// Id
     pub mid: usize,
+    /// The target of the match
     pub target: ImutExprInt<'script>,
+    /// The patterns against the match target
     pub patterns: ImutPredicates<'script>,
 }
 impl_expr2!(ImutMatch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct PredicateClause<'script> {
+/// Encapsulates a predicate expression form
+pub struct PredicateClause<'script> {
+    /// Id
     pub mid: usize,
+    /// Predicate pattern
     pub pattern: Pattern<'script>,
+    /// Optional guard expression
     pub guard: Option<ImutExprInt<'script>>,
+    /// Expressions to evaluate if predicate test and guard pass
     pub exprs: Exprs<'script>,
 }
 impl_expr2!(PredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ImutPredicateClause<'script> {
+/// Encapsulates an immutable predicate expression form
+pub struct ImutPredicateClause<'script> {
+    /// Id
     pub mid: usize,
+    /// Predicate pattern
     pub pattern: Pattern<'script>,
+    /// Optional guard expression
     pub guard: Option<ImutExprInt<'script>>,
+    /// Expressions to evaluate if predicate test and guard pass
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(ImutPredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Patch<'script> {
+/// Encapsulates a path expression form
+pub struct Patch<'script> {
+    /// Id
     pub mid: usize,
+    /// The patch target
     pub target: ImutExprInt<'script>,
+    /// Operations to patch against the target
     pub operations: PatchOperations<'script>,
 }
 impl_expr2!(Patch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum PatchOperation<'script> {
+/// Encapsulates patch operation forms
+pub enum PatchOperation<'script> {
+    /// Insert only operation
     Insert {
+        /// Field
         ident: ImutExprInt<'script>,
+        /// Value expression
         expr: ImutExprInt<'script>,
     },
+    /// Insert or update operation
     Upsert {
+        /// Field
         ident: ImutExprInt<'script>,
+        /// Value expression
         expr: ImutExprInt<'script>,
     },
+    /// Update only operation
     Update {
+        /// Field
         ident: ImutExprInt<'script>,
+        /// Value expression
         expr: ImutExprInt<'script>,
     },
+    /// Erase operation
     Erase {
+        /// Field
         ident: ImutExprInt<'script>,
     },
+    /// Copy operation
     Copy {
+        /// From field
         from: ImutExprInt<'script>,
+        /// To field
         to: ImutExprInt<'script>,
     },
+    /// Move operation
     Move {
+        /// Field from
         from: ImutExprInt<'script>,
+        /// Field to
         to: ImutExprInt<'script>,
     },
+    /// Merge convenience operation
     Merge {
+        /// Field
         ident: ImutExprInt<'script>,
+        /// Value
         expr: ImutExprInt<'script>,
     },
+    /// Tuple based merge operation
     TupleMerge {
+        /// Value
         expr: ImutExprInt<'script>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Merge<'script> {
+/// Encapsulates a merge form
+pub struct Merge<'script> {
+    /// Id
     pub mid: usize,
+    /// Target of the merge
     pub target: ImutExprInt<'script>,
+    /// Value expression computing content to merge into the target
     pub expr: ImutExprInt<'script>,
 }
 impl_expr2!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct Comprehension<'script> {
+/// Encapsulates a structure comprehension form
+pub struct Comprehension<'script> {
+    /// Id
     pub mid: usize,
+    /// Key binding
     pub key_id: usize,
+    /// Value binding
     pub val_id: usize,
+    /// Target of the comprehension
     pub target: ImutExprInt<'script>,
+    /// Case applications against target elements
     pub cases: ComprehensionCases<'script>,
 }
 impl_expr2!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ImutComprehension<'script> {
+/// Encapsulates an immutable comprehension form
+pub struct ImutComprehension<'script> {
+    /// Id
     pub mid: usize,
+    /// Key binding
     pub key_id: usize,
+    /// Value binding
     pub val_id: usize,
+    /// Target of the comprehension
     pub target: ImutExprInt<'script>,
+    /// Case applications against target elements
     pub cases: ImutComprehensionCases<'script>,
 }
 impl_expr2!(ImutComprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ComprehensionCase<'script> {
+/// Encapsulates a comprehension case application
+pub struct ComprehensionCase<'script> {
+    /// Id
     pub mid: usize,
+    /// Key binding
     pub key_name: Cow<'script, str>,
+    /// Value binding
     pub value_name: Cow<'script, str>,
+    /// Guard expression
     pub guard: Option<ImutExprInt<'script>>,
+    /// Case application against target on passing guard
     pub exprs: Exprs<'script>,
 }
 impl_expr2!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ImutComprehensionCase<'script> {
+/// Encapsulates an immutable comprehension case application
+pub struct ImutComprehensionCase<'script> {
+    /// id
     pub mid: usize,
+    /// Key binding
     pub key_name: Cow<'script, str>,
+    /// value binding
     pub value_name: Cow<'script, str>,
+    /// Guard expression
     pub guard: Option<ImutExprInt<'script>>,
+    /// Case application against target on passing guard
     pub exprs: ImutExprs<'script>,
 }
 impl_expr2!(ImutComprehensionCase);
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum Pattern<'script> {
+/// Encapsulates predicate pattern form
+pub enum Pattern<'script> {
     //Predicate(PredicatePattern<'script>),
+    /// Record pattern
     Record(RecordPattern<'script>),
+    /// Array pattern
     Array(ArrayPattern<'script>),
+    /// Expression
     Expr(ImutExprInt<'script>),
+    /// Assignment pattern
     Assign(AssignPattern<'script>),
+    /// Tuple pattern
     Tuple(TuplePattern<'script>),
+    /// Dont care condition
     DoNotCare,
+    /// Gates if no other pattern matches
     Default,
 }
 impl<'script> Pattern<'script> {
@@ -974,46 +1137,72 @@ impl<'script> Pattern<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum PredicatePattern<'script> {
+/// Encapsulates a predicate pattern form
+pub enum PredicatePattern<'script> {
+    /// Structural application
     TildeEq {
+        /// Assigment bindpoint
         assign: Cow<'script, str>,
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
+        /// Predicate
         test: Box<TestExpr>,
     },
+    /// Binary predicate
     Bin {
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
+        /// Rhs
         rhs: ImutExprInt<'script>,
+        /// Binary operation kind
         kind: BinOpKind,
     },
+    /// Record search pattern
     RecordPatternEq {
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
+        /// Predicate
         pattern: RecordPattern<'script>,
     },
+    /// Array search pattern
     ArrayPatternEq {
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
+        /// Predicate
         pattern: ArrayPattern<'script>,
     },
+    /// Field presence
     FieldPresent {
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
     },
+    /// Field absence
     FieldAbsent {
+        /// Lhs
         lhs: Cow<'script, str>,
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
     },
 }
 
 impl<'script> PredicatePattern<'script> {
+    /// Get key
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -1044,52 +1233,78 @@ impl<'script> PredicatePattern<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct RecordPattern<'script> {
+/// Encapsulates a record pattern
+pub struct RecordPattern<'script> {
+    /// Id
     pub mid: usize,
+    /// Pattern fields
     pub fields: PatternFields<'script>,
 }
 impl_expr2!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum ArrayPredicatePattern<'script> {
+/// Encapsulates an array predicate pattern
+pub enum ArrayPredicatePattern<'script> {
+    /// Expression
     Expr(ImutExprInt<'script>),
+    /// Tilde predicate
     Tilde(TestExpr),
+    /// Nested record pattern
     Record(RecordPattern<'script>),
+    /// Dont care condition
     Ignore,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct ArrayPattern<'script> {
+/// Encapsulates an array pattern
+pub struct ArrayPattern<'script> {
+    /// Id
     pub mid: usize,
+    /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
 }
 impl_expr2!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct AssignPattern<'script> {
+/// Encapsulates an assignment pattern
+pub struct AssignPattern<'script> {
+    /// Bindpoint
     pub id: Cow<'script, str>,
+    /// Local index
     pub idx: usize,
+    /// Nested predicate pattern
     pub pattern: Box<Pattern<'script>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct TuplePattern<'script> {
+/// Encapsulates a positional tuple pattern
+pub struct TuplePattern<'script> {
+    /// Id
     pub mid: usize,
+    /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
+    /// True, if the pattern supports variable arguments
     pub open: bool,
 }
 impl_expr2!(TuplePattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum Path<'script> {
+/// Represents a path-like-structure
+pub enum Path<'script> {
+    /// A constant path
     Const(LocalPath<'script>),
+    /// A local path
     Local(LocalPath<'script>),
+    /// The current event
     Event(EventPath<'script>),
+    /// The captured program state, minus const and local state
     State(StatePath<'script>),
+    /// Runtime type information ( meta-state )
     Meta(MetadataPath<'script>),
 }
 
 impl<'script> Path<'script> {
+    /// Get segments as slice
     pub fn segments(&self) -> &[Segment] {
         match self {
             Path::Const(path) | Path::Local(path) => &path.segments,
@@ -1101,56 +1316,85 @@ impl<'script> Path<'script> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) enum Segment<'script> {
+/// A Path segment
+pub enum Segment<'script> {
+    /// An identifier
     Id {
+        /// Key
         #[serde(skip)]
         key: KnownKey<'script>,
+        /// Id
         mid: usize,
     },
+    /// A numeric index
     Idx {
+        /// Index
         idx: usize,
+        /// id
         mid: usize,
     },
+    /// An element
     Element {
+        /// Value Expression
         expr: ImutExprInt<'script>,
+        /// Id
         mid: usize,
     },
+    /// A range
     Range {
+        /// Lower-inclusive
         lower_mid: usize,
+        /// Max-exclusive
         upper_mid: usize,
+        /// Id
         mid: usize,
+        /// Start of range value expression
         range_start: Box<ImutExprInt<'script>>,
+        /// End of range value expression
         range_end: Box<ImutExprInt<'script>>,
     },
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct LocalPath<'script> {
-    //pub id: Cow<'script, str>,
+/// A path local to the current program
+pub struct LocalPath<'script> {
+    /// Local Index
     pub idx: usize,
+    /// True, if declared const
     pub is_const: bool,
+    /// Id
     pub mid: usize,
+    /// Segments
     pub segments: Segments<'script>,
 }
 impl_expr2!(LocalPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct MetadataPath<'script> {
+/// A metadata path
+pub struct MetadataPath<'script> {
+    /// Id
     pub mid: usize,
+    /// Segments
     pub segments: Segments<'script>,
 }
 impl_expr2!(MetadataPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct EventPath<'script> {
+/// The path representing the current in-flight event
+pub struct EventPath<'script> {
+    /// Id
     pub mid: usize,
+    /// Segments
     pub segments: Segments<'script>,
 }
 impl_expr2!(EventPath);
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct StatePath<'script> {
+/// The path representing captured program state
+pub struct StatePath<'script> {
+    /// Id
     pub mid: usize,
+    /// Segments
     pub segments: Segments<'script>,
 }
 impl_expr2!(StatePath);
@@ -1206,10 +1450,15 @@ pub enum BinOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct BinExpr<'script> {
+/// Encapsulates a binary expression form
+pub struct BinExpr<'script> {
+    /// Id
     pub mid: usize,
+    /// The operation kind
     pub kind: BinOpKind,
+    /// The Left-hand-side operand
     pub lhs: ImutExprInt<'script>,
+    /// The Right-hand-side operand
     pub rhs: ImutExprInt<'script>,
 }
 impl_expr2!(BinExpr);
@@ -1228,14 +1477,19 @@ pub enum UnaryOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct UnaryExpr<'script> {
+/// Encapsulates a unary expression form
+pub struct UnaryExpr<'script> {
+    /// Id
     pub mid: usize,
+    /// The operation kind
     pub kind: UnaryOpKind,
+    /// The operand
     pub expr: ImutExprInt<'script>,
 }
 impl_expr2!(UnaryExpr);
 
-pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
+/// A list of expressions
+pub type Exprs<'script> = Vec<Expr<'script>>;
 /// A list of lexical compilation units
 pub type Imports<'script> = Vec<LexicalUnit<'script>>;
 /// A list of immutable expressions

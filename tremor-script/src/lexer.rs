@@ -550,7 +550,8 @@ impl<'input> fmt::Display for Token<'input> {
                 }
                 write!(f, "|")
             }
-            Token::BoolLiteral(value) => write!(f, "{}", value),
+            Token::BoolLiteral(true) => write!(f, "true"),
+            Token::BoolLiteral(false) => write!(f, "false"),
             Token::Bad(value) => write!(f, "{}", value),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),

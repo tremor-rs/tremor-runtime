@@ -286,11 +286,11 @@ async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str)
     let ser = ser(&app, &json)?;
     let endpoint = format!("{}{}", base_url, endpoint);
     let response = surf::post(&endpoint)
-        .set_header(headers::CONTENT_TYPE, content_type(app))
-        .set_header(headers::ACCEPT, accept(app))
+        .set_header(http_types::headers::CONTENT_TYPE, content_type(app))
+        .set_header("accept", accept(app))
         .body_string(ser)
-        .await?;
-    handle_response(response).await
+        .await;
+    handle_response(response?).await
 }
 
 async fn conductor_delete_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
