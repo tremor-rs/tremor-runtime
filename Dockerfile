@@ -1,4 +1,4 @@
-FROM rust:latest as builder
+FROM rust:1.43.1 as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -29,7 +29,8 @@ COPY tremor-query ./tremor-query
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
 
-RUN cargo build --release --all
+RUN cat /proc/cpuinfo
+RUN cargo build --release --all --verbose
 
 FROM debian:buster-slim
 
