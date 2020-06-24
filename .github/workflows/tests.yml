@@ -74,8 +74,8 @@ jobs:
         env:
           RUSTFLAGS: -C target-cpu=native
         with:
-          version: '0.11.0'
-          args: '--out Xml --exclude-files target* --exclude-files depricated/* --all'
+          version: "0.13.4"
+          args: "--out Xml --exclude-files target* --exclude-files depricated/* --all"
       - uses: codecov/codecov-action@v1.0.2
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
