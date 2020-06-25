@@ -123,7 +123,10 @@ impl Offramp for Kafka {
                 Ok(f) => {
                     task::spawn(f);
                 }
-                Err((e, _)) => error!("[Kafka Offramp] failed to enque message: {}", e),
+                Err((e, _)) => {
+                    self.producer.poll(std::time::Duration::from_millis(10));
+                    error!("[Kafka Offramp] failed to enque message: {}", e);
+                }
             }
         }
         Ok(())
