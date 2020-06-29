@@ -41,12 +41,6 @@ use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{AggrRegistry, Registry, Value};
 
-// Legacy ops for backwards compat with pipeline.yaml at runtime in trickle / extension
-use op::debug::EventHistoryFactory;
-use op::generic::{BackpressureFactory, BatchFactory, CounterFactory, WalFactory};
-use op::grouper::BucketGrouperFactory;
-use op::runtime::TremorFactory;
-
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
         id: common_cow(&port.0.id),
@@ -625,21 +619,7 @@ pub(crate) fn supported_operators(
                 node,
             )?)
         }
-        ["passthrough"] => {
-            let op = PassthroughFactory::new_boxed();
-            op.from_node(config)?
-        }
-        ["debug", "history"] => EventHistoryFactory::new_boxed().from_node(config)?,
-        ["runtime", "tremor"] => TremorFactory::new_boxed().from_node(config)?,
-        ["grouper", "bucket"] => BucketGrouperFactory::new_boxed().from_node(config)?,
-        ["generic", "batch"] => BatchFactory::new_boxed().from_node(config)?,
-        ["generic", "backpressure"] => BackpressureFactory::new_boxed().from_node(config)?,
-        ["generic", "counter"] => CounterFactory::new_boxed().from_node(config)?,
-        ["generic", "wal"] => WalFactory::new_boxed().from_node(config)?,
-        [namespace, name] => {
-            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
-        }
-        _ => return Err(ErrorKind::UnknownNamespace(config.op_type.clone()).into()),
+        _ => crate::operator(&config)?,
     };
     Ok(OperatorNode {
         id: config.id.clone(),

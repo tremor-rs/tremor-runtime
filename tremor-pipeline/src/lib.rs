@@ -402,6 +402,37 @@ impl Operator for OperatorNode {
     }
 }
 
+fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
+    use op::debug::EventHistoryFactory;
+    use op::generic::{
+        BackpressureFactory, BatchFactory, CounterFactory, RoundRobinFactory, WalFactory,
+    };
+    use op::grouper::BucketGrouperFactory;
+    use op::identity::PassthroughFactory;
+    use op::runtime::TremorFactory;
+    let name_parts: Vec<&str> = node.op_type.split("::").collect();
+    let factory = match name_parts.as_slice() {
+        ["passthrough"] => PassthroughFactory::new_boxed(),
+        ["debug", "history"] => EventHistoryFactory::new_boxed(),
+        ["runtime", "tremor"] => TremorFactory::new_boxed(),
+        ["grouper", "bucket"] => BucketGrouperFactory::new_boxed(),
+        ["generic", "batch"] => BatchFactory::new_boxed(),
+        ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
+        ["generic", "roundrobin"] => RoundRobinFactory::new_boxed(),
+        ["generic", "counter"] => CounterFactory::new_boxed(),
+        ["generic", "wal"] => WalFactory::new_boxed(),
+        [namespace, name] => {
+            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
+        }
+        _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
+    };
+    Ok(factory)
+}
+
+fn operator(node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
+    factory(&node)?.from_node(node)
+}
+
 // TODO We need an actual operator registry ...
 // because we really don't care here.
 // We allow needless pass by value since the function type
@@ -417,31 +448,11 @@ pub fn buildin_ops(
 ) -> Result<OperatorNode> {
     // Resolve from registry
 
-    use op::debug::EventHistoryFactory;
-    use op::generic::{BackpressureFactory, BatchFactory, CounterFactory, WalFactory};
-    use op::grouper::BucketGrouperFactory;
-    use op::identity::PassthroughFactory;
-    use op::runtime::TremorFactory;
-    let name_parts: Vec<&str> = node.op_type.split("::").collect();
-    let factory = match name_parts.as_slice() {
-        ["passthrough"] => PassthroughFactory::new_boxed(),
-        ["debug", "history"] => EventHistoryFactory::new_boxed(),
-        ["runtime", "tremor"] => TremorFactory::new_boxed(),
-        ["grouper", "bucket"] => BucketGrouperFactory::new_boxed(),
-        ["generic", "batch"] => BatchFactory::new_boxed(),
-        ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
-        ["generic", "counter"] => CounterFactory::new_boxed(),
-        ["generic", "wal"] => WalFactory::new_boxed(),
-        [namespace, name] => {
-            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
-        }
-        _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
-    };
     Ok(OperatorNode {
         id: node.id.clone(),
         kind: node.kind,
         op_type: node.op_type.clone(),
-        op: factory.from_node(node)?,
+        op: operator(node)?,
     })
 }
 impl NodeConfig {
