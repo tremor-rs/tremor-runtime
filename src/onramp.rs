@@ -51,7 +51,7 @@ pub(crate) trait Impl {
 pub enum Msg {
     Connect(Vec<(TremorURL, pipeline::Addr)>),
     Disconnect { id: TremorURL, tx: CbSender<bool> },
-    Cb(CBAction),
+    Cb(CBAction, Ids),
 }
 
 pub type Addr = sync::Sender<Msg>;
@@ -60,6 +60,7 @@ pub type Addr = sync::Sender<Msg>;
 pub(crate) trait Onramp: Send {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
@@ -116,6 +117,8 @@ where
     triggered: bool,
     pipelines: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
+    /// Unique Id for the source
+    uid: u64,
 }
 
 impl<T> SourceManager<T>
@@ -130,7 +133,7 @@ where
     ) -> Result<Vec<Vec<u8>>> {
         let mut data = vec![data];
         let mut data1 = Vec::new();
-        if let Some(pps) = self.preprocessors.get_mut(stream).and_then(|v| v.as_mut()) {
+        if let Some(pps) = self.preprocessors.get_mut(stream).and_then(Option::as_mut) {
             for pp in pps {
                 data1.clear();
                 for (i, d) in data.iter().enumerate() {
@@ -148,7 +151,6 @@ where
         Ok(data)
     }
     // We are borrowing a dyn box as we don't want to pass ownership.
-    #[allow(clippy::borrowed_box, clippy::too_many_arguments)]
     fn send_event(
         &mut self,
         stream: usize,
@@ -203,7 +205,7 @@ where
                     tx.send(true)?;
                     Ok(PipeHandlerResult::Terminate)
                 }
-                onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+                onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
             }
         } else {
             match msg {
@@ -218,7 +220,7 @@ where
                     Ok(PipeHandlerResult::Normal)
                 }
                 onramp::Msg::Disconnect { id, tx } => {
-                    for (pid, p) in self.pipelines.iter() {
+                    for (pid, p) in &self.pipelines {
                         if pid == &id {
                             p.send(pipeline::Msg::DisconnectInput(id.clone()))?;
                         }
@@ -232,7 +234,7 @@ where
                         Ok(PipeHandlerResult::Normal)
                     }
                 }
-                onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+                onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
             }
         }
     }
@@ -265,7 +267,7 @@ where
         //
         // Notably in a Guaranteed delivery scenario those discarded
         let event = Event {
-            id: self.id,
+            id: Ids::new(self.uid, self.id),
             data,
             ingest_ns,
             // TODO make origin_uri non-optional here too?
@@ -302,6 +304,7 @@ where
         error
     }
     async fn new(
+        uid: u64,
         mut source: T,
         preprocessors: &[String],
         codec: &str,
@@ -325,12 +328,14 @@ where
                 triggered: false,
                 id: 0,
                 pipelines: Vec::new(),
+                uid,
             },
             tx,
         ))
     }
 
     async fn start(
+        uid: u64,
         source: T,
         codec: &str,
         preprocessors: &[String],
@@ -338,7 +343,7 @@ where
     ) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
         let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
+            SourceManager::new(uid, source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
             .name(name)
             .spawn(move || task::block_on(manager.run()))?;
@@ -351,18 +356,22 @@ where
                 PipeHandlerResult::Retry => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
                 PipeHandlerResult::Normal => (),
-                PipeHandlerResult::Cb(CBAction::Fail(id)) => {
-                    self.source.fail(id);
+                PipeHandlerResult::Cb(CBAction::Fail, ids) => {
+                    if let Some(id) = ids.get(self.uid) {
+                        self.source.fail(id);
+                    }
                 }
-                PipeHandlerResult::Cb(CBAction::Ack(id)) => {
-                    self.source.ack(id);
+                PipeHandlerResult::Cb(CBAction::Ack, ids) => {
+                    if let Some(id) = ids.get(self.uid) {
+                        self.source.ack(id);
+                    }
                 }
-                PipeHandlerResult::Cb(CBAction::Trigger) => {
+                PipeHandlerResult::Cb(CBAction::Trigger, _ids) => {
                     // FIXME eprintln!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
-                PipeHandlerResult::Cb(CBAction::Restore) => {
+                PipeHandlerResult::Cb(CBAction::Restore, _ids) => {
                     // FIXME eprintln!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
@@ -397,10 +406,11 @@ where
                         self.transmit_event(data, ingest_ns, origin_uri);
                     }
                     SourceReply::Data {
-                        origin_uri,
+                        mut origin_uri,
                         data,
                         stream,
                     } => {
+                        origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
                         self.send_event(stream, &mut ingest_ns, &origin_uri, data);
                     }
@@ -454,9 +464,8 @@ impl fmt::Debug for Create {
 }
 
 /// This is control plane
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
-    Create(async_std::sync::Sender<Result<Addr>>, Create),
+    Create(async_std::sync::Sender<Result<Addr>>, Box<Create>),
     Stop,
 }
 
@@ -473,6 +482,7 @@ impl Manager {
         let (tx, rx) = channel(self.qsize);
 
         let h = task::spawn(async move {
+            let mut onramp_uid: u64 = 0;
             info!("Onramp manager started");
             loop {
                 match rx.recv().await {
@@ -480,22 +490,26 @@ impl Manager {
                         info!("Stopping onramps...");
                         break;
                     }
-                    Ok(ManagerMsg::Create(
-                        r,
-                        Create {
+                    Ok(ManagerMsg::Create(r, c)) => {
+                        let Create {
                             codec,
                             mut stream,
                             preprocessors,
                             metrics_reporter,
                             id,
-                        },
-                    )) => match stream.start(&codec, &preprocessors, metrics_reporter).await {
-                        Ok(addr) => {
-                            info!("Onramp {} started.", id);
-                            r.send(Ok(addr)).await
+                        } = *c;
+                        onramp_uid += 1;
+                        match stream
+                            .start(onramp_uid, &codec, &preprocessors, metrics_reporter)
+                            .await
+                        {
+                            Ok(addr) => {
+                                info!("Onramp {} started.", id);
+                                r.send(Ok(addr)).await
+                            }
+                            Err(e) => error!("Creating an onramp failed: {}", e),
                         }
-                        Err(e) => error!("Creating an onramp failed: {}", e),
-                    },
+                    }
                     Err(e) => {
                         info!("Stopping onramps... {}", e);
                         break;

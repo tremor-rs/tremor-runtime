@@ -189,7 +189,12 @@ impl Rest {
 }
 
 impl Offramp for Rest {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        _input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()> {
         let mut payload = Vec::with_capacity(4096);
         let mut output = None;
         for (value, meta) in event.value_meta_iter() {

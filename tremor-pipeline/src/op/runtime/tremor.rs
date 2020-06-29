@@ -64,6 +64,7 @@ pub struct Tremor {
 impl Operator for Tremor {
     fn on_event(
         &mut self,
+        _uid: u64,
         _in_port: &str,
         state: &mut Value<'static>,
         mut event: Event,
@@ -137,7 +138,7 @@ mod test {
             id: "badger".into(),
         };
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from(json!({"a": 1})).into(),
             ..Event::default()
@@ -145,8 +146,9 @@ mod test {
         let mut state = Value::null();
 
         let (out, event) = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("failed to run pipeline")
+            .events
             .pop()
             .expect("no event returned");
         assert_eq!("out", out);

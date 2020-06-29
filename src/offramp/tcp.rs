@@ -63,7 +63,12 @@ impl offramp::Impl for Tcp {
 }
 
 impl Offramp for Tcp {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        _input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;

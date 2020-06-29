@@ -120,6 +120,7 @@ if let Some(map) = &node.config {
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
@@ -157,7 +158,7 @@ impl Operator for Backpressure {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
         let mut is_open = false;
         let mut was_closed = true;
@@ -181,7 +182,7 @@ impl Operator for Backpressure {
             ..EventAndInsights::default()
         })
     }
-    fn on_contraflow(&mut self, insight: &mut Event) {
+    fn on_contraflow(&mut self, _uid: u64, insight: &mut Event) {
         let (_, meta) = insight.data.parts();
 
         let output = meta
@@ -244,14 +245,15 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event1.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event1.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -259,14 +261,15 @@ mod test {
         // Without a timeout event sent a second event,
         // it too should pass
         let event2 = Event {
-            id: 2,
+            id: 2.into(),
             ingest_ns: 2,
             data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -286,14 +289,15 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event1.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event1.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -305,14 +309,14 @@ mod test {
         m.insert("time".into(), 200.0.into());
         m.insert("backpressure-output".into(), "out".into());
         let mut insight = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
             ..Event::default()
         };
 
         // Verify that we now have a backoff of 1ms
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 1_000_000);
 
         // The first event was sent at exactly 1ms
@@ -320,14 +324,15 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
-            id: 2,
+            id: 2.into(),
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("overflow", out);
@@ -335,14 +340,15 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
-            id: 3,
+            id: 3.into(),
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event3.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -350,14 +356,15 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
-            id: 3,
+            id: 3.into(),
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event3.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("overflow", out);
@@ -377,7 +384,7 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
             ..Event::default()
@@ -389,7 +396,7 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight_reset = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
             ..Event::default()
@@ -398,20 +405,20 @@ mod test {
         // Assert initial state
         assert_eq!(op.outputs[0].backoff, 0);
         // move one step up
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 1_000_000);
         // move another step up
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 10_000_000);
         // move another another step up
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 100_000_000);
         // We are at the highest step everything
         // should stay  the same
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 100_000_000);
         // Now we should reset
-        op.on_contraflow(&mut insight_reset);
+        op.on_contraflow(0, &mut insight_reset);
         assert_eq!(op.outputs[0].backoff, 0);
     }
 
@@ -420,7 +427,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            outputs: vec![OUT, "snot".into()],
+            outputs: vec![OUT.into(), "snot".into()],
         }
         .into();
 
@@ -429,14 +436,15 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1_000_000,
             data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event1.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event1.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -444,14 +452,15 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event2 = Event {
-            id: 2,
+            id: 2.into(),
             ingest_ns: 1_000_001,
             data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("snot", out);
@@ -464,14 +473,14 @@ mod test {
         m.insert("backpressure-output".into(), "out".into());
 
         let mut insight = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
             ..Event::default()
         };
 
         // Verify that we now have a backoff of 1ms
-        op.on_contraflow(&mut insight);
+        op.on_contraflow(0, &mut insight);
         assert_eq!(op.outputs[0].backoff, 1_000_000);
         assert_eq!(op.outputs[0].next, 2_000_000);
 
@@ -480,14 +489,15 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
-            id: 2,
+            id: 2.into(),
             ingest_ns: 2_000_000 - 1,
             data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("snot", out);
@@ -495,14 +505,15 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
-            id: 3,
+            id: 3.into(),
             ingest_ns: 2_000_000,
             data: Value::from("boo").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event3.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -510,14 +521,15 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
-            id: 3,
+            id: 3.into(),
             ingest_ns: 2_000_000 + 1,
             data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
-            .on_event("in", &mut state, event3.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("snot", out);

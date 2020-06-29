@@ -23,7 +23,7 @@ pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
 pub(crate) use async_std::sync::{channel, Receiver};
 pub(crate) use async_std::task;
-pub(crate) use tremor_pipeline::{CBAction, Event, EventOriginUri};
+pub(crate) use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
 
 // TODO pub here too?
@@ -79,7 +79,8 @@ pub(crate) fn transmit_event(
     // Notably in a Guaranteed delivery scenario those discarded
     let mut result = None;
     let event = Event {
-        id,
+        /// FIXME: this should be replaced by the source trait
+        id: Ids::new(origin_uri.uid, id),
         data,
         ingest_ns,
         // TODO make origin_uri non-optional here too?
@@ -156,7 +157,7 @@ pub(crate) enum PipeHandlerResult {
     Terminate,
     Retry,
     Normal,
-    Cb(CBAction),
+    Cb(CBAction, Ids),
 }
 
 // Handles pipeline connections for an onramp
@@ -199,7 +200,7 @@ pub(crate) fn handle_pipelines_msg(
                 tx.send(true)?;
                 Ok(PipeHandlerResult::Terminate)
             }
-            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+            onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
         }
     } else {
         match msg {
@@ -217,7 +218,7 @@ pub(crate) fn handle_pipelines_msg(
                     Ok(PipeHandlerResult::Normal)
                 }
             }
-            onramp::Msg::Cb(cb) => Ok(PipeHandlerResult::Cb(cb)),
+            onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
         }
     }
 }

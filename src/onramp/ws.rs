@@ -48,6 +48,7 @@ use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
 
 async fn handle_connection(
+    uid: u64,
     loop_tx: Sender<WsOnrampMessage>,
     raw_stream: TcpStream,
     mut preprocessors: Preprocessors,
@@ -55,6 +56,7 @@ async fn handle_connection(
     let mut ws_stream = async_tungstenite::accept_async(raw_stream).await?;
 
     let origin_uri = tremor_pipeline::EventOriginUri {
+        uid,
         scheme: "tremor-ws".to_string(),
         host: "tremor-ws-client-host.remote".to_string(),
         port: None,
@@ -105,6 +107,7 @@ async fn handle_connection(
 // for select!
 #[allow(clippy::mut_mut)]
 async fn onramp_loop(
+    uid: u64,
     rx: &Receiver<onramp::Msg>,
     config: Config,
     preprocessors: Vec<String>,
@@ -136,7 +139,7 @@ async fn onramp_loop(
             msg = listener.accept().fuse() => if let Ok((stream, _socket)) = msg {
                 let preprocessors = make_preprocessors(&preprocessors)?;
 
-                task::spawn(handle_connection(loop_tx.clone(), stream, preprocessors));
+                task::spawn(handle_connection(uid, loop_tx.clone(), stream, preprocessors));
             },
             msg = loop_rx.recv().fuse() => if let Ok(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) = msg {
                 id += 1;
@@ -168,6 +171,7 @@ async fn onramp_loop(
 impl Onramp for Ws {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
@@ -180,8 +184,15 @@ impl Onramp for Ws {
         task::Builder::new()
             .name(format!("onramp-ws-{}", "???"))
             .spawn(async move {
-                if let Err(e) =
-                    onramp_loop(&rx, config, preprocessors, codec, metrics_reporter).await
+                if let Err(e) = onramp_loop(
+                    onramp_uid,
+                    &rx,
+                    config,
+                    preprocessors,
+                    codec,
+                    metrics_reporter,
+                )
+                .await
                 {
                     error!("[Onramp] Error: {}", e)
                 }

@@ -38,7 +38,12 @@ impl offramp::Impl for StdOut {
     }
 }
 impl Offramp for StdOut {
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        _input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {

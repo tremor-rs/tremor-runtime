@@ -81,6 +81,7 @@ impl<'consumer> From<BorrowedMessage<'consumer>> for MsgOffset {
 }
 
 pub struct Int {
+    uid: u64,
     config: Config,
     onramp_id: TremorURL,
     stream: Option<rentals::MessageStream>,
@@ -116,7 +117,8 @@ rental! {
         }
     }
 }
-#[allow(dead_code)]
+
+#[allow(dead_code, clippy::transmute_ptr_to_ptr)]
 impl rentals::MessageStream {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     unsafe fn mut_suffix(
@@ -124,16 +126,17 @@ impl rentals::MessageStream {
     ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext> {
         transmute(&self.suffix().stream)
     }
-    unsafe fn commit<'msg>(
+
+    unsafe fn commit(
         &mut self,
-        map: StdMap<(String, i32), Offset>,
-        mode: CommitMode,
+        map: &StdMap<(String, i32), Offset>,
+        mode: &CommitMode,
     ) -> Result<()> {
         struct MessageStream {
             consumer: Box<LoggingConsumer>,
             stream: StreamAndMsgs<'static>,
         };
-        let offsets = TopicPartitionList::from_topic_map(&map);
+        let offsets = TopicPartitionList::from_topic_map(map);
 
         let s: &mut MessageStream = transmute(self);
 
@@ -147,8 +150,9 @@ impl rentals::MessageStream {
 }
 
 impl Int {
-    fn from_config(onramp_id: TremorURL, config: &Config) -> Self {
+    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
+            uid,
             scheme: "tremor-kafka".to_string(),
             // picking the first host for these
             host: "not-connected".to_string(),
@@ -160,10 +164,10 @@ impl Int {
             .rdkafka_options
             .as_ref()
             .and_then(|m| m.get("enable.auto.commit"))
-            .map(|v| v == "true")
-            .unwrap_or(true);
+            .map_or(true, |v| v == "true");
 
         Self {
+            uid,
             config: config.clone(),
             onramp_id,
             stream: None,
@@ -252,6 +256,7 @@ impl Source for Int {
             return Err(format!("No brokers provided for Kafka onramp {}", self.onramp_id).into());
         };
         self.origin_uri = EventOriginUri {
+            uid: self.uid,
             scheme: "tremor-kafka".to_string(),
             // picking the first host for these
             host: first_broker[0].to_string(),
@@ -366,7 +371,7 @@ impl Source for Int {
                     partition,
                     offset,
                 },
-            ) in split.into_iter()
+            ) in split
             {
                 let this_offset = tm.entry((topic, partition)).or_insert(offset);
                 match (this_offset, offset) {
@@ -376,7 +381,7 @@ impl Source for Int {
             }
 
             if let Some(stream) = self.stream.as_mut() {
-                if let Err(e) = unsafe { stream.commit(tm, CommitMode::Async) } {
+                if let Err(e) = unsafe { stream.commit(&tm, &CommitMode::Async) } {
                     error!("[kafka] failed to commit message: {}", e)
                 }
             }
@@ -388,13 +393,14 @@ impl Source for Int {
 impl Onramp for Kafka {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config);
         let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
+            SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
             .name(self.onramp_id.short_id("src"))
             .spawn(move || task::block_on(manager.run()))?;

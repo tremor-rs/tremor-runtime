@@ -109,7 +109,7 @@ impl Query {
 
     /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self) -> Result<crate::ExecutableGraph> {
+    pub fn to_pipe(&self, uid: &mut u64) -> Result<crate::ExecutableGraph> {
         use crate::op::Operator;
         use crate::ExecutableGraph;
         use crate::NodeMetrics;
@@ -141,7 +141,8 @@ impl Query {
             node: None,
         });
         nodes.insert(IN, id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+        *uid += 1;
+        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         inputs.insert(IN, id);
 
@@ -156,7 +157,8 @@ impl Query {
             node: None,
         });
         nodes.insert(err.clone(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+        *uid += 1;
+        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
@@ -171,7 +173,9 @@ impl Query {
             node: None,
         });
         nodes.insert(OUT, id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+        *uid += 1;
+
+        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
         let mut port_indexes: PortIndexMap = HashMap::new();
@@ -231,7 +235,14 @@ impl Query {
                                 node: None,
                             });
                             nodes.insert(name.clone(), id);
-                            let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+                            *uid += 1;
+                            let op = pipe_graph[id].to_op(
+                                *uid,
+                                supported_operators,
+                                None,
+                                None,
+                                None,
+                            )?;
                             pipe_ops.insert(id, op);
                             inputs.insert(name.clone(), id);
                         }
@@ -252,7 +263,14 @@ impl Query {
                                 node: None,
                             });
                             nodes.insert(name.clone(), id);
-                            let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+                            *uid += 1;
+                            let op = pipe_graph[id].to_op(
+                                *uid,
+                                supported_operators,
+                                None,
+                                None,
+                                None,
+                            )?;
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
@@ -278,7 +296,8 @@ impl Query {
                     for w in &query.windows {
                         ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
                     }
-                    let op = node.to_op(supported_operators, None, Some(that), Some(ww))?;
+                    *uid += 1;
+                    let op = node.to_op(*uid, supported_operators, None, Some(that), Some(ww))?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
@@ -297,7 +316,9 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
+                        *uid += 1;
                         let op = node.to_op(
+                            *uid,
                             supported_operators,
                             None,
                             Some(that),
@@ -345,7 +366,8 @@ impl Query {
                     let that = StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
                     };
-                    let op = node.to_op(supported_operators, None, Some(that), None)?;
+                    *uid += 1;
+                    let op = node.to_op(*uid, supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
@@ -385,8 +407,9 @@ impl Query {
                     };
 
                     let id = pipe_graph.add_node(node.clone());
-
-                    let op = node.to_op(supported_operators, Some(that_defn), Some(that), None)?;
+                    *uid += 1;
+                    let op =
+                        node.to_op(*uid, supported_operators, Some(that_defn), Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
@@ -404,7 +427,9 @@ impl Query {
             node: None,
         });
         nodes.insert("metrics".into(), id);
-        let op = pipe_graph[id].to_op(supported_operators, None, None, None)?;
+        *uid += 1;
+
+        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
 
@@ -515,6 +540,7 @@ impl Query {
 #[allow(clippy::implicit_hasher, clippy::too_many_lines)]
 pub(crate) fn supported_operators(
     config: &NodeConfig,
+    uid: u64,
     defn: Option<tremor_script::query::StmtRentalWrapper>,
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
@@ -622,6 +648,7 @@ pub(crate) fn supported_operators(
         _ => crate::operator(&config)?,
     };
     Ok(OperatorNode {
+        uid,
         id: config.id.clone(),
         kind: config.kind,
         op_type: config.op_type.clone(),

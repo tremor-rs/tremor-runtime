@@ -51,11 +51,12 @@ pub enum Pipeline {
 impl Pipeline {
     pub(crate) fn to_executable_graph(
         &self,
+        uid: &mut u64,
         resolver: tremor_pipeline::NodeLookupFn,
     ) -> Result<tremor_pipeline::ExecutableGraph> {
         let mut g = match self {
-            Self::Pipeline(p) => p.to_executable_graph(resolver)?,
-            Self::Query(q) => q.to_pipe()?,
+            Self::Pipeline(p) => p.to_executable_graph(uid, resolver)?,
+            Self::Query(q) => q.to_pipe(uid)?,
         };
         g.optimize();
         Ok(g)

@@ -1,1 +1,1 @@
-rm -r ${TEST_DIR}/wal
+rm -r ${1}/wal

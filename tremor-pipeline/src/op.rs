@@ -35,12 +35,20 @@ pub struct EventAndInsights {
     /// Insights being returned
     pub insights: Vec<Event>,
 }
+
 impl From<Vec<(Cow<'static, str>, Event)>> for EventAndInsights {
     fn from(events: Vec<(Cow<'static, str>, Event)>) -> Self {
         Self {
             events,
             ..Self::default()
         }
+    }
+}
+
+#[cfg(test)]
+impl EventAndInsights {
+    fn len(&self) -> usize {
+        self.events.len()
     }
 }
 
@@ -52,6 +60,7 @@ pub trait Operator: std::fmt::Debug + Send {
     /// a vector of events is passed out.
     fn on_event(
         &mut self,
+        uid: u64,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -63,7 +72,7 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
     /// Handle singal events, defaults to returning an empty vector.
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(&mut self, uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
         // Make the trait signature nicer
         Ok(EventAndInsights::default())
     }
@@ -75,7 +84,7 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 
     /// Handles contraflow events - defaults to a noop
-    fn on_contraflow(&mut self, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
         // Make the trait signature nicer
     }
 

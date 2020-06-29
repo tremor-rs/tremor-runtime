@@ -48,18 +48,21 @@ pub struct EventHistory {
 impl Operator for EventHistory {
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        let id = event.id;
         let (_, meta) = event.data.parts();
         match meta
             .get_mut(self.config.name.as_str())
             .and_then(Value::as_array_mut)
         {
             Some(ref mut history) => {
-                history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
+                history.push(Value::from(format!(
+                    "evt: {}({})",
+                    self.config.op, event.id
+                )));
             }
             None => {
                 if let Some(ref mut obj) = meta.as_object_mut() {
@@ -67,7 +70,7 @@ impl Operator for EventHistory {
                         self.config.name.clone().into(),
                         Value::from(vec![Value::from(format!(
                             "evt: {}({})",
-                            self.config.op, id
+                            self.config.op, event.id
                         ))]),
                     );
                 }
@@ -79,8 +82,7 @@ impl Operator for EventHistory {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
-        let id = signal.id;
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
         let (_, meta) = signal.data.parts();
 
         match meta
@@ -88,7 +90,10 @@ impl Operator for EventHistory {
             .and_then(Value::as_array_mut)
         {
             Some(ref mut history) => {
-                history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
+                history.push(Value::from(format!(
+                    "sig: {}({})",
+                    self.config.op, signal.id
+                )));
             }
             None => {
                 if let Some(ref mut obj) = meta.as_object_mut() {
@@ -96,7 +101,7 @@ impl Operator for EventHistory {
                         self.config.name.clone().into(),
                         Value::from(vec![Value::from(format!(
                             "sig: {}({})",
-                            self.config.op, id
+                            self.config.op, signal.id
                         ))]),
                     );
                 }
@@ -119,7 +124,7 @@ mod test {
             id: "badger".into(),
         };
         let event = Event {
-            id: 1,
+            id: Ids::new(0, 1),
             ingest_ns: 1,
             data: Value::from("badger").into(),
             ..Event::default()
@@ -128,12 +133,13 @@ mod test {
         let mut state = Value::null();
 
         let (out, mut event) = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("Failed to run pipeline")
+            .events
             .pop()
             .expect("Empty results");
         assert_eq!("out", out);
-        let _ = op.on_signal(&mut event);
+        let _ = op.on_signal(0, &mut event);
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

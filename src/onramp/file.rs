@@ -68,7 +68,7 @@ impl std::fmt::Debug for FileInt {
     }
 }
 impl FileInt {
-    async fn from_config(onramp_id: TremorURL, config: Config) -> Result<Self> {
+    async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(FSFile::open(&config.source).await?);
         let ext = Path::new(&config.source)
             .extension()
@@ -82,6 +82,7 @@ impl FileInt {
         };
 
         let origin_uri = tremor_pipeline::EventOriginUri {
+            uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),
             port: None,
@@ -116,7 +117,8 @@ impl Source for FileInt {
         &self.onramp_id
     }
 
-    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+        let _id = id;
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
@@ -147,13 +149,15 @@ impl Source for FileInt {
 impl Onramp for File {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = FileInt::from_config(self.onramp_id.clone(), self.config.clone()).await?;
+        let source =
+            FileInt::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
         let (manager, tx) =
-            SourceManager::new(source, preprocessors, codec, metrics_reporter).await?;
+            SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
         thread::Builder::new()
             .name(format!("on-file-{}", self.config.source))
             .spawn(move || task::block_on(manager.run()))?;

@@ -21,7 +21,7 @@ use std::time::Duration;
 use tungstenite::protocol::Message;
 use url::Url;
 
-type WsAddr = Sender<(u64, WsMessage)>;
+type WsAddr = Sender<(Ids, WsMessage)>;
 
 enum WsMessage {
     Binary(Vec<u8>),
@@ -48,8 +48,8 @@ pub struct Ws {
 enum WSResult {
     Connected(WsAddr),
     Disconnected,
-    Ack(u64),
-    Fail(u64),
+    Ack(Ids),
+    Fail(Ids),
 }
 
 impl Default for WSResult {
@@ -121,14 +121,14 @@ impl Ws {
                 WSResult::Disconnected => self.addr = None,
                 WSResult::Ack(id) => {
                     for p in self.pipelines.values() {
-                        if let Err(e) = p.send_insight(Event::cb_ack(ingest_ns, id)) {
+                        if let Err(e) = p.send_insight(Event::cb_ack(ingest_ns, id.clone())) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
                     }
                 }
                 WSResult::Fail(id) => {
                     for p in self.pipelines.values() {
-                        if let Err(e) = p.send_insight(Event::cb_fail(ingest_ns, id)) {
+                        if let Err(e) = p.send_insight(Event::cb_fail(ingest_ns, id.clone())) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
                     }
@@ -171,7 +171,12 @@ impl Offramp for Ws {
         None
     }
 
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        _input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()> {
         task::block_on(async {
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;
@@ -190,9 +195,9 @@ impl Offramp for Ws {
                     let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
                     for raw in datas {
                         if self.config.binary {
-                            addr.send((event.id, WsMessage::Binary(raw))).await;
+                            addr.send((event.id.clone(), WsMessage::Binary(raw))).await;
                         } else if let Ok(txt) = String::from_utf8(raw) {
-                            addr.send((event.id, WsMessage::Text(txt))).await;
+                            addr.send((event.id.clone(), WsMessage::Text(txt))).await;
                         } else {
                             error!("[WS Offramp] Invalid utf8 data for text message");
                             return Err(Error::from("Invalid utf8 data for text message"));
@@ -205,7 +210,9 @@ impl Offramp for Ws {
                         error!("[WS Offramp] failed to return CB data: {}", e);
                     }
                     for p in self.pipelines.values() {
-                        if let Err(e) = p.send_insight(Event::cb_fail(event.ingest_ns, event.id)) {
+                        if let Err(e) =
+                            p.send_insight(Event::cb_fail(event.ingest_ns, event.id.clone()))
+                        {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
                     }

@@ -84,10 +84,14 @@ impl Manager {
                         self.pipeline.send(pipeline::ManagerMsg::Create(r, c)).await
                     }
                     Ok(ManagerMsg::CreateOnrampt(r, c)) => {
-                        self.onramp.send(onramp::ManagerMsg::Create(r, c)).await
+                        self.onramp
+                            .send(onramp::ManagerMsg::Create(r, Box::new(c)))
+                            .await
                     }
                     Ok(ManagerMsg::CreateOfframp(r, c)) => {
-                        self.offramp.send(offramp::ManagerMsg::Create(r, c)).await
+                        self.offramp
+                            .send(offramp::ManagerMsg::Create(r, Box::new(c)))
+                            .await
                     }
                     Ok(ManagerMsg::Stop) => {
                         info!("Stopping offramps...");

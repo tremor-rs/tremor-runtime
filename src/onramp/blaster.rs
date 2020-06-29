@@ -66,6 +66,7 @@ impl onramp::Impl for Blaster {
                 source_data_file.read_to_end(&mut data)?;
             };
             let origin_uri = tremor_pipeline::EventOriginUri {
+                uid: 0,
                 scheme: "tremor-blaster".to_string(),
                 host: hostname(),
                 port: None,
@@ -98,7 +99,8 @@ impl Source for Blaster {
         &self.onramp_id
     }
 
-    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+        let _id = id;
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
             thread::sleep(Duration::from_nanos(ival));
@@ -143,11 +145,19 @@ impl Source for Blaster {
 impl Onramp for Blaster {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        SourceManager::start(self.clone(), codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            self.clone(),
+            codec,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
     fn default_codec(&self) -> &str {
         "json"

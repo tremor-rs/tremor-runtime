@@ -47,6 +47,7 @@ impl onramp::Impl for Udp {
 }
 
 fn onramp_loop(
+    uid: u64,
     rx: &Receiver<onramp::Msg>,
     config: &Config,
     mut preprocessors: Preprocessors,
@@ -60,6 +61,7 @@ fn onramp_loop(
     let mut id = 0;
 
     let mut origin_uri = tremor_pipeline::EventOriginUri {
+        uid,
         scheme: "tremor-udp".to_string(),
         host: String::default(),
         port: None,
@@ -142,6 +144,7 @@ fn onramp_loop(
 impl Onramp for Udp {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
@@ -153,7 +156,14 @@ impl Onramp for Udp {
         thread::Builder::new()
             .name(format!("onramp-udp-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
+                if let Err(e) = onramp_loop(
+                    onramp_uid,
+                    &rx,
+                    &config,
+                    preprocessors,
+                    codec,
+                    metrics_reporter,
+                ) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

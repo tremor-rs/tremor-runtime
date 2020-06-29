@@ -14,10 +14,12 @@
 
 pub use super::*;
 pub use crate::errors::*;
-pub use crate::{CBAction, Event, Operator};
+pub use crate::{CBAction, Event, Ids, Operator};
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;
+pub use simd_json::OwnedValue;
 pub use std::borrow::Cow;
+pub use value_trait::Value as ValueTrait;
 
 pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
 pub const IN: Cow<'static, str> = Cow::Borrowed("in");
