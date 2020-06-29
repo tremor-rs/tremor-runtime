@@ -20,8 +20,8 @@ fn to_pipe(file_name: String, query: &str) -> std::result::Result<(), CompilerEr
     let module_path = tremor_script::path::load();
     let cus = vec![];
     let q = Query::parse(&module_path, query, &file_name, cus, &reg, &aggr_reg)?;
-
-    q.to_pipe().map_err(|error| CompilerError {
+    let mut uid = 0;
+    q.to_pipe(&mut uid).map_err(|error| CompilerError {
         error: format!("{}", error).into(),
         cus: vec![],
     })?;

@@ -248,8 +248,7 @@ impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
 
 impl<T1, T2> From<(T1, T2)> for rentals::Value
 where
-    Value<'static>: From<T1>,
-    Value<'static>: From<T2>,
+    Value<'static>: From<T1> + From<T2>,
 {
     fn from((v, m): (T1, T2)) -> Self {
         Self::new(vec![], |_| ValueAndMeta {

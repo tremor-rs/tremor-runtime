@@ -1,6 +1,7 @@
 onramp:
   - id: in
     type: bad_onramp
+    sleep_on_done: 1000
 
 offramp:
   - id: out
@@ -31,4 +32,3 @@ binding:
 mapping:
   /binding/test/1:
     instance: "1"
-      

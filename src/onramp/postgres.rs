@@ -71,6 +71,7 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn onramp_loop(
+    uid: u64,
     rx: &Receiver<onramp::Msg>,
     config: &Config,
     mut preprocessors: Preprocessors,
@@ -81,6 +82,7 @@ fn onramp_loop(
     let mut id = 0;
 
     let origin_uri = tremor_pipeline::EventOriginUri {
+        uid,
         scheme: "tremor-file".to_string(),
         host: hostname(),
         port: None,
@@ -317,6 +319,7 @@ fn onramp_loop(
 impl Onramp for Postgres {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
@@ -329,7 +332,14 @@ impl Onramp for Postgres {
         thread::Builder::new()
             .name(format!("onramp-postgres-{}", "???"))
             .spawn(move || {
-                if let Err(e) = onramp_loop(&rx, &config, preprocessors, codec, metrics_reporter) {
+                if let Err(e) = onramp_loop(
+                    onramp_uid,
+                    &rx,
+                    &config,
+                    preprocessors,
+                    codec,
+                    metrics_reporter,
+                ) {
                     error!("[Onramp] Error: {}", e)
                 }
             })?;

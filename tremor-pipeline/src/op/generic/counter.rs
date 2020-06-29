@@ -27,6 +27,7 @@ op!(CounterFactory(_node) {
 impl Operator for Counter {
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         state: &mut Value<'static>,
         event: Event,

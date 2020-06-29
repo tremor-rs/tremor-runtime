@@ -427,6 +427,7 @@ impl Operator for TrickleSelect {
     )]
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -647,7 +648,7 @@ impl Operator for TrickleSelect {
                     events.push((
                         OUT,
                         Event {
-                            id: event.id,
+                            id: event.id.clone(), // FIXME .unwrap() ensure that we track id's for a window
                             ingest_ns: event.ingest_ns,
                             // TODO avoid origin_uri clone here
                             origin_uri: event.origin_uri.clone(),
@@ -844,7 +845,7 @@ impl Operator for TrickleSelect {
                 events.push((
                     OUT,
                     Event {
-                        id: event.id,
+                        id: event.id.clone(), // FIXME .unwrap() ensure we track id's for windows
                         ingest_ns: event.ingest_ns,
                         // TODO avoid origin_uri clone here
                         origin_uri: event.origin_uri.clone(),
@@ -905,7 +906,7 @@ mod test {
 
     fn test_event(s: u64) -> Event {
         Event {
-            id: s,
+            id: s.into(),
             ingest_ns: s * 1_000_000_000,
             data: Value::from(json!({
                "h2g2" : 42,
@@ -950,9 +951,9 @@ mod test {
         event: Event,
     ) -> Result<Option<(Cow<'static, str>, Event)>> {
         let mut state = Value::null();
-        let mut action = op.on_event("in", &mut state, event)?;
-        let first = action.pop();
-        if action.is_empty() {
+        let mut action = op.on_event(0, "in", &mut state, event)?;
+        let first = action.events.pop();
+        if action.events.is_empty() {
             Ok(first)
         } else {
             Ok(None)
@@ -964,11 +965,12 @@ mod test {
         event: Event,
     ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
         let mut state = Value::null();
-        let mut action = op.on_event("in", &mut state, event)?;
+        let mut action = op.on_event(0, "in", &mut state, event)?;
         let r = action
+            .events
             .pop()
-            .and_then(|second| Some([action.pop()?, second]));
-        if action.is_empty() {
+            .and_then(|second| Some([action.events.pop()?, second]));
+        if action.events.is_empty() {
             Ok(r)
         } else {
             Ok(None)

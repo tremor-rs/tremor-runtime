@@ -34,23 +34,25 @@ extern crate log;
 extern crate rental;
 
 use crate::errors::{Error, ErrorKind, Result};
-use crate::op::prelude::IN;
+use crate::op::prelude::*;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
-use petgraph::graph;
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{self, NodeIndex};
 use petgraph::visit::EdgeRef;
 use serde::Serialize;
 use simd_json::prelude::*;
-use simd_json::{json, BorrowedValue};
+use simd_json::{json, BorrowedValue, OwnedValue};
 use std::borrow::Cow;
-use std::iter;
-use std::iter::Iterator;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::collections::BTreeMap;
+use std::iter::{self, Iterator};
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+};
+
 use tremor_script::prelude::*;
 use tremor_script::query::StmtRentalWrapper;
 
@@ -74,6 +76,7 @@ pub(crate) type ExecPortIndexMap =
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
+    uid: u64,
     defn: Option<StmtRentalWrapper>,
     node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
@@ -136,16 +139,84 @@ pub enum CBAction {
     Restore,
     /// Acknowledge delivery of messages up to a given ID.
     /// All messages prior to and including  this will be considered delivered.
-    Ack(u64),
+    Ack,
     /// Fail backwards to a given ID
     /// All messages after and including this will be considered non delivered
-    Fail(u64),
+    Fail,
 }
+/// IDs for covering multiple event sources. We use a vector to represent
+/// this as this:
+/// * Simplifies cloning (represented  inconsecutive memory) :sob:
+/// * Allows easier serialisation/deserialisation
+/// * We don't ever expect a huge number of sources at the same time
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, simd_json_derive::Serialize)]
+pub struct Ids(Vec<(u64, u64)>);
+
+impl fmt::Display for Ids {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut i = self.0.iter();
+        if let Some((oid, eid)) = i.next() {
+            write!(f, "{}: {}", oid, eid)?
+        }
+        for (oid, eid) in i {
+            write!(f, ", {}: {}", oid, eid)?
+        }
+        Ok(())
+    }
+}
+
+impl Ids {
+    /// Fetches the registered eid for a given source
+    pub fn get(&self, uid: u64) -> Option<u64> {
+        self.0
+            .iter()
+            .find_map(|(u, v)| if *u == uid { Some(*v) } else { None })
+    }
+    /// Adds a Id to the id map
+    pub fn add(&mut self, uri: Option<tremor_script::EventOriginUri>, e_id: u64) {
+        if let Some(uri) = uri {
+            self.add_id(uri.uid, e_id)
+        }
+    }
+
+    fn add_id(&mut self, u_id: u64, e_id: u64) {
+        for (cur_uid, cur_eid) in &mut self.0 {
+            if u_id == *cur_uid {
+                if *cur_eid < e_id {
+                    *cur_eid = e_id;
+                }
+                return;
+            }
+        }
+        self.0.push((u_id, e_id))
+    }
+    /// Creates a new Id map
+    pub fn new(u_id: u64, e_id: u64) -> Self {
+        let mut m = Vec::with_capacity(4);
+        m.push((u_id, e_id));
+        Self(m)
+    }
+    /// Merges two id sets, ensures we only ever track the largest id for each
+    /// source
+    pub fn merge(&mut self, other: Self) {
+        for (uid, eid) in other.0 {
+            self.add_id(uid, eid)
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<u64> for Ids {
+    fn from(eid: u64) -> Self {
+        Self::new(0, eid)
+    }
+}
+
 /// A tremor event
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, simd_json_derive::Serialize)]
 pub struct Event {
     /// The event ID
-    pub id: u64,
+    pub id: Ids,
     /// The event Data
     pub data: tremor_script::LineValue,
     /// Nanoseconds at when the event was ingested
@@ -158,9 +229,47 @@ pub struct Event {
     pub is_batch: bool,
     /// Circuit breaker action
     pub cb: Option<CBAction>,
+    /// Metadata for operators
+    pub op_meta: BTreeMap<u64, OwnedValue>,
 }
 
 impl Event {
+    /// Creates a new ack insight from the event, consums the `op_meta` and
+    /// `origin_uri` of the event may return None if no insight is needed
+    pub fn insight_ack(&mut self) -> Option<Event> {
+        let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
+        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
+        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        Some(e)
+    }
+
+    /// Creates a new fail insight from the event, consums the `op_meta` of the
+    /// event may return None if no insight is needed
+    pub fn insight_fail(&mut self) -> Option<Event> {
+        let mut e = Event::cb_fail(self.ingest_ns, self.id.clone());
+        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
+        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        Some(e)
+    }
+
+    /// Creates a restore insight from the event, consums the `op_meta` of the
+    /// event may return None if no insight is needed
+    pub fn insight_restore(&mut self) -> Option<Event> {
+        let mut e = Event::cb_restore(self.ingest_ns);
+        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
+        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        Some(e)
+    }
+
+    /// Creates a trigger insight from the event, consums the `op_meta` of the
+    /// event may return None if no insight is needed
+    pub fn insight_trigger(&mut self) -> Option<Event> {
+        let mut e = Event::cb_trigger(self.ingest_ns);
+        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
+        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        Some(e)
+    }
+
     /// allows to iterate over the values and metadatas
     /// in an event, if it is batched this can be multiple
     /// otherwise it's a singular event
@@ -189,19 +298,21 @@ impl Event {
     }
 
     /// Creates a new event to trigger a CB
-    pub fn cb_ack(ingest_ns: u64, id: u64) -> Self {
+    pub fn cb_ack(ingest_ns: u64, id: Ids) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Ack(id)),
+            id,
+            cb: Some(CBAction::Ack),
             ..Event::default()
         }
     }
 
     /// Creates a new event to trigger a CB
-    pub fn cb_fail(ingest_ns: u64, id: u64) -> Self {
+    pub fn cb_fail(ingest_ns: u64, id: Ids) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Fail(id)),
+            id,
+            cb: Some(CBAction::Fail),
             ..Event::default()
         }
     }
@@ -311,7 +422,7 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
-    /// Creates a NodeConfig from a config struct
+    /// Creates a `NodeConfig` from a config struct
     pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
     where
         C: Serialize,
@@ -363,30 +474,33 @@ pub struct OperatorNode {
     pub op_type: String,
     /// The executable operator
     pub op: Box<dyn Operator>,
+    /// Tremor unique identifyer
+    uid: u64,
 }
 
 impl Operator for OperatorNode {
     fn on_event(
         &mut self,
+        _uid: u64,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_event(port, state, event)
+        self.op.on_event(self.uid, port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
-        self.op.on_signal(signal)
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+        self.op.on_signal(self.uid, signal)
     }
 
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, contraevent: &mut Event) {
-        self.op.on_contraflow(contraevent)
+    fn on_contraflow(&mut self, _uid: u64, contraevent: &mut Event) {
+        self.op.on_contraflow(self.uid, contraevent)
     }
 
     fn metrics(
@@ -442,6 +556,7 @@ fn operator(node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
 #[allow(clippy::implicit_hasher, clippy::needless_pass_by_value)]
 pub fn buildin_ops(
     node: &NodeConfig,
+    uid: u64,
     _defn: Option<StmtRentalWrapper>,
     _nobody_knows: Option<StmtRentalWrapper>,
     _windows: Option<HashMap<String, WindowImpl>>,
@@ -449,6 +564,7 @@ pub fn buildin_ops(
     // Resolve from registry
 
     Ok(OperatorNode {
+        uid,
         id: node.id.clone(),
         kind: node.kind,
         op_type: node.op_type.clone(),
@@ -458,12 +574,13 @@ pub fn buildin_ops(
 impl NodeConfig {
     pub(crate) fn to_op(
         &self,
+        uid: u64,
         resolver: NodeLookupFn,
         defn: Option<StmtRentalWrapper>,
         node: Option<StmtRentalWrapper>,
         window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
-        resolver(&self, defn, node, window)
+        resolver(&self, uid, defn, node, window)
     }
 }
 
@@ -838,7 +955,7 @@ impl ExecutableGraph {
                 returns.push((node.id.clone(), event));
             } else {
                 let EventAndInsights { events, insights } =
-                    node.on_event(&port, &mut self.state.ops[idx], event)?;
+                    node.on_event(0, &port, &mut self.state.ops[idx], event)?;
                 for (out_port, _) in &events {
                     if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
                         .outputs
@@ -945,7 +1062,7 @@ impl ExecutableGraph {
         for idx in &self.contraflow {
             if skip_to.is_none() {
                 let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
-                op.on_contraflow(&mut insight);
+                op.on_contraflow(op.uid, &mut insight);
             } else if skip_to == Some(*idx) {
                 skip_to = None
             }
@@ -966,7 +1083,7 @@ impl ExecutableGraph {
             let i = self.signalflow[idx];
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                op.on_signal(&mut signal)?
+                op.on_signal(op.uid, &mut signal)?
             };
             for cf in insights {
                 self.insights.push((i, cf));
@@ -1000,7 +1117,11 @@ impl Pipeline {
     }
 
     /// Turns a pipeline into its executable form
-    pub fn to_executable_graph(&self, resolver: NodeLookupFn) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(
+        &self,
+        uid: &mut u64,
+        resolver: NodeLookupFn,
+    ) -> Result<ExecutableGraph> {
         let mut i2pos = HashMap::new();
         let mut graph = Vec::new();
         // Nodes that handle contraflow
@@ -1008,8 +1129,9 @@ impl Pipeline {
         // Nodes that handle signals
         let mut signalflow = Vec::new();
         for (i, nx) in self.graph.node_indices().enumerate() {
+            *uid += 1;
             i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(resolver, None, None, None)?;
+            let op = self.graph[nx].to_op(*uid, resolver, None, None, None)?;
             if op.handles_contraflow() {
                 contraflow.push(i);
             }
@@ -1082,11 +1204,11 @@ mod test {
         // FIXME check/fix and move to integration tests - this is out of place as a unit test
         let c = slurp("tests/configs/distsys.yaml");
         let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
+        let mut uid = 0;
         let mut e = p
-            .to_executable_graph(buildin_ops)
+            .to_executable_graph(&mut uid, buildin_ops)
             .expect("failed to build executable graph");
         let event1 = Event {
-            id: 1,
             ingest_ns: 1,
             data: Value::from(json!({"snot": "badger"})).into(),
             ..Event::default()
@@ -1124,11 +1246,12 @@ mod test {
     fn simple_graph_exec() {
         let c = slurp("tests/configs/simple_graph.yaml");
         let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
+        let mut uid = 0;
         let mut e = p
-            .to_executable_graph(buildin_ops)
+            .to_executable_graph(&mut uid, buildin_ops)
             .expect("failed to build executable graph");
         let event1 = Event {
-            id: 1,
+            id: Ids::new(0, 1),
             ingest_ns: 1,
             data: Value::null().into(),
             ..Event::default()
@@ -1138,7 +1261,7 @@ mod test {
             .expect("failed to enqueue");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "out");
-        assert_eq!(results[0].1.id, 1);
+        assert_eq!(results[0].1.id, Ids::new(0, 1));
     }
 
     #[test]
@@ -1146,16 +1269,18 @@ mod test {
         let c = slurp("tests/configs/two_input_complex_graph.yaml");
         let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
         println!("{}", p.to_dot());
+        let mut uid = 0;
+
         let mut e = p
-            .to_executable_graph(buildin_ops)
+            .to_executable_graph(&mut uid, buildin_ops)
             .expect("failed to build executable graph");
         let event1 = Event {
-            id: 1,
+            id: Ids::new(0, 1),
             ingest_ns: 1,
             ..Event::default()
         };
         let event2 = Event {
-            id: 2,
+            id: Ids::new(0, 2),
             ingest_ns: 2,
             ..Event::default()
         };
@@ -1165,47 +1290,59 @@ mod test {
         assert_eq!(results.len(), 6);
         for r in &results {
             assert_eq!(r.0, "out");
-            assert_eq!(r.1.id, 1);
+            assert_eq!(r.1.id, Ids::new(0, 1));
         }
         assert_eq!(
             results[0].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: branch(1)", "evt: m1(1)", "evt: combine(1)"]))
+            Value::from(json!([
+                "evt: branch(0: 1)",
+                "evt: m1(0: 1)",
+                "evt: combine(0: 1)"
+            ]))
         );
         assert_eq!(
             results[1].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
-                "evt: branch(1)",
-                "evt: m1(1)",
-                "evt: m2(1)",
-                "evt: combine(1)"
+                "evt: branch(0: 1)",
+                "evt: m1(0: 1)",
+                "evt: m2(0: 1)",
+                "evt: combine(0: 1)"
             ]))
         );
         assert_eq!(
             results[2].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
-                "evt: branch(1)",
-                "evt: m1(1)",
-                "evt: m2(1)",
-                "evt: m3(1)",
-                "evt: combine(1)"
+                "evt: branch(0: 1)",
+                "evt: m1(0: 1)",
+                "evt: m2(0: 1)",
+                "evt: m3(0: 1)",
+                "evt: combine(0: 1)"
             ]))
         );
         assert_eq!(
             results[3].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: branch(1)", "evt: m2(1)", "evt: combine(1)"]))
+            Value::from(json!([
+                "evt: branch(0: 1)",
+                "evt: m2(0: 1)",
+                "evt: combine(0: 1)"
+            ]))
         );
         assert_eq!(
             results[4].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
-                "evt: branch(1)",
-                "evt: m2(1)",
-                "evt: m3(1)",
-                "evt: combine(1)"
+                "evt: branch(0: 1)",
+                "evt: m2(0: 1)",
+                "evt: m3(0: 1)",
+                "evt: combine(0: 1)"
             ]))
         );
         assert_eq!(
             results[5].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: branch(1)", "evt: m3(1)", "evt: combine(1)"]))
+            Value::from(json!([
+                "evt: branch(0: 1)",
+                "evt: m3(0: 1)",
+                "evt: combine(0: 1)"
+            ]))
         );
 
         let mut results = Vec::new();
@@ -1214,23 +1351,27 @@ mod test {
         assert_eq!(results.len(), 3);
         for r in &results {
             assert_eq!(r.0, "out");
-            assert_eq!(r.1.id, 2);
+            assert_eq!(r.1.id, Ids::new(0, 2));
         }
         assert_eq!(
             results[0].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: m1(2)", "evt: combine(2)"]))
+            Value::from(json!(["evt: m1(0: 2)", "evt: combine(0: 2)"]))
         );
         assert_eq!(
             results[1].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: m1(2)", "evt: m2(2)", "evt: combine(2)"]))
+            Value::from(json!([
+                "evt: m1(0: 2)",
+                "evt: m2(0: 2)",
+                "evt: combine(0: 2)"
+            ]))
         );
         assert_eq!(
             results[2].1.data.suffix().meta()["debug::history"],
             Value::from(json!([
-                "evt: m1(2)",
-                "evt: m2(2)",
-                "evt: m3(2)",
-                "evt: combine(2)"
+                "evt: m1(0: 2)",
+                "evt: m2(0: 2)",
+                "evt: m3(0: 2)",
+                "evt: combine(0: 2)"
             ]))
         );
     }

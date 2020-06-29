@@ -32,7 +32,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use tremor_pipeline::errors::{Error, ErrorKind, Result};
-use tremor_pipeline::Event;
+use tremor_pipeline::{Event, Ids};
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::path::load as load_module_path;
 use tremor_script::{
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
         Err(e) => {
             let mut h = TermHighlighter::new();
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                error!("Error: {}", e);
+                eprintln!("Error: {}", e);
             };
             // ALLOW: main.rs
             std::process::exit(1);
@@ -233,7 +233,8 @@ fn main() -> Result<()> {
         vec![simd_json::borrowed::Value::from(Object::default())]
     };
 
-    let mut execable = runnable.to_pipe()?; // (&ctx, &mut global_map)?;
+    let mut uid = 0;
+    let mut execable = runnable.to_pipe(&mut uid)?; // (&ctx, &mut global_map)?;
 
     // FIXME todo exercise graph with event / MRP
     let mut continuation: tremor_pipeline::Returns = vec![];
@@ -249,7 +250,7 @@ fn main() -> Result<()> {
             execable.enqueue(
                 "in",
                 Event {
-                    id,
+                    id: Ids::new(0, id),
                     ingest_ns,
                     data: value.clone(),
                     ..Event::default()

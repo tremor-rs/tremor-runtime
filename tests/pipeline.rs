@@ -17,7 +17,7 @@ use serde_yaml;
 use std::fs::File;
 use std::io::prelude::*;
 use tremor_pipeline;
-use tremor_pipeline::Event;
+use tremor_pipeline::{Event, Ids};
 use tremor_runtime;
 use tremor_runtime::errors::*;
 use tremor_script::utils::*;
@@ -39,7 +39,8 @@ macro_rules! test_cases {
                 std::env::set_var("TREMOR_PATH", "tremor-script/lib");
                 let config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(&contents)?;
                 let pipeline = tremor_pipeline::build_pipeline(config)?;
-                let mut pipeline = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
+                let mut uid = 0;
+                let mut pipeline = pipeline.to_executable_graph(&mut uid, tremor_pipeline::buildin_ops)?;
 
                 let in_json = load_event_file(in_file)?;
                 let mut out_json = load_event_file(out_file)?;
@@ -49,7 +50,7 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
-                        id: id as u64,
+                        id: Ids::new(0, (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
                         ..Event::default()

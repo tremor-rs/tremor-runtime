@@ -14,6 +14,7 @@
 
 use crate::config::dflt;
 use crate::op::prelude::*;
+use std::mem::swap;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,7 +36,7 @@ pub struct Batch {
     pub max_delay_ns: Option<u64>,
     pub first_ns: u64,
     pub id: Cow<'static, str>,
-    pub event_id: u64,
+    pub event_ids: Ids,
 }
 
 pub fn empty() -> LineValue {
@@ -51,13 +52,13 @@ if let Some(map) = &node.config {
         None
     };
     Ok(Box::new(Batch {
-        event_id: 0,
         data: empty(),
         len: 0,
         config,
         max_delay_ns,
         first_ns: 0,
         id: node.id.clone(),
+        event_ids: Ids::default(),
     }))
 } else {
     Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
@@ -67,6 +68,7 @@ if let Some(map) = &node.config {
 impl Operator for Batch {
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
@@ -79,13 +81,14 @@ impl Operator for Batch {
             is_batch,
             ..
         } = event;
+        self.event_ids.merge(id);
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
                 if let Some(ref mut a) = this.value_mut().as_array_mut() {
                     let mut e = Object::with_capacity(7);
                     // {"id":1,
-                    e.insert_nocheck("id".into(), id.into());
+                    // e.insert_nocheck("id".into(), id.into());
                     //  "data": {
                     //      "value": "snot", "meta":{}
                     //  },
@@ -118,16 +121,15 @@ impl Operator for Batch {
         if flush {
             //TODO: This is ugly
             let mut data = empty();
-            std::mem::swap(&mut data, &mut self.data);
+            swap(&mut data, &mut self.data);
             self.len = 0;
-            let event = Event {
-                id: self.event_id,
+            let mut event = Event {
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
                 ..Event::default()
             };
-            self.event_id += 1;
+            swap(&mut self.event_ids, &mut event.id);
             Ok(vec![(OUT, event)].into())
         } else {
             Ok(EventAndInsights::default())
@@ -138,23 +140,22 @@ impl Operator for Batch {
         true
     }
 
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
         if let Some(delay_ns) = self.max_delay_ns {
             if signal.ingest_ns - self.first_ns > delay_ns {
                 // We don't want to modify the original signal we clone it to
                 // create a new event.
 
                 let mut data = empty();
-                std::mem::swap(&mut data, &mut self.data);
+                swap(&mut data, &mut self.data);
                 self.len = 0;
-                let event = Event {
-                    id: self.event_id,
+                let mut event = Event {
                     data,
                     ingest_ns: self.first_ns,
                     is_batch: true,
                     ..Event::default()
                 };
-                self.event_id += 1;
+                swap(&mut self.event_ids, &mut event.id);
                 Ok(EventAndInsights::from(vec![(OUT, event)]))
             } else {
                 Ok(EventAndInsights::default())
@@ -177,7 +178,7 @@ mod test {
                 count: 2,
                 timeout: None,
             },
-            event_id: 0,
+            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: None,
             data: empty(),
@@ -185,7 +186,7 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -194,22 +195,22 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event("in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("badger").into(),
             ..Event::default()
         };
 
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
+            .on_event(0, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
-        let (out, event) = r.pop().expect("no results");
+        let (out, event) = r.events.pop().expect("no results");
         assert_eq!("out", out);
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
@@ -218,14 +219,14 @@ mod test {
         );
 
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
         let r = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
@@ -237,7 +238,7 @@ mod test {
                 count: 100,
                 timeout: Some(1),
             },
-            event_id: 0,
+            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
             data: empty(),
@@ -245,7 +246,7 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -261,20 +262,21 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event("in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2_000_000,
             data: Value::from("badger").into(),
             ..Event::default()
         };
 
         let mut r = op
-            .on_event("in", &mut state, event2.clone())
-            .expect("could not run pipeline");
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty results");
         assert_eq!("out", out);
@@ -286,26 +288,26 @@ mod test {
         );
 
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
         let r = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
         let r = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
@@ -317,7 +319,7 @@ mod test {
                 count: 100,
                 timeout: Some(1),
             },
-            event_id: 0,
+            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
             data: empty(),
@@ -325,7 +327,7 @@ mod test {
             id: "badger".into(),
         };
         let event1 = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -334,18 +336,21 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event("in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1.clone())
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
         let mut signal = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2_000_000,
             data: Value::null().into(),
             ..Event::default()
         };
 
-        let (mut r, _) = op.on_signal(&mut signal).expect("failed to run pipeline");
+        let mut r = op
+            .on_signal(0, &mut signal)
+            .expect("failed to run pipeline")
+            .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);
@@ -354,26 +359,26 @@ mod test {
         assert_eq!(events, vec![event1.data.suffix().value()]);
 
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
         let r = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            id: 1,
+            id: 1.into(),
             ingest_ns: 2,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
         let r = op
-            .on_event("in", &mut state, event)
+            .on_event(0, "in", &mut state, event)
             .expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }

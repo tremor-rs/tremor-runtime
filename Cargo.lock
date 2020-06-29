@@ -4359,9 +4359,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive"
-version = "0.1.2"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370cd97d30dc63cac8ba5f1d5f5e75298b9ce61a17610f4f6ba84547c123b4d7"
+checksum = "b3b4fe76283091a46d8bd25473da0ba1791030e84bbfa0882941d6ccdd7d33ac"
 dependencies = [
  "chrono",
  "itoa",
@@ -5368,6 +5368,7 @@ dependencies = [
  "sled",
  "tremor-influx",
  "tremor-script",
+ "value-trait",
  "window",
  "xz2",
 ]

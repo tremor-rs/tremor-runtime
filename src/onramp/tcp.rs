@@ -17,7 +17,9 @@ use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token};
 use serde_yaml::Value;
 use std::io::{ErrorKind, Read};
+use std::net::SocketAddr;
 use std::time::Duration;
+use tremor_pipeline::EventOriginUri;
 
 const ONRAMP: Token = Token(0);
 
@@ -38,6 +40,7 @@ pub struct Tcp {
 }
 
 pub struct Int {
+    uid: u64,
     config: Config,
     poll: Poll,
     listener: Option<TcpListener>,
@@ -56,7 +59,7 @@ impl std::fmt::Debug for Int {
     }
 }
 impl Int {
-    fn from_config(onramp_id: TremorURL, config: &Config) -> Result<Self> {
+    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
         let config = config.clone();
         let poll = Poll::new()?;
         let events = Events::with_capacity(1024);
@@ -68,6 +71,7 @@ impl Int {
         let returned_tokens: Vec<usize> = vec![];
 
         Ok(Self {
+            uid,
             config,
             poll,
             listener: None,
@@ -97,7 +101,7 @@ impl onramp::Impl for Tcp {
 
 struct TremorTcpConnection {
     stream: TcpStream,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: EventOriginUri,
 }
 
 impl TremorTcpConnection {
@@ -108,13 +112,46 @@ impl TremorTcpConnection {
     }
 }
 
+impl Int {
+    // if there are any returned tokens, use it to keep track of the
+    // connection. otherwise create a new one.
+    fn next_token(&mut self, mut tcp_connection: TremorTcpConnection) -> Result<usize> {
+        let token_num = if let Some(token_num) = self.returned_tokens.pop() {
+            trace!(
+                "Tracking connection with returned token number: {}",
+                token_num
+            );
+            token_num
+        } else {
+            let token_num = self.connections.len();
+            trace!("Tracking connection with new token number: {}", token_num);
+            token_num
+        };
+        tcp_connection.register(&self.poll, Token(token_num))?;
+        self.connections[token_num] = Some(tcp_connection);
+        Ok(token_num)
+    }
+
+    fn uri(&self, client_addr: &SocketAddr) -> EventOriginUri {
+        EventOriginUri {
+            uid: self.uid,
+            scheme: "tremor-tcp".to_string(),
+            host: client_addr.ip().to_string(),
+            port: Some(client_addr.port()),
+            // TODO also add token_num here?
+            path: vec![self.config.port.to_string()], // captures server port
+        }
+    }
+}
+
 #[async_trait::async_trait()]
 impl Source for Int {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
 
-    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+        let _id = id;
         // temporary buffer to keep data read from the tcp socket
         let mut buffer = [0; BUFFER_SIZE_BYTES];
 
@@ -136,39 +173,13 @@ impl Source for Int {
                                     return Err(e.into());
                                 }
                                 Ok((stream, client_addr)) => {
-                                    debug!("Accepted connection from client: {}", client_addr);
+                                    debug!("Accepted connection from client: {}", &client_addr);
 
-                                    let origin_uri = tremor_pipeline::EventOriginUri {
-                                        scheme: "tremor-tcp".to_string(),
-                                        host: client_addr.ip().to_string(),
-                                        port: Some(client_addr.port()),
-                                        // TODO also add token_num here?
-                                        path: vec![self.config.port.to_string()], // captures server port
-                                    };
+                                    let origin_uri = self.uri(&client_addr);
 
-                                    let mut tcp_connection =
-                                        TremorTcpConnection { stream, origin_uri };
+                                    let id = self
+                                        .next_token(TremorTcpConnection { stream, origin_uri })?;
 
-                                    // if there are any returned tokens, use it to keep track of the
-                                    // connection. otherwise create a new one.
-                                    let id = if let Some(token_num) = self.returned_tokens.pop() {
-                                        trace!(
-                                            "Tracking connection with returned token number: {}",
-                                            token_num
-                                        );
-                                        tcp_connection.register(&self.poll, Token(token_num))?;
-                                        self.connections[token_num] = Some(tcp_connection);
-                                        token_num
-                                    } else {
-                                        let token_num = self.connections.len();
-                                        trace!(
-                                            "Tracking connection with new token number: {}",
-                                            token_num
-                                        );
-                                        tcp_connection.register(&self.poll, Token(token_num))?;
-                                        self.connections.push(Some(tcp_connection));
-                                        token_num
-                                    };
                                     self.new_streams.push(id);
                                 }
                             }
@@ -262,12 +273,13 @@ impl Source for Int {
 impl Onramp for Tcp {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(self.onramp_id.clone(), &self.config)?;
-        SourceManager::start(source, codec, preprocessors, metrics_reporter).await
+        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
+        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {

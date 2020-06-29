@@ -28,6 +28,7 @@ use tremor_script::path::ModulePath;
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let cus = vec![];
+    let mut uid = 0;
     let q = Query::parse(
         module_path,
         query,
@@ -36,7 +37,7 @@ fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<Exe
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
-    Ok(q.to_pipe()?)
+    Ok(q.to_pipe(&mut uid)?)
 }
 
 macro_rules! test_cases {

@@ -26,8 +26,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .list_onramps()
         .await
         .iter()
-        .filter_map(tremor_runtime::url::TremorURL::artefact)
-        .map(String::from)
+        .filter_map(|v| v.artefact().map(String::from))
         .collect();
     reply(req, result, false, StatusCode::Ok).await
 }
@@ -58,8 +57,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
         instances: result
             .instances
             .iter()
-            .filter_map(TremorURL::instance)
-            .map(String::from)
+            .filter_map(|v| v.instance().map(String::from))
             .collect(),
     };
 

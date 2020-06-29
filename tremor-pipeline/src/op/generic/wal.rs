@@ -49,10 +49,18 @@ impl Add<u64> for Idx {
         Idx::from(u64::from(self) + rhs)
     }
 }
+
 impl Add<u8> for Idx {
     type Output = Idx;
     fn add(self, rhs: u8) -> Self::Output {
-        self + (rhs as u64)
+        self + u64::from(rhs)
+    }
+}
+
+impl Add<usize> for Idx {
+    type Output = Idx;
+    fn add(self, rhs: usize) -> Self::Output {
+        Idx::from(u64::from(self) + rhs as u64)
     }
 }
 
@@ -80,8 +88,8 @@ impl From<Idx> for u64 {
 impl From<IVec> for Idx {
     fn from(v: IVec) -> Self {
         let mut rdr = Cursor::new(v);
-        let v: u64 = rdr.read_u64::<BigEndian>().unwrap_or(0);
-        Self(unsafe { mem::transmute(v.to_be()) })
+        let res: u64 = rdr.read_u64::<BigEndian>().unwrap_or(0);
+        Self(unsafe { mem::transmute(res.to_be()) })
     }
 }
 impl From<u64> for Idx {
@@ -112,11 +120,11 @@ impl From<Idx> for IVec {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, serde::Serialize)]
 pub struct Config {
     /// Maximum number of events to read per tick/event when filling
     /// up from the persistant storage
-    pub read_count: u64,
+    pub read_count: usize,
 
     /// The directory to store data in, if no dir is provided this will use
     /// a temporary storage that won't persist over restarts
@@ -184,6 +192,7 @@ op!(WalFactory(node) {
             broken: true,
             full: false,
             origin_uri: Some(EventOriginUri {
+                uid: 0,
                 scheme: "tremor-wal".to_string(),
                 host: "pipeline".to_string(),
                 port: None,
@@ -196,7 +205,8 @@ op!(WalFactory(node) {
 });
 
 impl WAL {
-    fn auto_commit(&mut self, _now: u64) -> Result<bool> {
+    #[allow(clippy::unused_self)]
+    fn auto_commit(&self, _now: u64) -> Result<bool> {
         Ok(true)
     }
 
@@ -216,6 +226,7 @@ impl WAL {
             let (_idx, e) = e?;
             self.read += 1;
             let e_slice: &[u8] = &e;
+            dbg!(String::from_utf8(e_slice.to_vec())).ok();
             let mut ev = Vec::from(e_slice);
             let event = simd_json::from_slice(&mut ev)?;
             events.push((OUT, event))
@@ -225,10 +236,10 @@ impl WAL {
         Ok(events)
     }
 
-    fn store_event(&mut self, mut event: Event) -> Result<()> {
+    fn store_event(&mut self, uid: u64, mut event: Event) -> Result<()> {
         let id = self.wal.generate_id()?;
         let write: [u8; 8] = unsafe { mem::transmute(id.to_be()) };
-        event.id = id;
+        event.id = Ids::new(uid, id);
 
         // Sieralize and write the event
         let event_buf = event.json_vec()?;
@@ -245,12 +256,6 @@ impl WAL {
             let (idx, _) = e?;
             self.events_tree.remove(idx)?;
         }
-        debug!(
-            "removed {} elements (={}, {}b)",
-            i,
-            self.cnt,
-            self.wal.size_on_disk().unwrap()
-        );
         Ok(i)
     }
 }
@@ -266,13 +271,19 @@ impl Operator for WAL {
     fn handles_contraflow(&self) -> bool {
         true
     }
-    fn on_contraflow(&mut self, insight: &mut Event) {
+    fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
         if insight.cb == Some(CBAction::Restore) {
             self.broken = false;
         } else if insight.cb == Some(CBAction::Trigger) {
             self.broken = true;
-        } else if let Some(CBAction::Ack(confirmed)) = &mut insight.cb {
-            self.confirmed.set(*confirmed);
+        } else if let Some(CBAction::Ack) = &mut insight.cb {
+            let c_id = if let Some(c_id) = insight.id.get(u_id) {
+                c_id
+            } else {
+                // This is not for us
+                return;
+            };
+            self.confirmed.set(c_id);
             if let Err(e) = self.state_tree.insert("read", self.confirmed) {
                 error!("Failed to persist confirm state: {}", e);
             }
@@ -282,11 +293,17 @@ impl Operator for WAL {
                 .ok()
                 .and_then(maybe_parse_ivec)
             {
-                debug!("WAL confirm: {}", confirmed);
-                *confirmed = e.id;
+                debug!("WAL confirm: {}", c_id);
+                insight.id.merge(e.id);
             }
-        } else if let Some(CBAction::Fail(fail)) = &mut insight.cb {
-            self.read.set_min(*fail);
+        } else if let Some(CBAction::Fail) = &mut insight.cb {
+            let f_id = if let Some(f_id) = insight.id.get(u_id) {
+                f_id
+            } else {
+                // This is not for us
+                return;
+            };
+            self.read.set_min(f_id);
 
             if let Some(e) = self
                 .events_tree
@@ -294,16 +311,16 @@ impl Operator for WAL {
                 .ok()
                 .and_then(maybe_parse_ivec)
             {
-                *fail = e.id;
+                insight.id.merge(e.id);
             }
 
             let c = u64::from(self.confirmed);
-            if *fail < c {
+            if f_id < c {
                 error!(
                     "trying to fail a message({}) that was already confirmed({})",
-                    fail, c
+                    f_id, c
                 );
-                self.confirmed.set(*fail);
+                self.confirmed.set(f_id);
                 if let Err(e) = self.state_tree.insert("read", self.confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
@@ -315,7 +332,7 @@ impl Operator for WAL {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
         // Are we currently full
         let now_full = self.limit_reached()?;
@@ -333,24 +350,25 @@ impl Operator for WAL {
             vec![]
         };
         self.full = now_full;
-        let events = if !self.broken {
-            self.read_events(now)?
-        } else {
+        let events = if self.broken {
             vec![]
+        } else {
+            self.read_events(now)?
         };
         Ok(EventAndInsights { insights, events })
     }
 
     fn on_event(
         &mut self,
+        uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        let id = event.id;
+        let id = event.id.clone();
         let now = event.ingest_ns;
 
-        self.store_event(event)?;
+        self.store_event(uid, event)?;
 
         let insight = Event::cb_ack(now, id);
         let insights = vec![insight];
@@ -381,27 +399,28 @@ mod test {
         // The operator start in broken status
 
         // Send a first event
-        let r = o.on_event("in", &mut v, e.clone())?;
+        let r = o.on_event(0, "in", &mut v, e.clone())?;
         // Since we are broken we should get nothing back
         assert_eq!(r.len(), 0);
 
         // Restore the CB
         let mut i = Event::cb_restore(0);
-        o.on_contraflow(&mut i);
+        o.on_contraflow(0, &mut i);
 
         // Send a second event
-        let r = o.on_event("in", &mut v, e.clone())?;
+        let r = o.on_event(0, "in", &mut v, e.clone())?;
         // Since we are restored we now get 2 events (1 and 2)
         assert_eq!(r.len(), 2);
 
         // Send a fail event beck to 1, this tell the WAL that delivery of
         // 2 failed and they need to be delivered again
         let mut i = Event::default();
-        i.cb = Some(CBAction::Fail(1));
-        o.on_contraflow(&mut i);
+        i.id = 1.into();
+        i.cb = Some(CBAction::Fail);
+        o.on_contraflow(0, &mut i);
 
         // Send a second event
-        let r = o.on_event("in", &mut v, e.clone())?;
+        let r = o.on_event(0, "in", &mut v, e.clone())?;
         // since we failed before we should see 2 events, 3 and the retransmit
         // of 2
         assert_eq!(r.len(), 2);
@@ -409,11 +428,13 @@ mod test {
         // Send a fail event beck to 0, this tell the WAL that delivery of
         // 1, 2, 3 failed and they need to be delivered again
         let mut i = Event::default();
-        i.cb = Some(CBAction::Fail(0));
-        o.on_contraflow(&mut i);
+        i.id = 1.into();
+
+        i.cb = Some(CBAction::Fail);
+        o.on_contraflow(0, &mut i);
 
         // Send a second event
-        let r = o.on_event("in", &mut v, e.clone())?;
+        let r = o.on_event(0, "in", &mut v, e.clone())?;
         // since we failed before we should see 4 events, 4 and the retransmit
         // of 1-3
         assert_eq!(r.len(), 4);

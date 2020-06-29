@@ -133,6 +133,7 @@ impl Operator for TrickleScript {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         state: &mut Value<'static>,
         mut event: Event,

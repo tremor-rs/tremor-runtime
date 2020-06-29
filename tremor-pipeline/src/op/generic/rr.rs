@@ -92,9 +92,10 @@ if let Some(map) = &node.config {
 impl Operator for RoundRobin {
     fn on_event(
         &mut self,
+        uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
         let mut output = None;
         for n in 0..self.outputs.len() {
@@ -102,17 +103,13 @@ impl Operator for RoundRobin {
             let o = &mut self.outputs[id];
             if o.open {
                 // :/ need pipeline lifetime to fix
-                output = Some(o.output.clone());
+                output = Some((o.output.clone(), id));
                 self.next = id + 1;
                 break;
             }
         }
-        if let Some(out) = output {
-            let (_, meta) = event.data.parts();
-
-            if let Some(meta) = meta.as_object_mut() {
-                meta.insert("backpressure-output".into(), out.clone().into());
-            };
+        if let Some((out, oid)) = output {
+            event.op_meta.insert(uid, oid.into());
             Ok(vec![(out.into(), event)].into())
         } else {
             Ok(vec![("overflow".into(), event)].into())
@@ -123,29 +120,25 @@ impl Operator for RoundRobin {
         true
     }
 
-    fn on_contraflow(&mut self, insight: &mut Event) {
-        let (_, meta) = insight.data.parts();
-        let output = meta
-            .get("backpressure-output")
-            .and_then(Value::as_str)
-            .unwrap_or("out");
-        let mut any_available = false;
-        let mut any_were_available = true;
+    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
         let RoundRobin {
             ref mut outputs, ..
         } = *self;
-        for o in outputs.iter_mut() {
-            any_were_available = any_were_available && o.open;
-            if o.output == output {
-                if let Some(CBAction::Trigger) = insight.cb {
-                    o.open = false;
-                } else if let Some(CBAction::Restore) = insight.cb {
-                    o.open = true;
-                }
-                // todo
+
+        let any_were_available = outputs.iter().any(|o| o.open);
+        if let Some(o) = insight
+            .op_meta
+            .get(&uid)
+            .and_then(OwnedValue::as_usize)
+            .and_then(|id| outputs.get_mut(id))
+        {
+            if let Some(CBAction::Trigger) = insight.cb {
+                o.open = false;
+            } else if let Some(CBAction::Restore) = insight.cb {
+                o.open = true;
             }
-            any_available = any_available || o.open;
         }
+        let any_available = outputs.iter().any(|o| o.open);
 
         if any_available && !any_were_available {
             insight.cb = Some(CBAction::Restore);
@@ -162,6 +155,6 @@ impl Operator for RoundRobin {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use simd_json::value::borrowed::Object;
+    //use super::*;
+    //use simd_json::value::borrowed::Object;
 }

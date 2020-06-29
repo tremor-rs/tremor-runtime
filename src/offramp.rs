@@ -75,7 +75,12 @@ pub type Addr = CbSender<Msg>;
 #[allow(clippy::borrowed_box, unused_variables)]
 pub trait Offramp: Send {
     fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
-    fn on_event(&mut self, codec: &Box<dyn Codec>, input: String, event: Event) -> Result<()>;
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()>;
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
@@ -135,9 +140,8 @@ impl fmt::Debug for Create {
 }
 
 /// This is control plane
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
-    Create(async_std::sync::Sender<Result<Addr>>, Create),
+    Create(async_std::sync::Sender<Result<Addr>>, Box<Create>),
     Stop,
 }
 
@@ -146,163 +150,129 @@ pub(crate) struct Manager {
     qsize: usize,
 }
 
+fn send_to_pipelines(
+    offramp_id: &TremorURL,
+    pipelines: &HashMap<TremorURL, pipeline::Addr>,
+    e: &Event,
+) {
+    for p in pipelines.values() {
+        if let Err(e) = p.send_insight(e.clone()) {
+            error!("[Offramp::{}] Counterflow error: {}", offramp_id, e);
+        };
+    }
+}
+
 impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
+    }
+
+    async fn offramp_thread(
+        &self,
+        r: async_std::sync::Sender<Result<Addr>>,
+        Create {
+            codec,
+            mut offramp,
+            postprocessors,
+            mut metrics_reporter,
+            id,
+        }: Create,
+    ) {
+        if let Err(e) = offramp.start(&codec, &postprocessors) {
+            error!("Failed to create onramp {}: {}", id, e);
+            return;
+        }
+
+        let (tx, rx) = bounded(self.qsize);
+        let offramp_id = id.clone();
+        thread::spawn(move || {
+            let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
+            info!("[Offramp::{}] started", offramp_id);
+
+            for m in rx {
+                match m {
+                    Msg::Signal(signal) => {
+                        if let Some(insight) = offramp.on_signal(signal) {
+                            send_to_pipelines(&offramp_id, &pipelines, &insight);
+                        }
+                    }
+                    Msg::Event { event, input } => {
+                        let ingest_ns = event.ingest_ns;
+                        let id = event.id.clone(); // FIXME: restructure for perf .unwrap()
+                        metrics_reporter.periodic_flush(ingest_ns);
+                        metrics_reporter.increment_in();
+
+                        // TODO FIXME implement postprocessors
+                        let e = if let Err(e) = offramp.on_event(&codec, input, event) {
+                            metrics_reporter.increment_error();
+                            error!("[Offramp::{}] On Event error: {}", offramp_id, e);
+                            Event::cb_fail(ingest_ns, id.clone())
+                        } else {
+                            metrics_reporter.increment_out();
+                            Event::cb_ack(ingest_ns, id.clone())
+                        };
+                        if offramp.auto_ack() {
+                            // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
+                            send_to_pipelines(&offramp_id, &pipelines, &e);
+                        }
+                    }
+                    Msg::Connect { id, addr } => {
+                        if id == *METRICS_PIPELINE {
+                            info!(
+                                "[Offramp::{}] Connecting system metrics pipeline {}",
+                                offramp_id, id
+                            );
+                            metrics_reporter.set_metrics_pipeline((id, addr));
+                        } else {
+                            info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
+                            let insight = if offramp.is_active() {
+                                Event::cb_restore(nanotime())
+                            } else {
+                                Event::cb_trigger(nanotime())
+                            };
+                            if let Err(e) = addr.send_insight(insight) {
+                                error!(
+                                    "[Offramp::{}] Could not send initial insight to {}: {}",
+                                    offramp_id, id, e
+                                );
+                            };
+
+                            pipelines.insert(id.clone(), addr.clone());
+                            offramp.add_pipeline(id, addr);
+                        }
+                    }
+                    Msg::Disconnect { id, tx } => {
+                        info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
+                        pipelines.remove(&id);
+                        let r = offramp.remove_pipeline(id.clone());
+                        info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
+                        if r {
+                            info!("[Offramp::{}] Marked as done ", offramp_id);
+                        }
+                        if let Err(e) = tx.send(r) {
+                            error!("Failed to send reply: {}", e)
+                        }
+                    }
+                }
+            }
+            info!("[Offramp::{}] stopped", offramp_id);
+        });
+        r.send(Ok(tx)).await
     }
 
     pub fn start(self) -> (JoinHandle<bool>, Sender) {
         let (tx, rx) = channel(64);
         let h = task::spawn(async move {
             info!("Onramp manager started");
-            loop {
-                match rx.recv().await {
-                    Ok(ManagerMsg::Stop) => {
+            while let Ok(msg) = rx.recv().await {
+                match msg {
+                    ManagerMsg::Stop => {
                         info!("Stopping onramps...");
                         break;
                     }
-                    Ok(ManagerMsg::Create(
-                        r,
-                        Create {
-                            codec,
-                            mut offramp,
-                            postprocessors,
-                            mut metrics_reporter,
-                            id,
-                        },
-                    )) => {
-                        match offramp.start(&codec, &postprocessors) {
-                            Ok(_) => (),
-                            Err(e) => {
-                                error!("Failed to create onramp {}: {}", id, e);
-                                continue;
-                            }
-                        }
-
-                        let (tx, rx) = bounded(self.qsize);
-                        let offramp_id = id.clone();
-                        thread::spawn(move || {
-                            let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
-                            info!("[Offramp::{}] started", offramp_id);
-                            for m in rx {
-                                match m {
-                                    Msg::Signal(signal) => {
-                                        if let Some(insight) = offramp.on_signal(signal) {
-                                            for p in pipelines.values() {
-                                                if let Err(e) = p.send_insight(insight.clone()) {
-                                                    error!(
-                                                        "[Offramp::{}] Counterflow error: {}",
-                                                        offramp_id, e
-                                                    );
-                                                };
-                                            }
-                                        }
-                                    }
-                                    Msg::Event { event, input } => {
-                                        let ingest_ns = event.ingest_ns;
-                                        let id = event.id;
-                                        metrics_reporter.periodic_flush(ingest_ns);
-
-                                        metrics_reporter.increment_in();
-                                        // TODO FIXME implement postprocessors
-                                        match offramp.on_event(&codec, input.into(), event) {
-                                            Ok(_) => {
-                                                if offramp.auto_ack() {
-                                                    // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
-                                                    for p in pipelines.values() {
-                                                        if let Err(e) = p.send_insight(
-                                                            Event::cb_ack(ingest_ns, id),
-                                                        ) {
-                                                            error!(
-                                                                "[Offramp::{}] Counterflow error: {}",
-                                                                offramp_id, e
-                                                            );
-                                                        };
-                                                    }
-                                                }
-                                                metrics_reporter.increment_out()
-                                            }
-                                            Err(e) => {
-                                                if offramp.auto_ack() {
-                                                    // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
-                                                    for p in pipelines.values() {
-                                                        if let Err(e) = p.send_insight(
-                                                            Event::cb_fail(ingest_ns, id),
-                                                        ) {
-                                                            error!(
-                                                                "[Offramp::{}] Counterflow error: {}",
-                                                                offramp_id, e
-                                                            );
-                                                        };
-                                                    }
-                                                }
-
-                                                metrics_reporter.increment_error();
-                                                error!(
-                                                    "[Offramp::{}] On Event error: {}",
-                                                    offramp_id, e
-                                                );
-                                            }
-                                        }
-                                    }
-                                    Msg::Connect { id, addr } => {
-                                        if id == *METRICS_PIPELINE {
-                                            info!(
-                                                "[Offramp::{}] Connecting system metrics pipeline {}",
-                                                offramp_id, id
-                                            );
-                                            metrics_reporter.set_metrics_pipeline((id, addr));
-                                        } else {
-                                            info!(
-                                                "[Offramp::{}] Connecting pipeline {}",
-                                                offramp_id, id
-                                            );
-                                            let insight = if offramp.is_active() {
-                                                Event::cb_restore(nanotime())
-                                            } else {
-                                                Event::cb_trigger(nanotime())
-                                            };
-                                            if let Err(e) = addr.send_insight(insight) {
-                                                error!(
-                                                    "[Offramp::{}] Could not send initial insight to {}: {}",
-                                                    offramp_id, id, e
-                                                );
-                                            };
-
-                                            pipelines.insert(id.clone(), addr.clone());
-                                            offramp.add_pipeline(id, addr);
-                                        }
-                                    }
-                                    Msg::Disconnect { id, tx } => {
-                                        info!(
-                                            "[Offramp::{}] Disconnecting pipeline {}",
-                                            offramp_id, id
-                                        );
-                                        pipelines.remove(&id);
-                                        let r = offramp.remove_pipeline(id.clone());
-                                        info!(
-                                            "[Offramp::{}] Pipeline {} disconnected",
-                                            offramp_id, id
-                                        );
-                                        if r {
-                                            info!("[Offramp::{}] Marked as done ", offramp_id);
-                                        }
-
-                                        if let Err(e) = tx.send(r) {
-                                            error!("Failed to send reply: {}", e)
-                                        }
-                                    }
-                                }
-                            }
-                            info!("[Offramp::{}] stopped", offramp_id);
-                        });
-                        r.send(Ok(tx)).await
-                    }
-                    Err(e) => {
-                        info!("Stopping onramps...: {}", e);
-                        break;
-                    }
+                    ManagerMsg::Create(r, c) => self.offramp_thread(r, *c).await,
                 };
+                info!("Stopping onramps...");
             }
             info!("Onramp manager stopped.");
             true

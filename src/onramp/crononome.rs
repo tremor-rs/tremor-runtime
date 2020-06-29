@@ -103,6 +103,7 @@ impl onramp::Impl for Crononome {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = tremor_pipeline::EventOriginUri {
+                uid: 0,
                 scheme: "tremor-crononome".to_string(),
                 host: hostname(),
                 port: None,
@@ -330,11 +331,19 @@ impl Source for Crononome {
 impl Onramp for Crononome {
     async fn start(
         &mut self,
+        onramp_uid: u64,
         codec: &str,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        SourceManager::start(self.clone(), codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            self.clone(),
+            codec,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {

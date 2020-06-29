@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
-use tremor_script;
 use tremor_script::prelude::*;
 
 #[allow(clippy::module_name_repetitions)]
@@ -87,25 +86,26 @@ impl TrickleOperator {
 impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
+        uid: u64,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_event(port, state, event)
+        self.op.on_event(uid, port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, signal: &mut Event) -> Result<EventAndInsights> {
-        self.op.on_signal(signal)
+    fn on_signal(&mut self, uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+        self.op.on_signal(uid, signal)
     }
 
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, contraevent: &mut Event) {
-        self.op.on_contraflow(contraevent)
+    fn on_contraflow(&mut self, uid: u64, contraevent: &mut Event) {
+        self.op.on_contraflow(uid, contraevent)
     }
 
     fn metrics(

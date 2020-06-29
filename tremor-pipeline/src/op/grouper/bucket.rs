@@ -139,6 +139,7 @@ impl std::fmt::Debug for Grouper {
 impl Operator for Grouper {
     fn on_event(
         &mut self,
+        _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,

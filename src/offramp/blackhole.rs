@@ -93,7 +93,12 @@ impl Offramp for Blackhole {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(
+        &mut self,
+        codec: &Box<dyn Codec>,
+        _input: Cow<'static, str>,
+        event: Event,
+    ) -> Result<()> {
         for value in event.value_iter() {
             let now_ns = nanotime();
 

@@ -67,14 +67,13 @@ trait SliceTrim {
 }
 
 impl SliceTrim for [u8] {
-    #[allow(clippy::all)]
     fn trim(&self) -> &[u8] {
-        fn is_not_whitespace(c: &u8) -> bool {
-            *c != b'\t' && *c != b' '
+        fn is_not_whitespace(c: u8) -> bool {
+            c != b'\t' && c != b' '
         }
 
-        if let Some(first) = self.iter().position(is_not_whitespace) {
-            if let Some(last) = self.iter().rposition(is_not_whitespace) {
+        if let Some(first) = self.iter().position(|v| is_not_whitespace(*v)) {
+            if let Some(last) = self.iter().rposition(|v| is_not_whitespace(*v)) {
                 &self[first..=last]
             } else {
                 &self[first..]
