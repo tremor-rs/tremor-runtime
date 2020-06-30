@@ -1,0 +1,7 @@
+allow:
+  # As part of URI's `host` is a standardized name we didn't find a good and
+  # well understood alternative at the moment - suggestions welcome.
+  - host-hostess
+  # The word `invalid` is used to refer to validity not a person with
+  # disabilities, the context makes this clear
+  - invalid

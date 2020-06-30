@@ -42,7 +42,7 @@ pipeline:
             match {"message": event} of
               case r = %{ message ~= grok|%{IPORHOST:clientip}·%{USER:ident}·%{USER:auth}·[%{HTTPDATE:timestamp}]·"%{WORD:verb}·%{DATA:request}·HTTP/%{NUMBER:httpversion}"·%{NUMBER:response:int}·(?:-\|%{NUMBER:bytes:int})·%{QS:referrer}·%{QS:agent}| } => 
                 let event = r.message
-              default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
+              default => emit event => "drop"
             end;
             event
     links:

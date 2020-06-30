@@ -1,4 +1,4 @@
-# Simple onramp for generating messages
+# onramp for generating messages
 id: metronome
 type: metronome
 config:

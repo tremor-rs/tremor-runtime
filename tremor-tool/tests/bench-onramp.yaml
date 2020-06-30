@@ -1,4 +1,4 @@
-# Simple onramp used for benchmarking
+# onramp used for benchmarking
 id: blaster
 type: blaster
 config:

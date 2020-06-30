@@ -144,7 +144,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid", id).into()),
         }
     }
 
@@ -158,7 +158,7 @@ impl World {
                 Ok(r)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {}", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid", id).into()),
         }
     }
 
@@ -255,7 +255,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid ", id).into()),
         }
     }
     /// Unbind an onramp
@@ -268,7 +268,7 @@ impl World {
                 r
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid ", id).into()),
         }
     }
 
@@ -347,7 +347,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid ", id).into()),
         }
     }
 
@@ -361,7 +361,7 @@ impl World {
                 r
             }
             (None, _) => Err(format!("Artefact not found: {}", id).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(format!("URI for instance {} is not valid ", id).into()),
         }
     }
 
@@ -433,7 +433,7 @@ impl World {
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
-            None => Err(format!("Invalid URI for instance {}", id).into()),
+            None => Err(format!("URI for instance {} is not valid", id).into()),
         }
     }
 
@@ -449,7 +449,7 @@ impl World {
                 self.repo.unbind_binding(id).await?;
                 Ok(servant)
             }
-            None => Err(format!("Invalid URI for instance {}", id).into()),
+            None => Err(format!("URI for instance {} is not valid", id).into()),
         }
     }
 

@@ -18,13 +18,13 @@ offramp:
       stop_after_secs: 100
       significant_figures: 2
 
-
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/{instance}/in' ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}/error":
+        ["/offramp/system::stderr/{instance}/in"]
 
 pipeline:
   - id: main
@@ -44,7 +44,7 @@ pipeline:
               # Parsing and field names here are based on the weblog processing we already do when sending these logs to HDFS
               case r = %{ message ~= dissect|%{syslog_timestamp} %{syslog_hostname} %{?syslog_rogram}: %{syslog_program_aux}[%{syslog_pid:int}] %{request_unix_time} %{request_timestamp} %{+request_timestamp} %{request_elapsed_time} %{server_addr}:%{server_port:int} %{remote_addr}:%{remote_port:int} "%{response_content_type}" %{response_content_length} %{request_status} %{bytes_sent} %{request_length} "%{url_scheme}" "%{http_host}" "%{request_method} %{request_url} %{request_protocol}" "%{http_referer}" "%{http_user_agent}" "%{http_x_forwarded_for}" "%{http_true_client_ip}" "%{remote_user}" "%{is_bot}" "%{admin_user}" "%{http_via}" "%{response_location}" "%{set_cookie}" "%{http_cookie}" "%{moawsl_info}" "%{php_message}" "%{akamai_edgescape}" "%{uid_info}" "%{geoip_country}" "%{geoip_region}" "%{geoip_city}" "%{geoip_postal}" "%{geoip_dma}" "%{server_id}" "%{txid}" "%{hpcnt}" "%{client_accept}" "%{client_accept_charset}" "%{client_accept_encoding}" "%{client_accept_language}" "%{client_accept_datetime}" "%{client_pragma}" "%{client_transfer_encoding}" "%{client_attdeviceid}" "%{client_wap_profile}" %{weblog_end}| } => #r= {"message": {...}}
                 let event = r.message
-              default => emit event => "drop" # if we don't match we can just return an empty literal that has no effect
+              default => emit event => "drop"
             end;
 
             let event.tremor = "tremor"; # system::hostname(); # in production this is hard coded by the deployment
@@ -65,7 +65,7 @@ pipeline:
 
             # useful for figuring out which logstash message came from
 
-            
+
             # remove unnecessary fields
             # We overwrite request_timestamp with a better value later (based on
             # request_unix_time). Removing it now ensures that it's not around even
@@ -73,20 +73,20 @@ pipeline:
             # some reason). Our elasticsearch setup expects a certain format for
             # request_timestamp and this is just making sure that we don't reject
             # those edge case documents.
-            
-            
+
+
             # TODO: look into ',' in patch vs no ',' in for and case
             let event = patch event of
               erase "@version",
               erase "request_timestamp",
-            
+
               # unix time for event creation
               # useful for calculating end to end lag (from the elasticsearch ingest nodes)
-            
+
               # TODO: erase <path>; we return the erased value
               erase "start_timestamp"
             end;
-            
+
             # with guard
             match event of
               case r = %{request_unix_time ~= datetime|%s|} => let event.start_timestamp = core::datetime::to_nearest_millisecond(r.request_unix_time)
@@ -94,11 +94,11 @@ pipeline:
               case r = %{request_unix_time ~= datetime|%s%f|} => let event.start_timestamp = core::datetime::to_nearest_millisecond(r.request_unix_time)
               default => null
             end;
-            
-            event            
+
+            event
 
     links:
-      in: [ runtime ]
-      runtime: [ out ]
-      runtime/drop: [ out ]
-      runtime/error: [ error ]
+      in: [runtime]
+      runtime: [out]
+      runtime/drop: [out]
+      runtime/error: [error]

@@ -1,9 +1,9 @@
-openapi: '3.0.2'
+openapi: "3.0.2"
 info:
   title: Tremor Api
-  description: 'REST API for tremor'
-  version: '1.0'
-  
+  description: "REST API for tremor"
+  version: "1.0"
+
 servers:
   - url: http://localhost:9898/
     description: The default ( development ) endpoint on a local ( development ) host
@@ -20,17 +20,17 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       operationId: find_onramps
-      tags: [ repo, onramp ]
+      tags: [repo, onramp]
       responses:
-        '200':
-          description: 'Find repository managed tremor artefacts'
+        "200":
+          description: "Find repository managed tremor artefacts"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
     post:
       summary: Publish a new onramp to the tremor artefact repository
       description: |
@@ -44,19 +44,19 @@ paths:
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
 
       operationId: publish_onramp
-      tags: [ repo, onramp ]
+      tags: [repo, onramp]
       responses:
-        '201':
-          description: 'Successfully published onramp to tremor registry'
+        "201":
+          description: "Successfully published onramp to tremor registry"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/onramp'
+                $ref: "#/components/schemas/onramp"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/onramp'
-        '409':
-          description: 'An onramp with the same id already exists error'
+                $ref: "#/components/schemas/onramp"
+        "409":
+          description: "An onramp with the same id already exists error"
   /onramp/{artefact-id}:
     get:
       summary: Finds onramp data from tremor artefact repository
@@ -66,7 +66,7 @@ paths:
         Returns artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, onramp ]
+      tags: [repo, onramp]
       operationId: get_onramp_by_id
       parameters:
         - name: artefact-id
@@ -76,17 +76,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Get a tremor onramp and any registered instances'
+        "200":
+          description: "Get a tremor onramp and any registered instances"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/onramp_state'
+                $ref: "#/components/schemas/onramp_state"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/onramp_state'
-        '404':
-          description: 'The onramp was not found and does not exist'
+                $ref: "#/components/schemas/onramp_state"
+        "404":
+          description: "The onramp was not found and does not exist"
     delete:
       summary: Remove an onramp from tremor artefact repository
       description: |
@@ -96,7 +96,7 @@ paths:
         Returns old artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, onramp ]
+      tags: [repo, onramp]
       operationId: delete_onramp_by_id
       parameters:
         - name: artefact-id
@@ -106,19 +106,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Deleted a onramp'
+        "200":
+          description: "Deleted a onramp"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/onramp'
+                $ref: "#/components/schemas/onramp"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/onramp'
-        '409':
-          description: 'The onramp has active instances'
-        '404':
-          description: 'The onramp was not found and does not exist'
+                $ref: "#/components/schemas/onramp"
+        "409":
+          description: "The onramp has active instances"
+        "404":
+          description: "The onramp was not found and does not exist"
   ##
   # OffRamp
   ##
@@ -130,17 +130,17 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       operationId: find_offramps
-      tags: [ repo, offramp ]
+      tags: [repo, offramp]
       responses:
-        '200':
-          description: 'Find repository managed tremor offramps'
+        "200":
+          description: "Find repository managed tremor offramps"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
     post:
       summary: Publish a new offramp to the tremor artefact repository
       description: |
@@ -154,19 +154,19 @@ paths:
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
 
       operationId: publish_offramp
-      tags: [ repo, offramp ]
+      tags: [repo, offramp]
       responses:
-        '201':
-          description: 'Successfully published offramp to tremor registry'
+        "201":
+          description: "Successfully published offramp to tremor registry"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/offramp'
+                $ref: "#/components/schemas/offramp"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/offramp'
-        '409':
-          description: 'An offramp with the same id already exists error'
+                $ref: "#/components/schemas/offramp"
+        "409":
+          description: "An offramp with the same id already exists error"
   /offramp/{artefact-id}:
     get:
       summary: Get offramp data from tremor artefact repository
@@ -176,7 +176,7 @@ paths:
         Returns artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, offramp ]
+      tags: [repo, offramp]
       operationId: get_offramp_by_id
       parameters:
         - name: artefact-id
@@ -186,17 +186,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Get a tremor artefact and any registered instances'
+        "200":
+          description: "Get a tremor artefact and any registered instances"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/offramp_state'
+                $ref: "#/components/schemas/offramp_state"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/offramp_state'
-        '404':
-          description: 'The offramp was not found and does not exist'
+                $ref: "#/components/schemas/offramp_state"
+        "404":
+          description: "The offramp was not found and does not exist"
     delete:
       summary: Remove artefact from tremor artefact repository
       description: |
@@ -205,7 +205,7 @@ paths:
         Returns old artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, offramp ]
+      tags: [repo, offramp]
       operationId: delete_offramp_by_id
       parameters:
         - name: artefact-id
@@ -215,19 +215,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Deleted an offramp'
+        "200":
+          description: "Deleted an offramp"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/offramp'
+                $ref: "#/components/schemas/offramp"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/offramp'
-        '409':
-          description: 'The offramp has active instances'
-        '404':
-          description: 'The artefact was not found and does not exist'
+                $ref: "#/components/schemas/offramp"
+        "409":
+          description: "The offramp has active instances"
+        "404":
+          description: "The artefact was not found and does not exist"
   ##
   # Pipeline
   ##
@@ -239,17 +239,17 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       operationId: find_pipelines
-      tags: [ repo, pipeline ]
+      tags: [repo, pipeline]
       responses:
-        '200':
-          description: 'Find repository managed tremor pipelines'
+        "200":
+          description: "Find repository managed tremor pipelines"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
     post:
       summary: Publish a new pipeline to the tremor artefact repository
       description: |
@@ -263,19 +263,19 @@ paths:
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
 
       operationId: publish_pipeline
-      tags: [ repo, pipeline ]
+      tags: [repo, pipeline]
       responses:
-        '201':
-          description: 'Successfully published pipeline to tremor registry'
+        "201":
+          description: "Successfully published pipeline to tremor registry"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pipeline'
+                $ref: "#/components/schemas/pipeline"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/pipeline'
-        '409':
-          description: 'A pipeline with the same id already exists error'
+                $ref: "#/components/schemas/pipeline"
+        "409":
+          description: "A pipeline with the same id already exists error"
   /pipeline/{artefact-id}:
     get:
       summary: Get pipeline data from tremor artefact repository
@@ -285,7 +285,7 @@ paths:
         Returns artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, pipeline ]
+      tags: [repo, pipeline]
       operationId: get_pipeline_by_id
       parameters:
         - name: artefact-id
@@ -295,17 +295,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Get a tremor pipeline and any registered instances'
+        "200":
+          description: "Get a tremor pipeline and any registered instances"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pipeline_state'
+                $ref: "#/components/schemas/pipeline_state"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/pipeline_state'
-        '404':
-          description: 'The artefact was not found and does not exist'
+                $ref: "#/components/schemas/pipeline_state"
+        "404":
+          description: "The artefact was not found and does not exist"
     delete:
       summary: Remove pipeline from tremor artefact repository
       description: |
@@ -314,7 +314,7 @@ paths:
         Returns old artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, pipeline ]
+      tags: [repo, pipeline]
       operationId: delete_pipeline_by_id
       parameters:
         - name: artefact-id
@@ -324,19 +324,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Deleted pipeline artefact'
+        "200":
+          description: "Deleted pipeline artefact"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pipeline'
+                $ref: "#/components/schemas/pipeline"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/pipeline'
-        '409':
-          description: 'The pipeline has active instances'
-        '404':
-          description: 'The pipeline was not found and does not exist'
+                $ref: "#/components/schemas/pipeline"
+        "409":
+          description: "The pipeline has active instances"
+        "404":
+          description: "The pipeline was not found and does not exist"
   ##
   # Binding
   ##
@@ -348,17 +348,17 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       operationId: find_bindings
-      tags: [ repo, binding ]
+      tags: [repo, binding]
       responses:
-        '200':
-          description: 'Find repository managed tremor bindings'
+        "200":
+          description: "Find repository managed tremor bindings"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/registry_set'
+                $ref: "#/components/schemas/registry_set"
     post:
       summary: Publish a new binding to the tremor artefact repository
       description: |
@@ -371,19 +371,19 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       operationId: publish_binding
-      tags: [ repo, binding ]
+      tags: [repo, binding]
       responses:
-        '201':
-          description: 'Successfully published artefact to tremor registry'
+        "201":
+          description: "Successfully published artefact to tremor registry"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/binding'
+                $ref: "#/components/schemas/binding"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/binding'
-        '409':
-          description: 'An arterfact with the same id already exists error'
+                $ref: "#/components/schemas/binding"
+        "409":
+          description: "An arterfact with the same id already exists error"
   /binding/{artefact-id}:
     get:
       summary: Get binding data from tremor artefact repository
@@ -393,7 +393,7 @@ paths:
         Returns artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, binding ]
+      tags: [repo, binding]
       operationId: get_binding_by_id
       parameters:
         - name: artefact-id
@@ -403,17 +403,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Get a binding and any registered instances'
+        "200":
+          description: "Get a binding and any registered instances"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/binding_state'
+                $ref: "#/components/schemas/binding_state"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/binding_state'
-        '404':
-          description: 'The artefact was not found and does not exist'
+                $ref: "#/components/schemas/binding_state"
+        "404":
+          description: "The artefact was not found and does not exist"
     delete:
       summary: Remove binding from tremor artefact repository
       description: |
@@ -422,7 +422,7 @@ paths:
         Returns old artefact data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, binding ]
+      tags: [repo, binding]
       operationId: delete_binding_by_id
       parameters:
         - name: artefact-id
@@ -432,18 +432,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Deleted binding'
+        "200":
+          description: "Deleted binding"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/binding'
+                $ref: "#/components/schemas/binding"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/binding'
-        '404':
-          description: 'The artefact was not found and does not exist'
-
+                $ref: "#/components/schemas/binding"
+        "404":
+          description: "The artefact was not found and does not exist"
 
   /{artefact-kind}/{artefact-id}/{instance-id}:
     get:
@@ -464,7 +463,7 @@ paths:
         Returns instance data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, reg ]
+      tags: [repo, reg]
       operationId: get_artefact_instance_by_id
       parameters:
         - name: artefact-kind
@@ -473,7 +472,7 @@ paths:
           description: The type of artefact
           schema:
             type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+            enum: ["pipeline", "onramp", "offramp", "binding"]
         - name: artefact-id
           in: path
           required: true
@@ -487,17 +486,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Get tremor artefact instance data'
+        "200":
+          description: "Get tremor artefact instance data"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: "#/components/schemas/artefact"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
-        '404':
-          description: 'The artefact instance was not found and does not exist'
+                $ref: "#/components/schemas/artefact"
+        "404":
+          description: "The artefact instance was not found and does not exist"
     post:
       summary: Publish, deploy and activate instances
       description: |
@@ -522,7 +521,7 @@ paths:
         Returns instance data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, reg ]
+      tags: [repo, reg]
       operationId: activate
       parameters:
         - name: artefact-kind
@@ -531,7 +530,7 @@ paths:
           description: The type of artefact
           schema:
             type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+            enum: ["pipeline", "onramp", "offramp", "binding"]
         - name: artefact-id
           in: path
           required: true
@@ -545,17 +544,17 @@ paths:
           schema:
             type: string
       responses:
-        '201':
-          description: 'Old tremor artefact instance data'
+        "201":
+          description: "Old tremor artefact instance data"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: "#/components/schemas/artefact"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
-        '404':
-          description: 'The artefact instance was not found and does not exist'
+                $ref: "#/components/schemas/artefact"
+        "404":
+          description: "The artefact instance was not found and does not exist"
     delete:
       summary: Deactivate and unpublish deployed instances
       description: |
@@ -577,7 +576,7 @@ paths:
         Returns old instance data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
-      tags: [ repo, reg ]
+      tags: [repo, reg]
       operationId: deactivate
       parameters:
         - name: artefact-kind
@@ -586,7 +585,7 @@ paths:
           description: The type of artefact
           schema:
             type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
+            enum: ["pipeline", "onramp", "offramp", "binding"]
         - name: artefact-id
           in: path
           required: true
@@ -600,17 +599,17 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: 'Old tremor artefact instance data'
+        "200":
+          description: "Old tremor artefact instance data"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: "#/components/schemas/artefact"
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
-        '404':
-          description: 'The artefact instance was not found and does not exist'
+                $ref: "#/components/schemas/artefact"
+        "404":
+          description: "The artefact instance was not found and does not exist"
 
   /version:
     get:
@@ -620,16 +619,15 @@ paths:
         This endpoint returns version information for the current
         version of tremor. Versioning policy follows [Semantic Versioning](https://semver.org/)
 
-      tags: [ version ]
+      tags: [version]
       operationId: get_version
       responses:
-        '200':
+        "200":
           description: The current version of treor
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/version'
-            
+                $ref: "#/components/schemas/version"
 
 components:
   schemas:
@@ -639,58 +637,58 @@ components:
         version:
           type: string
           description: The semantic version code
-      required: [ version ]
-    
+      required: [version]
+
     registry_set:
       description: A list of registry artefacts
       type: array
       items:
-        $ref: '#/components/schemas/artefact_id'
+        $ref: "#/components/schemas/artefact_id"
 
     instance_set:
-      description: A list of artefact instances 
+      description: A list of artefact instances
       type: array
       items:
-        $ref: '#/components/schemas/instance_id'
+        $ref: "#/components/schemas/instance_id"
 
     artefact_id:
       type: string
-      pattern: '^[a-z][a-zA-Z_:]*$'
+      pattern: "^[a-z][a-zA-Z_:]*$"
 
     instance_id:
-      $ref: '#/components/schemas/artefact_id'
-        
+      $ref: "#/components/schemas/artefact_id"
+
     port_id:
-      $ref: '#/components/schemas/artefact_id'
+      $ref: "#/components/schemas/artefact_id"
 
     artefact:
       oneOf:
-        - $ref: '#/components/schemas/pipeline'
-        - $ref: '#/components/schemas/onramp'
-        - $ref: '#/components/schemas/offramp'
-        - $ref: '#/components/schemas/binding'
-    
+        - $ref: "#/components/schemas/pipeline"
+        - $ref: "#/components/schemas/onramp"
+        - $ref: "#/components/schemas/offramp"
+        - $ref: "#/components/schemas/binding"
+
     instance:
       oneOf:
-        - $ref: '#/components/schemas/mapping'
-        
+        - $ref: "#/components/schemas/mapping"
+
     publish_ok:
       description: Response when a registry publish was succesful
       properties:
         id:
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
           description: The id of the pubished artefact
-      required: [ id ]
-      
+      required: [id]
+
     pipeline_state:
       description: State of an pipeline, including specification and instances
       type: object
       additionalProperties: false
       properties:
         artefact:
-          $ref: '#/components/schemas/pipeline'
+          $ref: "#/components/schemas/pipeline"
         instances:
-          $ref: '#/components/schemas/instance_set'
+          $ref: "#/components/schemas/instance_set"
 
     pipeline:
       description: A tremor pipeline specification
@@ -699,7 +697,7 @@ components:
       properties:
         id:
           # description: A unique identifier for this pipeline specification
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
         description:
           # description: Documentation for this type
           type: string
@@ -712,7 +710,7 @@ components:
         metrics_interval_s:
           minimum: 1
           type: integer
-      required: [ id, interface, nodes, links ]
+      required: [id, interface, nodes, links]
 
     interface:
       type: object
@@ -727,9 +725,8 @@ components:
       description: The set of input or output stream names
       type: array
       additionalItems: false
-      items: 
+      items:
         $ref: "#/components/schemas/port_id"
-
 
     nodes:
       description: The set of operator nodes this pipeline DAG is formed from
@@ -744,7 +741,7 @@ components:
       additionalProperties: false
       properties:
         id:
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
           description: A pipeline unique identifier for this operator
         description:
           type: string
@@ -755,16 +752,16 @@ components:
         config:
           type: object
           description: A map of key/value pairs used to configure this operator
-      required: [ id, type ]
+      required: [id, type]
 
     links:
       description: The set of connections between nodes/vertices/operators in a pipeline DAG
       type: object
       additionalProperties: false
-      # Note: swagger claims this is invalid but it's part of jsonspec
+      # Note: swagger claims this is not valid but it's part of jsonspec
       # we can ignore swaggers complaint here
-      patternProperties: 
-        '^[a-zA-Z][A-Za-z0-9_/]*$':
+      patternProperties:
+        "^[a-zA-Z][A-Za-z0-9_/]*$":
           type: array
           additionalItems: false
           items:
@@ -777,9 +774,9 @@ components:
       additionalProperties: false
       properties:
         artefact:
-          $ref: '#/components/schemas/onramp'
+          $ref: "#/components/schemas/onramp"
         instances:
-          $ref: '#/components/schemas/instance_set'
+          $ref: "#/components/schemas/instance_set"
 
     onramp:
       description: A tremor onramp specification
@@ -792,7 +789,7 @@ components:
         id:
           # This description would make it an invlaid schema :/
           # description: A unique identifier for this onramp specification
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
         description:
           type: string
           description: Documentation for this type
@@ -809,8 +806,7 @@ components:
         config:
           type: object
           description: A map of key/value pairs used to configure this onramp
-      required: [ type, id ]    
-  
+      required: [type, id]
 
     offramp_state:
       description: State of an offramp, including specification and instances
@@ -818,9 +814,9 @@ components:
       additionalProperties: false
       properties:
         artefact:
-          $ref: '#/components/schemas/offramp'
+          $ref: "#/components/schemas/offramp"
         instances:
-          $ref: '#/components/schemas/instance_set'
+          $ref: "#/components/schemas/instance_set"
 
     offramp:
       description: A tremor offramp specification
@@ -834,7 +830,7 @@ components:
         id:
           # This description would make it an invlaid schema :/
           # description: A unique identifier for this offramp specification
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
         description:
           type: string
           description: Documentation for this type
@@ -844,17 +840,17 @@ components:
           type: object
           description: A map of key/value pairs used to configure this onramp
 
-      required: [ type, id ]  
-    
+      required: [type, id]
+
     binding_state:
       description: State of an binding, including specification and instances
       type: object
       additionalProperties: false
       properties:
         artefact:
-          $ref: '#/components/schemas/binding'
+          $ref: "#/components/schemas/binding"
         instances:
-          $ref: '#/components/schemas/instance_set'
+          $ref: "#/components/schemas/instance_set"
 
     binding:
       description: A tremor binding specification
@@ -864,31 +860,31 @@ components:
         id:
           # This description would make it an invlaid schema :/
           # description: A unique identifier for this binding specification
-          $ref: '#/components/schemas/artefact_id'
+          $ref: "#/components/schemas/artefact_id"
         description:
           # This description would make it an invlaid schema :/
           # description: Documentation for this type
           type: string
         links:
           $ref: "#/components/schemas/binding_map"
-      required: [ id, links ]  
-    
+      required: [id, links]
+
     binding_map:
       description: A map of binding specification links
       type: object
       additionalProperties: false
-      # Note: swagger claims this is invalid but it's part of jsonspec
+      # Note: swagger claims this is not valid but it's part of jsonspec
       # we can ignore swaggers complaint here
-      patternProperties: 
-        '^(tremor://)?/(onramp|pipeline)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$':
-          type: array
+      patternProperties:
+        ? "^(tremor://)?/(onramp|pipeline)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$"
+        : type: array
           additionalItems: false
           items:
             $ref: "#/components/schemas/binding_dst"
 
     binding_dst:
       type: string
-      pattern: '^(tremor://)?/(pipeline|offramp)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$'
+      pattern: "^(tremor://)?/(pipeline|offramp)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$"
 
     mapping:
       description: A tremor mapping specification
@@ -901,7 +897,7 @@ components:
         - json
         - msgpack
         - string
-        - 'null'
+        - "null"
         - influx
 
     preprocessor:
