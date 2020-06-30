@@ -1,4 +1,5 @@
 # Contributing to Tremor
+
 [contributing-to-tremor]: #contributing-to-tremor
 
 Thank you for your interest in contributing to the Tremor project! There are many ways to
@@ -27,6 +28,7 @@ any guidance or assistance.
 [code-of-conduct]: https://docs.tremor.rs/CodeOfConduct
 
 ## Feature Requests
+
 [feature-requests]: #feature-requests
 
 To request a change to the way that Tremor works, please head over
@@ -35,6 +37,7 @@ to the [RFCs repository](https://github.com/wayfair-tremor/tremor-rfcs) and view
 for instructions.
 
 ## Bug Reports
+
 [bug-reports]: #bug-reports
 
 While bugs are unfortunate, they're a reality in software. We can't fix what we
@@ -56,7 +59,7 @@ This can be the language or compiler feature used, the conditions that trigger t
 or part of the error message if there is any.
 An example could be: **"impossible case reached" on match expression in tremor scripting language**.
 
-Opening an issue is as easy as following [this
+Opening an issue only requires following [this
 link](https://github.com/wayfair-tremor/tremor-runtime/issues/new) and filling out the fields.
 Here's a template that you can use to file a bug, though it's not necessary to
 use it exactly:
@@ -101,6 +104,7 @@ really useful commands to the build system, which could save you a lot of time.
 [tremor-build-guide]: http://docs.tremor.rs/development/quick-start/
 
 ## Pull Requests
+
 [pull-requests]: #pull-requests
 
 Pull requests are the primary mechanism we use to change Tremor. GitHub itself
@@ -129,15 +133,6 @@ the issue in question.
 
 [closing-keywords]: https://help.github.com/en/articles/closing-issues-using-keywords
 
-Please make sure your pull request is in compliance with Tremor's style
-guidelines by running
-
-    $ sh ./contrib/pre-commit
-
-Make this check before every pull request (and every new commit in a pull
-request); you can add [git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)
-before every push to make sure you never forget to make this check.
-
 All pull requests are reviewed by another person.
 
 If you want to request that a specific person reviews your pull request,
@@ -164,8 +159,8 @@ it can be found [here][https://github.com/wayfair-tremor/tremor-www-docs/blob/ma
 
 Currently building the Tremor project will also build the following external projects:
 
-* [clippy](https://github.com/rust-lang/rust-clippy)
-* [rustfmt](https://github.com/rust-lang/rustfmt)
+- [clippy](https://github.com/rust-lang/rust-clippy)
+- [rustfmt](https://github.com/rust-lang/rustfmt)
 
 Breakage is not allowed in released branches and must be addressed before a PR is merged.
 
@@ -205,6 +200,7 @@ Answer questions in the _Get Help!_ channels from the [Tremor Chat][tremor-chat]
 Participate in the [RFC process](https://github.com/wayfair-tremor/tremor-rfcs).
 
 ## Tremor Chat
+
 [tremor-chat]: #tremor-chat
 
 Join the tremor community [slack](https://join.slack.com/t/tremor-debs/shared_invite/enQtOTMxNzY3NDg0MjI2LTQ4MTU4NjlkZDk0MmJmNmIwYjU0ZDc1OTNjMGRmNzUwZTdlZGVkMWFmNGFkZTAwOWJlYjlkMDZkNGNiMjQ2NzI)

@@ -1,18 +1,18 @@
 # Tremor
 
-[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
+[![Build Status]][actions-tests] [![Quality Checks]][actions-checks] [![License Checks]][actions-license-audit] [![Security Checks]][actions-security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
 
-[Build Status]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Tests/badge.svg
-[actions-Tests]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3ATests
-[Quality Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Checks/badge.svg
-[actions-Checks]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3AChecks
-[License Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/License%20audit/badge.svg
-[actions-License-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22License+audit%22
-[Security Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Security%20audit/badge.svg
-[actions-Security-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
-[Code Coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/master/graph/badge.svg
+[build status]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Tests/badge.svg
+[actions-tests]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3ATests
+[quality checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Checks/badge.svg
+[actions-checks]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3AChecks
+[license checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/License%20audit/badge.svg
+[actions-license-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22License+audit%22
+[security checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Security%20audit/badge.svg
+[actions-security-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
+[code coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/master/graph/badge.svg
 [codecov.io]: https://codecov.io/gh/wayfair-tremor/tremor-runtime
-[Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=wayfair-tremor/tremor-runtime
+[dependabot status]: https://api.dependabot.com/badges/status?host=github&repo=wayfair-tremor/tremor-runtime
 [dependabot.com]: https://dependabot.com
 
 ---
@@ -23,7 +23,7 @@ More about the [history](https://docs.tremor.rs/history/) and [architecture](doc
 
 ## Audience
 
-Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route, or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
+Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route, or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be pluggable without much effort.
 
 ## Use Cases
 
@@ -33,21 +33,21 @@ Tremor has been successfully used to replace logstash as a Kafka to Elastic Sear
 
 ### HTTP to Kafka bridge
 
-Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime, this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead, only relying on HTTP as its transport.
+Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime, this can be a disadvantage, such as PHP, or tools that only run for a short time, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead, only relying on HTTP as its transport.
 
 ### When to use Tremor
 
-* You are currently using software such as Logstash or Telgraf
-* You have a high volume of events to handle
-* You want to protect a downstream system from overload
-* You wish to perform ETL like tasks on data.
+- You are currently using software such as Logstash or Telgraf
+- You have a high volume of events to handle
+- You want to protect a downstream system from overload
+- You wish to perform ETL like tasks on data.
 
 ### When not to use Tremor
 
 Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reality your contributions are more then welcome.
 
-* Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](https://docs.tremor.rs/artefacts/codecs/) are easy to write!)
-* Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/) too are easy to write!)
+- Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](https://docs.tremor.rs/artefacts/codecs/))
+- Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/))
 
 ### Example use cases
 
@@ -60,7 +60,6 @@ We provide some usage examples of this in the `docs/workshop` folder. Those exam
 Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
 
 Note that sice the image is building tremor in release mode it requires some serious resources, we recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
-
 
 ### Local builds
 
@@ -188,7 +187,7 @@ The tremor-runtime supports a micro-benchmarking framework via specialized on-ra
 Tremor input and output adapters. Benchmarks ( via blackhole ) output high dynamic range histogram latency reports to
 standard output that is compatible with HDR Histogram's plot files [service](https://hdrhistogram.github.io/HdrHistogram/plotFiles.html)
 
-To execute a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
+To run a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
 
 ```bash
 ./bench/run <name>
