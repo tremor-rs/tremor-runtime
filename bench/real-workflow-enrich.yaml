@@ -71,7 +71,7 @@ pipeline:
             # request_unix_time). Removing it now ensures that it's not around even
             # if the later process fails (eg: if request_unix_time is not set for
             # some reason). Our elasticsearch setup expects a certain format for
-            # request_timestamp and this is just making sure that we don't reject
+            # request_timestamp and this is making sure that we don't reject
             # those edge case documents.
 
 
