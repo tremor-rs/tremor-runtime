@@ -79,6 +79,8 @@ chk:
 
 dep-list:
 	@cargo tree --all | sed -e 's/[^a-z]*\([a-z]\)/\1/' | sort -u
+alex:
+	alex `find . -name '*.rs' -or -name '*.md' -or -name '*.yaml' -or -name '*.yml' | grep -v '^./target'`
 
 ###############################################################################
 
@@ -125,3 +127,4 @@ packages:
 	make $(foreach target,$(RELEASE_TARGETS),package-$(target))
 
 ###############################################################################
+
