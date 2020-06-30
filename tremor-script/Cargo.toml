@@ -25,7 +25,7 @@ name = "tremor_script"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-downcast-rs = "1.1"
+downcast-rs = "1.2"
 rental = "0.5"
 simd-json = {version = "0.3", features = ["known-key"]}
 error-chain="0.12"
