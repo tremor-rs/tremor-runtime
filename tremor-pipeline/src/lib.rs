@@ -518,11 +518,10 @@ impl Operator for OperatorNode {
 
 fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     use op::debug::EventHistoryFactory;
-    use op::generic::{
-        BackpressureFactory, BatchFactory, CounterFactory, RoundRobinFactory, WalFactory,
-    };
+    use op::generic::{BatchFactory, CounterFactory};
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
+    use op::qos::{BackpressureFactory, PercentileFactory, RoundRobinFactory, WalFactory};
     use op::runtime::TremorFactory;
     let name_parts: Vec<&str> = node.op_type.split("::").collect();
     let factory = match name_parts.as_slice() {
@@ -531,10 +530,15 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
         ["runtime", "tremor"] => TremorFactory::new_boxed(),
         ["grouper", "bucket"] => BucketGrouperFactory::new_boxed(),
         ["generic", "batch"] => BatchFactory::new_boxed(),
-        ["generic", "backpressure"] => BackpressureFactory::new_boxed(),
-        ["generic", "roundrobin"] => RoundRobinFactory::new_boxed(),
+        ["generic", "backpressure"] => {
+            error!("The generic::backpressure operator is depricated, please use qos::backpressure instread.");
+            BackpressureFactory::new_boxed()
+        }
         ["generic", "counter"] => CounterFactory::new_boxed(),
-        ["generic", "wal"] => WalFactory::new_boxed(),
+        ["qos", "backpressure"] => BackpressureFactory::new_boxed(),
+        ["qos", "roundrobin"] => RoundRobinFactory::new_boxed(),
+        ["qos", "wal"] => WalFactory::new_boxed(),
+        ["qos", "percentile"] => PercentileFactory::new_boxed(),
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }

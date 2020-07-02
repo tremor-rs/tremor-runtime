@@ -64,10 +64,7 @@ impl From<Config> for RoundRobin {
 
 impl From<String> for Output {
     fn from(output: String) -> Self {
-        Self {
-            output,
-            open: false,
-        }
+        Self { output, open: true }
     }
 }
 
@@ -155,6 +152,122 @@ impl Operator for RoundRobin {
 
 #[cfg(test)]
 mod test {
-    //use super::*;
-    //use simd_json::value::borrowed::Object;
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn multi_output_block() {
+        let mut op: RoundRobin = Config {
+            outputs: vec!["out".into(), "out2".into()],
+        }
+        .into();
+
+        let mut state = Value::null();
+
+        // Sent a first event, as all is initited clean
+        // we syould see this pass
+        let event1 = Event {
+            id: 1.into(),
+            ingest_ns: 1_000_000,
+            ..Event::default()
+        };
+        let mut r = op
+            .on_event(0, "in", &mut state, event1.clone())
+            .expect("could not run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+
+        // Sent a first event, as all is initited clean
+        // we syould see this pass
+        let event2 = Event {
+            id: 2.into(),
+            ingest_ns: 1_000_001,
+            ..Event::default()
+        };
+        let mut r = op
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out2", out);
+
+        // Mark output 0 as broken
+        let mut op_meta = BTreeMap::new();
+        op_meta.insert(0, 0.into());
+
+        let mut insight = Event {
+            id: 1.into(),
+            ingest_ns: 1_000_000,
+            cb: Some(CBAction::Trigger),
+            op_meta,
+            ..Event::default()
+        };
+
+        // Verify that we are broken on 0
+        op.on_contraflow(0, &mut insight);
+        assert_eq!(op.outputs[0].open, false);
+        assert_eq!(op.outputs[1].open, true);
+
+        // Output should now come out of 1
+        let event2 = Event {
+            id: 2.into(),
+            ingest_ns: 2_000_000 - 1,
+            ..Event::default()
+        };
+        let mut r = op
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out2", out);
+
+        // Even for multiople events
+        let event3 = Event {
+            id: 3.into(),
+            ingest_ns: 2_000_000,
+            ..Event::default()
+        };
+        let mut r = op
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out2", out);
+
+        // Mark output 1 as restored
+        let mut op_meta = BTreeMap::new();
+        op_meta.insert(0, 0.into());
+
+        let mut insight = Event {
+            id: 1.into(),
+            ingest_ns: 1_000_000,
+            cb: Some(CBAction::Restore),
+            op_meta,
+            ..Event::default()
+        };
+
+        // Verify that we now on disabled outputs
+        op.on_contraflow(0, &mut insight);
+        assert_eq!(op.outputs[0].open, true);
+        assert_eq!(op.outputs[1].open, true);
+
+        // The next event should go to the newly enabled output
+        let event3 = Event {
+            id: 3.into(),
+            ingest_ns: 2_000_000 + 1,
+            ..Event::default()
+        };
+        let mut r = op
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+    }
 }

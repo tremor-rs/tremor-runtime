@@ -226,7 +226,6 @@ impl WAL {
             let (_idx, e) = e?;
             self.read += 1;
             let e_slice: &[u8] = &e;
-            dbg!(String::from_utf8(e_slice.to_vec())).ok();
             let mut ev = Vec::from(e_slice);
             let event = simd_json::from_slice(&mut ev)?;
             events.push((OUT, event))
@@ -428,7 +427,7 @@ mod test {
         // Send a fail event beck to 0, this tell the WAL that delivery of
         // 1, 2, 3 failed and they need to be delivered again
         let mut i = Event::default();
-        i.id = 1.into();
+        i.id = 0.into();
 
         i.cb = Some(CBAction::Fail);
         o.on_contraflow(0, &mut i);

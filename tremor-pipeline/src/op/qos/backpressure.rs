@@ -29,6 +29,8 @@ use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
+const OVERFLOW: Cow<'static, str> = Cow::Borrowed("overflow");
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied
@@ -40,8 +42,13 @@ pub struct Config {
     #[serde(default = "d_steps")]
     pub steps: Vec<u64>,
 
-    #[serde(default = "d_outputs")]
-    pub outputs: Vec<String>,
+    /// If set to true will propagate circuit breaker events when the
+    /// backpressure is introduced.
+    ///
+    /// This should be used with caution as it does, to a degree defeate the
+    /// purpose of escalating backpressure
+    #[serde(default)]
+    pub circuit_breaker: bool,
 }
 
 impl ConfigImpl for Config {}
@@ -50,13 +57,13 @@ impl ConfigImpl for Config {}
 pub struct Output {
     backoff: u64,
     next: u64,
-    output: String,
+    output: Cow<'static, str>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Backpressure {
     pub config: Config,
-    pub outputs: Vec<Output>,
+    pub output: Output,
     pub steps: Vec<u64>,
     pub next: usize,
 }
@@ -64,32 +71,21 @@ pub struct Backpressure {
 impl From<Config> for Backpressure {
     fn from(config: Config) -> Self {
         let steps = config.steps.iter().map(|v| *v * 1_000_000).collect();
-        let outputs = config.outputs.iter().cloned().map(Output::from).collect();
         Self {
             config,
-            outputs,
+            output: Output {
+                output: OUT,
+                next: 0,
+                backoff: 0,
+            },
             steps,
             next: 0,
         }
     }
 }
 
-impl From<String> for Output {
-    fn from(output: String) -> Self {
-        Self {
-            output,
-            next: 0,
-            backoff: 0,
-        }
-    }
-}
-
 fn d_steps() -> Vec<u64> {
     vec![50, 100, 250, 500, 1000, 5000, 10000]
-}
-
-fn d_outputs() -> Vec<String> {
-    vec![String::from("out")]
 }
 
 pub fn next_backoff(steps: &[u64], current: u64) -> u64 {
@@ -104,76 +100,48 @@ pub fn next_backoff(steps: &[u64], current: u64) -> u64 {
 }
 
 op!(BackpressureFactory(node) {
-if let Some(map) = &node.config {
-    let config: Config = Config::new(map)?;
-    if config.outputs.is_empty() {
-        error!("No outputs supplied for backpressure operators");
-        return Err(ErrorKind::MissingOpConfig(node.id.to_string()).into());
-    };
-    // convert backoff to ns
-    Ok(Box::new(Backpressure::from(config)))
-} else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
-
-}});
+    if let Some(map) = &node.config {
+        let config: Config = Config::new(map)?;
+        Ok(Box::new(Backpressure::from(config)))
+    } else {
+        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    }
+});
 
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
-        _uid: u64,
+        uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
-        let mut output = None;
-        for n in 0..self.outputs.len() {
-            let id = (self.next + n) % self.outputs.len();
-            let o = &mut self.outputs[id];
-            if o.next <= event.ingest_ns {
-                // :/ need pipeline lifetime to fix
-                output = Some(o.output.clone());
-                if o.backoff > 0 {
-                    o.next = event.ingest_ns + o.backoff;
-                }
-                self.next = id + 1;
-                break;
-            }
-        }
-        if let Some(out) = output {
-            let (_, meta) = event.data.parts();
-
-            if let Some(meta) = meta.as_object_mut() {
-                meta.insert("backpressure-output".into(), out.clone().into());
-            };
-            Ok(vec![(out.into(), event)].into())
+        event.op_meta.insert(uid, OwnedValue::null());
+        if self.output.next <= event.ingest_ns {
+            self.output.next = event.ingest_ns + self.output.backoff;
+            Ok(vec![(self.output.output.clone(), event)].into())
         } else {
-            Ok(vec![("overflow".into(), event)].into())
+            Ok(vec![(OVERFLOW, event)].into())
         }
     }
 
     fn handles_contraflow(&self) -> bool {
         true
     }
+
     fn handles_signal(&self) -> bool {
         true
     }
 
     fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
-        let now = signal.ingest_ns;
-        let mut is_open = false;
-        let mut was_closed = true;
-
-        for o in &mut self.outputs {
-            was_closed = was_closed && o.backoff > 0;
-            if o.backoff > 0 && o.next < now {
-                is_open = true;
-                o.backoff = 0;
-                o.next = 0;
+        let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
+            self.output.backoff = 0;
+            self.output.next = 0;
+            if self.config.circuit_breaker {
+                vec![Event::cb_restore(signal.ingest_ns)]
+            } else {
+                vec![]
             }
-        }
-
-        let insights = if was_closed && is_open {
-            vec![Event::cb_restore(now)]
         } else {
             vec![]
         };
@@ -182,46 +150,44 @@ impl Operator for Backpressure {
             ..EventAndInsights::default()
         })
     }
-    fn on_contraflow(&mut self, _uid: u64, insight: &mut Event) {
+
+    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
+        // If the related event never touched this operator we don't take
+        // action
+        if !insight.op_meta.contains_key(&uid) {
+            return;
+        }
         let (_, meta) = insight.data.parts();
 
-        let output = meta
-            .get("backpressure-output")
-            .and_then(Value::as_str)
-            .unwrap_or("out");
-        let mut any_available = false;
         let Backpressure {
-            ref mut outputs,
+            ref mut output,
             ref steps,
             ..
         } = *self;
-        for o in outputs.iter_mut() {
-            if o.output == output {
-                if meta.get("error").and_then(Value::as_str).is_some() {
-                    let backoff = next_backoff(steps, o.backoff);
-                    o.backoff = backoff;
-                    o.next = insight.ingest_ns + backoff;
-                } else if let Some(v) = meta.get("time").and_then(Value::cast_f64) {
-                    if v > self.config.timeout {
-                        let backoff = next_backoff(steps, o.backoff);
-                        o.backoff = backoff;
-                        o.next = insight.ingest_ns + backoff;
-                    } else {
-                        o.backoff = 0;
-                        o.next = 0;
-                    }
-                }
-            }
-            any_available = any_available || o.backoff == 0;
+        let was_open = output.backoff == 0;
+        let timeout = self.config.timeout;
+        if meta.get("error").is_some()
+            || insight.cb == Some(CBAction::Fail)
+            || insight.cb == Some(CBAction::Trigger)
+        {
+            let backoff = next_backoff(steps, output.backoff);
+            output.backoff = backoff;
+            output.next = insight.ingest_ns + backoff;
+        } else if meta
+            .get("time")
+            .and_then(Value::cast_f64)
+            .map_or(false, |v| v > timeout)
+        {
+            let backoff = next_backoff(steps, output.backoff);
+            output.backoff = backoff;
+            output.next = insight.ingest_ns + backoff;
+        } else {
+            output.backoff = 0;
+            output.next = 0;
         }
 
-        if any_available {
-            insight.cb = Some(CBAction::Restore);
-            error!("Failed to restore circuit breaker");
-        } else {
-            dbg!("triggered");
+        if self.config.circuit_breaker && was_open && output.backoff > 0 {
             insight.cb = Some(CBAction::Trigger);
-            error!("Failed to trigger circuit breaker");
         };
     }
 }
@@ -230,13 +196,14 @@ impl Operator for Backpressure {
 mod test {
     use super::*;
     use simd_json::value::borrowed::Object;
+    use std::collections::BTreeMap;
 
     #[test]
     fn pass_wo_error() {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            outputs: d_outputs(),
+            circuit_breaker: false,
         }
         .into();
 
@@ -247,7 +214,6 @@ mod test {
         let event1 = Event {
             id: 1.into(),
             ingest_ns: 1,
-            data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
@@ -263,7 +229,6 @@ mod test {
         let event2 = Event {
             id: 2.into(),
             ingest_ns: 2,
-            data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
@@ -280,7 +245,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            outputs: d_outputs(),
+            circuit_breaker: false,
         }
         .into();
 
@@ -291,7 +256,6 @@ mod test {
         let event1 = Event {
             id: 1.into(),
             ingest_ns: 1_000_000,
-            data: Value::from("snot").into(),
             ..Event::default()
         };
         let mut r = op
@@ -307,17 +271,20 @@ mod test {
         // one up the backup steps
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
-        m.insert("backpressure-output".into(), "out".into());
+
+        let mut op_meta = BTreeMap::new();
+        op_meta.insert(0, OwnedValue::null());
         let mut insight = Event {
             id: 1.into(),
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
+            op_meta,
             ..Event::default()
         };
 
         // Verify that we now have a backoff of 1ms
         op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 1_000_000);
+        assert_eq!(op.output.backoff, 1_000_000);
 
         // The first event was sent at exactly 1ms
         // our we should block all eventsup to
@@ -326,7 +293,6 @@ mod test {
         let event2 = Event {
             id: 2.into(),
             ingest_ns: 2_000_000 - 1,
-            data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
@@ -342,7 +308,6 @@ mod test {
         let event3 = Event {
             id: 3.into(),
             ingest_ns: 2_000_000,
-            data: Value::from("boo").into(),
             ..Event::default()
         };
         let mut r = op
@@ -358,7 +323,6 @@ mod test {
         let event3 = Event {
             id: 3.into(),
             ingest_ns: 2_000_000 + 1,
-            data: Value::from("badger").into(),
             ..Event::default()
         };
         let mut r = op
@@ -375,163 +339,54 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            outputs: d_outputs(),
+            circuit_breaker: false,
         }
         .into();
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
-        m.insert("backpressure-output".into(), "out".into());
+        let mut op_meta = BTreeMap::new();
+        op_meta.insert(0, OwnedValue::null());
 
         let mut insight = Event {
             id: 1.into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
+            op_meta,
             ..Event::default()
         };
 
         // A contraflow that passes the timeout
         let mut m = Object::new();
         m.insert("time".into(), 99.0.into());
-        m.insert("backpressure-output".into(), "out".into());
+        let mut op_meta = BTreeMap::new();
+        op_meta.insert(0, OwnedValue::null());
 
         let mut insight_reset = Event {
             id: 1.into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
+            op_meta,
             ..Event::default()
         };
 
         // Assert initial state
-        assert_eq!(op.outputs[0].backoff, 0);
+        assert_eq!(op.output.backoff, 0);
         // move one step up
         op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 1_000_000);
+        assert_eq!(op.output.backoff, 1_000_000);
         // move another step up
         op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 10_000_000);
+        assert_eq!(op.output.backoff, 10_000_000);
         // move another another step up
         op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 100_000_000);
+        assert_eq!(op.output.backoff, 100_000_000);
         // We are at the highest step everything
         // should stay  the same
         op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 100_000_000);
+        assert_eq!(op.output.backoff, 100_000_000);
         // Now we should reset
         op.on_contraflow(0, &mut insight_reset);
-        assert_eq!(op.outputs[0].backoff, 0);
-    }
-
-    #[test]
-    fn multi_output_block() {
-        let mut op: Backpressure = Config {
-            timeout: 100.0,
-            steps: vec![1, 10, 100],
-            outputs: vec![OUT.into(), "snot".into()],
-        }
-        .into();
-
-        let mut state = Value::null();
-
-        // Sent a first event, as all is initited clean
-        // we syould see this pass
-        let event1 = Event {
-            id: 1.into(),
-            ingest_ns: 1_000_000,
-            data: Value::from("snot").into(),
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("out", out);
-
-        // Sent a first event, as all is initited clean
-        // we syould see this pass
-        let event2 = Event {
-            id: 2.into(),
-            ingest_ns: 1_000_001,
-            data: Value::from("snot").into(),
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("snot", out);
-
-        // Insert a timeout event with `time` set top `200`
-        // this is over our limit of `100` so we syould move
-        // one up the backup steps
-        let mut m = Object::new();
-        m.insert("time".into(), 200.0.into());
-        m.insert("backpressure-output".into(), "out".into());
-
-        let mut insight = Event {
-            id: 1.into(),
-            ingest_ns: 1_000_000,
-            data: (Value::null(), m).into(),
-            ..Event::default()
-        };
-
-        // Verify that we now have a backoff of 1ms
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.outputs[0].backoff, 1_000_000);
-        assert_eq!(op.outputs[0].next, 2_000_000);
-
-        // The first event was sent at exactly 1ms
-        // our we should block all eventsup to
-        // 1_999_999
-        // this event syould overflow
-        let event2 = Event {
-            id: 2.into(),
-            ingest_ns: 2_000_000 - 1,
-            data: Value::from("badger").into(),
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("snot", out);
-
-        // On exactly 2_000_000 we should be allowed to send
-        // again
-        let event3 = Event {
-            id: 3.into(),
-            ingest_ns: 2_000_000,
-            data: Value::from("boo").into(),
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("out", out);
-
-        // Since now the last successful event was at 2_000_000
-        // the next event should overflow at 2_000_001
-        let event3 = Event {
-            id: 3.into(),
-            ingest_ns: 2_000_000 + 1,
-            data: Value::from("badger").into(),
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("snot", out);
+        assert_eq!(op.output.backoff, 0);
     }
 }

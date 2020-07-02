@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod batch;
-pub mod counter;
+pub mod backpressure;
+pub mod percentile;
+pub mod rr;
+pub mod wal;
 
-pub use batch::BatchFactory;
-pub use counter::CounterFactory;
+pub use backpressure::BackpressureFactory;
+pub use percentile::PercentileFactory;
+pub use rr::RoundRobinFactory;
+pub use wal::WalFactory;
