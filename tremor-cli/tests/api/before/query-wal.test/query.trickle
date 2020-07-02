@@ -1,4 +1,4 @@
-define generic::wal operator wal
+define qos::wal operator wal
 with
    read_count = 5,
    max_elements = 100,
