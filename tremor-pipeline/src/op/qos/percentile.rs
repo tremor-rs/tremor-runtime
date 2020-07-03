@@ -105,7 +105,8 @@ impl Operator for Percentile {
         // We don't generate a real random number we use the last the 16 bit
         // of the nanosecond timestamp as a randum number.
         // This is both fairly random and completely deterministic.
-        let r = (event.ingest_ns % 0xFFFF) as f64 / 0xFFFF as f64;
+        #[allow(clippy::cast_precision_loss)]
+        let r = (event.ingest_ns % 0xFFFF) as f64 / f64::from(0xFFFF);
         if r > self.perc {
             Ok(vec![(OVERFLOW, event)].into())
         } else {
@@ -127,16 +128,11 @@ impl Operator for Percentile {
 
         if meta.get("error").is_some()
             || insight.cb == Some(CBAction::Fail)
-            || insight.cb == Some(CBAction::Trigger)
-        {
-            self.perc -= self.config.step_down;
-            if self.perc < 0.0 {
-                self.perc = 0.0;
-            }
-        } else if meta
-            .get("time")
-            .and_then(Value::cast_f64)
-            .map_or(false, |v| v > self.config.timeout)
+            || insight.cb == Some(CBAction::Close)
+            || meta
+                .get("time")
+                .and_then(Value::cast_f64)
+                .map_or(false, |v| v > self.config.timeout)
         {
             self.perc -= self.config.step_down;
             if self.perc < 0.0 {

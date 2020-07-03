@@ -164,7 +164,7 @@ where
                             self.pipelines.push(p.clone());
                         }
                     }
-                    Ok(PipeHandlerResult::Retry)
+                    Ok(PipeHandlerResult::Idle)
                 }
                 onramp::Msg::Disconnect { tx, .. } => {
                     tx.send(true)?;
@@ -241,13 +241,13 @@ where
         };
         let mut error = false;
         self.id += 1;
-        if let Some(((input, addr), pipelines)) = self.pipelines.split_last() {
+        if let Some((last, pipelines)) = self.pipelines.split_last_mut() {
             self.metrics_reporter.periodic_flush(ingest_ns);
             self.metrics_reporter.increment_out();
 
             for (input, addr) in pipelines {
                 if let Some(input) = input.instance_port() {
-                    if let Err(e) = addr.try_send(pipeline::Msg::Event {
+                    if let Err(e) = addr.try_send_safe(pipeline::Msg::Event {
                         input: input.to_string().into(),
                         event: event.clone(),
                     }) {
@@ -256,8 +256,8 @@ where
                     }
                 }
             }
-            if let Some(input) = input.instance_port() {
-                if let Err(e) = addr.try_send(pipeline::Msg::Event {
+            if let Some(input) = last.0.instance_port() {
+                if let Err(e) = last.1.try_send_safe(pipeline::Msg::Event {
                     input: input.to_string().into(),
                     event,
                 }) {
@@ -316,35 +316,42 @@ where
     pub(crate) async fn run(mut self) -> Result<()> {
         loop {
             match self.handle_pipelines2().await? {
-                PipeHandlerResult::Retry => continue,
-                PipeHandlerResult::Terminate => return Ok(()),
+                // No pipelines connected - nothing to do, so yield
+                PipeHandlerResult::Idle => continue,
+                // No actionable event from pipeline - nothing to do
                 PipeHandlerResult::Normal => (),
+                // Last connected pipeline disconnected - etherealize
+                PipeHandlerResult::Terminate => return Ok(()),
+                // Circuit breaker failure to delivery ( good -> bad transition )
                 PipeHandlerResult::Cb(CBAction::Fail, ids) => {
                     if let Some(id) = ids.get(self.uid) {
                         self.source.fail(id);
                     }
                 }
+                // Circuit breaker explicit acknowledgement of an event
                 PipeHandlerResult::Cb(CBAction::Ack, ids) => {
                     if let Some(id) = ids.get(self.uid) {
                         self.source.ack(id);
                     }
                 }
-                PipeHandlerResult::Cb(CBAction::Trigger, _ids) => {
+                // Circuit breaker soure failure -triggers close
+                PipeHandlerResult::Cb(CBAction::Close, _ids) => {
                     // FIXME eprintln!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true
                 }
-                PipeHandlerResult::Cb(CBAction::Restore, _ids) => {
+                //Circuit breaker source recovers - triggers open
+                PipeHandlerResult::Cb(CBAction::Open, _ids) => {
                     // FIXME eprintln!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false
                 }
             }
 
-            if !self.triggered
-                && !self.pipelines.is_empty()
-                && self.pipelines.iter().all(|(_, p)| p.ready())
-            {
+            let pipelines_empty = self.pipelines.is_empty();
+            let all_ready = self.pipelines.iter_mut().all(|(_, p)| p.drain_ready());
+
+            if !self.triggered && !pipelines_empty && all_ready {
                 match self.source.read(self.id).await? {
                     SourceReply::StartStream(id) => {
                         while self.preprocessors.len() <= id {

@@ -271,9 +271,9 @@ impl Operator for WAL {
         true
     }
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
-        if insight.cb == Some(CBAction::Restore) {
+        if insight.cb == Some(CBAction::Open) {
             self.broken = false;
-        } else if insight.cb == Some(CBAction::Trigger) {
+        } else if insight.cb == Some(CBAction::Close) {
             self.broken = true;
         } else if let Some(CBAction::Ack) = &mut insight.cb {
             let c_id = if let Some(c_id) = insight.id.get(u_id) {

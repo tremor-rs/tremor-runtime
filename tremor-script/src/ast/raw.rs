@@ -233,7 +233,6 @@ impl<'script> ModuleRaw<'script> {
                     let v = reduce2(expr, &helper)?;
                     helper.const_values.push(v);
                 }
-                #[allow(unreachable_code, unused_variables)]
                 #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
                     let f = f.up(helper)?;
