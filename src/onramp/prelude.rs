@@ -62,7 +62,7 @@ pub fn handle_pp(
 }
 
 pub(crate) fn transmit_event(
-    pipelines: &[(TremorURL, pipeline::Addr)],
+    pipelines: &mut [(TremorURL, pipeline::Addr)],
     metrics_reporter: &mut RampReporter,
     data: LineValue,
     ingest_ns: u64,
@@ -88,13 +88,13 @@ pub(crate) fn transmit_event(
         origin_uri: Some(origin_uri),
         ..Event::default()
     };
-    if let Some(((input, addr), pipelines)) = pipelines.split_last() {
+    if let Some((last, pipelines)) = pipelines.split_last_mut() {
         metrics_reporter.periodic_flush(ingest_ns);
         metrics_reporter.increment_out();
 
         for (input, addr) in pipelines {
             if let Some(input) = input.instance_port() {
-                if let Err(e) = addr.try_send(pipeline::Msg::Event {
+                if let Err(e) = addr.try_send_safe(pipeline::Msg::Event {
                     input: input.to_string().into(),
                     event: event.clone(),
                 }) {
@@ -103,8 +103,8 @@ pub(crate) fn transmit_event(
                 }
             }
         }
-        if let Some(input) = input.instance_port() {
-            if let Err(e) = addr.try_send(pipeline::Msg::Event {
+        if let Some(input) = last.0.instance_port() {
+            if let Err(e) = last.1.try_send_safe(pipeline::Msg::Event {
                 input: input.to_string().into(),
                 event,
             }) {
@@ -119,7 +119,7 @@ pub(crate) fn transmit_event(
 // We are borrowing a dyn box as we don't want to pass ownership.
 #[allow(clippy::borrowed_box, clippy::too_many_arguments)]
 pub(crate) fn send_event(
-    pipelines: &[(TremorURL, pipeline::Addr)],
+    pipelines: &mut [(TremorURL, pipeline::Addr)],
     preprocessors: &mut Preprocessors,
     codec: &mut Box<dyn Codec>,
     metrics_reporter: &mut RampReporter,
@@ -156,7 +156,7 @@ pub(crate) fn send_event(
 
 pub(crate) enum PipeHandlerResult {
     Terminate,
-    Retry,
+    Idle,
     Normal,
     Cb(CBAction, Ids),
 }
@@ -195,7 +195,7 @@ pub(crate) fn handle_pipelines_msg(
                         pipelines.push(p.clone());
                     }
                 }
-                Ok(PipeHandlerResult::Retry)
+                Ok(PipeHandlerResult::Idle)
             }
             onramp::Msg::Disconnect { tx, .. } => {
                 tx.send(true)?;

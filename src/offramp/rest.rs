@@ -105,7 +105,7 @@ impl Rest {
         let destination = self.config.endpoints[self.client_idx].clone();
         let (tx, rx) = bounded(1);
         let config = self.config.clone();
-        let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
+        let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
             .pipelines
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
@@ -134,11 +134,12 @@ impl Rest {
                 ..Event::default()
             };
 
-            for (pid, p) in pipelines {
+            for (pid, p) in &mut pipelines {
                 if p.send_insight(insight.clone()).is_err() {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
+            while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
 
             if let Err(e) = tx.send(r) {
                 error!("Failed to send reply: {}", e)
@@ -162,16 +163,18 @@ impl Rest {
                     ..Event::default()
                 };
 
-                let pipelines: Vec<(TremorURL, pipeline::Addr)> = self
+                let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
                     .pipelines
                     .iter()
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
-                for (pid, p) in pipelines {
+                for (pid, p) in &mut pipelines {
                     if p.send_insight(insight.clone()).is_err() {
                         error!("Failed to send contraflow to pipeline {}", pid)
                     };
                 }
+                while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
+
                 error!("Dropped data due to overload");
                 Err("Dropped data due to overload".into())
             }

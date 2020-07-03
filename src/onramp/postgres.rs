@@ -125,7 +125,7 @@ fn onramp_loop(
             &mut pipelines,
             &mut metrics_reporter,
         ))? {
-            PipeHandlerResult::Retry => continue,
+            PipeHandlerResult::Idle => continue,
             PipeHandlerResult::Terminate => return Ok(()),
             _ => (), // fixme .unwrap()
         }
@@ -300,7 +300,7 @@ fn onramp_loop(
             };
 
             send_event(
-                &pipelines,
+                &mut pipelines,
                 &mut preprocessors,
                 &mut codec,
                 &mut metrics_reporter,

@@ -57,7 +57,7 @@ pub enum Msg {
     Signal(Event),
     Connect {
         id: TremorURL,
-        addr: pipeline::Addr,
+        addr: Box<pipeline::Addr>,
     },
     Disconnect {
         id: TremorURL,
@@ -152,10 +152,10 @@ pub(crate) struct Manager {
 
 fn send_to_pipelines(
     offramp_id: &TremorURL,
-    pipelines: &HashMap<TremorURL, pipeline::Addr>,
+    pipelines: &mut HashMap<TremorURL, pipeline::Addr>,
     e: &Event,
 ) {
-    for p in pipelines.values() {
+    for p in pipelines.values_mut() {
         if let Err(e) = p.send_insight(e.clone()) {
             error!("[Offramp::{}] Counterflow error: {}", offramp_id, e);
         };
@@ -193,7 +193,7 @@ impl Manager {
                 match m {
                     Msg::Signal(signal) => {
                         if let Some(insight) = offramp.on_signal(signal) {
-                            send_to_pipelines(&offramp_id, &pipelines, &insight);
+                            send_to_pipelines(&offramp_id, &mut pipelines, &insight);
                         }
                     }
                     Msg::Event { event, input } => {
@@ -213,16 +213,16 @@ impl Manager {
                         };
                         if offramp.auto_ack() {
                             // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
-                            send_to_pipelines(&offramp_id, &pipelines, &e);
+                            send_to_pipelines(&offramp_id, &mut pipelines, &e);
                         }
                     }
-                    Msg::Connect { id, addr } => {
+                    Msg::Connect { id, mut addr } => {
                         if id == *METRICS_PIPELINE {
                             info!(
                                 "[Offramp::{}] Connecting system metrics pipeline {}",
                                 offramp_id, id
                             );
-                            metrics_reporter.set_metrics_pipeline((id, addr));
+                            metrics_reporter.set_metrics_pipeline((id, *addr));
                         } else {
                             info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
                             let insight = if offramp.is_active() {
@@ -237,8 +237,8 @@ impl Manager {
                                 );
                             };
 
-                            pipelines.insert(id.clone(), addr.clone());
-                            offramp.add_pipeline(id, addr);
+                            pipelines.insert(id.clone(), (*addr).clone());
+                            offramp.add_pipeline(id, *addr);
                         }
                     }
                     Msg::Disconnect { id, tx } => {

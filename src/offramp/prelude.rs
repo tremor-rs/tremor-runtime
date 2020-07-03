@@ -38,7 +38,6 @@ pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> 
         .collect()
 }
 // We are borrowing a dyn box as we don't want to pass ownership.
-#[allow(clippy::borrowed_box)]
 pub fn postprocess(
     postprocessors: &mut [Box<dyn Postprocessor>],
     ingres_ns: u64,

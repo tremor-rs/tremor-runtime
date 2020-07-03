@@ -129,7 +129,7 @@ async fn onramp_loop(
     loop {
         loop {
             match handle_pipelines(false, &rx, &mut pipelines, &mut metrics_reporter).await? {
-                PipeHandlerResult::Retry => continue,
+                PipeHandlerResult::Idle => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
                 _ => break, // fixme .unwrap()
             }
@@ -144,7 +144,7 @@ async fn onramp_loop(
             msg = loop_rx.recv().fuse() => if let Ok(WsOnrampMessage::Data(mut ingest_ns, origin_uri, data)) = msg {
                 id += 1;
                 send_event(
-                    &pipelines,
+                    &mut pipelines,
                     &mut no_pp,
                     &mut  codec,
                     &mut metrics_reporter,
@@ -157,7 +157,7 @@ async fn onramp_loop(
             },
             msg = rx.recv().fuse() => if let Ok(msg) = msg {
                 match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
-                    PipeHandlerResult::Retry | PipeHandlerResult::Normal => continue,
+                    PipeHandlerResult::Idle | PipeHandlerResult::Normal => continue,
                     PipeHandlerResult::Terminate => break,
                     _ => continue, // fixme .unwrap()
                 }

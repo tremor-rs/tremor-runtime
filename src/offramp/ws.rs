@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::offramp::prelude::*;
+use crate::{offramp::prelude::*, pipeline};
 use async_std::sync::{channel, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
@@ -116,18 +116,19 @@ impl Ws {
     async fn update_ws_state(&mut self, ingest_ns: u64) -> bool {
         let mut new_connect = false;
         while !self.rx.is_empty() {
+            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
             match self.rx.recv().await.unwrap_or_default() {
                 WSResult::Connected(addr) => self.addr = Some(addr),
                 WSResult::Disconnected => self.addr = None,
                 WSResult::Ack(id) => {
-                    for p in self.pipelines.values() {
+                    for p in self.pipelines.values_mut() {
                         if let Err(e) = p.send_insight(Event::cb_ack(ingest_ns, id.clone())) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
                     }
                 }
                 WSResult::Fail(id) => {
-                    for p in self.pipelines.values() {
+                    for p in self.pipelines.values_mut() {
                         if let Err(e) = p.send_insight(Event::cb_fail(ingest_ns, id.clone())) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
@@ -150,18 +151,20 @@ impl Offramp for Ws {
 
     fn on_signal(&mut self, event: Event) -> Option<Event> {
         task::block_on(async {
+            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
+
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;
 
             if was_connected && !new_connect {
-                for p in self.pipelines.values() {
+                for p in self.pipelines.values_mut() {
                     if let Err(e) = p.send_insight(Event::cb_trigger(event.ingest_ns)) {
                         error!("[WS Offramp] failed to return CB data: {}", e);
                     }
                 }
             } else if !was_connected && new_connect {
                 dbg!(was_connected, new_connect);
-                for p in self.pipelines.values() {
+                for p in self.pipelines.values_mut() {
                     if let Err(e) = p.send_insight(Event::cb_restore(event.ingest_ns)) {
                         error!("[WS Offramp] failed to return CB data: {}", e);
                     }
@@ -178,13 +181,15 @@ impl Offramp for Ws {
         event: Event,
     ) -> Result<()> {
         task::block_on(async {
+            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
+
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;
 
             if let Some(addr) = &self.addr {
                 if new_connect && !was_connected {
                     dbg!(was_connected, new_connect);
-                    for p in self.pipelines.values() {
+                    for p in self.pipelines.values_mut() {
                         if let Err(e) = p.send_insight(Event::cb_restore(event.ingest_ns)) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
                         }
@@ -205,16 +210,14 @@ impl Offramp for Ws {
                     }
                 }
             } else {
-                for p in self.pipelines.values() {
+                for p in self.pipelines.values_mut() {
                     if let Err(e) = p.send_insight(Event::cb_trigger(event.ingest_ns)) {
                         error!("[WS Offramp] failed to return CB data: {}", e);
                     }
-                    for p in self.pipelines.values() {
-                        if let Err(e) =
-                            p.send_insight(Event::cb_fail(event.ingest_ns, event.id.clone()))
-                        {
-                            error!("[WS Offramp] failed to return CB data: {}", e);
-                        }
+                    if let Err(e) =
+                        p.send_insight(Event::cb_fail(event.ingest_ns, event.id.clone()))
+                    {
+                        error!("[WS Offramp] failed to return CB data: {}", e);
                     }
                 }
                 return Err(Error::from("not connected"));

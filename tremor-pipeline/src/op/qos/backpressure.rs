@@ -168,15 +168,11 @@ impl Operator for Backpressure {
         let timeout = self.config.timeout;
         if meta.get("error").is_some()
             || insight.cb == Some(CBAction::Fail)
-            || insight.cb == Some(CBAction::Trigger)
-        {
-            let backoff = next_backoff(steps, output.backoff);
-            output.backoff = backoff;
-            output.next = insight.ingest_ns + backoff;
-        } else if meta
-            .get("time")
-            .and_then(Value::cast_f64)
-            .map_or(false, |v| v > timeout)
+            || insight.cb == Some(CBAction::Close)
+            || meta
+                .get("time")
+                .and_then(Value::cast_f64)
+                .map_or(false, |v| v > timeout)
         {
             let backoff = next_backoff(steps, output.backoff);
             output.backoff = backoff;
@@ -187,7 +183,7 @@ impl Operator for Backpressure {
         }
 
         if self.config.circuit_breaker && was_open && output.backoff > 0 {
-            insight.cb = Some(CBAction::Trigger);
+            insight.cb = Some(CBAction::Close);
         };
     }
 }

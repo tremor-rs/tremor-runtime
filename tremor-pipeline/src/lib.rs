@@ -134,9 +134,9 @@ pub enum NodeKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum CBAction {
     /// The circuit breaker is triggerd and should break
-    Trigger,
+    Close,
     /// The circuit breaker is restored and should work again
-    Restore,
+    Open,
     /// Acknowledge delivery of messages up to a given ID.
     /// All messages prior to and including  this will be considered delivered.
     Ack,
@@ -283,7 +283,7 @@ impl Event {
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Restore),
+            cb: Some(CBAction::Open),
             ..Event::default()
         }
     }
@@ -292,7 +292,7 @@ impl Event {
     pub fn cb_trigger(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Trigger),
+            cb: Some(CBAction::Close),
             ..Event::default()
         }
     }

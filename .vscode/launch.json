@@ -1,0 +1,425 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'tremor-api'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=tremor-api"],
+        "filter": {
+          "name": "tremor-api",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'tremor-pipeline'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=tremor-pipeline"],
+        "filter": {
+          "name": "tremor-pipeline",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'query'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=query",
+          "--package=tremor-pipeline"
+        ],
+        "filter": {
+          "name": "query",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'tremor-influx'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=tremor-influx"],
+        "filter": {
+          "name": "tremor-influx",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug benchmark 'decoder'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bench=decoder",
+          "--package=tremor-influx"
+        ],
+        "filter": {
+          "name": "decoder",
+          "kind": "bench"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'tremor_script'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=tremor-script"],
+        "filter": {
+          "name": "tremor_script",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'tremor-script'",
+      "cargo": {
+        "args": ["build", "--bin=tremor-script", "--package=tremor-script"],
+        "filter": {
+          "name": "tremor-script",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'tremor-script'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=tremor-script",
+          "--package=tremor-script"
+        ],
+        "filter": {
+          "name": "tremor-script",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'tremor-runtime'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=tremor-runtime"],
+        "filter": {
+          "name": "tremor-runtime",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'script_runtime_error'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=script_runtime_error",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "script_runtime_error",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'query_error'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=query_error",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "query_error",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'query'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=query",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "query",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'pipeline'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=pipeline",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "pipeline",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'script_error'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=script_error",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "script_error",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'script_warning'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=script_warning",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "script_warning",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'script'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=script",
+          "--package=tremor-runtime"
+        ],
+        "filter": {
+          "name": "script",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'tremor-query'",
+      "cargo": {
+        "args": ["build", "--bin=tremor-query", "--package=tremor-query"],
+        "filter": {
+          "name": "tremor-query",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'tremor-query'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=tremor-query",
+          "--package=tremor-query"
+        ],
+        "filter": {
+          "name": "tremor-query",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'tremor-server'",
+      "cargo": {
+        "args": ["build", "--bin=tremor-server", "--package=tremor-server"],
+        "filter": {
+          "name": "tremor-server",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug real-workflow-throughput-json",
+      "cargo": {
+        "args": ["build", "--bin=tremor-server", "--package=tremor-server"],
+        "filter": {
+          "name": "tremor-server",
+          "kind": "bin"
+        }
+      },
+      "args": [
+        "--no-api",
+        "-c",
+        "bench/real-workflow-throughput-json.yaml",
+        "bench/link.yaml"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Release real-workflow-throughput-json",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=tremor-server",
+          "--package=tremor-server",
+          "--release"
+        ],
+        "filter": {
+          "name": "tremor-server",
+          "kind": "bin"
+        }
+      },
+      "args": [
+        "--no-api",
+        "-c",
+        "bench/real-workflow-throughput-json.yaml",
+        "bench/link.yaml"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'tremor-server'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=tremor-server",
+          "--package=tremor-server"
+        ],
+        "filter": {
+          "name": "tremor-server",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'tremor-tool'",
+      "cargo": {
+        "args": ["build", "--bin=tremor-tool", "--package=tremor-tool"],
+        "filter": {
+          "name": "tremor-tool",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'tremor-tool'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=tremor-tool",
+          "--package=tremor-tool"
+        ],
+        "filter": {
+          "name": "tremor-tool",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

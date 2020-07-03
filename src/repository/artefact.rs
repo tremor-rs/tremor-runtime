@@ -149,7 +149,7 @@ impl Artefact for Pipeline {
                                 .send(pipeline::Msg::ConnectPipeline(
                                     from.clone().into(),
                                     to.clone(),
-                                    p,
+                                    Box::new(p),
                                 ))
                                 .map_err(|e| -> Error {
                                     format!("Could not send to pipeline: {:?}", e).into()
@@ -268,7 +268,7 @@ impl Artefact for OfframpArtefact {
                 if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
                     offramp.send(offramp::Msg::Connect {
                         id: pipeline_id,
-                        addr: pipeline,
+                        addr: Box::new(pipeline),
                     })?;
                 };
             }
