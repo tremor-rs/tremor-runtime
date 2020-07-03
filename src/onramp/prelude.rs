@@ -15,9 +15,10 @@
 pub(crate) use crate::codec::{self, Codec};
 pub(crate) use crate::errors::*;
 pub(crate) use crate::metrics::RampReporter;
-pub(crate) use crate::onramp::{self, Onramp, Source, SourceManager, SourceReply, SourceState};
+pub(crate) use crate::onramp::{self, Onramp};
 pub(crate) use crate::pipeline;
 pub(crate) use crate::preprocessor::{self, Preprocessors};
+pub(crate) use crate::source::{Source, SourceManager, SourceReply, SourceState};
 pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
