@@ -17,6 +17,7 @@ use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::registry::ServantId;
+use crate::sink::{blackhole, rest, stderr, stdout};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
@@ -25,11 +26,10 @@ use async_std::sync::channel;
 use async_std::task::{self, JoinHandle};
 use crossbeam_channel::{bounded, Sender as CbSender};
 use hashbrown::HashMap;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::thread;
 
-mod blackhole;
 mod debug;
 mod elastic;
 mod exit;
@@ -41,10 +41,7 @@ mod gpub;
 mod kafka;
 mod newrelic;
 mod postgres;
-mod prelude;
-mod rest;
-mod stderr;
-mod stdout;
+pub(crate) mod prelude;
 mod tcp;
 mod udp;
 mod ws;
@@ -72,15 +69,14 @@ pub type Addr = CbSender<Msg>;
 // overlying object with lifetimes.
 // We also can't pass in Box<dyn Codec> as that would try to move it out of
 // borrowed contest
-#[allow(clippy::borrowed_box, unused_variables)]
+#[allow(unused_variables)]
 pub trait Offramp: Send {
-    fn start(&mut self, codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()>;
-    fn on_event(
-        &mut self,
-        codec: &Box<dyn Codec>,
-        input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()>;
+    fn ready(&mut self) -> bool {
+        true
+    }
+    fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
+    fn on_event(&mut self, codec: &dyn Codec, input: Cow<'static, str>, event: Event)
+        -> Result<()>;
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
@@ -178,7 +174,7 @@ impl Manager {
             id,
         }: Create,
     ) {
-        if let Err(e) = offramp.start(&codec, &postprocessors) {
+        if let Err(e) = offramp.start(codec.borrow(), &postprocessors) {
             error!("Failed to create onramp {}: {}", id, e);
             return;
         }
@@ -203,7 +199,7 @@ impl Manager {
                         metrics_reporter.increment_in();
 
                         // TODO FIXME implement postprocessors
-                        let e = if let Err(e) = offramp.on_event(&codec, input, event) {
+                        let e = if let Err(e) = offramp.on_event(codec.borrow(), input, event) {
                             metrics_reporter.increment_error();
                             error!("[Offramp::{}] On Event error: {}", offramp_id, e);
                             Event::cb_fail(ingest_ns, id.clone())

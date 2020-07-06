@@ -169,7 +169,6 @@ impl Elastic {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
-            while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
             // TODO: Handle contraflow for notification
             if let Err(e) = tx.send(r) {
                 error!("Failed to send reply: {}", e)
@@ -200,7 +199,6 @@ impl Elastic {
                         error!("Failed to send contraflow to pipeline {}", pid)
                     };
                 }
-                while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
 
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
@@ -222,7 +220,7 @@ impl Offramp for Elastic {
     // We enforce json here!
     fn on_event(
         &mut self,
-        _codec: &Box<dyn Codec>,
+        _codec: &dyn Codec,
         _input: Cow<'static, str>,
         event: Event,
     ) -> Result<()> {
@@ -283,7 +281,7 @@ impl Offramp for Elastic {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

@@ -13,11 +13,14 @@
 // limitations under the License.
 
 use crate::offramp::prelude::*;
-use crossbeam_channel::bounded;
+use crate::sink::{
+    AsyncSink, ConfigImpl, Event, OpConfig, Result, Sink, SinkDequeueError, SinkManager,
+};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
-use simd_json::borrowed::Object;
 use std::str;
 use std::time::Instant;
+use tremor_pipeline::{CBAction, OpMeta};
 use tremor_script::prelude::*;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -40,8 +43,9 @@ pub struct Rest {
     client_idx: usize,
     config: Config,
     queue: AsyncSink<u64>,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
+    tx: Sender<Event>,
+    rx: Receiver<Event>,
 }
 
 impl offramp::Impl for Rest {
@@ -50,12 +54,14 @@ impl offramp::Impl for Rest {
             let config: Config = Config::new(config)?;
 
             let queue = AsyncSink::new(config.concurrency);
-            Ok(Box::new(Self {
+            let (tx, rx) = bounded(64);
+            Ok(SinkManager::new_box(Self {
                 client_idx: 0,
-                pipelines: HashMap::new(),
                 postprocessors: vec![],
                 config,
                 queue,
+                rx,
+                tx,
             }))
         } else {
             Err("Rest offramp requires a configuration.".into())
@@ -96,50 +102,37 @@ impl Rest {
         Ok(d)
     }
 
-    fn enqueue_send_future(
-        &mut self,
-        output: Option<Value<'static>>,
-        payload: Vec<u8>,
-    ) -> Result<()> {
+    fn enqueue_send_future(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
         let destination = self.config.endpoints[self.client_idx].clone();
         let (tx, rx) = bounded(1);
         let config = self.config.clone();
-        let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
-            .pipelines
-            .iter()
-            .map(|(i, p)| (i.clone(), p.clone()))
-            .collect();
+        let insight_tx = self.tx.clone();
+
         task::spawn(async move {
             let r = Self::flush(&destination, config, payload).await;
-            let mut m = Value::object_with_capacity(2);
-            if let Some(o) = output {
-                if m.insert("backpressure-output", o).is_err() {
-                    unreachable!()
-                };
-            };
-            if let Ok(t) = r {
+            let mut m = Value::object_with_capacity(1);
+
+            let cb = if let Ok(t) = r {
                 if m.insert("time", t).is_err() {
                     unreachable!()
                 };
+                Some(CBAction::Ack)
             } else {
                 error!("REST offramp error: {:?}", r);
-                if m.insert("error", "Failed to send").is_err() {
-                    unreachable!()
-                }
-            };
-            let insight = Event {
-                data: (Value::null(), m).into(),
-                ingest_ns: nanotime(),
-                ..Event::default()
+                Some(CBAction::Fail)
             };
 
-            for (pid, p) in &mut pipelines {
-                if p.send_insight(insight.clone()).is_err() {
-                    error!("Failed to send contraflow to pipeline {}", pid)
-                };
-            }
-            while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
+            if let Err(e) = insight_tx.send(Event {
+                id,
+                op_meta,
+                data: (Value::null(), m).into(),
+                cb,
+                ingest_ns: nanotime(),
+                ..Event::default()
+            }) {
+                error!("Failed to send reply: {}", e)
+            };
 
             if let Err(e) = tx.send(r) {
                 error!("Failed to send reply: {}", e)
@@ -148,38 +141,24 @@ impl Rest {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, output: Option<Value<'static>>, payload: Vec<u8>) -> Result<()> {
+    fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                let mut m = Object::new();
-                m.insert(
-                    "error".into(),
-                    "Dropped data due to REST endpoint overload".into(),
-                );
-
-                let insight = Event {
-                    data: (Value::null(), m).into(),
+                if let Err(e) = self.tx.send(Event {
+                    id,
+                    op_meta,
+                    cb: Some(CBAction::Fail),
                     ingest_ns: nanotime(),
                     ..Event::default()
+                }) {
+                    error!("Failed to send reply: {}", e)
                 };
-
-                let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
-                    .pipelines
-                    .iter()
-                    .map(|(i, p)| (i.clone(), p.clone()))
-                    .collect();
-                for (pid, p) in &mut pipelines {
-                    if p.send_insight(insight.clone()).is_err() {
-                        error!("Failed to send contraflow to pipeline {}", pid)
-                    };
-                }
-                while !pipelines.iter_mut().all(|(_, addr)| addr.drain_ready()) {}
 
                 error!("Dropped data due to overload");
                 Err("Dropped data due to overload".into())
             }
             _ => {
-                if self.enqueue_send_future(output, payload).is_err() {
+                if self.enqueue_send_future(id, op_meta, payload).is_err() {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request");
                     Err("Failed to enqueue send request".into())
@@ -189,39 +168,50 @@ impl Rest {
             }
         }
     }
+    async fn drain_insights(&mut self) -> Result<Vec<Event>> {
+        let mut v = Vec::with_capacity(self.tx.len());
+        while let Ok(e) = self.rx.try_recv() {
+            v.push(e)
+        }
+        Ok(v)
+    }
 }
 
-impl Offramp for Rest {
-    fn on_event(
+#[async_trait::async_trait]
+impl Sink for Rest {
+    async fn on_event(
         &mut self,
-        codec: &Box<dyn Codec>,
-        _input: Cow<'static, str>,
+        _input: &str,
+        codec: &dyn Codec,
         event: Event,
-    ) -> Result<()> {
+    ) -> Result<Vec<Event>> {
         let mut payload = Vec::with_capacity(4096);
-        let mut output = None;
-        for (value, meta) in event.value_meta_iter() {
-            if output.is_none() {
-                output = meta.get("backpressure-output").map(Value::clone_static);
-            }
+        for value in event.value_iter() {
             let mut raw = codec.encode(value)?;
             payload.append(&mut raw);
             payload.push(b'\n');
         }
-        self.maybe_enque(output, payload)
+        self.maybe_enque(event.id, event.op_meta, payload)?;
+        self.drain_insights().await
     }
+
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+
+    async fn init(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        let _ = codec;
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
+    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
+        let _ = signal;
+        self.drain_insights().await
     }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

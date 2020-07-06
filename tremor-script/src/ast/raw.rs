@@ -1358,7 +1358,7 @@ impl<'script> Upable<'script> for PatchOperationRaw<'script> {
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             },
-            Merge { ident, expr } => PatchOperation::Merge {
+            Merge { expr, ident, .. } => PatchOperation::Merge {
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },

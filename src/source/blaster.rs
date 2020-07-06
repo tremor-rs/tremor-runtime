@@ -18,7 +18,6 @@ use serde_yaml::Value;
 use std::fs::File;
 use std::io::{BufRead, Read};
 use std::path::Path;
-use std::thread;
 use std::time::Duration;
 use xz2::read::XzDecoder;
 
@@ -103,7 +102,7 @@ impl Source for Blaster {
         let _id = id;
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
-            thread::sleep(Duration::from_nanos(ival));
+            task::sleep(Duration::from_nanos(ival)).await;
         }
         if Some(self.acc.count) == self.config.iters {
             return Ok(SourceReply::StateChange(SourceState::Disconnected));

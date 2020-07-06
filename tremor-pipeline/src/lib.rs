@@ -50,6 +50,7 @@ use std::collections::BTreeMap;
 use std::iter::{self, Iterator};
 use std::{
     fmt,
+    mem::swap,
     sync::{Arc, Mutex},
 };
 
@@ -82,6 +83,9 @@ pub type NodeLookupFn = fn(
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
 pub(crate) type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
+
+/// Operator metadata
+pub type OpMeta = BTreeMap<u64, OwnedValue>;
 
 lazy_static! {
     /// Function registory for the pipeline to look up functions
@@ -230,7 +234,7 @@ pub struct Event {
     /// Circuit breaker action
     pub cb: Option<CBAction>,
     /// Metadata for operators
-    pub op_meta: BTreeMap<u64, OwnedValue>,
+    pub op_meta: OpMeta,
 }
 
 impl Event {
@@ -238,8 +242,8 @@ impl Event {
     /// `origin_uri` of the event may return None if no insight is needed
     pub fn insight_ack(&mut self) -> Option<Event> {
         let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
-        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
-        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        swap(&mut e.op_meta, &mut self.op_meta);
+        swap(&mut e.origin_uri, &mut self.origin_uri);
         Some(e)
     }
 
@@ -247,8 +251,8 @@ impl Event {
     /// event may return None if no insight is needed
     pub fn insight_fail(&mut self) -> Option<Event> {
         let mut e = Event::cb_fail(self.ingest_ns, self.id.clone());
-        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
-        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        swap(&mut e.op_meta, &mut self.op_meta);
+        swap(&mut e.origin_uri, &mut self.origin_uri);
         Some(e)
     }
 
@@ -256,8 +260,8 @@ impl Event {
     /// event may return None if no insight is needed
     pub fn insight_restore(&mut self) -> Option<Event> {
         let mut e = Event::cb_restore(self.ingest_ns);
-        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
-        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        swap(&mut e.op_meta, &mut self.op_meta);
+        swap(&mut e.origin_uri, &mut self.origin_uri);
         Some(e)
     }
 
@@ -265,8 +269,8 @@ impl Event {
     /// event may return None if no insight is needed
     pub fn insight_trigger(&mut self) -> Option<Event> {
         let mut e = Event::cb_trigger(self.ingest_ns);
-        std::mem::swap(&mut e.op_meta, &mut self.op_meta);
-        std::mem::swap(&mut e.origin_uri, &mut self.origin_uri);
+        swap(&mut e.op_meta, &mut self.op_meta);
+        swap(&mut e.origin_uri, &mut self.origin_uri);
         Some(e)
     }
 
@@ -397,7 +401,7 @@ impl<'value> Iterator for ValueIter<'value> {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum SignalKind {
     // Lifecycle
-    /// Init singnal    
+    /// Init singnal
     Init,
     /// Shutdown Signal
     Shutdown,

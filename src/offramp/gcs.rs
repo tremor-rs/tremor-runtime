@@ -93,12 +93,12 @@ impl Offramp for GCS {
         "json"
     }
 
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
 
-    fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    fn on_event(&mut self, codec: &dyn Codec, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             let req = Object::default();

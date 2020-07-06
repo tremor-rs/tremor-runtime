@@ -43,7 +43,7 @@ impl offramp::Impl for Exit {
 impl Offramp for Exit {
     fn on_event(
         &mut self,
-        _codec: &Box<dyn Codec>,
+        _codec: &dyn Codec,
         _input: Cow<'static, str>,
         event: Event,
     ) -> Result<()> {
@@ -70,7 +70,7 @@ impl Offramp for Exit {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
