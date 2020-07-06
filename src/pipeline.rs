@@ -32,7 +32,7 @@ pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
 #[derive(Clone)]
 pub struct Addr {
     addr: TrySender<Msg>,
-    cf_addr: TrySender<CfMsg>,
+    cf_addr: CbSender<CfMsg>,
     id: ServantId,
 }
 
@@ -87,18 +87,30 @@ impl<M: Send> TrySender<M> {
     }
 
     pub(crate) fn drain_ready(&mut self) -> bool {
-        std::mem::swap(&mut self.pending, &mut self.pending2);
-        for msg in self.pending2.drain(..) {
-            match self.addr.try_send(msg) {
-                Err(TrySendError::Full(msg)) => self.pending.push(msg),
-                Ok(()) | Err(_) => (),
+        if !self.pending.is_empty() && self.addr.capacity().unwrap_or_default() > self.addr.len() {
+            std::mem::swap(&mut self.pending, &mut self.pending2);
+            let mut bad = false;
+            for msg in self.pending2.drain(..) {
+                if bad {
+                    self.pending.push(msg)
+                } else {
+                    match self.addr.try_send(msg) {
+                        Err(TrySendError::Full(msg)) => {
+                            self.pending.push(msg);
+                            bad = true
+                        }
+                        Ok(()) | Err(_) => (),
+                    }
+                }
             }
         }
         self.ready()
     }
+
     pub(crate) fn send(&self, msg: M) -> Result<()> {
         Ok(self.addr.send(msg)?)
     }
+
     pub(crate) fn maybe_send(&self, msg: M) -> bool {
         self.addr.try_send(msg).is_ok()
     }
@@ -110,7 +122,8 @@ impl Addr {
     }
 
     pub(crate) fn send_insight(&mut self, event: Event) -> Result<()> {
-        Ok(self.cf_addr.try_send_safe(CfMsg::Insight(event))?)
+        let r = Ok(self.cf_addr.send(CfMsg::Insight(event))?);
+        r
     }
 
     pub(crate) fn send(&self, msg: Msg) -> Result<()> {
@@ -126,7 +139,7 @@ impl Addr {
     }
 
     pub(crate) fn drain_ready(&mut self) -> bool {
-        self.addr.drain_ready() && self.cf_addr.drain_ready()
+        self.addr.drain_ready()
     }
 }
 
@@ -135,7 +148,7 @@ impl fmt::Debug for Addr {
         write!(f, "Pipeline({})", self.id)
     }
 }
-
+#[derive(Debug)]
 pub(crate) enum CfMsg {
     Insight(Event),
 }
@@ -316,88 +329,100 @@ fn pipeline_thread(
     let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
 
     info!("[Pipeline:{}] starting thread.", id);
-    for req in rx {
-        // FIXME eprintln!("pipeline");
-        loop {
-            while let Ok(CfMsg::Insight(insight)) = cf_rx.try_recv() {
-                task::block_on(handle_insight(None, insight, &mut pipeline, &onramps));
+    loop {
+        use crossbeam_channel::select;
+        if !dests
+            .values_mut()
+            .all(|v| v.iter_mut().all(|(_, dst)| dst.drain_ready()))
+        {
+            if let Ok(msg) = cf_rx.try_recv() {
+                match msg {
+                    CfMsg::Insight(insight) => {
+                        task::block_on(handle_insight(None, insight, &mut pipeline, &onramps))
+                    }
+                }
             }
-            if dests
-                .values_mut()
-                .all(|v| v.iter_mut().all(|(_, dst)| dst.drain_ready()))
-            {
-                break;
-            }
+            continue;
         }
-        match req {
-            Msg::Event { input, event } => {
-                // FIXME eprintln!("event");
-                match pipeline.enqueue(&input, event, &mut eventset) {
-                    Ok(()) => {
-                        task::block_on(handle_insights(&mut pipeline, &onramps));
+        select! {
+            recv(cf_rx) -> msg => {
+                match msg {
+                    Ok(CfMsg::Insight(insight)) => task::block_on(handle_insight(None, insight, &mut pipeline, &onramps)),
+                    _ => break
+                }
 
-                        if let Err(e) = send_events(&mut eventset, &mut dests) {
-                            error!("Failed to send event: {}", e)
+            }
+            recv(rx) -> msg => {
+                match msg {
+                    Ok(Msg::Event { input, event }) => {
+                        match pipeline.enqueue(&input, event, &mut eventset) {
+                            Ok(()) => {
+                                task::block_on(handle_insights(&mut pipeline, &onramps));
+                                if let Err(e) = send_events(&mut eventset, &mut dests) {
+                                    error!("Failed to send event: {}", e)
+                                }
+                            }
+                            Err(e) => error!("error: {:?}", e),
                         }
                     }
-                    Err(e) => error!("error: {:?}", e),
-                }
-            }
-            Msg::Signal(signal) => {
-                if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
-                    error!("error: {:?}", e)
-                } else {
-                    if let Err(e) = send_signal(&id, signal, &mut dests) {
-                        error!("Failed to send signal: {}", e)
-                    }
-                    task::block_on(handle_insights(&mut pipeline, &onramps));
+                    Ok(Msg::Signal(signal)) => {
+                        if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
+                            error!("error: {:?}", e)
+                        } else {
+                            if let Err(e) = send_signal(&id, signal, &mut dests) {
+                                error!("Failed to send signal: {}", e)
+                            }
+                            task::block_on(handle_insights(&mut pipeline, &onramps));
 
-                    if let Err(e) = send_events(&mut eventset, &mut dests) {
-                        error!("Failed to send event: {}", e)
+                            if let Err(e) = send_events(&mut eventset, &mut dests) {
+                                error!("Failed to send event: {}", e)
+                            }
+                        }
+                    }
+                    Ok(Msg::ConnectOfframp(output, offramp_id, offramp)) => {
+                        info!(
+                            "[Pipeline:{}] connecting {} to offramp {}",
+                            id, output, offramp_id
+                        );
+                        if let Some(offramps) = dests.get_mut(&output) {
+                            offramps.push((offramp_id, Dest::Offramp(offramp.into())));
+                        } else {
+                            dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp.into()))]);
+                        }
+                    }
+                    Ok(Msg::ConnectPipeline(output, pipeline_id, pipeline)) => {
+                        info!(
+                            "[Pipeline:{}] connecting {} to pipeline {}",
+                            id, output, pipeline_id
+                        );
+                        if let Some(offramps) = dests.get_mut(&output) {
+                            offramps.push((pipeline_id, Dest::Pipeline(*pipeline)));
+                        } else {
+                            dests.insert(output, vec![(pipeline_id, Dest::Pipeline(*pipeline))]);
+                        }
+                    }
+                    Ok(Msg::ConnectOnramp(onramp_id, onramp)) => {
+                        onramps.insert(onramp_id, onramp);
+                    }
+                    Ok(Msg::DisconnectOutput(output, to_delete)) => {
+                        let mut remove = false;
+                        if let Some(offramp_vec) = dests.get_mut(&output) {
+                            offramp_vec.retain(|(this_id, _)| this_id != &to_delete);
+                            remove = offramp_vec.is_empty();
+                        }
+                        if remove {
+                            dests.remove(&output);
+                        }
+                    }
+                    Ok(Msg::DisconnectInput(onramp_id)) => {
+                        onramps.remove(&onramp_id);
+                    }
+                    Err(_) => {
+                            break;
                     }
                 }
             }
-            Msg::ConnectOfframp(output, offramp_id, offramp) => {
-                info!(
-                    "[Pipeline:{}] connecting {} to offramp {}",
-                    id, output, offramp_id
-                );
-                if let Some(offramps) = dests.get_mut(&output) {
-                    offramps.push((offramp_id, Dest::Offramp(offramp.into())));
-                } else {
-                    dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp.into()))]);
-                }
-            }
-            Msg::ConnectPipeline(output, pipeline_id, pipeline) => {
-                info!(
-                    "[Pipeline:{}] connecting {} to pipeline {}",
-                    id, output, pipeline_id
-                );
-                if let Some(offramps) = dests.get_mut(&output) {
-                    offramps.push((pipeline_id, Dest::Pipeline(*pipeline)));
-                } else {
-                    dests.insert(output, vec![(pipeline_id, Dest::Pipeline(*pipeline))]);
-                }
-            }
-            Msg::ConnectOnramp(onramp_id, onramp) => {
-                // FIXME eprintln!("connecting onramp: {}", onramp_id);
-                onramps.insert(onramp_id, onramp);
-            }
-            Msg::DisconnectOutput(output, to_delete) => {
-                let mut remove = false;
-                if let Some(offramp_vec) = dests.get_mut(&output) {
-                    offramp_vec.retain(|(this_id, _)| this_id != &to_delete);
-                    remove = offramp_vec.is_empty();
-                }
-                if remove {
-                    dests.remove(&output);
-                }
-            }
-            Msg::DisconnectInput(onramp_id) => {
-                // FIXME eprintln!("disconnecting onramp: {}", onramp_id);
-                onramps.remove(&onramp_id);
-            }
-        };
+        }
     }
     info!("[Pipeline:{}] stopping thread.", id);
     Ok(())

@@ -24,7 +24,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
 use crate::offramp::prelude::*;
-use halfbrown::HashMap;
+use crate::sink::{Event, OpConfig, Result, Sink, SinkManager};
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
 use std::fmt::Display;
@@ -55,7 +55,6 @@ pub struct Blackhole {
     delivered: Histogram<u64>,
     run_secs: f64,
     bytes: usize,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
 }
 
@@ -64,7 +63,7 @@ impl offramp::Impl for Blackhole {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let now_ns = nanotime();
-            Ok(Box::new(Self {
+            Ok(SinkManager::new_box(Self {
                 // config: config.clone(),
                 run_secs: config.stop_after_secs as f64,
                 stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
@@ -75,7 +74,6 @@ impl offramp::Impl for Blackhole {
                     100_000_000_000,
                     config.significant_figures as u8,
                 )?,
-                pipelines: HashMap::new(),
                 postprocessors: vec![],
                 bytes: 0,
             }))
@@ -85,40 +83,37 @@ impl offramp::Impl for Blackhole {
     }
 }
 
-impl Offramp for Blackhole {
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
+#[async_trait::async_trait]
+impl Sink for Blackhole {
+    async fn init(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        self.postprocessors = make_postprocessors(postprocessors)?;
+        Ok(())
     }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
-    }
-    fn on_event(
+
+    async fn on_event(
         &mut self,
-        codec: &Box<dyn Codec>,
-        _input: Cow<'static, str>,
+        _input: &str,
+        codec: &dyn Codec,
         event: Event,
-    ) -> Result<()> {
+    ) -> Result<Vec<Event>> {
+        let now_ns = nanotime();
+        if self.has_stop_limit && now_ns > self.stop_after {
+            let mut buf = Vec::new();
+            let mut serializer = V2Serializer::new();
+
+            serializer.serialize(&self.delivered, &mut buf)?;
+            if quantiles(buf.as_slice(), stdout(), 5, 2).is_ok() {
+                println!(
+                    "\n\nThroughput: {:.1} MB/s",
+                    (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
+                );
+            } else {
+                eprintln!("Failed to serialize histogram");
+            }
+            // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
+            process::exit(0);
+        };
         for value in event.value_iter() {
-            let now_ns = nanotime();
-
-            if self.has_stop_limit && now_ns > self.stop_after {
-                let mut buf = Vec::new();
-                let mut serializer = V2Serializer::new();
-
-                serializer.serialize(&self.delivered, &mut buf)?;
-                if quantiles(buf.as_slice(), stdout(), 5, 2).is_ok() {
-                    println!(
-                        "\n\nThroughput: {:.1} MB/s",
-                        (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0)
-                    );
-                } else {
-                    eprintln!("Failed to serialize histogram");
-                }
-                // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
-                process::exit(0);
-            };
-
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
                 if let Ok(v) = codec.encode(value) {
@@ -127,14 +122,19 @@ impl Offramp for Blackhole {
                 self.delivered.record(delta_ns)?
             }
         }
-        Ok(())
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "null"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
-        Ok(())
+    async fn on_signal(&mut self, _signal: Event) -> Result<Vec<Event>> {
+        Ok(Vec::new())
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }
 

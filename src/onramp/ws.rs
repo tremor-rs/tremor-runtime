@@ -146,7 +146,7 @@ async fn onramp_loop(
                 send_event(
                     &mut pipelines,
                     &mut no_pp,
-                    &mut  codec,
+                    &mut codec,
                     &mut metrics_reporter,
                     &mut ingest_ns,
                     &origin_uri,

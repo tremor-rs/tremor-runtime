@@ -115,6 +115,7 @@ where
         }
         Ok(data)
     }
+
     // We are borrowing a dyn box as we don't want to pass ownership.
     fn send_event(
         &mut self,
@@ -149,6 +150,7 @@ where
             self.source.fail(original_id);
         }
     }
+
     fn handle_pipelines_msg(&mut self, msg: onramp::Msg) -> Result<PipeHandlerResult> {
         if self.pipelines.is_empty() {
             match msg {

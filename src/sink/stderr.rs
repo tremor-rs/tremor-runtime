@@ -22,50 +22,59 @@
 //! This operator takes no configuration
 
 use crate::offramp::prelude::*;
-use halfbrown::HashMap;
+use crate::sink::{Event, OpConfig, Result, Sink, SinkManager};
+use async_std::io;
+use async_std::prelude::*;
 
-pub struct StdOut {
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
+pub struct StdErr {
     postprocessors: Postprocessors,
+    stderr: io::Stderr,
 }
 
-impl offramp::Impl for StdOut {
+impl offramp::Impl for StdErr {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(Self {
-            pipelines: HashMap::new(),
+        Ok(SinkManager::new_box(Self {
             postprocessors: vec![],
+            stderr: io::stderr(),
         }))
     }
 }
-impl Offramp for StdOut {
-    fn on_event(
+#[async_trait::async_trait]
+impl Sink for StdErr {
+    async fn on_event(
         &mut self,
-        codec: &Box<dyn Codec>,
-        _input: Cow<'static, str>,
+        _input: &str,
+        codec: &dyn Codec,
         event: Event,
-    ) -> Result<()> {
+    ) -> Result<Vec<Event>> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
-                println!("{}", s)
+                self.stderr.write_all(s.as_bytes()).await?
             } else {
-                println!("{:?}", raw)
+                self.stderr
+                    .write_all(format!("{:?}", raw).as_bytes())
+                    .await?
             }
         }
+        Ok(Vec::new())
+    }
+    async fn init(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        let _ = codec;
+        self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
-    }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
     }
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
-        Ok(())
+    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
+        let _ = signal;
+        Ok(vec![])
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

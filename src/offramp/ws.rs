@@ -116,7 +116,6 @@ impl Ws {
     async fn update_ws_state(&mut self, ingest_ns: u64) -> bool {
         let mut new_connect = false;
         while !self.rx.is_empty() {
-            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
             match self.rx.recv().await.unwrap_or_default() {
                 WSResult::Connected(addr) => self.addr = Some(addr),
                 WSResult::Disconnected => self.addr = None,
@@ -151,8 +150,6 @@ impl Offramp for Ws {
 
     fn on_signal(&mut self, event: Event) -> Option<Event> {
         task::block_on(async {
-            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
-
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;
 
@@ -163,7 +160,6 @@ impl Offramp for Ws {
                     }
                 }
             } else if !was_connected && new_connect {
-                dbg!(was_connected, new_connect);
                 for p in self.pipelines.values_mut() {
                     if let Err(e) = p.send_insight(Event::cb_restore(event.ingest_ns)) {
                         error!("[WS Offramp] failed to return CB data: {}", e);
@@ -176,19 +172,16 @@ impl Offramp for Ws {
 
     fn on_event(
         &mut self,
-        codec: &Box<dyn Codec>,
+        codec: &dyn Codec,
         _input: Cow<'static, str>,
         event: Event,
     ) -> Result<()> {
         task::block_on(async {
-            while !self.pipelines.values_mut().all(pipeline::Addr::drain_ready) {}
-
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;
 
             if let Some(addr) = &self.addr {
                 if new_connect && !was_connected {
-                    dbg!(was_connected, new_connect);
                     for p in self.pipelines.values_mut() {
                         if let Err(e) = p.send_insight(Event::cb_restore(event.ingest_ns)) {
                             error!("[WS Offramp] failed to return CB data: {}", e);
@@ -236,7 +229,7 @@ impl Offramp for Ws {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
