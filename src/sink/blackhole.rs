@@ -85,17 +85,19 @@ impl offramp::Impl for Blackhole {
 
 #[async_trait::async_trait]
 impl Sink for Blackhole {
-    async fn init(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn init(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        let _ = codec;
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
 
     async fn on_event(
         &mut self,
-        _input: &str,
+        input: &str,
         codec: &dyn Codec,
         event: Event,
     ) -> Result<Vec<Event>> {
+        let _ = input;
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
             let mut buf = Vec::new();
@@ -127,7 +129,8 @@ impl Sink for Blackhole {
     fn default_codec(&self) -> &str {
         "null"
     }
-    async fn on_signal(&mut self, _signal: Event) -> Result<Vec<Event>> {
+    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
+        let _ = signal;
         Ok(Vec::new())
     }
     fn is_active(&self) -> bool {

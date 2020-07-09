@@ -177,6 +177,7 @@ impl Elastic {
         self.queue.enqueue(rx)?;
         Ok(())
     }
+
     fn maybe_enque(&mut self, output: Option<Value<'static>>, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
