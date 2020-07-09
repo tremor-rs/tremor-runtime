@@ -141,7 +141,6 @@ impl Operator for RoundRobin {
             insight.cb = Some(CBAction::Open);
             error!("Failed to restore circuit breaker");
         } else if any_were_available && !any_available {
-            dbg!("triggered");
             insight.cb = Some(CBAction::Close);
             error!("Failed to trigger circuit breaker");
         } else {

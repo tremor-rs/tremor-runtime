@@ -29,6 +29,7 @@ use hashbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::thread;
+use tremor_pipeline::CBAction;
 
 mod debug;
 mod elastic;
@@ -75,8 +76,7 @@ pub trait Offramp: Send {
         true
     }
     fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
-    fn on_event(&mut self, codec: &dyn Codec, input: Cow<'static, str>, event: Event)
-        -> Result<()>;
+    fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
@@ -194,21 +194,21 @@ impl Manager {
                     }
                     Msg::Event { event, input } => {
                         let ingest_ns = event.ingest_ns;
-                        let id = event.id.clone(); // FIXME: restructure for perf .unwrap()
+
                         metrics_reporter.periodic_flush(ingest_ns);
                         metrics_reporter.increment_in();
 
+                        let mut e = Event::cb_ack(ingest_ns, event.id.clone());
+
                         // TODO FIXME implement postprocessors
-                        let e = if let Err(e) = offramp.on_event(codec.borrow(), input, event) {
+                        if let Err(err) = offramp.on_event(codec.borrow(), input.borrow(), event) {
+                            error!("[Offramp::{}] On Event error: {}", offramp_id, err);
                             metrics_reporter.increment_error();
-                            error!("[Offramp::{}] On Event error: {}", offramp_id, e);
-                            Event::cb_fail(ingest_ns, id.clone())
+                            e.cb = Some(CBAction::Fail);
                         } else {
                             metrics_reporter.increment_out();
-                            Event::cb_ack(ingest_ns, id.clone())
                         };
                         if offramp.auto_ack() {
-                            // FIXME: unwrap() how do we ensure we only send to the 'right' pipeline?
                             send_to_pipelines(&offramp_id, &mut pipelines, &e);
                         }
                     }

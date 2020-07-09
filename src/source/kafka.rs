@@ -29,7 +29,7 @@ use rdkafka::{Message, Offset, TopicPartitionList};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap as StdMap;
-use std::mem::transmute;
+use std::mem::{self, transmute};
 use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -356,13 +356,12 @@ impl Source for Int {
     }
     fn trigger_breaker(&mut self) {}
     fn restore_breaker(&mut self) {}
-    fn fail(&mut self, id: std::primitive::u64) {
-        let _ = id;
-    }
-    fn ack(&mut self, id: std::primitive::u64) {
+    #[allow(unused_variables)]
+    fn fail(&mut self, id: u64) {}
+    fn ack(&mut self, id: u64) {
         if !self.auto_commit {
             let mut split = self.messages.split_off(&(id + 1));
-            std::mem::swap(&mut split, &mut self.messages);
+            mem::swap(&mut split, &mut self.messages);
             let mut tm = StdMap::with_capacity(split.len());
             for (
                 _,

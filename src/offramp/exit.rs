@@ -41,12 +41,7 @@ impl offramp::Impl for Exit {
 }
 
 impl Offramp for Exit {
-    fn on_event(
-        &mut self,
-        _codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(status) = value.get("exit").and_then(Value::as_i32) {
                 if let Some(delay) = value.get("delay").and_then(Value::as_u64) {

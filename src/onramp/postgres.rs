@@ -127,7 +127,7 @@ fn onramp_loop(
         ))? {
             PipeHandlerResult::Idle => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            _ => (), // fixme .unwrap()
+            _ => (),
         }
         if cli.is_none() {
             cli = loop {

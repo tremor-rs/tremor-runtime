@@ -53,12 +53,7 @@ impl offramp::Impl for Debug {
     }
 }
 impl Offramp for Debug {
-    fn on_event(
-        &mut self,
-        _codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();

@@ -41,6 +41,7 @@ use simd_json::json;
 use std::str;
 use std::time::Instant;
 use threadpool::ThreadPool;
+use tremor_pipeline::OpMeta;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Deserialize)]
@@ -123,11 +124,7 @@ impl Elastic {
         Ok(d)
     }
 
-    fn enqueue_send_future(
-        &mut self,
-        output: Option<Value<'static>>,
-        payload: Vec<u8>,
-    ) -> Result<()> {
+    fn enqueue_send_future(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         self.client_idx = (self.client_idx + 1) % self.clients.len();
         let destination = self.clients[self.client_idx].clone();
         let (tx, rx) = bounded(1);
@@ -139,15 +136,11 @@ impl Elastic {
         self.pool.execute(move || {
             let r = Self::flush(&destination.client, payload);
             let mut m = Value::object_with_capacity(2);
-            if let Some(o) = output {
-                if m.insert("backpressure-output", o).is_err() {
-                    unreachable!()
-                };
-            };
 
             if let Ok(t) = r {
                 // FIXME println!("Elastic search ok: {:?}", t);
                 if m.insert("time", t).is_err() {
+                    // ALLOW: this is OK
                     unreachable!()
                 };
             } else {
@@ -155,12 +148,14 @@ impl Elastic {
                 error!("Elastic search error: {:?}", r);
                 // FIXME println!("Elastic search error: {:?}", r);
                 if m.insert("error", "Failed to send to ES").is_err() {
+                    // ALLOW: this is OK
                     unreachable!()
                 };
             };
             let insight = Event {
                 data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
+                op_meta,
                 ..Event::default()
             };
 
@@ -178,7 +173,7 @@ impl Elastic {
         Ok(())
     }
 
-    fn maybe_enque(&mut self, output: Option<Value<'static>>, payload: Vec<u8>) -> Result<()> {
+    fn maybe_enque(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -205,7 +200,7 @@ impl Elastic {
                 Err("Dropped data due to es overload".into())
             }
             _ => {
-                if self.enqueue_send_future(output, payload).is_err() {
+                if self.enqueue_send_future(op_meta, payload).is_err() {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request to elastic");
                     Err("Failed to enqueue send request to elastic".into())
@@ -219,16 +214,12 @@ impl Elastic {
 
 impl Offramp for Elastic {
     // We enforce json here!
-    fn on_event(
-        &mut self,
-        _codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
         let mut payload = Vec::with_capacity(4096);
         let mut output = None;
+        let op_meta = event.op_meta.clone();
 
         for (value, meta) in event.value_meta_iter() {
             if output.is_none() {
@@ -264,11 +255,10 @@ impl Offramp for Elastic {
             value.write(&mut payload)?;
             payload.push(b'\n');
         }
-        self.maybe_enque(output, payload)
+        self.maybe_enque(op_meta, payload)
     }
 
-    fn on_signal(&mut self, event: Event) -> Option<Event> {
-        dbg!(event.ingest_ns);
+    fn on_signal(&mut self, _event: Event) -> Option<Event> {
         None
     }
 

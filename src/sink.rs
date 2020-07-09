@@ -13,7 +13,6 @@
 // limitations under the License.
 use crate::offramp::prelude::*;
 use hashbrown::HashMap;
-use std::borrow::Borrow;
 
 pub(crate) mod blackhole;
 pub(crate) mod rest;
@@ -30,7 +29,7 @@ pub(crate) trait Sink {
         codec: &dyn Codec,
         event: Event,
     ) -> Result<Vec<Event>>;
-    async fn init(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
+    async fn init(&mut self, postprocessors: &[String]) -> Result<()>;
 
     async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>>;
 
@@ -72,17 +71,12 @@ impl<T> Offramp for SinkManager<T>
 where
     T: Sink + Send,
 {
-    fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        task::block_on(self.sink.init(codec.borrow(), postprocessors))
+    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        task::block_on(self.sink.init(postprocessors))
     }
 
-    fn on_event(
-        &mut self,
-        codec: &dyn Codec,
-        input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
-        for insight in task::block_on(self.sink.on_event(&input, codec, event))? {
+    fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
+        for insight in task::block_on(self.sink.on_event(input, codec, event))? {
             for p in self.pipelines.values_mut() {
                 if let Err(e) = p.send_insight(insight.clone()) {
                     error!("Error: {}", e)
@@ -127,6 +121,6 @@ where
     }
 
     fn ready(&mut self) -> bool {
-        dbg!(self.pipelines.values_mut().all(pipeline::Addr::drain_ready))
+        self.pipelines.values_mut().all(pipeline::Addr::drain_ready)
     }
 }

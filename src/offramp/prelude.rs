@@ -25,7 +25,6 @@ pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_std::task;
 pub(crate) use simd_json::prelude::*;
-pub(crate) use std::borrow::Cow;
 pub(crate) use tremor_pipeline::Ids;
 
 //pub(crate) use crossbeam_channel::{Receiver, Sender, TryRecvError};

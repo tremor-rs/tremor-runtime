@@ -117,8 +117,8 @@ impl Source for FileInt {
         &self.onramp_id
     }
 
+    #[allow(unused_variables)]
     async fn read(&mut self, id: u64) -> Result<SourceReply> {
-        let _id = id;
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),

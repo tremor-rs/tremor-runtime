@@ -109,14 +109,12 @@ impl Rest {
         let config = self.config.clone();
         let insight_tx = self.tx.clone();
 
-        task::spawn(async move {
+        task::spawn::<_, Result<()>>(async move {
             let r = Self::flush(&destination, config, payload).await;
             let mut m = Value::object_with_capacity(1);
 
             let cb = if let Ok(t) = r {
-                if m.insert("time", t).is_err() {
-                    unreachable!()
-                };
+                m.insert("time", t)?;
                 Some(CBAction::Ack)
             } else {
                 error!("REST offramp error: {:?}", r);
@@ -137,6 +135,7 @@ impl Rest {
             if let Err(e) = tx.send(r) {
                 error!("Failed to send reply: {}", e)
             }
+            Ok(())
         });
         self.queue.enqueue(rx)?;
         Ok(())
@@ -179,13 +178,13 @@ impl Rest {
 
 #[async_trait::async_trait]
 impl Sink for Rest {
+    #[allow(unused_variables)]
     async fn on_event(
         &mut self,
         input: &str,
         codec: &dyn Codec,
         event: Event,
     ) -> Result<Vec<Event>> {
-        let _ = input;
         let mut payload = Vec::with_capacity(4096);
         for value in event.value_iter() {
             let mut raw = codec.encode(value)?;
@@ -200,13 +199,12 @@ impl Sink for Rest {
         "json"
     }
 
-    async fn init(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        let _ = codec;
+    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
+    #[allow(unused_variables)]
     async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
-        let _ = signal;
         self.drain_insights().await
     }
     fn is_active(&self) -> bool {
