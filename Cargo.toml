@@ -113,6 +113,9 @@ env_logger = "0.7"
 [features]
 default = []
 
+# arm suopport
+neon = [ "simd-json/neon" ]
+
 # Experimental suport for google cloud APIs
 gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
 
