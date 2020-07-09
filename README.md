@@ -193,3 +193,11 @@ To execute a benchmark, build tremor in **release** mode and run the examples fr
 ```bash
 ./bench/run <name>
 ```
+
+### ARM/aarch64/NEON
+
+to run and compile with neon use:
+
+```bash
+RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
+```
