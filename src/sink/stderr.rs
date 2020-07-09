@@ -43,10 +43,11 @@ impl offramp::Impl for StdErr {
 impl Sink for StdErr {
     async fn on_event(
         &mut self,
-        _input: &str,
+        input: &str,
         codec: &dyn Codec,
         event: Event,
     ) -> Result<Vec<Event>> {
+        let _ = input;
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {

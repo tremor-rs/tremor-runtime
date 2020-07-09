@@ -181,10 +181,11 @@ impl Rest {
 impl Sink for Rest {
     async fn on_event(
         &mut self,
-        _input: &str,
+        input: &str,
         codec: &dyn Codec,
         event: Event,
     ) -> Result<Vec<Event>> {
+        let _ = input;
         let mut payload = Vec::with_capacity(4096);
         for value in event.value_iter() {
             let mut raw = codec.encode(value)?;

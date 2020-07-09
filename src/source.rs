@@ -23,6 +23,7 @@ use crate::Result;
 use async_std::sync::{self, channel, Receiver};
 use async_std::task;
 use std::time::Duration;
+use sync::Sender;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
 
@@ -74,7 +75,7 @@ where
     source_id: TremorURL,
     source: T,
     rx: Receiver<onramp::Msg>,
-    tx: sync::Sender<onramp::Msg>,
+    tx: Sender<onramp::Msg>,
     pp_template: Vec<String>,
     preprocessors: Vec<Option<Preprocessors>>,
     codec: Box<dyn Codec>,
@@ -206,7 +207,7 @@ where
         }
     }
 
-    async fn handle_pipelines2(&mut self) -> Result<PipeHandlerResult> {
+    async fn handle_pipelines(&mut self) -> Result<PipeHandlerResult> {
         if self.pipelines.is_empty() || self.triggered {
             let msg = self.rx.recv().await?;
             self.handle_pipelines_msg(msg)
@@ -276,8 +277,8 @@ where
         preprocessors: &[String],
         codec: &str,
         metrics_reporter: RampReporter,
-    ) -> Result<(Self, sync::Sender<onramp::Msg>)> {
-        let (tx, rx) = channel(1);
+    ) -> Result<(Self, Sender<onramp::Msg>)> {
+        let (tx, rx) = channel(64);
         let codec = codec::lookup(&codec)?;
         let pp_template = preprocessors.to_vec();
         let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
@@ -317,7 +318,7 @@ where
 
     pub(crate) async fn run(mut self) -> Result<()> {
         loop {
-            match self.handle_pipelines2().await? {
+            match self.handle_pipelines().await? {
                 // No pipelines connected - nothing to do, so yield
                 PipeHandlerResult::Idle => continue,
                 // No actionable event from pipeline - nothing to do
@@ -329,24 +330,28 @@ where
                     if let Some(id) = ids.get(self.uid) {
                         self.source.fail(id);
                     }
+                    continue;
                 }
                 // Circuit breaker explicit acknowledgement of an event
                 PipeHandlerResult::Cb(CBAction::Ack, ids) => {
                     if let Some(id) = ids.get(self.uid) {
                         self.source.ack(id);
                     }
+                    continue;
                 }
                 // Circuit breaker soure failure -triggers close
                 PipeHandlerResult::Cb(CBAction::Close, _ids) => {
                     // FIXME eprintln!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
-                    self.triggered = true
+                    self.triggered = true;
+                    continue;
                 }
                 //Circuit breaker source recovers - triggers open
                 PipeHandlerResult::Cb(CBAction::Open, _ids) => {
                     // FIXME eprintln!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
-                    self.triggered = false
+                    self.triggered = false;
+                    continue;
                 }
             }
 
