@@ -81,7 +81,7 @@ impl Operator for Batch {
             is_batch,
             ..
         } = event;
-        self.event_ids.merge(id);
+        self.event_ids.merge(&id);
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {

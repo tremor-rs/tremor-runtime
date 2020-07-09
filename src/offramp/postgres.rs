@@ -72,12 +72,7 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 }
 
 impl Offramp for Postgres {
-    fn on_event(
-        &mut self,
-        _codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for val in event.value_iter() {
             let obj = val.as_object();
             if let Some(kv) = obj {

@@ -98,8 +98,8 @@ impl Source for Blaster {
         &self.onramp_id
     }
 
+    #[allow(unused_variables)]
     async fn read(&mut self, id: u64) -> Result<SourceReply> {
-        let _id = id;
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
             task::sleep(Duration::from_nanos(ival)).await;

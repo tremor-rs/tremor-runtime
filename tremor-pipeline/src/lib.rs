@@ -202,9 +202,9 @@ impl Ids {
     }
     /// Merges two id sets, ensures we only ever track the largest id for each
     /// source
-    pub fn merge(&mut self, other: Self) {
-        for (uid, eid) in other.0 {
-            self.add_id(uid, eid)
+    pub fn merge(&mut self, other: &Self) {
+        for (uid, eid) in &other.0 {
+            self.add_id(*uid, *eid)
         }
     }
 }

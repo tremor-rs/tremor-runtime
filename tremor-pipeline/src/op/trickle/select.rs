@@ -42,6 +42,7 @@ pub struct GroupData<'groups> {
     group: Value<'static>,
     window: WindowImpl,
     aggrs: Aggrs<'groups>,
+    id: Ids,
 }
 type Groups<'groups> = HashMap<String, GroupData<'groups>>;
 rental! {
@@ -576,9 +577,11 @@ impl Operator for TrickleSelect {
                                 window: this.window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
+                                id: event.id.clone(),
                             }),
                         )
                     });
+                this_group.id.merge(&event.id);
                 let window_event = this_group.window.on_event(&event)?;
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the inital frame
@@ -648,7 +651,7 @@ impl Operator for TrickleSelect {
                     events.push((
                         OUT,
                         Event {
-                            id: event.id.clone(), // FIXME .unwrap() ensure that we track id's for a window
+                            id: this_group.id.clone(),
                             ingest_ns: event.ingest_ns,
                             // TODO avoid origin_uri clone here
                             origin_uri: event.origin_uri.clone(),
@@ -703,6 +706,7 @@ impl Operator for TrickleSelect {
                                 window: this.window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
+                                id: event.id.clone(),
                             }),
                         )
                     });
@@ -741,6 +745,7 @@ impl Operator for TrickleSelect {
                                     window: prev.window_impl.clone(),
                                     aggrs: aggregates.clone(),
                                     group: group_value.clone_static(),
+                                    id: event.id.clone(),
                                 }),
                             )
                         });
@@ -776,6 +781,7 @@ impl Operator for TrickleSelect {
                                 window: this.window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
+                                id: event.id.clone(),
                             },
                         )
                     });
@@ -845,7 +851,7 @@ impl Operator for TrickleSelect {
                 events.push((
                     OUT,
                     Event {
-                        id: event.id.clone(), // FIXME .unwrap() ensure we track id's for windows
+                        id: event.id.clone(),
                         ingest_ns: event.ingest_ns,
                         // TODO avoid origin_uri clone here
                         origin_uri: event.origin_uri.clone(),

@@ -170,12 +170,7 @@ impl Offramp for Ws {
         None
     }
 
-    fn on_event(
-        &mut self,
-        codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         task::block_on(async {
             let was_connected = self.addr.is_some();
             let new_connect = self.update_ws_state(event.ingest_ns).await;

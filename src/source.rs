@@ -54,18 +54,15 @@ pub(crate) enum SourceReply {
     Empty(u64),
 }
 #[async_trait::async_trait]
+#[allow(unused_variables)]
 pub(crate) trait Source {
     async fn read(&mut self, id: u64) -> Result<SourceReply>;
     async fn init(&mut self) -> Result<SourceState>;
     fn id(&self) -> &TremorURL;
     fn trigger_breaker(&mut self) {}
     fn restore_breaker(&mut self) {}
-    fn ack(&mut self, id: u64) {
-        let _ = id;
-    }
-    fn fail(&mut self, id: u64) {
-        let _ = id;
-    }
+    fn ack(&mut self, id: u64) {}
+    fn fail(&mut self, id: u64) {}
 }
 
 pub(crate) struct SourceManager<T>

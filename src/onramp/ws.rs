@@ -131,7 +131,7 @@ async fn onramp_loop(
             match handle_pipelines(false, &rx, &mut pipelines, &mut metrics_reporter).await? {
                 PipeHandlerResult::Idle => continue,
                 PipeHandlerResult::Terminate => return Ok(()),
-                _ => break, // fixme .unwrap()
+                _ => break,
             }
         }
 
@@ -159,7 +159,7 @@ async fn onramp_loop(
                 match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
                     PipeHandlerResult::Idle | PipeHandlerResult::Normal => continue,
                     PipeHandlerResult::Terminate => break,
-                    _ => continue, // fixme .unwrap()
+                    _ => continue,
                 }
             }
         }

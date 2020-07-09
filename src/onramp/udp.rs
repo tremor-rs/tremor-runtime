@@ -86,7 +86,7 @@ fn onramp_loop(
         ))? {
             PipeHandlerResult::Idle => continue,
             PipeHandlerResult::Terminate => return Ok(()),
-            _ => (), // fixme .unwrap()
+            _ => (),
         }
 
         poll.poll(&mut events, Some(Duration::from_millis(100)))?;
@@ -106,7 +106,7 @@ fn onramp_loop(
                 ))? {
                     PipeHandlerResult::Idle => continue,
                     PipeHandlerResult::Terminate => return Ok(()),
-                    _ => (), // fixme .unwrap()
+                    _ => (),
                 }
 
                 let mut ingest_ns = nanotime();

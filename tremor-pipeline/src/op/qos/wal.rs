@@ -293,7 +293,7 @@ impl Operator for WAL {
                 .and_then(maybe_parse_ivec)
             {
                 debug!("WAL confirm: {}", c_id);
-                insight.id.merge(e.id);
+                insight.id.merge(&e.id);
             }
         } else if let Some(CBAction::Fail) = &mut insight.cb {
             let f_id = if let Some(f_id) = insight.id.get(u_id) {
@@ -310,7 +310,7 @@ impl Operator for WAL {
                 .ok()
                 .and_then(maybe_parse_ivec)
             {
-                insight.id.merge(e.id);
+                insight.id.merge(&e.id);
             }
 
             let c = u64::from(self.confirmed);

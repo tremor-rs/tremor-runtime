@@ -60,12 +60,7 @@ impl offramp::Impl for Udp {
 
 impl Offramp for Udp {
     // TODO
-    fn on_event(
-        &mut self,
-        codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             //TODO: Error handling

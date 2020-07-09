@@ -85,11 +85,11 @@ impl<M: Send> TrySender<M> {
         }
     }
     pub(crate) fn ready(&self) -> bool {
-        self.addr.capacity().unwrap_or_default() > self.addr.len() && self.pending.is_empty()
+        !self.addr.is_full() && self.pending.is_empty()
     }
 
     pub(crate) fn drain_ready(&mut self) -> bool {
-        if !self.pending.is_empty() && self.addr.capacity().unwrap_or_default() > self.addr.len() {
+        if !self.pending.is_empty() && !self.addr.is_full() {
             std::mem::swap(&mut self.pending, &mut self.pending2);
             let mut bad = false;
             for msg in self.pending2.drain(..) {

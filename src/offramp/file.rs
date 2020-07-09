@@ -58,12 +58,7 @@ impl offramp::Impl for File {
 
 impl Offramp for File {
     // TODO
-    fn on_event(
-        &mut self,
-        codec: &dyn Codec,
-        _input: Cow<'static, str>,
-        event: Event,
-    ) -> Result<()> {
+    fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         eprint!("offramp");
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
