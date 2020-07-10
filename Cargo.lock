@@ -1608,9 +1608,9 @@ dependencies = [
 
 [[package]]
 name = "google-pubsub1"
-version = "1.0.13+20200403"
+version = "1.0.14+20200627"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abab7e0fded0d4e28b5bfbdbacfea007efba04eee59fe930036c605f687306d0"
+checksum = "38f2cc1d4fdc4c35ff9687040635536d00c63a55645d43575bbcfe6a70216c9c"
 dependencies = [
  "hyper 0.10.16",
  "mime 0.2.6",
