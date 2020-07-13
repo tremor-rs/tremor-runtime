@@ -1860,9 +1860,9 @@ dependencies = [
 
 [[package]]
 name = "http-types"
-version = "2.2.1"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca4221cd1c7cedf275cd0ad3c9dfe58b5acc93cdd5511c7e020a102e1995fe99"
+checksum = "4bc341c4b7a71eb0d85c760dc7363648b82ecc38fa5ead50f69b52858df708b9"
 dependencies = [
  "anyhow",
  "async-std",
