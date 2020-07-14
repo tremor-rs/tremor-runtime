@@ -149,7 +149,7 @@ impl Onramp for Udp {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let codec = codec::lookup(codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;

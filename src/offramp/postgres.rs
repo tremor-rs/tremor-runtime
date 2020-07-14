@@ -71,8 +71,9 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
     Ok(cli)
 }
 
+#[async_trait::async_trait]
 impl Offramp for Postgres {
-    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for val in event.value_iter() {
             let obj = val.as_object();
             if let Some(kv) = obj {
@@ -144,7 +145,7 @@ impl Offramp for Postgres {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

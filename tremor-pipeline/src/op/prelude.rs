@@ -14,7 +14,7 @@
 
 pub use super::*;
 pub use crate::errors::*;
-pub use crate::{CBAction, Event, Ids, Operator};
+pub use crate::{CBAction, Event, Ids, OpMeta, Operator};
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;
 pub use simd_json::OwnedValue;

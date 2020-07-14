@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::onramp::prelude::*;
-use async_std::sync::Sender;
+use async_channel::Sender;
 use futures::{select, FutureExt, StreamExt};
 use serde_yaml::Value;
 use tungstenite::protocol::Message;
@@ -77,7 +77,7 @@ async fn handle_connection(
                                 origin_uri.clone(),
                                 d,
                             ))
-                            .await;
+                            .await?;
                     }
                 }
             }
@@ -92,7 +92,7 @@ async fn handle_connection(
                                 origin_uri.clone(),
                                 d,
                             ))
-                            .await;
+                            .await?;
                     }
                 }
             }
@@ -114,7 +114,7 @@ async fn onramp_loop(
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let (loop_tx, loop_rx) = channel(64);
+    let (loop_tx, loop_rx) = bounded(64);
 
     let addr = format!("{}:{}", config.host, config.port);
 
@@ -156,7 +156,7 @@ async fn onramp_loop(
 
             },
             msg = rx.recv().fuse() => if let Ok(msg) = msg {
-                match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter)? {
+                match handle_pipelines_msg(msg, &mut pipelines, &mut metrics_reporter).await? {
                     PipeHandlerResult::Idle | PipeHandlerResult::Normal => continue,
                     PipeHandlerResult::Terminate => break,
                     _ => continue,
@@ -176,7 +176,7 @@ impl Onramp for Ws {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         // we need to change this here since ws is special

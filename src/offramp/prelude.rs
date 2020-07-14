@@ -27,7 +27,6 @@ pub(crate) use async_std::task;
 pub(crate) use simd_json::prelude::*;
 pub(crate) use tremor_pipeline::Ids;
 
-//pub(crate) use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::mem;
 
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {

@@ -33,14 +33,13 @@
 use crate::offramp::prelude::make_postprocessors;
 use crate::offramp::prelude::*;
 use crate::postprocessor::Postprocessors;
-use crossbeam_channel::bounded;
+use async_channel::bounded;
 use elastic::prelude::*;
 use halfbrown::HashMap;
 use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
 use std::time::Instant;
-use threadpool::ThreadPool;
 use tremor_pipeline::OpMeta;
 use tremor_script::prelude::*;
 
@@ -65,7 +64,6 @@ pub struct Elastic {
     client_idx: usize,
     clients: Vec<Destination>,
     // config: Config,
-    pool: ThreadPool,
     queue: AsyncSink<u64>,
     // hostname: String,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
@@ -88,7 +86,6 @@ impl offramp::Impl for Elastic {
                 .collect();
             let clients = clients?;
 
-            let pool = ThreadPool::new(config.concurrency);
             let queue = AsyncSink::new(config.concurrency);
             //let hostname = match hostname::get() {
             //    Some(h) => h,
@@ -100,7 +97,6 @@ impl offramp::Impl for Elastic {
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
                 // config,
-                pool,
                 clients,
                 queue,
                 // hostname,
@@ -133,7 +129,7 @@ impl Elastic {
             .iter()
             .map(|(i, p)| (i.clone(), p.clone()))
             .collect();
-        self.pool.execute(move || {
+        task::spawn(async move {
             let r = Self::flush(&destination.client, payload);
             let mut m = Value::object_with_capacity(2);
 
@@ -160,12 +156,13 @@ impl Elastic {
             };
 
             for (pid, p) in &mut pipelines {
-                if p.send_insight(insight.clone()).is_err() {
+                if p.send_insight(insight.clone()).await.is_err() {
                     error!("Failed to send contraflow to pipeline {}", pid)
                 };
             }
+
             // TODO: Handle contraflow for notification
-            if let Err(e) = tx.send(r) {
+            if let Err(e) = tx.send(r).await {
                 error!("Failed to send reply: {}", e)
             }
         });
@@ -190,11 +187,13 @@ impl Elastic {
                     .iter()
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
-                for (pid, p) in &mut pipelines {
-                    if p.send_insight(insight.clone()).is_err() {
-                        error!("Failed to send contraflow to pipeline {}", pid)
-                    };
-                }
+                task::block_on(async {
+                    for (pid, p) in &mut pipelines {
+                        if p.send_insight(insight.clone()).await.is_err() {
+                            error!("Failed to send contraflow to pipeline {}", pid)
+                        };
+                    }
+                });
 
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
@@ -211,10 +210,10 @@ impl Elastic {
         }
     }
 }
-
+#[async_trait::async_trait]
 impl Offramp for Elastic {
     // We enforce json here!
-    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
         let mut payload = Vec::with_capacity(4096);
@@ -258,7 +257,7 @@ impl Offramp for Elastic {
         self.maybe_enque(op_meta, payload)
     }
 
-    fn on_signal(&mut self, _event: Event) -> Option<Event> {
+    async fn on_signal(&mut self, _event: Event) -> Option<Event> {
         None
     }
 
@@ -272,7 +271,7 @@ impl Offramp for Elastic {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
-    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

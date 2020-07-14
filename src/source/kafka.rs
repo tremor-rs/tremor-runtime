@@ -17,6 +17,7 @@ use crate::errors::Result;
 use crate::onramp::prelude::*;
 
 //NOTE: This is required for StreamHander's stream
+use futures::future::{self, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
 use rdkafka::client::ClientContext;
@@ -25,12 +26,32 @@ use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::message::BorrowedMessage;
+use rdkafka::util::AsyncRuntime;
 use rdkafka::{Message, Offset, TopicPartitionList};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap as StdMap;
+use std::future::Future;
 use std::mem::{self, transmute};
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, Instant};
+
+pub struct SmolRuntime;
+
+impl AsyncRuntime for SmolRuntime {
+    type Delay = future::Map<async_io::Timer, fn(Instant)>;
+
+    fn spawn<T>(task: T)
+    where
+        T: Future<Output = ()> + Send + 'static,
+    {
+        smol::Task::spawn(task).detach()
+    }
+
+    fn delay_for(duration: Duration) -> Self::Delay {
+        async_io::Timer::new(duration).map(|_| ())
+    }
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -97,11 +118,13 @@ impl std::fmt::Debug for Int {
 }
 
 pub struct StreamAndMsgs<'consumer> {
-    pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>,
+    pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
 }
 
 impl<'consumer> StreamAndMsgs<'consumer> {
-    fn new(stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext>) -> Self {
+    fn new(
+        stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
+    ) -> Self {
         Self { stream }
     }
 }
@@ -221,7 +244,7 @@ impl Source for Int {
                     let mut origin_uri = self.origin_uri.clone();
                     origin_uri.path = vec![
                         m.topic().to_string(),
-                        m.partition().to_string(),
+                        // m.partition().to_string(),
                         m.offset().to_string(),
                     ];
                     let data = data.to_vec();
@@ -348,8 +371,11 @@ impl Source for Int {
             Err(e) => error!("Kafka error for topics '{:?}': {}", good_topics, e),
         };
 
-        let stream =
-            rentals::MessageStream::new(Box::new(consumer), |c| StreamAndMsgs::new(c.start()));
+        let stream = rentals::MessageStream::new(Box::new(consumer), |c| {
+            StreamAndMsgs::new(
+                c.start_with_runtime::<SmolRuntime>(Duration::from_millis(100), false),
+            )
+        });
         self.stream = Some(stream);
 
         Ok(SourceState::Connected)

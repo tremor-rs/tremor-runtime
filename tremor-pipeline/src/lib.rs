@@ -19,8 +19,7 @@
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
-    clippy::result_unwrap_used,
-    clippy::option_unwrap_used,
+    clippy::unwrap_used,
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
@@ -47,13 +46,14 @@ use simd_json::prelude::*;
 use simd_json::{json, BorrowedValue, OwnedValue};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::iter::{self, Iterator};
+use std::str::FromStr;
 use std::{
     fmt,
     mem::swap,
     sync::{Arc, Mutex},
 };
-
 use tremor_script::prelude::*;
 use tremor_script::query::StmtRentalWrapper;
 
@@ -84,8 +84,103 @@ pub type NodeLookupFn = fn(
 ) -> Result<OperatorNode>;
 pub(crate) type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
+/// Stringified numeric key
+/// from https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct PrimStr<T>(T)
+where
+    T: Copy + Ord + Display + FromStr;
+
+impl<T> Serialize for PrimStr<T>
+where
+    T: Copy + Ord + Display + FromStr,
+{
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(&self.0)
+    }
+}
+
+impl<'de, T> serde::Deserialize<'de> for PrimStr<T>
+where
+    T: Copy + Ord + Display + FromStr,
+{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use std::marker::PhantomData;
+        struct Visitor<T>(PhantomData<T>);
+
+        impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
+        where
+            T: Copy + Ord + Display + FromStr,
+        {
+            type Value = PrimStr<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("number represented as string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> std::result::Result<PrimStr<T>, E>
+            where
+                E: serde::de::Error,
+            {
+                match T::from_str(value) {
+                    Ok(id) => Ok(PrimStr(id)),
+                    Err(_) => Err(E::invalid_value(serde::de::Unexpected::Str(value), &self)),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(Visitor(PhantomData))
+    }
+}
+
+impl<T> simd_json_derive::SerializeAsKey for PrimStr<T>
+where
+    T: Copy + Ord + Display + FromStr,
+{
+    fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        write!(writer, "{}", self.0)
+    }
+}
+
+impl<T> simd_json_derive::Serialize for PrimStr<T>
+where
+    T: Copy + Ord + Display + FromStr,
+{
+    fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        write!(writer, "{}", self.0)
+    }
+}
+
 /// Operator metadata
-pub type OpMeta = BTreeMap<u64, OwnedValue>;
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
+pub struct OpMeta(BTreeMap<PrimStr<u64>, OwnedValue>);
+
+impl OpMeta {
+    /// inserts a value
+    pub fn insert(&mut self, key: u64, value: OwnedValue) -> Option<OwnedValue> {
+        self.0.insert(PrimStr(key), value)
+    }
+    /// reads a value
+    pub fn get(&mut self, key: u64) -> Option<&OwnedValue> {
+        self.0.get(&PrimStr(key))
+    }
+    /// checks existance of a key
+    pub fn contains_key(&self, key: u64) -> bool {
+        self.0.contains_key(&PrimStr(key))
+    }
+}
 
 lazy_static! {
     /// Function registory for the pipeline to look up functions

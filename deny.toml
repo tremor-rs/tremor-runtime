@@ -33,14 +33,6 @@ license-files = [
   { path = "LICENSE-MIT", hash = 0x343f7050 }
 ]
 
-# This is MIT, Apache, CC, BSD-2 and BSD-3
-[[licenses.clarify]]
-name = "crossbeam-channel"
-expression = "MIT AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause"
-license-files = [
-  { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 },
-]
-
 # This is MIT, Apache, ISC tripple licensed
 [[licenses.clarify]]
 name = "hyper-rustls"

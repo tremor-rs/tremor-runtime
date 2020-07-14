@@ -21,13 +21,11 @@ use crate::repository::{
 };
 use crate::url::TremorURL;
 use crate::utils::nanotime;
+use async_channel::bounded;
 use async_std::fs::File;
 use async_std::io::prelude::*;
 use async_std::path::Path;
-use async_std::{
-    sync::{self, channel},
-    task::{self, JoinHandle},
-};
+use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 
 pub(crate) use crate::offramp;
@@ -55,59 +53,65 @@ lazy_static! {
 /// This is control plane
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
-    CreatePipeline(sync::Sender<Result<pipeline::Addr>>, pipeline::Create),
-    CreateOnrampt(sync::Sender<Result<onramp::Addr>>, onramp::Create),
-    CreateOfframp(sync::Sender<Result<offramp::Addr>>, offramp::Create),
+    CreatePipeline(
+        async_channel::Sender<Result<pipeline::Addr>>,
+        pipeline::Create,
+    ),
+    CreateOnrampt(async_channel::Sender<Result<onramp::Addr>>, onramp::Create),
+    CreateOfframp(
+        async_channel::Sender<Result<offramp::Addr>>,
+        offramp::Create,
+    ),
     Stop,
 }
 
-pub(crate) type Sender = async_std::sync::Sender<ManagerMsg>;
+pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
     pub offramp: offramp::Sender,
     pub onramp: onramp::Sender,
     pub pipeline: pipeline::Sender,
-    pub offramp_h: JoinHandle<bool>,
-    pub onramp_h: JoinHandle<bool>,
-    pub pipeline_h: JoinHandle<bool>,
+    pub offramp_h: JoinHandle<Result<()>>,
+    pub onramp_h: JoinHandle<Result<()>>,
+    pub pipeline_h: JoinHandle<Result<()>>,
     pub qsize: usize,
 }
 
 impl Manager {
-    pub fn start(self) -> (JoinHandle<()>, Sender) {
-        let (tx, rx) = channel(64);
+    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+        let (tx, rx) = bounded(64);
         let system_h = task::spawn(async move {
-            loop {
-                match rx.recv().await {
-                    Ok(ManagerMsg::CreatePipeline(r, c)) => {
-                        self.pipeline.send(pipeline::ManagerMsg::Create(r, c)).await
+            while let Ok(msg) = rx.recv().await {
+                match msg {
+                    ManagerMsg::CreatePipeline(r, c) => {
+                        self.pipeline
+                            .send(pipeline::ManagerMsg::Create(r, c))
+                            .await?
                     }
-                    Ok(ManagerMsg::CreateOnrampt(r, c)) => {
+                    ManagerMsg::CreateOnrampt(r, c) => {
                         self.onramp
                             .send(onramp::ManagerMsg::Create(r, Box::new(c)))
-                            .await
+                            .await?
                     }
-                    Ok(ManagerMsg::CreateOfframp(r, c)) => {
+                    ManagerMsg::CreateOfframp(r, c) => {
                         self.offramp
                             .send(offramp::ManagerMsg::Create(r, Box::new(c)))
-                            .await
+                            .await?
                     }
-                    Ok(ManagerMsg::Stop) => {
+                    ManagerMsg::Stop => {
                         info!("Stopping offramps...");
-                        self.offramp.send(offramp::ManagerMsg::Stop).await;
+                        self.offramp.send(offramp::ManagerMsg::Stop).await?;
                         info!("Stopping pipelines...");
-                        self.pipeline.send(pipeline::ManagerMsg::Stop).await;
+                        self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
                         info!("Stopping onramps...");
-                        self.onramp.send(onramp::ManagerMsg::Stop).await;
-                        break;
-                    }
-                    Err(e) => {
-                        info!("Stopping onramps in an odd way... {}", e);
+                        self.onramp.send(onramp::ManagerMsg::Stop).await?;
                         break;
                     }
                 }
             }
+            info!("Stopping onramps in an odd way...");
+            Ok(())
         });
         (system_h, tx)
     }
@@ -167,8 +171,8 @@ impl World {
     }
 
     /// Stop the runtime
-    pub async fn stop(&self) {
-        self.system.send(ManagerMsg::Stop).await;
+    pub async fn stop(&self) -> Result<()> {
+        Ok(self.system.send(ManagerMsg::Stop).await?)
     }
     /// Links a pipeline
     pub async fn link_pipeline(
@@ -482,23 +486,23 @@ impl World {
         let pipeline: PipelineVec = self
             .repo
             .serialize_pipelines()
-            .await
+            .await?
             .into_iter()
             .filter_map(|p| match p {
                 PipelineArtefact::Pipeline(p) => Some(p.config),
                 PipelineArtefact::Query(_q) => None, // FIXME
             })
             .collect();
-        let onramp: OnRampVec = self.repo.serialize_onramps().await;
-        let offramp: OffRampVec = self.repo.serialize_offramps().await;
+        let onramp: OnRampVec = self.repo.serialize_onramps().await?;
+        let offramp: OffRampVec = self.repo.serialize_offramps().await?;
         let binding: BindingVec = self
             .repo
             .serialize_bindings()
-            .await
+            .await?
             .into_iter()
             .map(|b| b.binding)
             .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings().await;
+        let mapping: MappingMap = self.reg.serialize_mappings().await?;
         let config = crate::config::Config {
             pipeline,
             onramp,
@@ -555,7 +559,7 @@ impl World {
     pub async fn start(
         qsize: usize,
         storage_directory: Option<String>,
-    ) -> Result<(Self, JoinHandle<()>)> {
+    ) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
@@ -649,13 +653,13 @@ type: stderr
         config: PipelineArtefact,
         id: ServantId,
     ) -> Result<pipeline::Addr> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.system
             .send(ManagerMsg::CreatePipeline(
                 tx,
                 pipeline::Create { id, config },
             ))
-            .await;
+            .await?;
         rx.recv().await?
     }
 }

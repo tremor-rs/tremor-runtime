@@ -154,7 +154,7 @@ impl Operator for Backpressure {
     fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
-        if !insight.op_meta.contains_key(&uid) {
+        if !insight.op_meta.contains_key(uid) {
             return;
         }
         let (_, meta) = insight.data.parts();
@@ -192,7 +192,6 @@ impl Operator for Backpressure {
 mod test {
     use super::*;
     use simd_json::value::borrowed::Object;
-    use std::collections::BTreeMap;
 
     #[test]
     fn pass_wo_error() {
@@ -268,7 +267,7 @@ mod test {
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
 
-        let mut op_meta = BTreeMap::new();
+        let mut op_meta = OpMeta::default();
         op_meta.insert(0, OwnedValue::null());
         let mut insight = Event {
             id: 1.into(),
@@ -341,7 +340,7 @@ mod test {
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
-        let mut op_meta = BTreeMap::new();
+        let mut op_meta = OpMeta::default();
         op_meta.insert(0, OwnedValue::null());
 
         let mut insight = Event {
@@ -355,7 +354,7 @@ mod test {
         // A contraflow that passes the timeout
         let mut m = Object::new();
         m.insert("time".into(), 99.0.into());
-        let mut op_meta = BTreeMap::new();
+        let mut op_meta = OpMeta::default();
         op_meta.insert(0, OwnedValue::null());
 
         let mut insight_reset = Event {

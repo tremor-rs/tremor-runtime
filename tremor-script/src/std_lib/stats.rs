@@ -436,7 +436,6 @@ unsafe impl Send for Dds {}
 unsafe impl Sync for Dds {}
 
 impl TremorAggrFn for Dds {
-    #[allow(clippy::result_unwrap_used)]
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
             if !self.percentiles_set {
@@ -709,7 +708,6 @@ impl Hdr {
     }
 }
 impl TremorAggrFn for Hdr {
-    #[allow(clippy::result_unwrap_used)]
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
             if !self.percentiles_set {
@@ -734,8 +732,7 @@ impl TremorAggrFn for Hdr {
                 return Ok(());
             }
 
-            #[allow(clippy::cast_possible_truncation)]
-            #[allow(clippy::cast_sign_loss)]
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let v = v as u64; // FIXME TODO add f64 support to HDR Histogram create -  oss
             if let Some(ref mut histo) = self.histo {
                 histo.record(v).map_err(|e| FunctionError::RuntimeError {

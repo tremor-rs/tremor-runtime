@@ -58,9 +58,10 @@ impl offramp::Impl for Udp {
     }
 }
 
+#[async_trait::async_trait]
 impl Offramp for Udp {
     // TODO
-    fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             //TODO: Error handling
@@ -78,7 +79,7 @@ impl Offramp for Udp {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

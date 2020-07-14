@@ -121,7 +121,7 @@ impl Operator for Percentile {
     fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
-        if !insight.op_meta.contains_key(&uid) {
+        if !insight.op_meta.contains_key(uid) {
             return;
         }
         let (_, meta) = insight.data.parts();

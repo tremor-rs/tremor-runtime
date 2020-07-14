@@ -73,76 +73,76 @@ fn onramp_loop(
         path: vec![subscription_name.clone()],
     };
 
-    //    thread::spawn(move || {
-    let hub = pubsub_api(&config.service_account.to_string())?;
-    let projects = hub.projects();
+    task::spawn(async move {
+        let hub = pubsub_api(&config.service_account.to_string())?;
+        let projects = hub.projects();
 
-    loop {
-        match task::block_on(handle_pipelines(
-            false,
-            &rx,
-            &mut pipelines,
-            &mut metrics_reporter,
-        ))? {
-            PipeHandlerResult::Retry => continue,
-            PipeHandlerResult::Terminate => return Ok(()),
-            PipeHandlerResult::Normal => (),
-        }
-        let request = google_pubsub1::PullRequest {
-            return_immediately: Some(false),
-            max_messages: Some(10),
-        };
+        loop {
+            match handle_pipelines(
+                false,
+                &rx,
+                &mut pipelines,
+                &mut metrics_reporter,
+            ).await? {
+                PipeHandlerResult::Retry => continue,
+                PipeHandlerResult::Terminate => return Ok(()),
+                PipeHandlerResult::Normal => (),
+            }
+            let request = google_pubsub1::PullRequest {
+                return_immediately: Some(false),
+                max_messages: Some(10),
+            };
 
-        let subscription = projects
-            .subscriptions_pull(request, &subscription_name)
-            .doit();
+            let subscription = projects
+                .subscriptions_pull(request, &subscription_name)
+                .doit();
 
-        match subscription {
-            Err(e) => warn!("Onramp error {:?}", e),
-            Ok((_x, batch)) => {
-                // TODO extract 'ack' logic as utility function
-                for message in batch.received_messages.unwrap_or_default() {
-                    let ack_id = message.ack_id.unwrap_or_default();
-                    let body = message.message.unwrap_or_default();
+            match subscription {
+                Err(e) => warn!("Onramp error {:?}", e),
+                Ok((_x, batch)) => {
+                    // TODO extract 'ack' logic as utility function
+                    for message in batch.received_messages.unwrap_or_default() {
+                        let ack_id = message.ack_id.unwrap_or_default();
+                        let body = message.message.unwrap_or_default();
 
-                    match base64::decode(&body.data.unwrap_or_default()) {
-                        Ok(decoded) => {
-                            let mut ingest_ns = nanotime();
-                            // TODO add a method in origin_uri for changes like this?
-                            origin_uri.path.push(body.message_id.unwrap_or_default());
-                            send_event(
-                                &pipelines,
-                                &mut preprocessors,
-                                &mut codec,
-                                &mut metrics_reporter,
-                                &mut ingest_ns,
-                                &origin_uri,
-                                id,
-                                decoded,
-                            );
-                            id += 1;
+                        match base64::decode(&body.data.unwrap_or_default()) {
+                            Ok(decoded) => {
+                                let mut ingest_ns = nanotime();
+                                // TODO add a method in origin_uri for changes like this?
+                                origin_uri.path.push(body.message_id.unwrap_or_default());
+                                send_event(
+                                    &pipelines,
+                                    &mut preprocessors,
+                                    &mut codec,
+                                    &mut metrics_reporter,
+                                    &mut ingest_ns,
+                                    &origin_uri,
+                                    id,
+                                    decoded,
+                                );
+                                id += 1;
+                            }
+                            Err(e) => error!("base64 decoding error error: {:?}", e),
                         }
-                        Err(e) => error!("base64 decoding error error: {:?}", e),
+
+                        if ack_id != "" {
+                            if let Err(e) = projects
+                                .subscriptions_acknowledge(
+                                    google_pubsub1::AcknowledgeRequest {
+                                        ack_ids: Some(vec![ack_id]),
+                                    },
+                                    &subscription_name,
+                                )
+                                .doit()
+                            {
+                                error!("Ack error: {:?}", e)
+                            }
+                        };
                     }
-
-                    if ack_id != "" {
-                        if let Err(e) = projects
-                            .subscriptions_acknowledge(
-                                google_pubsub1::AcknowledgeRequest {
-                                    ack_ids: Some(vec![ack_id]),
-                                },
-                                &subscription_name,
-                            )
-                            .doit()
-                        {
-                            error!("Ack error: {:?}", e)
-                        }
-                    };
                 }
             }
         }
-    }
-    //    })
+    })
 }
 
 impl Onramp for GSub {
@@ -152,7 +152,7 @@ impl Onramp for GSub {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;

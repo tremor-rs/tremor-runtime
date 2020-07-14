@@ -21,7 +21,6 @@
 //! See [Config](struct.Config.html) for details.
 use std::io::{Cursor, Read, Write};
 
-use async_std::task::block_on;
 use chrono::prelude::Utc;
 use hashbrown::HashMap;
 use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
@@ -104,13 +103,14 @@ impl offramp::Impl for NewRelic {
     }
 }
 
+#[async_trait::async_trait]
 impl Offramp for NewRelic {
-    fn start(&mut self, _codec: &Box<dyn Codec>, postprocessors: &[String]) -> Result<()> {
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
 
-    fn on_event(&mut self, _codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         // TODO: Document this, if one of the log entries cannot be decoded, the whole batch will be lost because
         // of the collect::<Result<_>>
         let payload = NewRelicPayload {
@@ -122,7 +122,7 @@ impl Offramp for NewRelic {
 
         debug!("Sending a batch of {} items", payload.logs.len());
 
-        block_on(self.send(&payload))?;
+        self.send(&payload).await?;
         Ok(())
     }
 

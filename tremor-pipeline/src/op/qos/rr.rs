@@ -125,7 +125,7 @@ impl Operator for RoundRobin {
         let any_were_available = outputs.iter().any(|o| o.open);
         if let Some(o) = insight
             .op_meta
-            .get(&uid)
+            .get(uid)
             .and_then(OwnedValue::as_usize)
             .and_then(|id| outputs.get_mut(id))
         {
@@ -152,7 +152,6 @@ impl Operator for RoundRobin {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::BTreeMap;
 
     #[test]
     fn multi_output_block() {
@@ -194,7 +193,7 @@ mod test {
         assert_eq!("out2", out);
 
         // Mark output 0 as broken
-        let mut op_meta = BTreeMap::new();
+        let mut op_meta = OpMeta::default();
         op_meta.insert(0, 0.into());
 
         let mut insight = Event {
@@ -239,7 +238,7 @@ mod test {
         assert_eq!("out2", out);
 
         // Mark output 1 as restored
-        let mut op_meta = BTreeMap::new();
+        let mut op_meta = OpMeta::default();
         op_meta.insert(0, 0.into());
 
         let mut insight = Event {

@@ -19,8 +19,7 @@
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
-    clippy::result_unwrap_used,
-    clippy::option_unwrap_used,
+    clippy::unwrap_used,
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]

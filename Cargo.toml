@@ -28,7 +28,10 @@ opt-level = 3
 [dependencies]
 async-std = {version = "1.6", features = ["unstable"]}
 async-trait = "0.1"
+async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
+smol = "0.2"
+async-io = "0.1"
 base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"
@@ -50,12 +53,12 @@ rmp-serde = "0.14"
 serde = "1"
 serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
-simd-json-derive = "0.1"
-threadpool = "1"
+simd-json-derive = "0.1.9"
 tremor-pipeline = { path = "tremor-pipeline" }
 url = "2.1"
 async-tungstenite = { version = "0.8.0", features = ["async-std-runtime"] }
 value-trait = "0.1"
+pin-project-lite = "0.1"
 
 
 log = "0.4"
@@ -68,8 +71,7 @@ lz4 = "1.23.2"
 tremor-script = { path = "tremor-script" }
 tremor-influx = { path = "tremor-influx" }
 indexmap = { version = "1", features = [ "serde-1" ] }
-
-crossbeam-channel = "0.4"
+crossbeam = "0.7.3"
 
 memmap = { version = "0.7.0" }
 tempfile = { version = "3.1" }
