@@ -23,7 +23,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
     let repo = &req.state().world.repo;
     let result: Vec<_> = repo
         .list_offramps()
-        .await
+        .await?
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();

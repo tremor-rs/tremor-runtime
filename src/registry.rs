@@ -42,7 +42,7 @@ use crate::repository::{
     Artefact, ArtefactId, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact,
 };
 use crate::url::TremorURL;
-use async_std::sync::{self, channel};
+use async_channel::bounded;
 use async_std::task;
 use hashbrown::HashMap;
 use std::default::Default;
@@ -112,16 +112,19 @@ impl<A: Artefact> Registry<A> {
     }
 }
 pub(crate) enum Msg<A: Artefact> {
-    SerializeServants(sync::Sender<Vec<A>>),
-    FindServant(sync::Sender<Result<Option<A::SpawnResult>>>, ServantId),
+    SerializeServants(async_channel::Sender<Vec<A>>),
+    FindServant(
+        async_channel::Sender<Result<Option<A::SpawnResult>>>,
+        ServantId,
+    ),
     PublishServant(
-        sync::Sender<Result<ActivationState>>,
+        async_channel::Sender<Result<ActivationState>>,
         ServantId,
         ActivatorLifecycleFsm<A>,
     ),
-    UnpublishServant(sync::Sender<Result<ActivationState>>, ServantId),
+    UnpublishServant(async_channel::Sender<Result<ActivationState>>, ServantId),
     Transition(
-        sync::Sender<Result<ActivationState>>,
+        async_channel::Sender<Result<ActivationState>>,
         ServantId,
         ActivationState,
     ),
@@ -132,43 +135,42 @@ where
     A: Artefact + Send + Sync + 'static,
     A::SpawnResult: Send + Sync + 'static,
 {
-    fn start(mut self) -> sync::Sender<Msg<A>> {
-        let (tx, rx) = channel(64);
+    fn start(mut self) -> async_channel::Sender<Msg<A>> {
+        let (tx, rx) = bounded(64);
 
-        task::spawn(async move {
+        task::spawn::<_, Result<()>>(async move {
             loop {
-                match rx.recv().await {
-                    Ok(Msg::SerializeServants(r)) => r.send(self.values()).await,
-                    Ok(Msg::FindServant(r, id)) => {
+                match rx.recv().await? {
+                    Msg::SerializeServants(r) => r.send(self.values()).await?,
+                    Msg::FindServant(r, id) => {
                         r.send(
                             A::servant_id(&id)
                                 .map(|id| self.find(id).and_then(|v| v.resolution.clone())),
                         )
-                        .await
+                        .await?
                     }
-                    Ok(Msg::PublishServant(r, id, s)) => {
+                    Msg::PublishServant(r, id, s) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.publish(id, s).map(|p| p.state)),
                         )
-                        .await
+                        .await?
                     }
 
-                    Ok(Msg::UnpublishServant(r, id)) => {
+                    Msg::UnpublishServant(r, id) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.unpublish(id).map(|p| p.state)),
                         )
-                        .await
+                        .await?
                     }
-                    Ok(Msg::Transition(r, mut id, new_state)) => {
+                    Msg::Transition(r, mut id, new_state) => {
                         id.trim_to_instance();
                         let res = match self.find_mut(id) {
                             Some(s) => s.transition(new_state).map(|s| s.state),
                             None => Err("Servant not found".into()),
                         };
 
-                        r.send(res).await
+                        r.send(res).await?
                     }
-                    Err(e) => info!("Terminating repositry {}", e),
                 }
             }
         });
@@ -179,10 +181,10 @@ where
 /// The tremor registry holding running artifacts
 #[derive(Clone)]
 pub struct Registries {
-    pipeline: sync::Sender<Msg<PipelineArtefact>>,
-    onramp: sync::Sender<Msg<OnrampArtefact>>,
-    offramp: sync::Sender<Msg<OfframpArtefact>>,
-    binding: sync::Sender<Msg<BindingArtefact>>,
+    pipeline: async_channel::Sender<Msg<PipelineArtefact>>,
+    onramp: async_channel::Sender<Msg<OnrampArtefact>>,
+    offramp: async_channel::Sender<Msg<OfframpArtefact>>,
+    binding: async_channel::Sender<Msg<BindingArtefact>>,
 }
 
 impl fmt::Debug for Registries {
@@ -208,26 +210,24 @@ impl Registries {
         }
     }
     /// serialize the mappings of this registry
-    pub async fn serialize_mappings(&self) -> crate::config::MappingMap {
-        let (tx, rx) = channel(1);
-        self.binding.send(Msg::SerializeServants(tx)).await;
-        rx.recv()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|v| v.mapping)
-            .fold(HashMap::new(), |mut acc, v| {
+    pub async fn serialize_mappings(&self) -> Result<crate::config::MappingMap> {
+        let (tx, rx) = bounded(1);
+        self.binding.send(Msg::SerializeServants(tx)).await?;
+        Ok(rx.recv().await?.into_iter().filter_map(|v| v.mapping).fold(
+            HashMap::new(),
+            |mut acc, v| {
                 acc.extend(v);
                 acc
-            })
+            },
+        ))
     }
     /// Finds a pipeline
     pub async fn find_pipeline(
         &self,
         id: &TremorURL,
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = channel(1);
-        self.pipeline.send(Msg::FindServant(tx, id.clone())).await;
+        let (tx, rx) = bounded(1);
+        self.pipeline.send(Msg::FindServant(tx, id.clone())).await?;
         rx.recv().await?
     }
     /// Publishes a pipeline
@@ -236,19 +236,19 @@ impl Registries {
         id: &TremorURL,
         servant: PipelineServant,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
     /// unpublishes a pipeline
     pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::UnpublishServant(tx, id.clone()))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -258,10 +258,10 @@ impl Registries {
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::Transition(tx, id.clone(), new_state))
-            .await;
+            .await?;
         rx.recv().await?
     }
     /// Finds an onramp
@@ -269,8 +269,8 @@ impl Registries {
         &self,
         id: &TremorURL,
     ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = channel(1);
-        self.onramp.send(Msg::FindServant(tx, id.clone())).await;
+        let (tx, rx) = bounded(1);
+        self.onramp.send(Msg::FindServant(tx, id.clone())).await?;
         rx.recv().await?
     }
     /// Publishes an onramp
@@ -279,18 +279,18 @@ impl Registries {
         id: &TremorURL,
         servant: OnrampServant,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.onramp
             .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await;
+            .await?;
         rx.recv().await?
     }
     /// Usnpublishes an onramp
     pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.onramp
             .send(Msg::UnpublishServant(tx, id.clone()))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -300,10 +300,10 @@ impl Registries {
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.onramp
             .send(Msg::Transition(tx, id.clone(), new_state))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -312,8 +312,8 @@ impl Registries {
         &self,
         id: &TremorURL,
     ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = channel(1);
-        self.offramp.send(Msg::FindServant(tx, id.clone())).await;
+        let (tx, rx) = bounded(1);
+        self.offramp.send(Msg::FindServant(tx, id.clone())).await?;
         rx.recv().await?
     }
 
@@ -323,18 +323,18 @@ impl Registries {
         id: &TremorURL,
         servant: OfframpServant,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.offramp
             .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await;
+            .await?;
         rx.recv().await?
     }
     /// Unpublishes an offramp
     pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.offramp
             .send(Msg::UnpublishServant(tx, id.clone()))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -344,10 +344,10 @@ impl Registries {
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.offramp
             .send(Msg::Transition(tx, id.clone(), new_state))
-            .await;
+            .await?;
         rx.recv().await?
     }
     /// Finds a binding
@@ -355,8 +355,8 @@ impl Registries {
         &self,
         id: &TremorURL,
     ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = channel(1);
-        self.binding.send(Msg::FindServant(tx, id.clone())).await;
+        let (tx, rx) = bounded(1);
+        self.binding.send(Msg::FindServant(tx, id.clone())).await?;
         rx.recv().await?
     }
     /// Publishes a binding
@@ -365,19 +365,19 @@ impl Registries {
         id: &TremorURL,
         servant: BindingServant,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
     /// Unpublishes a binding
     pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::UnpublishServant(tx, id.clone()))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -387,10 +387,10 @@ impl Registries {
         id: &TremorURL,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::Transition(tx, id.clone(), new_state))
-            .await;
+            .await?;
         rx.recv().await?
     }
 }

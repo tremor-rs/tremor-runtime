@@ -67,18 +67,19 @@ where
     // }
 }
 
+#[async_trait::async_trait]
 impl<T> Offramp for SinkManager<T>
 where
     T: Sink + Send,
 {
-    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        task::block_on(self.sink.init(postprocessors))
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+        self.sink.init(postprocessors).await
     }
 
-    fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
-        for insight in task::block_on(self.sink.on_event(input, codec, event))? {
+    async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
+        for insight in self.sink.on_event(input, codec, event).await? {
             for p in self.pipelines.values_mut() {
-                if let Err(e) = p.send_insight(insight.clone()) {
+                if let Err(e) = p.send_insight(insight.clone()).await {
                     error!("Error: {}", e)
                 };
             }
@@ -99,11 +100,11 @@ where
         self.pipelines.is_empty()
     }
 
-    fn on_signal(&mut self, signal: Event) -> Option<Event> {
-        if let Ok(insights) = task::block_on(self.sink.on_signal(signal)) {
+    async fn on_signal(&mut self, signal: Event) -> Option<Event> {
+        if let Ok(insights) = self.sink.on_signal(signal).await {
             for insight in insights {
                 for p in self.pipelines.values_mut() {
-                    if let Err(e) = p.send_insight(insight.clone()) {
+                    if let Err(e) = p.send_insight(insight.clone()).await {
                         error!("Error: {}", e)
                     };
                 }

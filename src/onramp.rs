@@ -18,9 +18,7 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::{blaster, crononome, file, kafka, metronome, tcp};
 use crate::url::TremorURL;
-use async_std::sync::{self, channel};
 use async_std::task::{self, JoinHandle};
-use crossbeam_channel::Sender as CbSender;
 use serde_yaml::Value;
 use std::fmt;
 
@@ -32,7 +30,7 @@ mod udp;
 // mod rest;
 mod ws;
 
-pub(crate) type Sender = sync::Sender<ManagerMsg>;
+pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
     fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
@@ -41,11 +39,14 @@ pub(crate) trait Impl {
 #[derive(Clone, Debug)]
 pub enum Msg {
     Connect(Vec<(TremorURL, pipeline::Addr)>),
-    Disconnect { id: TremorURL, tx: CbSender<bool> },
+    Disconnect {
+        id: TremorURL,
+        tx: async_channel::Sender<bool>,
+    },
     Cb(CBAction, Ids),
 }
 
-pub type Addr = sync::Sender<Msg>;
+pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub(crate) trait Onramp: Send {
@@ -99,7 +100,7 @@ impl fmt::Debug for Create {
 
 /// This is control plane
 pub(crate) enum ManagerMsg {
-    Create(async_std::sync::Sender<Result<Addr>>, Box<Create>),
+    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
     Stop,
 }
 
@@ -112,10 +113,10 @@ impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
-    pub fn start(self) -> (JoinHandle<bool>, Sender) {
-        let (tx, rx) = channel(self.qsize);
+    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+        let (tx, rx) = bounded(self.qsize);
 
-        let h = task::spawn(async move {
+        let h = task::spawn::<_, Result<()>>(async move {
             let mut onramp_uid: u64 = 0;
             info!("Onramp manager started");
             loop {
@@ -139,7 +140,7 @@ impl Manager {
                         {
                             Ok(addr) => {
                                 info!("Onramp {} started.", id);
-                                r.send(Ok(addr)).await
+                                r.send(Ok(addr)).await?;
                             }
                             Err(e) => error!("Creating an onramp failed: {}", e),
                         }
@@ -151,7 +152,7 @@ impl Manager {
                 }
             }
             info!("Onramp manager stopped.");
-            true
+            Ok(())
         });
 
         (h, tx)
@@ -321,7 +322,7 @@ links:
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
-            b!(world.stop());
+            b!(world.stop())?;
         };
     }
 

@@ -25,6 +25,7 @@ use chrono::prelude::*;
 use postgres::{Client, NoTls};
 use serde_yaml::Value;
 use simd_json::prelude::*;
+use std::thread;
 use std::time::Duration;
 use tokio_postgres::error::SqlState;
 
@@ -324,7 +325,7 @@ impl Onramp for Postgres {
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
         let config = self.config.clone();
         let codec = codec::lookup(&codec)?;
         let preprocessors = make_preprocessors(&preprocessors)?;

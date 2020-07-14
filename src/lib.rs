@@ -19,8 +19,7 @@
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
-    clippy::result_unwrap_used,
-    clippy::option_unwrap_used,
+    clippy::unwrap_used,
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
@@ -54,6 +53,7 @@ pub(crate) mod lifecycle;
 pub mod metrics;
 pub(crate) mod offramp;
 pub(crate) mod onramp;
+pub(crate) mod permge;
 pub(crate) mod pipeline;
 /// Onramp Preprocessors
 pub mod postprocessor;

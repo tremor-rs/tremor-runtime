@@ -26,7 +26,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 
     let result: Vec<_> = repo
         .list_pipelines()
-        .await
+        .await?
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();

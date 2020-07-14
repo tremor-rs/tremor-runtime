@@ -22,14 +22,13 @@ pub(crate) use crate::source::{Source, SourceManager, SourceReply, SourceState};
 pub(crate) use crate::system::METRICS_PIPELINE;
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::{hostname, nanotime, ConfigImpl};
-pub(crate) use async_std::sync::{channel, Receiver};
+pub(crate) use async_channel::{bounded, Receiver};
 pub(crate) use async_std::task;
 pub(crate) use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
 
 // TODO pub here too?
 use std::mem;
-pub(crate) use std::thread;
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
@@ -170,17 +169,17 @@ pub(crate) async fn handle_pipelines(
 ) -> Result<PipeHandlerResult> {
     if pipelines.is_empty() || triggered {
         let msg = rx.recv().await?;
-        handle_pipelines_msg(msg, pipelines, metrics_reporter)
+        handle_pipelines_msg(msg, pipelines, metrics_reporter).await
     } else if rx.is_empty() {
         Ok(PipeHandlerResult::Normal)
     } else {
         let msg = rx.recv().await?;
-        handle_pipelines_msg(msg, pipelines, metrics_reporter)
+        handle_pipelines_msg(msg, pipelines, metrics_reporter).await
     }
 }
 // Handles pipeline connections for an onramp
 
-pub(crate) fn handle_pipelines_msg(
+pub(crate) async fn handle_pipelines_msg(
     msg: onramp::Msg,
     pipelines: &mut Vec<(TremorURL, pipeline::Addr)>,
     metrics_reporter: &mut RampReporter,
@@ -198,7 +197,7 @@ pub(crate) fn handle_pipelines_msg(
                 Ok(PipeHandlerResult::Idle)
             }
             onramp::Msg::Disconnect { tx, .. } => {
-                tx.send(true)?;
+                tx.send(true).await?;
                 Ok(PipeHandlerResult::Terminate)
             }
             onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
@@ -212,10 +211,10 @@ pub(crate) fn handle_pipelines_msg(
             onramp::Msg::Disconnect { id, tx } => {
                 pipelines.retain(|(pipeline, _)| pipeline != &id);
                 if pipelines.is_empty() {
-                    tx.send(true)?;
+                    tx.send(true).await?;
                     Ok(PipeHandlerResult::Terminate)
                 } else {
-                    tx.send(false)?;
+                    tx.send(false).await?;
                     Ok(PipeHandlerResult::Normal)
                 }
             }

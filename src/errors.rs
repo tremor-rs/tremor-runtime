@@ -90,17 +90,12 @@ impl From<google_pubsub1::Error> for Error {
         Self::from(format!("{:?}", e))
     }
 }
+impl<T> From<async_channel::SendError<T>> for Error {
+    fn from(e: async_channel::SendError<T>) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
 
-impl<T> From<crossbeam_channel::SendError<T>> for Error {
-    fn from(e: crossbeam_channel::SendError<T>) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
-impl From<crossbeam_channel::RecvError> for Error {
-    fn from(e: crossbeam_channel::RecvError) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
 impl From<tremor_script::errors::CompilerError> for Error {
     fn from(e: tremor_script::errors::CompilerError) -> Self {
         e.error().into()
@@ -157,7 +152,7 @@ error_chain! {
         RegexError(regex::Error);
         WsError(tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
-        AsyncRecvError(async_std::sync::RecvError);
+        AsyncChannelRecvError(async_channel::RecvError);
         JSONAccessError(value_trait::AccessError);
         CronError(cron::error::Error);
     }

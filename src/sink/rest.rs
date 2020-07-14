@@ -16,7 +16,7 @@ use crate::offramp::prelude::*;
 use crate::sink::{
     AsyncSink, ConfigImpl, Event, OpConfig, Result, Sink, SinkDequeueError, SinkManager,
 };
-use crossbeam_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use std::str;
 use std::time::Instant;
@@ -121,18 +121,21 @@ impl Rest {
                 Some(CBAction::Fail)
             };
 
-            if let Err(e) = insight_tx.send(Event {
-                id,
-                op_meta,
-                data: (Value::null(), m).into(),
-                cb,
-                ingest_ns: nanotime(),
-                ..Event::default()
-            }) {
+            if let Err(e) = insight_tx
+                .send(Event {
+                    id,
+                    op_meta,
+                    data: (Value::null(), m).into(),
+                    cb,
+                    ingest_ns: nanotime(),
+                    ..Event::default()
+                })
+                .await
+            {
                 error!("Failed to send reply: {}", e)
             };
 
-            if let Err(e) = tx.send(r) {
+            if let Err(e) = tx.send(r).await {
                 error!("Failed to send reply: {}", e)
             }
             Ok(())
@@ -140,16 +143,20 @@ impl Rest {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
+    async fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                if let Err(e) = self.tx.send(Event {
-                    id,
-                    op_meta,
-                    cb: Some(CBAction::Fail),
-                    ingest_ns: nanotime(),
-                    ..Event::default()
-                }) {
+                if let Err(e) = self
+                    .tx
+                    .send(Event {
+                        id,
+                        op_meta,
+                        cb: Some(CBAction::Fail),
+                        ingest_ns: nanotime(),
+                        ..Event::default()
+                    })
+                    .await
+                {
                     error!("Failed to send reply: {}", e)
                 };
 
@@ -191,7 +198,7 @@ impl Sink for Rest {
             payload.append(&mut raw);
             payload.push(b'\n');
         }
-        self.maybe_enque(event.id, event.op_meta, payload)?;
+        self.maybe_enque(event.id, event.op_meta, payload).await?;
         self.drain_insights().await
     }
 

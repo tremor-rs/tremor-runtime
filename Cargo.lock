@@ -953,6 +953,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69323bff1fb41c635347b8ead484a5ca6c3f11914d784170b158d8449ab07f8e"
+dependencies = [
+ "cfg-if",
+ "crossbeam-channel 0.4.3",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils 0.7.2",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4359,9 +4373,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3b4fe76283091a46d8bd25473da0ba1791030e84bbfa0882941d6ccdd7d33ac"
+checksum = "00783fbd8fc1271c32c926bafdc38a805aa74dd017e7b29ae3259b14e266709e"
 dependencies = [
  "chrono",
  "itoa",
@@ -5377,7 +5391,9 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.8.0"
 dependencies = [
+ "async-channel",
  "async-compression",
+ "async-io",
  "async-std",
  "async-trait",
  "async-tungstenite",
@@ -5411,6 +5427,7 @@ dependencies = [
  "matches",
  "memmap",
  "mio 0.7.0",
+ "pin-project-lite",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
@@ -5424,10 +5441,10 @@ dependencies = [
  "serde_yaml",
  "simd-json",
  "simd-json-derive",
+ "smol 0.2.0",
  "snap",
  "surf",
  "tempfile",
- "threadpool",
  "tokio-postgres",
  "tremor-influx",
  "tremor-pipeline",

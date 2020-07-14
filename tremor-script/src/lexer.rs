@@ -16,10 +16,7 @@
 // only lists
 
 use crate::errors::{Error, ErrorKind, Result};
-#[cfg_attr(
-    feature = "cargo-clippy",
-    allow(clippy::all, clippy::result_unwrap_used, clippy::unnecessary_unwrap)
-)]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
 use crate::path::ModulePath;
 pub use crate::pos::*;

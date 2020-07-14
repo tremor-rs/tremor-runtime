@@ -26,9 +26,8 @@ use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
 pub(crate) use crate::OffRamp as OfframpArtefact;
 pub(crate) use crate::OnRamp as OnrampArtefact;
-use async_std::sync::channel;
+use async_channel::bounded;
 use async_trait::async_trait;
-use crossbeam_channel::bounded;
 
 /// A Binding
 #[derive(Clone, Debug)]
@@ -130,11 +129,12 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Offramp) => {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
                             pipeline
-                                .send(pipeline::Msg::ConnectOfframp(
+                                .send_mgmt(pipeline::MgmtMsg::ConnectOfframp(
                                     from.clone().into(),
                                     to.clone(),
                                     offramp,
                                 ))
+                                .await
                                 .map_err(|e| -> Error {
                                     format!("Could not send to pipeline: {}", e).into()
                                 })?;
@@ -146,11 +146,12 @@ impl Artefact for Pipeline {
                         info!("[Pipeline:{}] Linking port {} to {}", id, from, to);
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
                             pipeline
-                                .send(pipeline::Msg::ConnectPipeline(
+                                .send_mgmt(pipeline::MgmtMsg::ConnectPipeline(
                                     from.clone().into(),
                                     to.clone(),
                                     Box::new(p),
                                 ))
+                                .await
                                 .map_err(|e| -> Error {
                                     format!("Could not send to pipeline: {:?}", e).into()
                                 })?;
@@ -180,12 +181,14 @@ impl Artefact for Pipeline {
                 match to.resource_type() {
                     Some(ResourceType::Offramp) => {
                         pipeline
-                            .send(pipeline::Msg::DisconnectOutput(from.clone().into(), to))
+                            .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
+                            .await
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     Some(ResourceType::Pipeline) => {
                         pipeline
-                            .send(pipeline::Msg::DisconnectOutput(from.clone().into(), to))
+                            .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
+                            .await
                             .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
                     }
                     _ => {
@@ -238,7 +241,7 @@ impl Artefact for OfframpArtefact {
         };
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
 
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
 
         world
             .system
@@ -252,7 +255,7 @@ impl Artefact for OfframpArtefact {
                     metrics_reporter,
                 },
             ))
-            .await;
+            .await?;
         rx.recv().await?
     }
     async fn link(
@@ -266,10 +269,12 @@ impl Artefact for OfframpArtefact {
             for (pipeline_id, _this) in mappings {
                 info!("Linking offramp {} to {}", id, pipeline_id);
                 if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
-                    offramp.send(offramp::Msg::Connect {
-                        id: pipeline_id,
-                        addr: Box::new(pipeline),
-                    })?;
+                    offramp
+                        .send(offramp::Msg::Connect {
+                            id: pipeline_id,
+                            addr: Box::new(pipeline),
+                        })
+                        .await?;
                 };
             }
             Ok(true)
@@ -288,12 +293,14 @@ impl Artefact for OfframpArtefact {
         if let Some(offramp) = system.reg.find_offramp(id).await? {
             let (tx, rx) = bounded(mappings.len());
             for (_this, pipeline_id) in mappings {
-                offramp.send(offramp::Msg::Disconnect {
-                    id: pipeline_id,
-                    tx: tx.clone(),
-                })?;
+                offramp
+                    .send(offramp::Msg::Disconnect {
+                        id: pipeline_id,
+                        tx: tx.clone(),
+                    })
+                    .await?;
             }
-            for empty in rx {
+            while let Ok(empty) = rx.recv().await {
                 if empty {
                     return Ok(true);
                 }
@@ -340,7 +347,7 @@ impl Artefact for OnrampArtefact {
             vec![]
         };
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-        let (tx, rx) = channel(1);
+        let (tx, rx) = bounded(1);
 
         world
             .system
@@ -354,7 +361,7 @@ impl Artefact for OnrampArtefact {
                     metrics_reporter,
                 },
             ))
-            .await;
+            .await?;
         rx.recv().await?
     }
 
@@ -372,7 +379,7 @@ impl Artefact for OnrampArtefact {
                     if let Some(pipeline) = system.reg.find_pipeline(&to).await? {
                         onramp
                             .send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))
-                            .await;
+                            .await?;
                     } else {
                         return Err(format!("Pipeline {:?} not found", to).into());
                     }
@@ -405,9 +412,9 @@ impl Artefact for OnrampArtefact {
                         id: pipeline_id,
                         tx: tx.clone(),
                     })
-                    .await;
+                    .await?;
             }
-            for empty in rx {
+            while let Ok(empty) = rx.recv().await {
                 if empty {
                     return Ok(true);
                 }

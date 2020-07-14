@@ -12,6 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(warnings)]
+// This isn't a external crate so we don't worry about docs
+// #![deny(missing_docs)]
+#![recursion_limit = "1024"]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
+)]
+#![allow(clippy::must_use_candidate)]
+
+#[cfg(feature = "allocator-mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg(feature = "allocator-snmalloc")]
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+#[cfg(feature = "allocator-jemalloc")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+#[macro_use]
+extern crate log;
+
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
@@ -252,10 +277,10 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             error!("API Error: {}", e);
         }
         warn!("API stopped");
-        world.stop().await;
+        world.stop().await?;
     }
 
-    handle.await;
+    handle.await?;
     warn!("World stopped");
     Ok(())
 }

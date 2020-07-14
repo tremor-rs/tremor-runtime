@@ -23,10 +23,9 @@ lalrpop_mod!(
         feature = "cargo-clippy",
         allow(
             clippy::all,
-            clippy::result_unwrap_used,
+            clippy::unwrap_used,
             clippy::unnecessary_unwrap,
             clippy::pedantic,
-            clippy::option_unwrap_used
         )
     )]
     grammar

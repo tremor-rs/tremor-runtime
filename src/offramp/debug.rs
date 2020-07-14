@@ -52,8 +52,9 @@ impl offramp::Impl for Debug {
         }))
     }
 }
+#[async_trait::async_trait]
 impl Offramp for Debug {
-    fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
@@ -92,7 +93,7 @@ impl Offramp for Debug {
     fn default_codec(&self) -> &str {
         "json"
     }
-    fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

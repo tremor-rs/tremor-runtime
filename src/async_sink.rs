@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use crossbeam_channel::Receiver;
+use async_channel::Receiver;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
@@ -96,7 +96,8 @@ impl<T> AsyncSink<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crossbeam_channel::bounded;
+    use async_channel::bounded;
+    use async_std::task;
 
     #[test]
     fn dequeue_empty() {
@@ -106,25 +107,27 @@ mod test {
 
     #[test]
     fn full_cycle() {
-        let mut q: AsyncSink<u8> = AsyncSink::new(2);
-        let (tx1, rx) = bounded(1);
-        assert!(q.enqueue(rx).is_ok());
-        let (tx2, rx) = bounded(1);
-        assert!(q.enqueue(rx).is_ok());
-        let (_tx3, rx) = bounded(1);
-        assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
-        assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
-        assert!(tx1.send(Ok(1)).is_ok());
-        assert_eq!(q.dequeue(), Ok(Ok(1)));
-        let (tx4, rx) = bounded(1);
-        assert!(q.enqueue(rx).is_ok());
-        let (_tx5, rx) = bounded(1);
-        assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
-        assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
-        assert!(tx2.send(Ok(2)).is_ok());
-        assert_eq!(q.dequeue(), Ok(Ok(2)));
-        assert!(tx4.send(Ok(4)).is_ok());
-        assert_eq!(q.dequeue(), Ok(Ok(4)));
-        assert_eq!(q.dequeue(), Err(SinkDequeueError::Empty));
+        task::block_on(async {
+            let mut q: AsyncSink<u8> = AsyncSink::new(2);
+            let (tx1, rx) = bounded(1);
+            assert!(q.enqueue(rx).is_ok());
+            let (tx2, rx) = bounded(1);
+            assert!(q.enqueue(rx).is_ok());
+            let (_tx3, rx) = bounded(1);
+            assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+            assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
+            assert!(tx1.send(Ok(1)).await.is_ok());
+            assert_eq!(q.dequeue(), Ok(Ok(1)));
+            let (tx4, rx) = bounded(1);
+            assert!(q.enqueue(rx).is_ok());
+            let (_tx5, rx) = bounded(1);
+            assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+            assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
+            assert!(tx2.send(Ok(2)).await.is_ok());
+            assert_eq!(q.dequeue(), Ok(Ok(2)));
+            assert!(tx4.send(Ok(4)).await.is_ok());
+            assert_eq!(q.dequeue(), Ok(Ok(4)));
+            assert_eq!(q.dequeue(), Err(SinkDequeueError::Empty));
+        });
     }
 }
