@@ -1958,9 +1958,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "0.13.6"
+version = "0.13.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6e7655b9594024ad0ee439f3b5a7299369dc2a3f459b47c696f9ff676f9aa1f"
+checksum = "3e68a8dd9716185d9e64ea473ea6ef63529252e3e27623295a0378a19665d5eb"
 dependencies = [
  "bytes 0.5.5",
  "futures-channel",
@@ -1971,12 +1971,12 @@ dependencies = [
  "http-body 0.3.1",
  "httparse",
  "itoa",
- "log 0.4.8",
  "pin-project",
  "socket2",
  "time 0.1.43",
  "tokio 0.2.21",
  "tower-service",
+ "tracing",
  "want 0.3.0",
 ]
 
@@ -2000,7 +2000,7 @@ dependencies = [
  "bytes 0.5.5",
  "ct-logs 0.6.0",
  "futures-util",
- "hyper 0.13.6",
+ "hyper 0.13.7",
  "log 0.4.8",
  "rustls 0.17.0",
  "rustls-native-certs 0.3.0",
@@ -2018,7 +2018,7 @@ dependencies = [
  "bytes 0.5.5",
  "ct-logs 0.7.0",
  "futures-util",
- "hyper 0.13.6",
+ "hyper 0.13.7",
  "log 0.4.8",
  "rustls 0.18.0",
  "rustls-native-certs 0.4.0",
@@ -3018,18 +3018,18 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "0.4.17"
+version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edc93aeee735e60ecb40cf740eb319ff23eab1c5748abfdb5c180e4ce49f7791"
+checksum = "12e3a6cdbfe94a5e4572812a0201f8c0ed98c1c452c7b8563ce2276988ef9c17"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "0.4.17"
+version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e58db2081ba5b4c93bd6be09c40fd36cb9193a8336c384f3b40012e531aa7e40"
+checksum = "6a0ffd45cf79d88737d7cc85bfd5d2894bee1139b356e616fe85dc389c61aaf7"
 dependencies = [
  "proc-macro2",
  "quote 1.0.6",
@@ -4918,7 +4918,7 @@ dependencies = [
  "hdrhistogram",
  "hostname",
  "http-types",
- "hyper 0.13.6",
+ "hyper 0.13.7",
  "hyper-rustls 0.21.0",
  "indexmap",
  "lazy_static",
@@ -5536,7 +5536,7 @@ dependencies = [
  "chrono",
  "futures 0.3.5",
  "http 0.2.1",
- "hyper 0.13.6",
+ "hyper 0.13.7",
  "hyper-rustls 0.20.0",
  "log 0.4.8",
  "percent-encoding 2.1.0",
