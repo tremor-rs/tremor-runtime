@@ -201,7 +201,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
 
 impl Event {
     /// Iterate over the values in an event
-    /// this will result in multiple entires
+    /// this will result in multiple entries
     /// if the event was batched otherwise
     /// have only a single element
     pub fn value_iter(&self) -> ValueIter {
