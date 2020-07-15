@@ -119,6 +119,9 @@ neon = [ "simd-json/neon" ]
 # Experimental suport for google cloud APIs
 gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
 
+# Optional newrelic support
+newrelic = []
+
 [patch.crates-io]
 #  waiting for https://github.com/http-rs/tide/pull/408
 
