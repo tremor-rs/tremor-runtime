@@ -141,7 +141,7 @@ impl Offramp for NewRelic {
 }
 
 impl NewRelic {
-    async fn send<'a>(&mut self, newrelic_payload: &NewRelicPayload<'a>) -> Result<()> {
+    async fn send(&mut self, newrelic_payload: &NewRelicPayload<'_>) -> Result<()> {
         let (key, value) = self.auth_headers();
         let output_array = vec![newrelic_payload];
         let mut buffer = Vec::with_capacity(10240);
@@ -151,14 +151,14 @@ impl NewRelic {
         }
 
         if log::log_enabled!(log::Level::Trace) {
-            if !self.config.compress_logs {
-                let output = String::from_utf8(buffer.clone())?;
-                trace!("Payload to send: {}", output);
-            } else {
+            if self.config.compress_logs {
                 let mut decoder = libflate::gzip::Decoder::new(&buffer[..])?;
                 let mut output = String::new();
                 decoder.read_to_string(&mut output)?;
                 trace!("Payload to send {}", output);
+            } else {
+                let output = String::from_utf8(buffer.clone())?;
+                trace!("Payload to send: {}", output);
             }
         }
 
