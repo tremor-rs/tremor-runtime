@@ -19,12 +19,12 @@
 //! ## Configuration
 //!
 //! See [Config](struct.Config.html) for details.
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 
 use async_std::task::block_on;
 use chrono::prelude::Utc;
 use hashbrown::HashMap;
-use http_types::headers::CONTENT_TYPE;
+use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
 use libflate::{finish, gzip};
 use log::debug;
 use simd_json::BorrowedValue;
@@ -141,20 +141,39 @@ impl Offramp for NewRelic {
 }
 
 impl NewRelic {
-    async fn send(&mut self, newrelic_payload: &NewRelicPayload) -> Result<()> {
+    async fn send<'a>(&mut self, newrelic_payload: &NewRelicPayload<'a>) -> Result<()> {
         let (key, value) = self.auth_headers();
+        let output_array = vec![newrelic_payload];
         let mut buffer = Vec::with_capacity(10240);
         {
             let mut writer = self.get_writer(&mut buffer)?;
-            simd_json::to_writer::<NewRelicPayload, _>(&mut writer, newrelic_payload)?;
+            simd_json::to_writer::<Vec<&NewRelicPayload>, _>(&mut writer, &output_array)?;
+        }
+
+        if log::log_enabled!(log::Level::Trace) {
+            if !self.config.compress_logs {
+                let output = String::from_utf8(buffer.clone())?;
+                trace!("Payload to send: {}", output);
+            } else {
+                let mut decoder = libflate::gzip::Decoder::new(&buffer[..])?;
+                let mut output = String::new();
+                decoder.read_to_string(&mut output)?;
+                trace!("Payload to send {}", output);
+            }
         }
 
         debug!("sending {} bytes", buffer.len());
 
-        let request = surf::post(self.config.region.logs_url())
+        let mut request = surf::post(self.config.region.logs_url())
             .set_header(key, value)
             .body_bytes(buffer)
-            .set_header(CONTENT_TYPE, self.content_type());
+            .set_header(CONTENT_TYPE, "application/json");
+
+        if self.config.compress_logs {
+            request = request.set_header(CONTENT_ENCODING, "gzip");
+        }
+
+        trace!("Request: {:?}", request);
 
         let mut response = request.await?;
 
@@ -201,36 +220,43 @@ impl NewRelic {
         }
     }
 
-    fn content_type(&self) -> &str {
-        if self.config.compress_logs {
-            "application/gzip"
-        } else {
-            "application/json"
-        }
-    }
-
-    fn value_to_newrelic_log(value: &BorrowedValue<'_>) -> Result<NewRelicLog> {
-        let timestamp = value
-            .get("timestamp")
+    fn value_to_newrelic_log<'a>(value: &'a BorrowedValue<'_>) -> Result<NewRelicLog<'a>> {
+        let mut new_value = value.clone();
+        let timestamp = new_value
+            .remove("timestamp")
+            .ok()
+            .flatten()
+            .as_ref()
             .and_then(BorrowedValue::as_i64)
             .unwrap_or_else(|| Utc::now().timestamp_millis());
 
+        let message = new_value
+            .remove("message")
+            .ok()
+            .flatten()
+            .as_ref()
+            .and_then(BorrowedValue::as_str)
+            .unwrap_or("")
+            .to_string();
+
         Ok(NewRelicLog {
             timestamp,
-            message: simd_json::to_string::<BorrowedValue<'_>>(value)?,
+            message,
+            attributes: Some(new_value),
         })
     }
 }
 
 #[derive(Debug, Serialize)]
-struct NewRelicPayload {
-    logs: Vec<NewRelicLog>,
+struct NewRelicPayload<'a> {
+    logs: Vec<NewRelicLog<'a>>,
 }
 
 #[derive(Debug, Serialize)]
-struct NewRelicLog {
+struct NewRelicLog<'a> {
     timestamp: i64,
     message: String,
+    attributes: Option<BorrowedValue<'a>>,
 }
 
 #[cfg(test)]
