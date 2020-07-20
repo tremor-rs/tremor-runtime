@@ -30,6 +30,7 @@ pub mod version;
 pub type Request = tide::Request<State>;
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Clone)]
 pub struct State {
     pub world: World,
 }
