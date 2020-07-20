@@ -19,7 +19,7 @@ log = "0.4"
 log4rs = "0.12.0"
 glob = "0.3"
 async-std = { version = "1.6", features = ["unstable"] }
-tide = "0.11"
+tide = "0.12"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
