@@ -283,7 +283,7 @@ async fn run_dun() -> Result<()> {
         eprintln!("Listening at: http://{}", host);
         info!("Listening at: http://{}", host);
 
-        if let Err(e) = app.listen(&host).await {
+        if let Err(e) = app.listen(host).await {
             error!("API Error: {}", e);
         }
         warn!("API stopped");
