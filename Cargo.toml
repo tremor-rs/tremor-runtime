@@ -83,7 +83,7 @@ postgres-protocol = "0.5"
 tokio-postgres = "0.5"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = { version = "0.23", features = ["cmake-build"] }
+rdkafka = { version = "0.24", features = ["cmake-build"] }
 
 # crononome
 cron = "0.6.1"
