@@ -73,6 +73,7 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 
 #[async_trait::async_trait]
 impl Offramp for Postgres {
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for val in event.value_iter() {
             let obj = val.as_object();
@@ -145,6 +146,7 @@ impl Offramp for Postgres {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

@@ -46,7 +46,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
         .map(|result| match result {
             PipelineArtefact::Pipeline(p) => p.config,
             //ALLOW:  We publish a pipeline we can't ever get anything else back
-            _ => unreachable!(),
+            PipelineArtefact::Query(_) => unreachable!(),
         })?;
     reply(req, result, true, StatusCode::Created).await
 }
@@ -60,7 +60,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
         .await
         .and_then(|result| match result {
             PipelineArtefact::Pipeline(p) => Ok(p.config),
-            _ => Err("This is a query".into()), // FIXME
+            PipelineArtefact::Query(_) => Err("This is a query".into()), // FIXME
         })?;
     reply(req, result, true, StatusCode::Ok).await
 }
@@ -90,7 +90,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             )
             .await
         }
-        _ => Err(Error::json(
+        PipelineArtefact::Query(_) => Err(Error::json(
             StatusCode::BadRequest,
             &r#"{"error": "Artefact is a query"}"#,
         )),

@@ -392,12 +392,7 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
         }
     } else if let Some(x) = val.as_i64() {
         match &op {
-            Minus => x
-                .try_into()
-                .ok()
-                .and_then(i64::checked_neg)
-                .map(Value::from)
-                .map(Cow::Owned),
+            Minus => x.checked_neg().map(Value::from).map(Cow::Owned),
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
             _ => None,
@@ -449,7 +444,7 @@ where
         },
         Path::Const(lpath) => match env.consts.get(lpath.idx) {
             Some(v) => v,
-            _ => {
+            None => {
                 return error_oops(
                     outer,
                     0xdead_0002,

@@ -54,7 +54,7 @@ impl offramp::Impl for Rest {
             let config: Config = Config::new(config)?;
 
             let queue = AsyncSink::new(config.concurrency);
-            let (tx, rx) = bounded(64);
+            let (tx, rx) = bounded(crate::QSIZE);
             Ok(SinkManager::new_box(Self {
                 client_idx: 0,
                 postprocessors: vec![],
@@ -174,24 +174,19 @@ impl Rest {
             }
         }
     }
-    async fn drain_insights(&mut self) -> Result<Vec<Event>> {
-        let mut v = Vec::with_capacity(self.tx.len());
+    async fn drain_insights(&mut self) -> ResultVec {
+        let mut v = Vec::with_capacity(self.tx.len() + 1);
         while let Ok(e) = self.rx.try_recv() {
             v.push(e)
         }
-        Ok(v)
+        Ok(Some(v))
     }
 }
 
 #[async_trait::async_trait]
 impl Sink for Rest {
     #[allow(unused_variables)]
-    async fn on_event(
-        &mut self,
-        input: &str,
-        codec: &dyn Codec,
-        event: Event,
-    ) -> Result<Vec<Event>> {
+    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         let mut payload = Vec::with_capacity(4096);
         for value in event.value_iter() {
             let mut raw = codec.encode(value)?;
@@ -211,7 +206,7 @@ impl Sink for Rest {
         Ok(())
     }
     #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
+    async fn on_signal(&mut self, signal: Event) -> ResultVec {
         self.drain_insights().await
     }
     fn is_active(&self) -> bool {

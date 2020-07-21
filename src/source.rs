@@ -13,15 +13,21 @@
 // limitations under the License.
 use crate::codec::{self, Codec};
 use crate::metrics::RampReporter;
-use crate::onramp::{self, prelude::make_preprocessors, prelude::PipeHandlerResult};
+use crate::onramp::{self, prelude::make_preprocessors};
 use crate::pipeline;
 use crate::preprocessor::Preprocessors;
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
 use crate::Result;
-use async_channel::{self, bounded, Receiver, Sender};
+use async_channel::{self, unbounded, Receiver, Sender};
+// use async_std::stream::Stream;
 use async_std::task;
+// use core::task::{Context, Poll};
+// use futures_timer::Delay;
+// use pin_project_lite::pin_project;
+// use std::future::Future;
+// use std::pin::Pin;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
@@ -37,6 +43,7 @@ pub(crate) enum SourceState {
     Connected,
     Disconnected,
 }
+
 pub(crate) enum SourceReply {
     Data {
         origin_uri: EventOriginUri,
@@ -62,6 +69,9 @@ pub(crate) trait Source {
     fn restore_breaker(&mut self) {}
     fn ack(&mut self, id: u64) {}
     fn fail(&mut self, id: u64) {}
+    fn is_transactional(&self) -> bool {
+        false
+    }
 }
 
 pub(crate) struct SourceManager<T>
@@ -79,9 +89,72 @@ where
     triggered: bool,
     pipelines: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
+    is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
 }
+
+// pin_project! {
+//     struct DelayedRead<'r>
+//     {
+//         ready: bool,
+//         delayed: bool,
+//         #[pin]
+//         delay: Delay,
+//         #[pin]
+//         ramp: Pin<Box<dyn Future<Output = Result<SourceReply>> + Send + 'r>>,
+//     }
+// }
+// impl<'r> Future for DelayedRead<'r> {
+//     type Output = MaybeRead;
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         let this = self.project();
+//         if !*this.ready {
+//             cx.waker().wake_by_ref();
+//             return Poll::Pending;
+//         }
+//         if *this.delayed {
+//             match this.delay.poll(cx) {
+//                 Poll::Ready(_) => {
+//                     *this.delayed = false;
+//                     this.ramp.poll(cx).map(MaybeRead::Read)
+//                 }
+//                 Poll::Pending => Poll::Pending,
+//             }
+//         } else {
+//             this.ramp.poll(cx).map(MaybeRead::Read)
+//         }
+//     }
+// }
+
+// pin_project! {
+//     struct SourceRead<'r>
+//     {
+//         #[pin]
+//         channel: Receiver<CachePadded<onramp::Msg>>,
+
+//         #[pin]
+//         ramp: DelayedRead<'r>,
+//     }
+// }
+
+// enum MaybeRead {
+//     CounterFlow(onramp::Msg),
+//     Read(Result<SourceReply>),
+//     // Read(()),
+// }
+
+// impl<'r> Future for SourceRead<'r> {
+//     type Output = MaybeRead;
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         let this = self.project();
+
+//         match this.channel.poll_next(cx) {
+//             Poll::Ready(Some(item)) => Poll::Ready(MaybeRead::CounterFlow(item.into_inner())),
+//             Poll::Ready(None) | Poll::Pending => this.ramp.poll(cx),
+//         }
+//     }
+// }
 
 impl<T> SourceManager<T>
 where
@@ -114,7 +187,7 @@ where
     }
 
     // We are borrowing a dyn box as we don't want to pass ownership.
-    fn send_event(
+    async fn send_event(
         &mut self,
         stream: usize,
         ingest_ns: &mut u64,
@@ -128,7 +201,9 @@ where
             for d in data {
                 match self.codec.decode(d, *ingest_ns) {
                     Ok(Some(data)) => {
-                        error |= self.transmit_event(data, *ingest_ns, origin_uri.clone());
+                        error |= self
+                            .transmit_event(data, *ingest_ns, origin_uri.clone())
+                            .await;
                     }
                     Ok(None) => (),
                     Err(e) => {
@@ -148,42 +223,31 @@ where
         }
     }
 
-    async fn handle_pipelines_msg(&mut self, msg: onramp::Msg) -> Result<PipeHandlerResult> {
-        if self.pipelines.is_empty() {
+    async fn handle_pipelines(&mut self) -> Result<bool> {
+        loop {
+            let msg = if self.pipelines.is_empty() || self.triggered {
+                self.rx.recv().await?
+            } else if let Ok(msg) = self.rx.try_recv() {
+                msg
+            } else {
+                return Ok(false);
+            };
+
             match msg {
                 onramp::Msg::Connect(ps) => {
-                    for p in &ps {
+                    for p in ps {
                         if p.0 == *METRICS_PIPELINE {
-                            self.metrics_reporter.set_metrics_pipeline(p.clone());
+                            self.metrics_reporter.set_metrics_pipeline(p);
                         } else {
-                            p.1.send_mgmt(pipeline::MgmtMsg::ConnectOnramp(
-                                self.source_id.clone(),
-                                self.tx.clone(),
-                            ))
-                            .await?;
-                            self.pipelines.push(p.clone());
+                            let msg = pipeline::MgmtMsg::ConnectOnramp {
+                                id: self.source_id.clone(),
+                                addr: self.tx.clone(),
+                                reply: self.is_transactional,
+                            };
+                            p.1.send_mgmt(msg).await?;
+                            self.pipelines.push(p);
                         }
                     }
-                    Ok(PipeHandlerResult::Idle)
-                }
-                onramp::Msg::Disconnect { tx, .. } => {
-                    tx.send(true).await?;
-                    Ok(PipeHandlerResult::Terminate)
-                }
-                onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
-            }
-        } else {
-            match msg {
-                onramp::Msg::Connect(mut ps) => {
-                    for p in &ps {
-                        p.1.send_mgmt(pipeline::MgmtMsg::ConnectOnramp(
-                            self.source_id.clone(),
-                            self.tx.clone(),
-                        ))
-                        .await?;
-                    }
-                    self.pipelines.append(&mut ps);
-                    Ok(PipeHandlerResult::Normal)
                 }
                 onramp::Msg::Disconnect { id, tx } => {
                     for (pid, p) in &self.pipelines {
@@ -196,29 +260,39 @@ where
                     self.pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if self.pipelines.is_empty() {
                         tx.send(true).await?;
-                        Ok(PipeHandlerResult::Terminate)
+                        return Ok(self.pipelines.is_empty());
                     } else {
                         tx.send(false).await?;
-                        Ok(PipeHandlerResult::Normal)
                     }
                 }
-                onramp::Msg::Cb(cb, ids) => Ok(PipeHandlerResult::Cb(cb, ids)),
+                onramp::Msg::Cb(CBAction::Fail, ids) => {
+                    if let Some(id) = ids.get(self.uid) {
+                        self.source.fail(id);
+                    }
+                }
+                // Circuit breaker explicit acknowledgement of an event
+                onramp::Msg::Cb(CBAction::Ack, ids) => {
+                    if let Some(id) = ids.get(self.uid) {
+                        self.source.ack(id);
+                    }
+                }
+                // Circuit breaker soure failure -triggers close
+                onramp::Msg::Cb(CBAction::Close, _ids) => {
+                    // FIXME eprintln!("triggered for: {:?}", self.source);
+                    self.source.trigger_breaker();
+                    self.triggered = true;
+                }
+                //Circuit breaker source recovers - triggers open
+                onramp::Msg::Cb(CBAction::Open, _ids) => {
+                    // FIXME eprintln!("restored for: {:?}", self.source);
+                    self.source.restore_breaker();
+                    self.triggered = false;
+                }
             }
         }
     }
 
-    async fn handle_pipelines(&mut self) -> Result<PipeHandlerResult> {
-        if self.pipelines.is_empty() || self.triggered {
-            let msg = self.rx.recv().await?;
-            self.handle_pipelines_msg(msg).await
-        } else if let Ok(msg) = self.rx.try_recv() {
-            self.handle_pipelines_msg(msg).await
-        } else {
-            Ok(PipeHandlerResult::Normal)
-        }
-    }
-
-    pub(crate) fn transmit_event(
+    pub(crate) async fn transmit_event(
         &mut self,
         data: LineValue,
         ingest_ns: u64,
@@ -249,20 +323,27 @@ where
 
             for (input, addr) in pipelines {
                 if let Some(input) = input.instance_port() {
-                    if let Err(e) = addr.try_send_safe(pipeline::Msg::Event {
-                        input: input.to_string().into(),
-                        event: event.clone(),
-                    }) {
+                    if let Err(e) = addr
+                        .send(pipeline::Msg::Event {
+                            input: input.to_string().into(),
+                            event: event.clone(),
+                        })
+                        .await
+                    {
                         error!("[Onramp] failed to send to pipeline: {}", e);
                         error = true;
                     }
                 }
             }
             if let Some(input) = last.0.instance_port() {
-                if let Err(e) = last.1.try_send_safe(pipeline::Msg::Event {
-                    input: input.to_string().into(),
-                    event,
-                }) {
+                if let Err(e) = last
+                    .1
+                    .send(pipeline::Msg::Event {
+                        input: input.to_string().into(),
+                        event,
+                    })
+                    .await
+                {
                     error!("[Onramp] failed to send to pipeline: {}", e);
                     error = true;
                 }
@@ -270,6 +351,7 @@ where
         }
         error
     }
+
     async fn new(
         uid: u64,
         mut source: T,
@@ -277,11 +359,12 @@ where
         codec: &str,
         metrics_reporter: RampReporter,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
-        let (tx, rx) = bounded(15);
+        let (tx, rx) = unbounded();
         let codec = codec::lookup(&codec)?;
         let pp_template = preprocessors.to_vec();
         let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
         source.init().await?;
+        let is_transactional = source.is_transactional();
         Ok((
             Self {
                 source_id: source.id().clone(),
@@ -296,6 +379,7 @@ where
                 id: 0,
                 pipelines: Vec::new(),
                 uid,
+                is_transactional,
             },
             tx,
         ))
@@ -315,48 +399,31 @@ where
         Ok(tx)
     }
 
-    pub(crate) async fn run(mut self) -> Result<()> {
+    async fn run(mut self) -> Result<()> {
+        // let SourceManager { mut source, .. } = self;
+        // let mut thing = SourceRead {
+        //     channel: self.rx.clone(),
+        //     ramp: DelayedRead {
+        //         delayed: true,
+        //         delay: Delay::new(Duration::from_millis(1)),
+        //         ready: false,
+        //         ramp: source.read(self.id),
+        //     },
+        // };
         loop {
-            match self.handle_pipelines().await? {
-                // No pipelines connected - nothing to do, so yield
-                PipeHandlerResult::Idle => continue,
-                // No actionable event from pipeline - nothing to do
-                PipeHandlerResult::Normal => (),
-                // Last connected pipeline disconnected - etherealize
-                PipeHandlerResult::Terminate => return Ok(()),
-                // Circuit breaker failure to delivery ( good -> bad transition )
-                PipeHandlerResult::Cb(CBAction::Fail, ids) => {
-                    if let Some(id) = ids.get(self.uid) {
-                        self.source.fail(id);
-                    }
-                    continue;
-                }
-                // Circuit breaker explicit acknowledgement of an event
-                PipeHandlerResult::Cb(CBAction::Ack, ids) => {
-                    if let Some(id) = ids.get(self.uid) {
-                        self.source.ack(id);
-                    }
-                    continue;
-                }
-                // Circuit breaker soure failure -triggers close
-                PipeHandlerResult::Cb(CBAction::Close, _ids) => {
-                    // FIXME eprintln!("triggered for: {:?}", self.source);
-                    self.source.trigger_breaker();
-                    self.triggered = true;
-                    continue;
-                }
-                //Circuit breaker source recovers - triggers open
-                PipeHandlerResult::Cb(CBAction::Open, _ids) => {
-                    // FIXME eprintln!("restored for: {:?}", self.source);
-                    self.source.restore_breaker();
-                    self.triggered = false;
-                    continue;
-                }
-            }
+            // match (&thing).await {
+            //     MaybeRead::CounterFlow(cf) => {
+            //         if self.handle_pipelines().await? {
+            //             return Ok(());
+            //         }
+            //     }
+            //     MaybeRead::Read(_) => panic!(),
+            // }
 
-            if !self.pipelines.iter_mut().all(|(_, p)| p.drain_ready()) {
-                task::yield_now().await;
-                continue;
+            // In non transactional sources we get very few replies so we don't need to check
+            // as often
+            if self.handle_pipelines().await? {
+                return Ok(());
             }
 
             let pipelines_empty = self.pipelines.is_empty();
@@ -383,7 +450,7 @@ where
                     SourceReply::Structured { origin_uri, data } => {
                         let ingest_ns = nanotime();
 
-                        self.transmit_event(data, ingest_ns, origin_uri);
+                        self.transmit_event(data, ingest_ns, origin_uri).await;
                     }
                     SourceReply::Data {
                         mut origin_uri,
@@ -392,7 +459,8 @@ where
                     } => {
                         origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
-                        self.send_event(stream, &mut ingest_ns, &origin_uri, data);
+                        self.send_event(stream, &mut ingest_ns, &origin_uri, data)
+                            .await;
                     }
                     SourceReply::StateChange(SourceState::Disconnected) => return Ok(()),
                     SourceReply::StateChange(SourceState::Connected) => (),

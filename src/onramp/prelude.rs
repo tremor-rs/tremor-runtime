@@ -60,7 +60,7 @@ pub fn handle_pp(
     Ok(data)
 }
 
-pub(crate) fn transmit_event(
+pub(crate) async fn transmit_event(
     pipelines: &mut [(TremorURL, pipeline::Addr)],
     metrics_reporter: &mut RampReporter,
     data: LineValue,
@@ -93,20 +93,27 @@ pub(crate) fn transmit_event(
 
         for (input, addr) in pipelines {
             if let Some(input) = input.instance_port() {
-                if let Err(e) = addr.try_send_safe(pipeline::Msg::Event {
-                    input: input.to_string().into(),
-                    event: event.clone(),
-                }) {
+                if let Err(e) = addr
+                    .send(pipeline::Msg::Event {
+                        input: input.to_string().into(),
+                        event: event.clone(),
+                    })
+                    .await
+                {
                     error!("[Onramp] failed to send to pipeline: {}", e);
                     result = Some(id);
                 }
             }
         }
         if let Some(input) = last.0.instance_port() {
-            if let Err(e) = last.1.try_send_safe(pipeline::Msg::Event {
-                input: input.to_string().into(),
-                event,
-            }) {
+            if let Err(e) = last
+                .1
+                .send(pipeline::Msg::Event {
+                    input: input.to_string().into(),
+                    event,
+                })
+                .await
+            {
                 error!("[Onramp] failed to send to pipeline: {}", e);
                 result = Some(id);
             }
@@ -127,30 +134,33 @@ pub(crate) fn send_event(
     id: u64,
     data: Vec<u8>,
 ) {
-    if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
-        for d in data {
-            match codec.decode(d, *ingest_ns) {
-                Ok(Some(data)) => {
-                    transmit_event(
-                        pipelines,
-                        metrics_reporter,
-                        data,
-                        *ingest_ns,
-                        origin_uri.clone(),
-                        id,
-                    );
-                }
-                Ok(None) => (),
-                Err(e) => {
-                    metrics_reporter.increment_error();
-                    error!("[Codec] {}", e);
+    task::block_on(async {
+        if let Ok(data) = handle_pp(preprocessors, ingest_ns, data) {
+            for d in data {
+                match codec.decode(d, *ingest_ns) {
+                    Ok(Some(data)) => {
+                        transmit_event(
+                            pipelines,
+                            metrics_reporter,
+                            data,
+                            *ingest_ns,
+                            origin_uri.clone(),
+                            id,
+                        )
+                        .await;
+                    }
+                    Ok(None) => (),
+                    Err(e) => {
+                        metrics_reporter.increment_error();
+                        error!("[Codec] {}", e);
+                    }
                 }
             }
-        }
-    } else {
-        // record preprocessor failures too
-        metrics_reporter.increment_error();
-    };
+        } else {
+            // record preprocessor failures too
+            metrics_reporter.increment_error();
+        };
+    })
 }
 
 pub(crate) enum PipeHandlerResult {

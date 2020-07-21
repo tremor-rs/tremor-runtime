@@ -114,7 +114,7 @@ async fn onramp_loop(
     mut codec: Box<dyn Codec>,
     mut metrics_reporter: RampReporter,
 ) -> Result<()> {
-    let (loop_tx, loop_rx) = bounded(64);
+    let (loop_tx, loop_rx) = bounded(crate::QSIZE);
 
     let addr = format!("{}:{}", config.host, config.port);
 

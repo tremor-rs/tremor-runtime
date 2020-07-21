@@ -19,11 +19,9 @@ use core::task::{Context, Poll};
 use pin_project_lite::pin_project;
 
 use crate::pipeline::{CfMsg, MgmtMsg, Msg};
-use async_channel::{Receiver, TryRecvError};
 use async_std::stream::Fuse;
 use async_std::stream::Stream;
 use async_std::stream::StreamExt;
-use async_std::task;
 
 pin_project! {
     /// A stream that merges two other streams into a single stream.
@@ -61,7 +59,6 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
-
         match this.high.poll_next(cx) {
             Poll::Ready(None) => this.low.poll_next(cx),
             Poll::Ready(item) => Poll::Ready(item),
@@ -73,21 +70,6 @@ where
     }
 }
 
-/// A stream that merges two other streams into a single stream.
-///
-/// This `struct` is created by the [`merge`] method on [`Stream`]. See its
-/// documentation for more.
-///
-/// [`merge`]: trait.Stream.html#method.merge
-/// [`Stream`]: trait.Stream.html
-#[cfg_attr(feature = "docs", doc(cfg(unstable)))]
-#[derive(Debug)]
-pub(crate) struct PriorityMergeChannel {
-    high: Receiver<MgmtMsg>,
-    mid: Receiver<CfMsg>,
-    low: Receiver<Msg>,
-}
-
 #[derive(Debug)]
 pub(crate) enum M {
     F(Msg),
@@ -95,29 +77,12 @@ pub(crate) enum M {
     M(MgmtMsg),
 }
 
-impl PriorityMergeChannel {
-    pub(crate) fn new(high: Receiver<MgmtMsg>, mid: Receiver<CfMsg>, low: Receiver<Msg>) -> Self {
-        Self { high, mid, low }
-    }
-}
-
-impl PriorityMergeChannel {
-    pub async fn recv(&self) -> Option<M> {
-        loop {
-            match self.high.try_recv() {
-                Ok(item) => return Some(M::M(item)),
-                Err(TryRecvError::Empty) => match self.mid.try_recv() {
-                    Ok(item) => return Some(M::C(item)),
-                    Err(TryRecvError::Empty) => match self.low.try_recv() {
-                        Ok(item) => return Some(M::F(item)),
-                        Err(TryRecvError::Empty) => (),
-                        Err(_) => return None,
-                    },
-                    Err(_) => return None,
-                },
-                Err(_) => return None,
-            }
-            task::yield_now().await;
+impl M {
+    pub(crate) fn msg_type(&self) -> &'static str {
+        match self {
+            M::F(_) => "fwd",
+            M::C(_) => "cf",
+            M::M(_) => "mgmt",
         }
     }
 }

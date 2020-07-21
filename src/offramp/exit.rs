@@ -41,6 +41,7 @@ impl offramp::Impl for Exit {
 
 #[async_trait::async_trait]
 impl Offramp for Exit {
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(status) = value.get("exit").and_then(Value::as_i32) {
@@ -65,6 +66,7 @@ impl Offramp for Exit {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

@@ -154,7 +154,7 @@ pub(crate) enum Msg<A: Artefact> {
 }
 impl<A: Artefact + Send + Sync + 'static> Repository<A> {
     fn start(mut self) -> async_channel::Sender<Msg<A>> {
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
 
         task::spawn::<_, Result<()>>(async move {
             while let Ok(msg) = rx.recv().await {

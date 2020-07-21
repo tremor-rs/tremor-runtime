@@ -170,7 +170,7 @@ impl Elastic {
         Ok(())
     }
 
-    fn maybe_enque(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
+    async fn maybe_enque(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -187,13 +187,11 @@ impl Elastic {
                     .iter()
                     .map(|(i, p)| (i.clone(), p.clone()))
                     .collect();
-                task::block_on(async {
-                    for (pid, p) in &mut pipelines {
-                        if p.send_insight(insight.clone()).await.is_err() {
-                            error!("Failed to send contraflow to pipeline {}", pid)
-                        };
-                    }
-                });
+                for (pid, p) in &mut pipelines {
+                    if p.send_insight(insight.clone()).await.is_err() {
+                        error!("Failed to send contraflow to pipeline {}", pid)
+                    };
+                }
 
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
@@ -213,6 +211,7 @@ impl Elastic {
 #[async_trait::async_trait]
 impl Offramp for Elastic {
     // We enforce json here!
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
@@ -254,9 +253,10 @@ impl Offramp for Elastic {
             value.write(&mut payload)?;
             payload.push(b'\n');
         }
-        self.maybe_enque(op_meta, payload)
+        self.maybe_enque(op_meta, payload).await
     }
 
+    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _event: Event) -> Option<Event> {
         None
     }
@@ -271,6 +271,7 @@ impl Offramp for Elastic {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

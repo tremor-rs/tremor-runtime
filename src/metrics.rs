@@ -116,7 +116,7 @@ impl RampReporter {
                     ..Event::default()
                 };
 
-                if !metrics_addr.maybe_send(pipeline::Msg::Event {
+                if !metrics_addr.try_send(pipeline::Msg::Event {
                     input: input.to_string().into(),
                     event: metrics_event,
                 }) {

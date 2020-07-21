@@ -85,7 +85,7 @@ pub type NodeLookupFn = fn(
 pub(crate) type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
 /// Stringified numeric key
-/// from https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs
+/// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct PrimStr<T>(T)
 where
@@ -243,6 +243,17 @@ pub enum CBAction {
     /// All messages after and including this will be considered non delivered
     Fail,
 }
+
+impl CBAction {
+    /// This is a Circuit Breaker related message
+    pub fn is_cb(self) -> bool {
+        self == CBAction::Close || self == CBAction::Open
+    }
+    /// This is a Guaranteed Delivery related message
+    pub fn is_gd(self) -> bool {
+        self == CBAction::Ack || self == CBAction::Fail
+    }
+}
 /// IDs for covering multiple event sources. We use a vector to represent
 /// this as this:
 /// * Simplifies cloning (represented  inconsecutive memory) :sob:
@@ -330,6 +341,8 @@ pub struct Event {
     pub cb: Option<CBAction>,
     /// Metadata for operators
     pub op_meta: OpMeta,
+    /// this needs transactional data
+    pub transactional: bool,
 }
 
 impl Event {

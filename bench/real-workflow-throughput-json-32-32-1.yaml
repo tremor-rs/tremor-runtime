@@ -1,0 +1,133 @@
+# Test a realistic workflow including json encoding and decoding
+# and connect both the pass and the overflow output to the
+# blackhole to acount for the data
+---
+onramp:
+  - id: blaster
+    type: blaster
+    codec: json
+    config:
+      source: ./demo/data/data.json.xz
+
+offramp:
+  - id: blackhole
+    type: blackhole
+    codec: json
+    config:
+      warmup_secs: 10
+      stop_after_secs: 100
+      significant_figures: 2
+
+binding:
+  - id: bench
+    links:
+      "/onramp/blaster/{instance}-01/out": ["/pipeline/main/{instance}-01/in"]
+      "/onramp/blaster/{instance}-02/out": ["/pipeline/main/{instance}-02/in"]
+      "/onramp/blaster/{instance}-03/out": ["/pipeline/main/{instance}-03/in"]
+      "/onramp/blaster/{instance}-04/out": ["/pipeline/main/{instance}-04/in"]
+      "/onramp/blaster/{instance}-05/out": ["/pipeline/main/{instance}-05/in"]
+      "/onramp/blaster/{instance}-06/out": ["/pipeline/main/{instance}-06/in"]
+      "/onramp/blaster/{instance}-07/out": ["/pipeline/main/{instance}-07/in"]
+      "/onramp/blaster/{instance}-08/out": ["/pipeline/main/{instance}-08/in"]
+      "/onramp/blaster/{instance}-09/out": ["/pipeline/main/{instance}-09/in"]
+      "/onramp/blaster/{instance}-10/out": ["/pipeline/main/{instance}-10/in"]
+      "/onramp/blaster/{instance}-11/out": ["/pipeline/main/{instance}-11/in"]
+      "/onramp/blaster/{instance}-12/out": ["/pipeline/main/{instance}-12/in"]
+      "/onramp/blaster/{instance}-13/out": ["/pipeline/main/{instance}-13/in"]
+      "/onramp/blaster/{instance}-14/out": ["/pipeline/main/{instance}-14/in"]
+      "/onramp/blaster/{instance}-15/out": ["/pipeline/main/{instance}-15/in"]
+      "/onramp/blaster/{instance}-16/out": ["/pipeline/main/{instance}-16/in"]
+      "/onramp/blaster/{instance}-17/out": ["/pipeline/main/{instance}-17/in"]
+      "/onramp/blaster/{instance}-18/out": ["/pipeline/main/{instance}-18/in"]
+      "/onramp/blaster/{instance}-19/out": ["/pipeline/main/{instance}-19/in"]
+      "/onramp/blaster/{instance}-20/out": ["/pipeline/main/{instance}-20/in"]
+      "/onramp/blaster/{instance}-21/out": ["/pipeline/main/{instance}-21/in"]
+      "/onramp/blaster/{instance}-22/out": ["/pipeline/main/{instance}-22/in"]
+      "/onramp/blaster/{instance}-23/out": ["/pipeline/main/{instance}-23/in"]
+      "/onramp/blaster/{instance}-24/out": ["/pipeline/main/{instance}-24/in"]
+      "/onramp/blaster/{instance}-25/out": ["/pipeline/main/{instance}-25/in"]
+      "/onramp/blaster/{instance}-26/out": ["/pipeline/main/{instance}-26/in"]
+      "/onramp/blaster/{instance}-27/out": ["/pipeline/main/{instance}-27/in"]
+      "/onramp/blaster/{instance}-28/out": ["/pipeline/main/{instance}-28/in"]
+      "/onramp/blaster/{instance}-29/out": ["/pipeline/main/{instance}-29/in"]
+      "/onramp/blaster/{instance}-30/out": ["/pipeline/main/{instance}-30/in"]
+      "/onramp/blaster/{instance}-31/out": ["/pipeline/main/{instance}-31/in"]
+      "/onramp/blaster/{instance}-32/out": ["/pipeline/main/{instance}-32/in"]
+      "/pipeline/main/{instance}-01/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-02/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-03/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-04/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-05/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-06/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-07/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-08/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-09/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-10/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-11/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-12/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-13/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-14/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-15/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-16/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-17/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-18/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-19/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-20/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-21/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-22/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-23/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-24/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-25/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-26/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-27/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-28/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-29/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-30/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-31/out": ["/offramp/blackhole/{instance}/in"]
+      "/pipeline/main/{instance}-32/out": ["/offramp/blackhole/{instance}/in"]
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            use std::array;
+            match event.application of
+              case "app1" => let $class = "applog_app1",  let $rate = 1250, let $dimension = event.application, emit event
+              case "app2" => let $class = "applog_app1",  let $rate = 2500, let $dimension = event.application, emit event
+              case "app3" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
+              case "app4" => let $class = "applog_app1",  let $rate = 750, let $dimension = event.application, emit event
+              case "app5" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
+              default => null
+            end;
+            match event.index_type of
+              case "applog_app6" => let $class = "applog_app6", let $rate = 4500, let $dimensions = event.logger_name, emit event
+              case "syslog_app1" => let $class = "syslog_app1", let $rate = 2500, let $dimensions = event.syslog_hostname, emit event
+              default => null
+            end;
+            match array::contains(event.tags, "tag1") of
+              case true => let $class = "syslog_app2", let $rate = 125, let $dimensions = event.syslog_hostname, emit event
+              default => null
+            end;
+            match event.index_type of
+              case "syslog_app3" => let $class = "syslog_app3", let $rate = 1750, let $dimensions = event.syslog_hostname
+              case "syslog_app4" => let $class = "syslog_app4", let $rate = 7500, let $dimensions = event.syslog_hostname
+              case "syslog_app5" => let $class = "syslog_app5", let $rate = 125, let $dimensions = event.syslog_hostname
+              case "syslog_app6" => let $class = "syslog_app6", let $rate = 3750, let $dimensions = event.syslog_hostname
+              default => let $class = "default", let $rate = 250
+            end;
+            event;
+      - id: group
+        op: grouper::bucket
+    links:
+      in: [runtime]
+      runtime: [group]
+      group: [out]
+      group/overflow: [out]

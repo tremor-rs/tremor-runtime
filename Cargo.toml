@@ -26,10 +26,11 @@ lto = true
 opt-level = 3
 
 [dependencies]
-async-std = {version = "1.6", features = ["unstable"]}
+async-std = {version = "1.6", features = ["unstable", "attributes"]}
 async-trait = "0.1"
 async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
+futures-timer = "3"
 smol = "0.2"
 async-io = "0.1"
 base64 = "0.12"
@@ -59,6 +60,7 @@ url = "2.1"
 async-tungstenite = { version = "0.8.0", features = ["async-std-runtime"] }
 value-trait = "0.1"
 pin-project-lite = "0.1"
+tinyvec = { version = "0.4", features = ["alloc"] }
 
 
 log = "0.4"

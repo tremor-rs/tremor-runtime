@@ -33,7 +33,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap as StdMap;
 use std::future::Future;
 use std::mem::{self, transmute};
-use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct SmolRuntime;
@@ -153,7 +152,7 @@ impl rentals::MessageStream {
     unsafe fn commit(
         &mut self,
         map: &StdMap<(String, i32), Offset>,
-        mode: &CommitMode,
+        mode: CommitMode,
     ) -> Result<()> {
         struct MessageStream {
             consumer: Box<LoggingConsumer>,
@@ -406,7 +405,7 @@ impl Source for Int {
             }
 
             if let Some(stream) = self.stream.as_mut() {
-                if let Err(e) = unsafe { stream.commit(&tm, &CommitMode::Async) } {
+                if let Err(e) = unsafe { stream.commit(&tm, CommitMode::Async) } {
                     error!("[kafka] failed to commit message: {}", e)
                 }
             }
@@ -426,9 +425,9 @@ impl Onramp for Kafka {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config);
         let (manager, tx) =
             SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
-        thread::Builder::new()
+        task::Builder::new()
             .name(self.onramp_id.short_id("src"))
-            .spawn(move || task::block_on(manager.run()))?;
+            .spawn(manager.run())?;
         Ok(tx)
     }
     fn default_codec(&self) -> &str {

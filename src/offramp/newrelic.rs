@@ -105,11 +105,13 @@ impl offramp::Impl for NewRelic {
 
 #[async_trait::async_trait]
 impl Offramp for NewRelic {
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
 
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         // TODO: Document this, if one of the log entries cannot be decoded, the whole batch will be lost because
         // of the collect::<Result<_>>

@@ -27,7 +27,6 @@ use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
-use tremor_pipeline::CBAction;
 
 mod debug;
 mod elastic;
@@ -71,9 +70,6 @@ pub type Addr = async_channel::Sender<Msg>;
 #[allow(unused_variables)]
 #[async_trait::async_trait]
 pub trait Offramp: Send {
-    fn ready(&mut self) -> bool {
-        true
-    }
     async fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
@@ -148,10 +144,16 @@ pub(crate) struct Manager {
 async fn send_to_pipelines(
     offramp_id: &TremorURL,
     pipelines: &mut HashMap<TremorURL, pipeline::Addr>,
-    e: &Event,
+    e: Event,
 ) {
-    for p in pipelines.values_mut() {
-        if let Err(e) = p.send_insight(e.clone()).await {
+    let mut i = pipelines.values_mut();
+    if let Some(first) = i.next() {
+        for p in i {
+            if let Err(e) = p.send_insight(e.clone()).await {
+                error!("[Offramp::{}] Counterflow error: {}", offramp_id, e);
+            };
+        }
+        if let Err(e) = first.send_insight(e).await {
             error!("[Offramp::{}] Counterflow error: {}", offramp_id, e);
         };
     }
@@ -178,7 +180,7 @@ impl Manager {
             return Err(e);
         }
 
-        let (tx, rx) = bounded(self.qsize);
+        let (tx, rx) = bounded::<Msg>(self.qsize);
         let offramp_id = id.clone();
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
@@ -188,30 +190,36 @@ impl Manager {
                 match m {
                     Msg::Signal(signal) => {
                         if let Some(insight) = offramp.on_signal(signal).await {
-                            send_to_pipelines(&offramp_id, &mut pipelines, &insight).await;
+                            send_to_pipelines(&offramp_id, &mut pipelines, insight).await;
                         }
                     }
                     Msg::Event { event, input } => {
                         let ingest_ns = event.ingest_ns;
+                        let transactional = event.transactional;
+                        let ids = event.id.clone();
 
                         metrics_reporter.periodic_flush(ingest_ns);
                         metrics_reporter.increment_in();
 
-                        let mut e = Event::cb_ack(ingest_ns, event.id.clone());
-
                         // TODO FIXME implement postprocessors
-                        if let Err(err) = offramp
+                        let fial = if let Err(err) = offramp
                             .on_event(codec.borrow(), input.borrow(), event)
                             .await
                         {
                             error!("[Offramp::{}] On Event error: {}", offramp_id, err);
                             metrics_reporter.increment_error();
-                            e.cb = Some(CBAction::Fail);
+                            true
                         } else {
                             metrics_reporter.increment_out();
+                            false
                         };
-                        if offramp.auto_ack() {
-                            send_to_pipelines(&offramp_id, &mut pipelines, &e).await;
+                        if offramp.auto_ack() && transactional {
+                            let e = if fial {
+                                Event::cb_fail(ingest_ns, ids)
+                            } else {
+                                Event::cb_ack(ingest_ns, ids)
+                            };
+                            send_to_pipelines(&offramp_id, &mut pipelines, e).await;
                         }
                     }
                     Msg::Connect { id, mut addr } => {
@@ -259,7 +267,7 @@ impl Manager {
     }
 
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Onramp manager started");
             while let Ok(msg) = rx.recv().await {
