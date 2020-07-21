@@ -175,12 +175,6 @@ mod test {
     use std::net::UdpSocket;
     use std::ops::Range;
 
-    macro_rules! b {
-        ($f:expr) => {
-            async_std::task::block_on($f)
-        };
-    }
-
     #[allow(dead_code)]
     fn port_is_taken(port: u16) -> bool {
         match TcpListener::bind(format!("127.0.0.1:{}", port)) {
@@ -257,18 +251,24 @@ mod test {
     macro_rules! rampercize {
         ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
             let storage_directory = Some("./storage".to_string());
-            let (world, _handle) = b!(system::World::start(50, storage_directory))?;
+            let (world, _handle) = system::World::start(50, storage_directory).await?;
             let config = serde_yaml::to_value($onramp_config).expect("json to yaml not ok");
 
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;
             let onramp_url = TremorURL::from_onramp_id("test").expect("bad url");
-            b!(world.repo.publish_onramp(&onramp_url, false, onramp))?;
+            world
+                .repo
+                .publish_onramp(&onramp_url, false, onramp)
+                .await?;
 
             let config2 = serde_yaml::to_value($offramp_config).expect("json to yaml not ok");
 
             let offramp: crate::config::OffRamp = serde_yaml::from_value(config2)?;
             let offramp_url = TremorURL::from_offramp_id("test").expect("bad url");
-            b!(world.repo.publish_offramp(&offramp_url, false, offramp))?;
+            world
+                .repo
+                .publish_offramp(&offramp_url, false, offramp)
+                .await?;
 
             let id = TremorURL::parse(&format!("/pipeline/{}", "test"))?;
 
@@ -286,7 +286,7 @@ links:
             let artefact = PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(
                 test_pipeline_config,
             )?));
-            b!(world.repo.publish_pipeline(&id, false, artefact))?;
+            world.repo.publish_pipeline(&id, false, artefact).await?;
 
             let binding: Binding = serde_yaml::from_str(
                 r#"
@@ -297,14 +297,17 @@ links:
 "#,
             )?;
 
-            b!(world.repo.publish_binding(
-                &TremorURL::parse(&format!("/binding/{}", "test"))?,
-                false,
-                BindingArtefact {
-                    binding,
-                    mapping: None,
-                },
-            ))?;
+            world
+                .repo
+                .publish_binding(
+                    &TremorURL::parse(&format!("/binding/{}", "test"))?,
+                    false,
+                    BindingArtefact {
+                        binding,
+                        mapping: None,
+                    },
+                )
+                .await?;
 
             let mapping: MappingMap = serde_yaml::from_str(
                 r#"
@@ -314,7 +317,7 @@ links:
             )?;
 
             let id = TremorURL::parse(&format!("/binding/{}/01", "test"))?;
-            b!(world.link_binding(&id, mapping[&id].clone()))?;
+            world.link_binding(&id, mapping[&id].clone()).await?;
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
@@ -322,7 +325,7 @@ links:
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
-            b!(world.stop())?;
+            world.stop().await?;
         };
     }
 
@@ -334,8 +337,8 @@ links:
         };
     }
 
-    #[test]
-    fn tcp_onramp() -> Result<()> {
+    #[async_std::test]
+    async fn tcp_onramp() -> Result<()> {
         let port = find_free_port(9000..9099).expect("no free port");
         rampercize!(
             // onramp config
@@ -372,8 +375,8 @@ links:
         Ok(())
     }
 
-    #[test]
-    fn udp_onramp() -> Result<()> {
+    #[async_std::test]
+    async fn udp_onramp() -> Result<()> {
         let port = find_free_port(9100..9199).expect("no free port");
         rampercize!(
             // onramp config
@@ -410,8 +413,8 @@ links:
     }
 
     #[ignore]
-    #[test]
-    fn rest_onramp() -> Result<()> {
+    #[async_std::test]
+    async fn rest_onramp() -> Result<()> {
         let port = find_free_port(9200..9299).expect("no free port");
         rampercize!(
             // onramp config

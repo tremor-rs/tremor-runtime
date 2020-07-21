@@ -88,8 +88,16 @@ impl onramp::Impl for Blaster {
 #[derive(Clone, Default)]
 struct Acc {
     elements: Vec<Vec<u8>>,
-    consuming: Vec<Vec<u8>>,
-    count: u64,
+    count: usize,
+}
+impl Acc {
+    fn next(&mut self) -> Vec<u8> {
+        unsafe {
+            self.elements
+                .get_unchecked(self.count % self.elements.len())
+                .clone()
+        }
+    }
 }
 
 #[async_trait::async_trait()]
@@ -104,23 +112,15 @@ impl Source for Blaster {
         if let Some(ival) = self.config.interval {
             task::sleep(Duration::from_nanos(ival)).await;
         }
-        if Some(self.acc.count) == self.config.iters {
+        if Some(self.acc.count as u64) == self.config.iters {
             return Ok(SourceReply::StateChange(SourceState::Disconnected));
         };
-        self.acc.count += 1;
-        if self.acc.consuming.is_empty() {
-            self.acc.consuming = self.acc.elements.clone();
-        }
 
-        if let Some(data) = self.acc.consuming.pop() {
-            Ok(SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data,
-                stream: 0,
-            })
-        } else {
-            Ok(SourceReply::StateChange(SourceState::Disconnected))
-        }
+        Ok(SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data: self.acc.next(),
+            stream: 0,
+        })
     }
     async fn init(&mut self) -> Result<SourceState> {
         let elements: Result<Vec<Vec<u8>>> = self
@@ -135,7 +135,6 @@ impl Source for Blaster {
             })
             .collect();
         self.acc.elements = elements?;
-        self.acc.consuming = self.acc.elements.clone();
         Ok(SourceState::Connected)
     }
 }

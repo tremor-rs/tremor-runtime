@@ -212,7 +212,7 @@ where
                 ..
             } => match env.consts.get(*idx) {
                 Some(v) => Ok(Cow::Borrowed(v)),
-                _ => error_oops(self, 0xdead_000e, "Unknown const variable", &env.meta),
+                None => error_oops(self, 0xdead_000e, "Unknown const variable", &env.meta),
             },
             ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExprInt::Binary(ref expr) => {
@@ -417,7 +417,9 @@ where
             },
             Path::Const(path) => match env.consts.get(path.idx) {
                 Some(v) => v,
-                _ => return error_oops(self, 0xdead_0010, "Unknown constant variable", &env.meta),
+                None => {
+                    return error_oops(self, 0xdead_0010, "Unknown constant variable", &env.meta)
+                }
             },
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,

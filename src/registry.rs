@@ -136,7 +136,7 @@ where
     A::SpawnResult: Send + Sync + 'static,
 {
     fn start(mut self) -> async_channel::Sender<Msg<A>> {
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
 
         task::spawn::<_, Result<()>>(async move {
             loop {

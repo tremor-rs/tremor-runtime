@@ -64,6 +64,7 @@ impl offramp::Impl for Tcp {
 
 #[async_trait::async_trait]
 impl Offramp for Tcp {
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
@@ -84,6 +85,7 @@ impl Offramp for Tcp {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

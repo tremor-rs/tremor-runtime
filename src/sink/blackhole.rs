@@ -56,6 +56,7 @@ pub struct Blackhole {
     run_secs: f64,
     bytes: usize,
     postprocessors: Postprocessors,
+    buf: Vec<u8>,
 }
 
 impl offramp::Impl for Blackhole {
@@ -76,6 +77,7 @@ impl offramp::Impl for Blackhole {
                 )?,
                 postprocessors: vec![],
                 bytes: 0,
+                buf: Vec::with_capacity(1024),
             }))
         } else {
             Err("Blackhole offramp requires a config".into())
@@ -92,12 +94,7 @@ impl Sink for Blackhole {
     }
 
     #[allow(unused_variables)]
-    async fn on_event(
-        &mut self,
-        input: &str,
-        codec: &dyn Codec,
-        event: Event,
-    ) -> Result<Vec<Event>> {
+    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
             let mut buf = Vec::new();
@@ -118,20 +115,23 @@ impl Sink for Blackhole {
         for value in event.value_iter() {
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(v) = codec.encode(value) {
-                    self.bytes += v.len();
+                if codec.encode_into(value, &mut self.buf).is_ok() {
+                    self.bytes += self.buf.len();
+                } else {
+                    error!("failed to encode");
                 };
+                self.buf.clear();
                 self.delivered.record(delta_ns)?
             }
         }
-        Ok(Vec::new())
+        Ok(None)
     }
     fn default_codec(&self) -> &str {
         "null"
     }
     #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
-        Ok(Vec::new())
+    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+        Ok(None)
     }
     fn is_active(&self) -> bool {
         true

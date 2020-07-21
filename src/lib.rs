@@ -90,6 +90,9 @@ pub(crate) use crate::config::OnRamp;
 pub(crate) use serde_yaml::Value as OpConfig;
 pub(crate) use tremor_pipeline::Event;
 
+/// Default Q Size
+pub const QSIZE: usize = 1024 * 4;
+
 /// In incarnated config
 #[derive(Debug)]
 pub struct IncarnatedConfig {

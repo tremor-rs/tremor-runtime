@@ -22,7 +22,6 @@ use async_std::prelude::*;
 use serde_yaml::Value;
 use std::path::Path;
 use std::process;
-use std::thread;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -158,9 +157,9 @@ impl Onramp for File {
             FileInt::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
         let (manager, tx) =
             SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
-        thread::Builder::new()
+        task::Builder::new()
             .name(format!("on-file-{}", self.config.source))
-            .spawn(move || task::block_on(manager.run()))?;
+            .spawn(manager.run())?;
         Ok(tx)
     }
     fn default_codec(&self) -> &str {

@@ -30,9 +30,13 @@ impl Codec for JSON {
         .map_err(|e| e.0.into())
     }
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
-        let mut v = Vec::new();
+        let mut v = Vec::with_capacity(1024);
         data.write(&mut v)?;
         Ok(v)
+    }
+    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
+        data.write(dst)?;
+        Ok(())
     }
 }
 

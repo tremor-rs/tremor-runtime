@@ -550,7 +550,7 @@ impl TremorAggrFn for Dds {
             } else {
                 match histo.min() {
                     Some(min) => min,
-                    _ => {
+                    None => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
                             error: "Unable to calculate min".to_string(),
@@ -563,7 +563,7 @@ impl TremorAggrFn for Dds {
             } else {
                 match histo.max() {
                     Some(max) => max,
-                    _ => {
+                    None => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
                             error: "Unable to calculate max".to_string(),
@@ -576,7 +576,7 @@ impl TremorAggrFn for Dds {
             } else {
                 match histo.sum() {
                     Some(sum) => sum,
-                    _ => {
+                    None => {
                         return Err(FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
                             error: "Unable to calculate sum".to_string(),
@@ -632,7 +632,7 @@ impl TremorAggrFn for Dds {
                         }
                         self.histo = Some(histo)
                     }
-                    _ => {
+                    None => {
                         // If both are caches
                         if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
                             // If the cache size exceeds our maximal cache size drain them into a histogram

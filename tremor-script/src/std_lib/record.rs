@@ -49,7 +49,7 @@ pub fn load(registry: &mut Registry) {
             Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.
                 //ALLOW: We know this has an element
-                let second = a.pop().unwrap();
+                let second = a.pop().expect("this can never happen");
                 if let Some(Value::String(first)) = a.pop() {
                     Ok((first, second))
                 } else {

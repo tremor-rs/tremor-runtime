@@ -53,7 +53,7 @@ fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCid
     network_length = match itr.next() {
         Some(c) if *c >= b'0' && *c <= b'9' => network_length * 10 + *c - b'0',
         None => network_length,
-        _ => return None,
+        Some(_) => return None,
     };
     if network_length > 32 {
         None

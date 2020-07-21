@@ -39,6 +39,12 @@ pub trait Codec: Send + Sync {
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
     /// Encodes a Value into a binary
     fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
+    /// Encodes into an existing buffer
+    fn encode_into(&self, data: &BorrowedValue, dst: &mut Vec<u8>) -> Result<()> {
+        let mut res = self.encode(data)?;
+        std::mem::swap(&mut res, dst);
+        Ok(())
+    }
 }
 
 /// Codec lookup function

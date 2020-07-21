@@ -67,7 +67,7 @@ async fn ws_loop(url: String, offramp_tx: Sender<WSResult>) -> Result<()> {
             task::sleep(Duration::from_secs(1)).await;
             continue;
         };
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
         offramp_tx.send(WSResult::Connected(tx)).await?;
 
         while let Ok((id, msg)) = rx.recv().await {
@@ -172,6 +172,7 @@ impl Offramp for Ws {
         None
     }
 
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         task::block_on(async {
             let was_connected = self.addr.is_some();
@@ -228,6 +229,7 @@ impl Offramp for Ws {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

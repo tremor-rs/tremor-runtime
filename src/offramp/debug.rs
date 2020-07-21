@@ -54,6 +54,7 @@ impl offramp::Impl for Debug {
 }
 #[async_trait::async_trait]
 impl Offramp for Debug {
+    #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
@@ -93,6 +94,7 @@ impl Offramp for Debug {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())

@@ -23,15 +23,10 @@ pub(crate) mod stdout;
 pub(crate) trait Sink {
     /// FIXME we can't make this async right now
     /// https://github.com/rust-lang/rust/issues/63033
-    async fn on_event(
-        &mut self,
-        input: &str,
-        codec: &dyn Codec,
-        event: Event,
-    ) -> Result<Vec<Event>>;
+    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec;
     async fn init(&mut self, postprocessors: &[String]) -> Result<()>;
 
-    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>>;
+    async fn on_signal(&mut self, signal: Event) -> ResultVec;
 
     fn is_active(&self) -> bool;
     fn auto_ack(&self) -> bool;
@@ -72,16 +67,25 @@ impl<T> Offramp for SinkManager<T>
 where
     T: Sink + Send,
 {
+    #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.sink.init(postprocessors).await
     }
 
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
-        for insight in self.sink.on_event(input, codec, event).await? {
-            for p in self.pipelines.values_mut() {
-                if let Err(e) = p.send_insight(insight.clone()).await {
-                    error!("Error: {}", e)
-                };
+        if let Some(mut insights) = self.sink.on_event(input, codec, event).await? {
+            for insight in insights.drain(..) {
+                let mut i = self.pipelines.values_mut();
+                if let Some(first) = i.next() {
+                    for p in i {
+                        if let Err(e) = p.send_insight(insight.clone()).await {
+                            error!("Error: {}", e)
+                        };
+                    }
+                    if let Err(e) = first.send_insight(insight).await {
+                        error!("Error: {}", e)
+                    };
+                }
             }
         }
         Ok(())
@@ -101,13 +105,18 @@ where
     }
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
-        if let Ok(insights) = self.sink.on_signal(signal).await {
-            for insight in insights {
-                for p in self.pipelines.values_mut() {
+        let insights = self.sink.on_signal(signal).await.ok()??;
+        for insight in insights {
+            let mut i = self.pipelines.values_mut();
+            if let Some(first) = i.next() {
+                for p in i {
                     if let Err(e) = p.send_insight(insight.clone()).await {
                         error!("Error: {}", e)
                     };
                 }
+                if let Err(e) = first.send_insight(insight).await {
+                    error!("Error: {}", e)
+                };
             }
         }
         None
@@ -119,9 +128,5 @@ where
 
     fn auto_ack(&self) -> bool {
         self.sink.auto_ack()
-    }
-
-    fn ready(&mut self) -> bool {
-        self.pipelines.values_mut().all(pipeline::Addr::drain_ready)
     }
 }

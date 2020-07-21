@@ -42,12 +42,7 @@ impl offramp::Impl for StdOut {
 #[async_trait::async_trait]
 impl Sink for StdOut {
     #[allow(unused_variables)]
-    async fn on_event(
-        &mut self,
-        input: &str,
-        codec: &dyn Codec,
-        event: Event,
-    ) -> Result<Vec<Event>> {
+    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
@@ -58,7 +53,7 @@ impl Sink for StdOut {
                     .await?
             }
         }
-        Ok(Vec::new())
+        Ok(None)
     }
     async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
@@ -68,8 +63,8 @@ impl Sink for StdOut {
         "json"
     }
     #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> Result<Vec<Event>> {
-        Ok(Vec::new())
+    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+        Ok(None)
     }
     fn is_active(&self) -> bool {
         true

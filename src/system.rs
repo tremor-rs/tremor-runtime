@@ -80,7 +80,7 @@ pub(crate) struct Manager {
 
 impl Manager {
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 match msg {

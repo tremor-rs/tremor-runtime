@@ -18,9 +18,9 @@ use crate::repository::PipelineArtefact;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
 use crate::{offramp, onramp};
-use async_channel::{bounded, TrySendError};
+use async_channel::{bounded, unbounded};
+use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
-use crossbeam::utils::CachePadded;
 use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
@@ -28,105 +28,16 @@ use tremor_pipeline::{Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 1000;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
-type Onramps = halfbrown::HashMap<TremorURL, onramp::Addr>;
+type Onramps = halfbrown::HashMap<TremorURL, (bool, onramp::Addr)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a a pipeline
 #[derive(Clone)]
 pub struct Addr {
-    addr: TrySender<CachePadded<Msg>>,
-    cf_addr: async_channel::Sender<CachePadded<CfMsg>>,
+    addr: async_channel::Sender<Msg>,
+    cf_addr: async_channel::Sender<CfMsg>,
     mgmt_addr: async_channel::Sender<MgmtMsg>,
     id: ServantId,
-}
-
-pub struct TrySender<M: Send> {
-    addr: async_channel::Sender<M>,
-    pending: Vec<M>,
-    pending2: Vec<M>,
-}
-
-impl<M: Send> std::fmt::Debug for TrySender<M>
-where
-    async_channel::Sender<M>: std::fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.addr)
-    }
-}
-
-impl<M: Send> Clone for TrySender<M> {
-    fn clone(&self) -> Self {
-        Self {
-            addr: self.addr.clone(),
-            pending: Vec::new(),
-            pending2: Vec::new(),
-        }
-    }
-}
-
-impl<M: Send> From<async_channel::Sender<M>> for TrySender<M> {
-    fn from(addr: async_channel::Sender<M>) -> Self {
-        Self {
-            addr,
-            pending: Vec::new(),
-            pending2: Vec::new(),
-        }
-    }
-}
-
-impl<M: Send> TrySender<M> {
-    pub(crate) fn try_send_safe(&mut self, msg: M) -> Result<()> {
-        match self.addr.try_send(msg) {
-            Ok(()) => Ok(()),
-            Err(TrySendError::Full(msg)) => {
-                self.pending.push(msg);
-                Ok(())
-            }
-            Err(_e) => Err("disconnected".into()),
-        }
-    }
-    pub(crate) fn ready(&self) -> bool {
-        let not_full = !self.addr.is_full();
-        let no_pending = self.pending.is_empty();
-        not_full && no_pending
-    }
-
-    pub(crate) fn drain_ready(&mut self) -> bool {
-        let some_pending = !self.pending.is_empty();
-        let not_full = !self.addr.is_full();
-
-        if some_pending && not_full {
-            std::mem::swap(&mut self.pending, &mut self.pending2);
-            let mut bad = false;
-            for msg in self.pending2.drain(..) {
-                if bad {
-                    self.pending.push(msg)
-                } else {
-                    match self.addr.try_send(msg) {
-                        Err(TrySendError::Full(msg)) => {
-                            self.pending.push(msg);
-                            bad = true
-                        }
-                        Ok(()) | Err(_) => (),
-                    }
-                }
-            }
-        }
-        let ready = self.ready();
-        ready
-    }
-
-    pub(crate) async fn send(&self, msg: M) -> Result<()> {
-        Ok(self.addr.send(msg).await?)
-    }
-
-    pub(crate) fn maybe_send(&self, msg: M) -> bool {
-        self.addr.try_send(msg).is_ok()
-    }
-    pub(crate) fn len(&self) -> usize {
-        self.addr.len()
-    }
 }
 
 impl Addr {
@@ -138,30 +49,19 @@ impl Addr {
     }
 
     pub(crate) async fn send_insight(&mut self, event: Event) -> Result<()> {
-        Ok(self
-            .cf_addr
-            .send(CachePadded::new(CfMsg::Insight(event)))
-            .await?)
+        Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
-        Ok(self.addr.send(CachePadded::new(msg)).await?)
+        Ok(self.addr.send(msg).await?)
+    }
+
+    pub(crate) fn try_send(&self, msg: Msg) -> bool {
+        self.addr.try_send(msg).is_ok()
     }
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
         Ok(self.mgmt_addr.send(msg).await?)
-    }
-
-    pub(crate) fn maybe_send(&self, msg: Msg) -> bool {
-        self.addr.maybe_send(CachePadded::new(msg))
-    }
-
-    pub(crate) fn try_send_safe(&mut self, msg: Msg) -> Result<()> {
-        Ok(self.addr.try_send_safe(CachePadded::new(msg))?)
-    }
-
-    pub(crate) fn drain_ready(&mut self) -> bool {
-        self.addr.drain_ready()
     }
 }
 
@@ -178,7 +78,11 @@ pub(crate) enum CfMsg {
 #[derive(Debug)]
 pub(crate) enum MgmtMsg {
     ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
-    ConnectOnramp(TremorURL, onramp::Addr),
+    ConnectOnramp {
+        id: TremorURL,
+        addr: onramp::Addr,
+        reply: bool,
+    },
     ConnectPipeline(Cow<'static, str>, TremorURL, Box<Addr>),
     DisconnectOutput(Cow<'static, str>, TremorURL),
     DisconnectInput(TremorURL),
@@ -195,7 +99,7 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub enum Dest {
-    Offramp(TrySender<offramp::Msg>),
+    Offramp(async_channel::Sender<offramp::Msg>),
     Pipeline(Addr),
 }
 
@@ -299,9 +203,11 @@ async fn handle_insight(
 ) {
     let insight = pipeline.contraflow(skip_to, insight);
     if let Some(cb) = insight.cb {
-        for (_k, o) in onramps {
-            if let Err(e) = o.send(onramp::Msg::Cb(cb, insight.id.clone())).await {
-                error!("[Pipeline] failed to send to onramp: {} {:?}", e, &o);
+        for (_k, (send, o)) in onramps {
+            if *send || cb.is_cb() {
+                if let Err(e) = o.send(onramp::Msg::Cb(cb, insight.id.clone())).await {
+                    error!("[Pipeline] failed to send to onramp: {} {:?}", e, &o);
+                }
             }
         }
     }
@@ -316,17 +222,14 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Onramps) {
     }
 }
 
-async fn tick(tick_tx: async_channel::Sender<CachePadded<Msg>>) {
+async fn tick(tick_tx: async_channel::Sender<Msg>) {
     let mut e = Event {
         ingest_ns: nanotime(),
         kind: Some(SignalKind::Tick),
         ..Event::default()
     };
 
-    while tick_tx
-        .try_send(CachePadded::new(Msg::Signal(e.clone())))
-        .is_ok()
-    {
+    while tick_tx.send(Msg::Signal(e.clone())).await.is_ok() {
         task::sleep(Duration::from_secs(TICK_MS)).await;
         e.ingest_ns = nanotime();
     }
@@ -343,7 +246,7 @@ async fn handle_cfg_msg(
     Ok(())
 }
 
-fn try_send(r: Result<()>) {
+fn maybe_send(r: Result<()>) {
     if let Err(e) = r {
         error!("Failed to send : {}", e)
     }
@@ -352,8 +255,8 @@ fn try_send(r: Result<()>) {
 async fn pipeline_task(
     id: TremorURL,
     mut pipeline: ExecutableGraph,
-    rx: async_channel::Receiver<CachePadded<Msg>>,
-    cf_rx: async_channel::Receiver<CachePadded<CfMsg>>,
+    rx: async_channel::Receiver<Msg>,
+    cf_rx: async_channel::Receiver<CfMsg>,
     mgmt_rx: async_channel::Receiver<MgmtMsg>,
 ) -> Result<()> {
     let mut pid = id.clone();
@@ -366,12 +269,13 @@ async fn pipeline_task(
 
     info!("[Pipeline:{}] starting task.", id);
 
-    use async_std::stream::StreamExt;
-    let ff = rx.map(CachePadded::into_inner).map(M::F);
-    let cf = cf_rx.map(CachePadded::into_inner).map(M::C);
+    let ff = rx.map(M::F);
+    let cf = cf_rx.map(M::C);
     let mf = mgmt_rx.map(M::M);
 
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
+    // let mut no_yield = 0;
+
     // let s = PriorityMergeChannel::new(mgmt_rx, cf_rx, rx);
     while let Some(msg) = s.next().await {
         match msg {
@@ -382,7 +286,7 @@ async fn pipeline_task(
                 match pipeline.enqueue(&input, event, &mut eventset) {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &onramps).await;
-                        try_send(send_events(&mut eventset, &mut dests).await);
+                        maybe_send(send_events(&mut eventset, &mut dests).await);
                     }
                     Err(e) => error!("error: {:?}", e),
                 }
@@ -391,14 +295,9 @@ async fn pipeline_task(
                 if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
                     error!("error: {:?}", e)
                 } else {
-                    if let Err(e) = send_signal(&id, signal, &mut dests).await {
-                        error!("Failed to send signal: {}", e)
-                    }
+                    maybe_send(send_signal(&id, signal, &mut dests).await);
                     handle_insights(&mut pipeline, &onramps).await;
-
-                    if let Err(e) = send_events(&mut eventset, &mut dests).await {
-                        error!("Failed to send event: {}", e)
-                    }
+                    maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
             }
             M::M(MgmtMsg::ConnectOfframp(output, offramp_id, offramp)) => {
@@ -407,9 +306,9 @@ async fn pipeline_task(
                     id, output, offramp_id
                 );
                 if let Some(offramps) = dests.get_mut(&output) {
-                    offramps.push((offramp_id, Dest::Offramp(offramp.into())));
+                    offramps.push((offramp_id, Dest::Offramp(offramp)));
                 } else {
-                    dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp.into()))]);
+                    dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp))]);
                 }
             }
             M::M(MgmtMsg::ConnectPipeline(output, pipeline_id, pipeline)) => {
@@ -423,8 +322,8 @@ async fn pipeline_task(
                     dests.insert(output, vec![(pipeline_id, Dest::Pipeline(*pipeline))]);
                 }
             }
-            M::M(MgmtMsg::ConnectOnramp(onramp_id, onramp)) => {
-                onramps.insert(onramp_id, onramp);
+            M::M(MgmtMsg::ConnectOnramp { id, addr, reply }) => {
+                onramps.insert(id, (reply, addr));
             }
             M::M(MgmtMsg::DisconnectOutput(output, to_delete)) => {
                 let mut remove = false;
@@ -440,6 +339,13 @@ async fn pipeline_task(
                 onramps.remove(&onramp_id);
             }
         }
+        // this lead to no termination
+        // if no_yield > 32 {
+        // no_yield = 0;
+        task::yield_now().await;
+        // } else {
+        // no_yield += 1;
+        // }
     }
 
     info!("[Pipeline:{}] stopping task.", id);
@@ -456,7 +362,7 @@ impl Manager {
         }
     }
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Sender) {
-        let (tx, rx) = bounded(64);
+        let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Pipeline manager started");
             loop {
@@ -486,17 +392,17 @@ impl Manager {
 
         let id = req.id.clone();
 
-        let (tx, rx) = bounded::<CachePadded<Msg>>(self.qsize);
-        let (cf_tx, cf_rx) = bounded::<CachePadded<CfMsg>>(self.qsize);
+        let (tx, rx) = bounded::<Msg>(self.qsize);
+        let (cf_tx, cf_rx) = unbounded::<CfMsg>();
         let (mgmt_tx, mgmt_rx) = bounded::<MgmtMsg>(self.qsize);
 
         task::spawn(tick(tx.clone()));
         task::Builder::new()
-            .name(format!("pipeline-{}", id.clone()))
+            .name(format!("pipeline-{}", id))
             .spawn(pipeline_task(id, pipeline, rx, cf_rx, mgmt_rx))?;
         Ok(Addr {
             id: req.id,
-            addr: tx.into(),
+            addr: tx,
             cf_addr: cf_tx,
             mgmt_addr: mgmt_tx,
         })

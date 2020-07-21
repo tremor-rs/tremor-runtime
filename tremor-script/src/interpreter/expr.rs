@@ -395,7 +395,9 @@ where
                         );
                     }
 
-                    _ => return error_oops(self, 0xdead_000a, "Unknown local varialbe", &env.meta),
+                    None => {
+                        return error_oops(self, 0xdead_000a, "Unknown local varialbe", &env.meta)
+                    }
                 },
                 Path::Meta(_path) => {
                     if segments.is_empty() {
