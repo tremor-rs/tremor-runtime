@@ -2412,9 +2412,9 @@ checksum = "a94d21414c1f4a51209ad204c1776a3d0765002c76c6abcb602a6f09f1e881c7"
 
 [[package]]
 name = "log4rs"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4d8e6e1d5f89acca713132acc6034f30bad09b961d1338161bdb71c08f6e4fa"
+checksum = "e1e1ad45e4584824d760c35d71868dd7e6e5acd8f5195a9573743b369fc86cd6"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -2424,7 +2424,7 @@ dependencies = [
  "libc",
  "log 0.4.11",
  "log-mdc",
- "parking_lot 0.10.2",
+ "parking_lot 0.11.0",
  "serde",
  "serde-value",
  "serde_derive",
@@ -2907,16 +2907,6 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
-dependencies = [
- "lock_api 0.3.4",
- "parking_lot_core 0.7.2",
-]
-
-[[package]]
-name = "parking_lot"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4893845fa2ca272e647da5d0e46660a314ead9c2fdd9a883aabc32e481a8733"
@@ -2938,20 +2928,6 @@ dependencies = [
  "redox_syscall",
  "rustc_version",
  "smallvec 0.6.13",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
-dependencies = [
- "cfg-if",
- "cloudabi 0.0.3",
- "libc",
- "redox_syscall",
- "smallvec 1.4.1",
  "winapi 0.3.9",
 ]
 
