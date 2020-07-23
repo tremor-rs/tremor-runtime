@@ -16,7 +16,7 @@ serde_yaml = "0.8"
 clap = { version = "2", features = ["yaml"] }
 env_logger = "0.7.1"
 log = "0.4"
-log4rs = "0.12.0"
+log4rs = "0.13.0"
 glob = "0.3"
 async-std = { version = "1.6", features = ["unstable"] }
 tide = "0.12"
