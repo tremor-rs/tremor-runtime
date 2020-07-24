@@ -79,7 +79,7 @@ postgres-protocol = "0.5"
 tokio-postgres = "0.5"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows.
-rdkafka = { version = "0.23", features = ["cmake-build"] }
+rdkafka = { version = "0.24", features = ["cmake-build"] }
 
 # crononome
 cron = "0.6.0"
@@ -112,8 +112,3 @@ default = []
 
 # Experimental suport for google cloud APIs
 gpc = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
-
-[patch.crates-io]
-# sourcing from git to get the fix in https://github.com/fede1024/rust-rdkafka/pull/259
-# remove once version 0.24 is released
-rdkafka = { git = "https://github.com/fede1024/rust-rdkafka", rev = "a73bbae27361073e9370a4c9b8d5029313d1e9e2", features = ["cmake-build"] }
