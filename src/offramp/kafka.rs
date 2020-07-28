@@ -23,7 +23,10 @@
 use crate::offramp::prelude::*;
 use halfbrown::HashMap;
 use rdkafka::config::ClientConfig;
-use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::{
+    error::KafkaError,
+    producer::{FutureProducer, FutureRecord},
+};
 use std::fmt;
 
 #[derive(Deserialize)]
@@ -60,8 +63,8 @@ fn d_host() -> String {
 
 /// Kafka offramp connectoz
 pub struct Kafka {
+    config: Config,
     producer: FutureProducer,
-    topic: String,
     key: Option<String>,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
@@ -69,7 +72,7 @@ pub struct Kafka {
 
 impl fmt::Debug for Kafka {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Kafka: {}", self.topic)
+        write!(f, "Kafka: {}", self.config.topic)
     }
 }
 
@@ -93,8 +96,9 @@ impl offramp::Impl for Kafka {
             // Create the thread pool where the expensive computation will be performed.
 
             Ok(Box::new(Self {
+                config,
                 producer,
-                topic: config.topic,
+
                 pipelines: HashMap::new(),
                 postprocessors: vec![],
                 key,
@@ -105,12 +109,28 @@ impl offramp::Impl for Kafka {
     }
 }
 
+fn is_fatal(e: &KafkaError) -> bool {
+    match e {
+        KafkaError::AdminOp(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::ConsumerCommit(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::Global(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::GroupListFetch(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::MessageConsumption(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::MessageProduction(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::MetadataFetch(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::OffsetFetch(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::SetPartitionOffset(rdkafka::error::RDKafkaError::Fatal)
+        | KafkaError::StoreOffset(rdkafka::error::RDKafkaError::Fatal) => true,
+        _ => false,
+    }
+}
+
 impl Offramp for Kafka {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
-            let mut record = FutureRecord::to(&self.topic);
+            let mut record = FutureRecord::to(&self.config.topic);
             record = record.payload(&raw);
             //TODO: Key
 
@@ -123,9 +143,29 @@ impl Offramp for Kafka {
                 Ok(f) => {
                     task::spawn(f);
                 }
-                Err((e, _)) => {
-                    self.producer.poll(std::time::Duration::from_millis(10));
+                Err((e, _r)) => {
                     error!("[Kafka Offramp] failed to enque message: {}", e);
+                    if is_fatal(&e) {
+                        let mut producer_config = ClientConfig::new();
+                        let producer_config = producer_config
+                            .set(
+                                "client.id",
+                                &format!("tremor-{}-{}", self.config.hostname, 0),
+                            )
+                            .set("bootstrap.servers", &self.config.brokers.join(","))
+                            .set("message.timeout.ms", "5000")
+                            .set("queue.buffering.max.ms", "0");
+
+                        self.producer = self
+                            .config
+                            .rdkafka_options
+                            .iter()
+                            .fold(producer_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
+                            .create()?;
+                        error!("[Kafka Offramp] reinitiating client");
+                    } else {
+                        self.producer.poll(std::time::Duration::from_millis(10));
+                    }
                 }
             }
         }
