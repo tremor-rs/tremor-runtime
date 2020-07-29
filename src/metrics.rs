@@ -75,12 +75,14 @@ impl RampReporter {
     }
 
     #[inline]
-    pub fn periodic_flush(&mut self, timestamp: u64) {
+    pub fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval {
             if timestamp - self.last_flush_ns > interval {
                 self.flush(timestamp);
+                return Some(timestamp);
             }
         }
+        None
     }
 
     fn flush(&mut self, timestamp: u64) {
@@ -90,39 +92,41 @@ impl RampReporter {
         self.last_flush_ns = timestamp;
     }
 
-    fn send_metric(&self, timestamp: u64, port: &'static str, count: u64) {
+    pub(crate) fn send(&self, event: Event) {
         if let Some((metrics_input, metrics_addr)) = &self.metrics_pipeline {
             if let Some(input) = metrics_input.instance_port() {
-                // metrics tags
-                let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::new();
-                tags.insert("ramp".into(), self.artefact_url.to_string().into());
-
-                tags.insert("port".into(), port.into());
-                let value: Value = json!({
-                    "measurement": "ramp_events",
-                    "tags": tags,
-                    "fields": {
-                        "count": count,
-                    },
-                    "timestamp": timestamp,
-                })
-                .into();
-
-                // full metrics payload
-                let metrics_event = Event {
-                    data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
-                    ingest_ns: timestamp,
-                    origin_uri: None, // TODO update
-                    ..Event::default()
-                };
-
                 if !metrics_addr.try_send(pipeline::Msg::Event {
                     input: input.to_string().into(),
-                    event: metrics_event,
+                    event: event,
                 }) {
                     error!("Failed to send to system metrics pipeline");
                 }
             }
         }
+    }
+    fn send_metric(&self, timestamp: u64, port: &'static str, count: u64) {
+        // metrics tags
+        let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::new();
+        tags.insert("ramp".into(), self.artefact_url.to_string().into());
+
+        tags.insert("port".into(), port.into());
+        let value: Value = json!({
+            "measurement": "ramp_events",
+            "tags": tags,
+            "fields": {
+                "count": count,
+            },
+            "timestamp": timestamp,
+        })
+        .into();
+
+        // full metrics payload
+        let metrics_event = Event {
+            data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
+            ingest_ns: timestamp,
+            origin_uri: None, // TODO update
+            ..Event::default()
+        };
+        self.send(metrics_event)
     }
 }
