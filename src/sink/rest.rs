@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::offramp::prelude::*;
-use crate::sink::{
-    AsyncSink, ConfigImpl, Event, OpConfig, Result, Sink, SinkDequeueError, SinkManager,
-};
+use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use std::str;
 use std::time::Instant;
 use tremor_pipeline::{CBAction, OpMeta};
-use tremor_script::prelude::*;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {

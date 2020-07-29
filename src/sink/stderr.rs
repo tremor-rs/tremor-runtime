@@ -21,10 +21,8 @@
 //!
 //! This operator takes no configuration
 
-use crate::offramp::prelude::*;
-use crate::sink::{Event, OpConfig, Result, Sink, SinkManager};
+use crate::sink::prelude::*;
 use async_std::io;
-use async_std::prelude::*;
 
 pub struct StdErr {
     postprocessors: Postprocessors,
