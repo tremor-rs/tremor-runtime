@@ -26,7 +26,7 @@ halfbrown = "0.1"
 log = "0.4"
 rental = "0.5"
 regex = "1"
-sled = "0.31"
+sled = "0.34"
 
 [dev-dependencies]
 criterion = "0.3"

@@ -31,7 +31,7 @@ async-trait = "0.1"
 async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 futures-timer = "3"
-smol = "0.2"
+smol = { version = "0.3", features = ["tokio02"] }
 async-io = "0.1"
 base64 = "0.12"
 bytes = "0.5"
@@ -60,7 +60,6 @@ url = "2.1"
 async-tungstenite = { version = "0.8.0", features = ["async-std-runtime"] }
 value-trait = "0.1"
 pin-project-lite = "0.1"
-tinyvec = { version = "0.4", features = ["alloc"] }
 
 
 log = "0.4"
@@ -73,7 +72,6 @@ lz4 = "1.23.2"
 tremor-script = { path = "tremor-script" }
 tremor-influx = { path = "tremor-influx" }
 indexmap = { version = "1", features = [ "serde-1" ] }
-crossbeam = "0.7.3"
 
 memmap = { version = "0.7.0" }
 tempfile = { version = "3.1" }
@@ -92,14 +90,6 @@ rdkafka = { version = "0.24", features = ["cmake-build"] }
 
 # crononome
 cron = "0.6.1"
-
-#Google cloud stuff
-google-storage1 = { version = "1", optional = true }
-google-pubsub1 = { version = "1", optional = true }
-hyper-rustls = { version = "0.21", optional = true } # chan't update this because of google
-yup-oauth2 = { version = "4", optional = true } # can't update this because of google
-
-hyper = { version = "0.13", optional = true }  # chan't update this because of google
 
 # logstash grok patterns
 grok = "1"
@@ -124,14 +114,6 @@ default = []
 
 # arm suopport
 neon = [ "simd-json/neon" ]
-
-# Experimental suport for google cloud APIs
-gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
-
-# for compiling and statically linking to openssl. helps us create more
-# portable builds by side-stepping issues with openssl dynamic linking
-# (eg: latest version of openssl not available in old distros like centos 7)
-#static-ssl = ["openssl/vendored"]
 
 [patch.crates-io]
 

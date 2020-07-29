@@ -22,13 +22,12 @@
 use std::io::{Cursor, Read, Write};
 
 use chrono::prelude::Utc;
-use hashbrown::HashMap;
 use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
 use libflate::{finish, gzip};
 use log::debug;
 use simd_json::BorrowedValue;
 
-use crate::offramp::prelude::*;
+use crate::sink::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -84,19 +83,13 @@ impl Region {
 
 pub struct NewRelic {
     config: Config,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
-    postprocessors: Postprocessors,
 }
 
 impl offramp::Impl for NewRelic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config = Config::new(config)?;
-            Ok(Box::new(NewRelic {
-                config,
-                pipelines: HashMap::new(),
-                postprocessors: vec![],
-            }))
+            Ok(SinkManager::new_box(NewRelic { config }))
         } else {
             Err("Missing config for newrelic offramp".into())
         }
@@ -104,15 +97,9 @@ impl offramp::Impl for NewRelic {
 }
 
 #[async_trait::async_trait]
-impl Offramp for NewRelic {
+impl Sink for NewRelic {
     #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
-        Ok(())
-    }
-
-    #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
         // TODO: Document this, if one of the log entries cannot be decoded, the whole batch will be lost because
         // of the collect::<Result<_>>
         let payload = NewRelicPayload {
@@ -125,20 +112,26 @@ impl Offramp for NewRelic {
         debug!("Sending a batch of {} items", payload.logs.len());
 
         self.send(&payload).await?;
-        Ok(())
+        Ok(None)
     }
 
     fn default_codec(&self) -> &str {
         "json"
     }
 
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
+    #[allow(clippy::used_underscore_binding)]
+    async fn init(&mut self, _postprocessors: &[String]) -> Result<()> {
+        Ok(())
     }
-
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        Ok(None)
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }
 

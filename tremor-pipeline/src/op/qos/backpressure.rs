@@ -167,8 +167,8 @@ impl Operator for Backpressure {
         let was_open = output.backoff == 0;
         let timeout = self.config.timeout;
         if meta.get("error").is_some()
-            || insight.cb == Some(CBAction::Fail)
-            || insight.cb == Some(CBAction::Close)
+            || insight.cb == CBAction::Fail
+            || insight.cb == CBAction::Close
             || meta
                 .get("time")
                 .and_then(Value::cast_f64)
@@ -183,7 +183,7 @@ impl Operator for Backpressure {
         }
 
         if self.config.circuit_breaker && was_open && output.backoff > 0 {
-            insight.cb = Some(CBAction::Close);
+            insight.cb = CBAction::Close;
         };
     }
 }

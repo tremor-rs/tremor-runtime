@@ -127,8 +127,8 @@ impl Operator for Percentile {
         let (_, meta) = insight.data.parts();
 
         if meta.get("error").is_some()
-            || insight.cb == Some(CBAction::Fail)
-            || insight.cb == Some(CBAction::Close)
+            || insight.cb == CBAction::Fail
+            || insight.cb == CBAction::Close
             || meta
                 .get("time")
                 .and_then(Value::cast_f64)

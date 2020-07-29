@@ -17,7 +17,6 @@ use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use std::str;
 use std::time::Instant;
-use tremor_pipeline::{CBAction, OpMeta};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -111,10 +110,10 @@ impl Rest {
 
             let cb = if let Ok(t) = r {
                 m.insert("time", t)?;
-                Some(CBAction::Ack)
+                CBAction::Ack
             } else {
                 error!("REST offramp error: {:?}", r);
-                Some(CBAction::Fail)
+                CBAction::Fail
             };
 
             if let Err(e) = insight_tx
@@ -147,7 +146,7 @@ impl Rest {
                     .send(Event {
                         id,
                         op_meta,
-                        cb: Some(CBAction::Fail),
+                        cb: CBAction::Fail,
                         ingest_ns: nanotime(),
                         ..Event::default()
                     })
@@ -171,7 +170,7 @@ impl Rest {
         }
     }
     async fn drain_insights(&mut self) -> ResultVec {
-        let mut v = Vec::with_capacity(self.tx.len() + 1);
+        let mut v = Vec::with_capacity(self.rx.len() + 1);
         while let Ok(e) = self.rx.try_recv() {
             v.push(e)
         }
@@ -181,8 +180,8 @@ impl Rest {
 
 #[async_trait::async_trait]
 impl Sink for Rest {
-    #[allow(unused_variables)]
-    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         let mut payload = Vec::with_capacity(4096);
         for value in event.value_iter() {
             let mut raw = codec.encode(value)?;
@@ -201,8 +200,9 @@ impl Sink for Rest {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
-    #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         self.drain_insights().await
     }
     fn is_active(&self) -> bool {

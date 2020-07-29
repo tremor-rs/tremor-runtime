@@ -281,16 +281,16 @@ where
                 }
                 // Circuit breaker soure failure -triggers close
                 onramp::Msg::Cb(CBAction::Close, _ids) => {
-                    // FIXME eprintln!("triggered for: {:?}", self.source);
                     self.source.trigger_breaker();
                     self.triggered = true;
                 }
                 //Circuit breaker source recovers - triggers open
                 onramp::Msg::Cb(CBAction::Open, _ids) => {
-                    // FIXME eprintln!("restored for: {:?}", self.source);
                     self.source.restore_breaker();
                     self.triggered = false;
                 }
+
+                onramp::Msg::Cb(CBAction::None, _ids) => {}
             }
         }
     }
