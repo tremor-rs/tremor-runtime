@@ -173,8 +173,8 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 return Err(ErrorKind::InvalidStatsD.into());
             }
         }
-        None => (),
         Some(_) => return Err(ErrorKind::InvalidStatsD.into()),
+        None => (),
     };
     m.insert("value".into(), value);
     Ok(Value::from(m))

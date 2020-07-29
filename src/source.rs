@@ -72,6 +72,9 @@ pub(crate) trait Source {
     fn is_transactional(&self) -> bool {
         false
     }
+    fn metrics(&mut self, t: u64) -> Vec<Event> {
+        vec![]
+    }
 }
 
 pub(crate) struct SourceManager<T>
@@ -318,7 +321,11 @@ where
         let mut error = false;
         self.id += 1;
         if let Some((last, pipelines)) = self.pipelines.split_last_mut() {
-            self.metrics_reporter.periodic_flush(ingest_ns);
+            if let Some(t) = self.metrics_reporter.periodic_flush(ingest_ns) {
+                for e in self.source.metrics(t) {
+                    self.metrics_reporter.send(e)
+                }
+            }
             self.metrics_reporter.increment_out();
 
             for (input, addr) in pipelines {
