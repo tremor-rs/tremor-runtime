@@ -24,7 +24,7 @@ use async_std::task::{self, JoinHandle};
 use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
-use tremor_pipeline::{Event, ExecutableGraph, SignalKind};
+use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 1000;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
@@ -202,10 +202,13 @@ async fn handle_insight(
     onramps: &Onramps,
 ) {
     let insight = pipeline.contraflow(skip_to, insight);
-    if let Some(cb) = insight.cb {
+    if insight.cb != CBAction::None {
         for (_k, (send, o)) in onramps {
-            if *send || cb.is_cb() {
-                if let Err(e) = o.send(onramp::Msg::Cb(cb, insight.id.clone())).await {
+            if *send || insight.cb.is_cb() {
+                if let Err(e) = o
+                    .send(onramp::Msg::Cb(insight.cb, insight.id.clone()))
+                    .await
+                {
                     error!("[Pipeline] failed to send to onramp: {} {:?}", e, &o);
                 }
             }

@@ -11,18 +11,26 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::offramp::prelude::*;
+use crate::pipeline;
+use crate::sink::prelude::*;
+use crate::url::TremorURL;
 use hashbrown::HashMap;
 
 pub(crate) mod blackhole;
 pub(crate) mod debug;
+pub(crate) mod elastic;
 pub(crate) mod exit;
 pub(crate) mod file;
+pub(crate) mod kafka;
+pub(crate) mod newrelic;
+pub(crate) mod postgres;
 pub(crate) mod prelude;
 pub(crate) mod rest;
 pub(crate) mod stderr;
 pub(crate) mod stdout;
 pub(crate) mod tcp;
+pub(crate) mod udp;
+pub(crate) mod ws;
 
 pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
 
@@ -62,11 +70,6 @@ where
     fn new_box(sink: T) -> Box<Self> {
         Box::new(Self::new(sink))
     }
-    // async fn start() {}
-
-    // pub(crate) async fn run(self) -> Result<()> {
-    //     Ok(())
-    // }
 }
 
 #[async_trait::async_trait]

@@ -30,12 +30,10 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
-use crate::offramp::prelude::make_postprocessors;
-use crate::offramp::prelude::*;
 use crate::postprocessor::Postprocessors;
-use async_channel::bounded;
+use crate::sink::prelude::*;
+use async_channel::{bounded, Receiver, Sender};
 use elastic::prelude::*;
-use halfbrown::HashMap;
 use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
@@ -54,52 +52,31 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-#[derive(Clone)]
-struct Destination {
-    client: SyncClient,
-    url: String,
-}
-
 pub struct Elastic {
-    client_idx: usize,
-    clients: Vec<Destination>,
-    // config: Config,
+    client: SyncClient,
     queue: AsyncSink<u64>,
-    // hostname: String,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
     postprocessors: Postprocessors,
+    tx: Sender<Event>,
+    rx: Receiver<Event>,
 }
 
 impl offramp::Impl for Elastic {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            let clients: Result<Vec<Destination>> = config
-                .endpoints
-                .iter()
-                .map(|s| {
-                    Ok(Destination {
-                        client: SyncClientBuilder::new().static_node(s.clone()).build()?,
-                        url: s.clone(),
-                    })
-                })
-                .collect();
-            let clients = clients?;
+            let client = SyncClientBuilder::new()
+                .static_nodes(config.endpoints.into_iter())
+                .build()?;
 
             let queue = AsyncSink::new(config.concurrency);
-            //let hostname = match hostname::get() {
-            //    Some(h) => h,
-            //    None => "tremor-host.local".to_string(),
-            //};
+            let (tx, rx) = bounded(crate::QSIZE);
 
-            Ok(Box::new(Self {
-                client_idx: 0,
-                pipelines: HashMap::new(),
+            Ok(SinkManager::new_box(Self {
                 postprocessors: vec![],
-                // config,
-                clients,
+                client,
                 queue,
-                // hostname,
+                rx,
+                tx,
             }))
         } else {
             Err("Elastic offramp requires a configuration.".into())
@@ -108,69 +85,76 @@ impl offramp::Impl for Elastic {
 }
 
 impl Elastic {
-    fn flush(client: &SyncClient, payload: Vec<u8>) -> Result<u64> {
-        let start = Instant::now();
-        let res = client.request(BulkRequest::new(payload)).send()?;
-        for item in res.into_response::<BulkErrorsResponse>()? {
-            // TODO update error metric here?
-            error!("Elastic Search item error: {:?}", item);
+    async fn drain_insights(&mut self) -> ResultVec {
+        let mut v = Vec::with_capacity(self.tx.len() + 1);
+        while let Ok(e) = self.rx.try_recv() {
+            v.push(e)
         }
-        let d = start.elapsed();
-        let d = duration_to_millis(d);
-        Ok(d)
+        Ok(Some(v))
     }
 
-    fn enqueue_send_future(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
-        self.client_idx = (self.client_idx + 1) % self.clients.len();
-        let destination = self.clients[self.client_idx].clone();
+    async fn enqueue_send_future(
+        &mut self,
+        id: Ids,
+        op_meta: OpMeta,
+        payload: Vec<u8>,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
-        let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
-            .pipelines
-            .iter()
-            .map(|(i, p)| (i.clone(), p.clone()))
-            .collect();
-        task::spawn(async move {
-            let r = Self::flush(&destination.client, payload);
-            let mut m = Value::object_with_capacity(2);
+        let insight_tx = self.tx.clone();
 
+        let req = self.client.request(BulkRequest::new(payload));
+
+        task::spawn_blocking(move || {
+            let r = (move || {
+                let start = Instant::now();
+                for item in req.send()?.into_response::<BulkErrorsResponse>()? {
+                    // TODO update error metric here?
+                    error!("Elastic Search item error: {:?}", item);
+                }
+                let d = start.elapsed();
+                let d = duration_to_millis(d);
+                Ok(d)
+            })();
+
+            let mut m = Value::object_with_capacity(2);
+            let cb;
             if let Ok(t) = r {
                 // FIXME println!("Elastic search ok: {:?}", t);
                 if m.insert("time", t).is_err() {
                     // ALLOW: this is OK
                     unreachable!()
                 };
+                cb = CBAction::Ack;
             } else {
                 // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
                 // FIXME println!("Elastic search error: {:?}", r);
-                if m.insert("error", "Failed to send to ES").is_err() {
-                    // ALLOW: this is OK
-                    unreachable!()
-                };
+                cb = CBAction::Fail;
             };
             let insight = Event {
                 data: (Value::null(), m).into(),
                 ingest_ns: nanotime(),
+                id,
                 op_meta,
+                cb,
                 ..Event::default()
             };
-
-            for (pid, p) in &mut pipelines {
-                if p.send_insight(insight.clone()).await.is_err() {
-                    error!("Failed to send contraflow to pipeline {}", pid)
+            task::block_on(async {
+                if insight_tx.send(insight).await.is_err() {
+                    error!("Failed to send insight")
                 };
-            }
 
-            // TODO: Handle contraflow for notification
-            if let Err(e) = tx.send(r).await {
-                error!("Failed to send reply: {}", e)
-            }
+                // TODO: Handle contraflow for notification
+                if let Err(e) = tx.send(r).await {
+                    error!("Failed to send reply: {}", e)
+                }
+            });
         });
         self.queue.enqueue(rx)?;
         Ok(())
     }
 
-    async fn maybe_enque(&mut self, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
+    async fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -182,22 +166,19 @@ impl Elastic {
                     ..Event::default()
                 };
 
-                let mut pipelines: Vec<(TremorURL, pipeline::Addr)> = self
-                    .pipelines
-                    .iter()
-                    .map(|(i, p)| (i.clone(), p.clone()))
-                    .collect();
-                for (pid, p) in &mut pipelines {
-                    if p.send_insight(insight.clone()).await.is_err() {
-                        error!("Failed to send contraflow to pipeline {}", pid)
-                    };
-                }
+                if self.tx.send(insight.clone()).await.is_err() {
+                    error!("Failed to send insight")
+                };
 
                 error!("Dropped data due to es overload");
                 Err("Dropped data due to es overload".into())
             }
             _ => {
-                if self.enqueue_send_future(op_meta, payload).is_err() {
+                if self
+                    .enqueue_send_future(id, op_meta, payload)
+                    .await
+                    .is_err()
+                {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request to elastic");
                     Err("Failed to enqueue send request to elastic".into())
@@ -209,10 +190,10 @@ impl Elastic {
     }
 }
 #[async_trait::async_trait]
-impl Offramp for Elastic {
+impl Sink for Elastic {
     // We enforce json here!
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
         let mut payload = Vec::with_capacity(4096);
@@ -253,27 +234,26 @@ impl Offramp for Elastic {
             value.write(&mut payload)?;
             payload.push(b'\n');
         }
-        self.maybe_enque(op_meta, payload).await
+        self.maybe_enque(event.id, op_meta, payload).await?;
+        self.drain_insights().await
     }
 
-    #[allow(clippy::used_underscore_binding)]
-    async fn on_signal(&mut self, _event: Event) -> Option<Event> {
-        None
-    }
-
-    fn default_codec(&self) -> &str {
-        "json"
-    }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
-    }
-    #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
+    }
+
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        self.drain_insights().await
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        false
+    }
+    fn default_codec(&self) -> &str {
+        todo!()
     }
 }

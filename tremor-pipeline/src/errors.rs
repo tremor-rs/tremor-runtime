@@ -29,8 +29,8 @@ impl From<regex::Error> for Error {
     }
 }
 
-impl From<sled::TransactionError<()>> for Error {
-    fn from(e: sled::TransactionError<()>) -> Self {
+impl From<sled::transaction::TransactionError<()>> for Error {
+    fn from(e: sled::transaction::TransactionError<()>) -> Self {
         Self::from(format!("Sled Transaction Error: {:?}", e))
     }
 }

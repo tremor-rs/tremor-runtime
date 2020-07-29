@@ -17,7 +17,10 @@ use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::registry::ServantId;
-use crate::sink::{blackhole, debug, exit, file, rest, stderr, stdout, tcp};
+use crate::sink::{
+    blackhole, debug, elastic, exit, file, kafka, newrelic, postgres, rest, stderr, stdout, tcp,
+    udp, ws,
+};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
@@ -27,18 +30,6 @@ use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
-
-mod elastic;
-#[cfg(feature = "gcp")]
-mod gcs;
-#[cfg(feature = "gcp")]
-mod gpub;
-mod kafka;
-mod newrelic;
-mod postgres;
-pub(crate) mod prelude;
-mod udp;
-mod ws;
 
 pub enum Msg {
     Event {
@@ -95,10 +86,6 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "elastic" => elastic::Elastic::from_config(config),
         "exit" => exit::Exit::from_config(config),
         "file" => file::File::from_config(config),
-        #[cfg(feature = "gcp")]
-        "gcs" => gcs::GCS::from_config(config),
-        #[cfg(feature = "gcp")]
-        "gpub" => gpub::GPub::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "newrelic" => newrelic::NewRelic::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),

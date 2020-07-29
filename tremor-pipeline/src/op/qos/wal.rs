@@ -271,61 +271,63 @@ impl Operator for WAL {
         true
     }
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
-        if insight.cb == Some(CBAction::Open) {
-            self.broken = false;
-        } else if insight.cb == Some(CBAction::Close) {
-            self.broken = true;
-        } else if let Some(CBAction::Ack) = &mut insight.cb {
-            let c_id = if let Some(c_id) = insight.id.get(u_id) {
-                c_id
-            } else {
-                // This is not for us
-                return;
-            };
-            self.confirmed.set(c_id);
-            if let Err(e) = self.state_tree.insert("read", self.confirmed) {
-                error!("Failed to persist confirm state: {}", e);
-            }
-            if let Some(e) = self
-                .events_tree
-                .get(self.confirmed)
-                .ok()
-                .and_then(maybe_parse_ivec)
-            {
-                debug!("WAL confirm: {}", c_id);
-                insight.id.merge(&e.id);
-            }
-        } else if let Some(CBAction::Fail) = &mut insight.cb {
-            let f_id = if let Some(f_id) = insight.id.get(u_id) {
-                f_id
-            } else {
-                // This is not for us
-                return;
-            };
-            self.read.set_min(f_id);
-
-            if let Some(e) = self
-                .events_tree
-                .get(self.confirmed)
-                .ok()
-                .and_then(maybe_parse_ivec)
-            {
-                insight.id.merge(&e.id);
-            }
-
-            let c = u64::from(self.confirmed);
-            if f_id < c {
-                error!(
-                    "trying to fail a message({}) that was already confirmed({})",
-                    f_id, c
-                );
-                self.confirmed.set(f_id);
+        match insight.cb {
+            CBAction::None => {}
+            CBAction::Open => self.broken = false,
+            CBAction::Close => self.broken = true,
+            CBAction::Ack => {
+                let c_id = if let Some(c_id) = insight.id.get(u_id) {
+                    c_id
+                } else {
+                    // This is not for us
+                    return;
+                };
+                self.confirmed.set(c_id);
                 if let Err(e) = self.state_tree.insert("read", self.confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
+                if let Some(e) = self
+                    .events_tree
+                    .get(self.confirmed)
+                    .ok()
+                    .and_then(maybe_parse_ivec)
+                {
+                    debug!("WAL confirm: {}", c_id);
+                    insight.id.merge(&e.id);
+                }
+            }
+            CBAction::Fail => {
+                let f_id = if let Some(f_id) = insight.id.get(u_id) {
+                    f_id
+                } else {
+                    // This is not for us
+                    return;
+                };
+                self.read.set_min(f_id);
+
+                if let Some(e) = self
+                    .events_tree
+                    .get(self.confirmed)
+                    .ok()
+                    .and_then(maybe_parse_ivec)
+                {
+                    insight.id.merge(&e.id);
+                }
+
+                let c = u64::from(self.confirmed);
+                if f_id < c {
+                    error!(
+                        "trying to fail a message({}) that was already confirmed({})",
+                        f_id, c
+                    );
+                    self.confirmed.set(f_id);
+                    if let Err(e) = self.state_tree.insert("read", self.confirmed) {
+                        error!("Failed to persist confirm state: {}", e);
+                    }
+                }
             }
         }
-        insight.cb = None;
+        insight.cb = CBAction::None;
     }
 
     fn handles_signal(&self) -> bool {
@@ -415,7 +417,7 @@ mod test {
         // 2 failed and they need to be delivered again
         let mut i = Event::default();
         i.id = 1.into();
-        i.cb = Some(CBAction::Fail);
+        i.cb = CBAction::Fail;
         o.on_contraflow(0, &mut i);
 
         // Send a second event
@@ -429,7 +431,7 @@ mod test {
         let mut i = Event::default();
         i.id = 0.into();
 
-        i.cb = Some(CBAction::Fail);
+        i.cb = CBAction::Fail;
         o.on_contraflow(0, &mut i);
 
         // Send a second event

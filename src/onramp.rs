@@ -22,8 +22,6 @@ use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::fmt;
 
-#[cfg(feature = "gcp")]
-mod gsub;
 mod postgres;
 pub(crate) mod prelude;
 mod udp;
@@ -70,8 +68,6 @@ pub(crate) fn lookup(
     match name {
         "blaster" => blaster::Blaster::from_config(id, config),
         "file" => file::File::from_config(id, config),
-        #[cfg(feature = "gcp")]
-        "gsub" => gsub::GSub::from_config(id, config),
         "kafka" => kafka::Kafka::from_config(id, config),
         "postgres" => postgres::Postgres::from_config(id, config),
         "metronome" => metronome::Metronome::from_config(id, config),

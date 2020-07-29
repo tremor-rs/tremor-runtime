@@ -20,16 +20,13 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use crate::offramp::prelude::*;
 use crate::ramp::postgres::{json_to_record, Record};
-use halfbrown::HashMap;
+use crate::sink::prelude::*;
 use postgres::{Client, NoTls};
 
 pub struct Postgres {
     pub config: Config,
     client: Option<postgres::Client>,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
-    postprocessors: Postprocessors,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -49,10 +46,8 @@ impl offramp::Impl for Postgres {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
-            Ok(Box::new(Self {
+            Ok(SinkManager::new_box(Self {
                 config,
-                pipelines: HashMap::new(),
-                postprocessors: vec![],
                 client: None,
             }))
         } else {
@@ -72,9 +67,9 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 }
 
 #[async_trait::async_trait]
-impl Offramp for Postgres {
+impl Sink for Postgres {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
         for val in event.value_iter() {
             let obj = val.as_object();
             if let Some(kv) = obj {
@@ -128,27 +123,29 @@ impl Offramp for Postgres {
                         .map(|p| p as &dyn postgres::types::ToSql)
                         .collect::<Vec<&dyn postgres::types::ToSql>>(),
                 ) {
-                    Ok(_) => return Ok(()),
+                    Ok(_) => return Ok(None),
                     Err(e) => return Err(format!("Failure while querying: {}", e).into()),
                 }
             }
         }
 
-        Ok(())
-    }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+        Ok(None)
     }
     fn default_codec(&self) -> &str {
         "json"
     }
     #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+    async fn init(&mut self, _postprocessors: &[String]) -> Result<()> {
         Ok(())
+    }
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        Ok(None)
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

@@ -77,19 +77,6 @@ impl From<glob::PatternError> for Error {
     }
 }
 
-#[cfg(feature = "gcp")]
-impl From<google_storage1::Error> for Error {
-    fn from(e: google_storage1::Error) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
-
-#[cfg(feature = "gcp")]
-impl From<google_pubsub1::Error> for Error {
-    fn from(e: google_pubsub1::Error) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
 impl<T> From<async_channel::SendError<T>> for Error {
     fn from(e: async_channel::SendError<T>) -> Self {
         Self::from(format!("{:?}", e))

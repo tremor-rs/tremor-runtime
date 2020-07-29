@@ -232,6 +232,8 @@ pub enum NodeKind {
 /// A circuit breaker action
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
 pub enum CBAction {
+    /// Nothing of note
+    None,
     /// The circuit breaker is triggerd and should break
     Close,
     /// The circuit breaker is restored and should work again
@@ -242,6 +244,20 @@ pub enum CBAction {
     /// Fail backwards to a given ID
     /// All messages after and including this will be considered non delivered
     Fail,
+}
+impl Default for CBAction {
+    fn default() -> Self {
+        Self::None
+    }
+}
+impl From<bool> for CBAction {
+    fn from(success: bool) -> Self {
+        if success {
+            CBAction::Ack
+        } else {
+            CBAction::Fail
+        }
+    }
 }
 
 impl CBAction {
@@ -338,7 +354,7 @@ pub struct Event {
     /// If this event is batched (containing multiple events itself)
     pub is_batch: bool,
     /// Circuit breaker action
-    pub cb: Option<CBAction>,
+    pub cb: CBAction,
     /// Metadata for operators
     pub op_meta: OpMeta,
     /// this needs transactional data
@@ -346,6 +362,17 @@ pub struct Event {
 }
 
 impl Event {
+    /// turns the event in an insight given it's success
+    pub fn insight(self, success: bool) -> Event {
+        Event {
+            cb: success.into(),
+            ingest_ns: self.ingest_ns,
+            id: self.id,
+            op_meta: self.op_meta,
+            origin_uri: self.origin_uri,
+            ..Event::default()
+        }
+    }
     /// Creates a new ack insight from the event, consums the `op_meta` and
     /// `origin_uri` of the event may return None if no insight is needed
     pub fn insight_ack(&mut self) -> Option<Event> {
@@ -395,7 +422,7 @@ impl Event {
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Open),
+            cb: CBAction::Open,
             ..Event::default()
         }
     }
@@ -404,7 +431,7 @@ impl Event {
     pub fn cb_trigger(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: Some(CBAction::Close),
+            cb: CBAction::Close,
             ..Event::default()
         }
     }
@@ -414,7 +441,7 @@ impl Event {
         Event {
             ingest_ns,
             id,
-            cb: Some(CBAction::Ack),
+            cb: CBAction::Ack,
             ..Event::default()
         }
     }
@@ -424,7 +451,7 @@ impl Event {
         Event {
             ingest_ns,
             id,
-            cb: Some(CBAction::Fail),
+            cb: CBAction::Fail,
             ..Event::default()
         }
     }
