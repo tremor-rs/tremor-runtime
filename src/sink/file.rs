@@ -20,16 +20,15 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-use crate::offramp::prelude::*;
-use halfbrown::HashMap;
-use std::fs::File as FSFile;
-use std::io::Write;
+use crate::sink::prelude::*;
+use async_std::fs::File as FSFile;
+use async_std::io::prelude::*;
 
 /// An offramp that write a given file
 pub struct File {
-    file: FSFile,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
+    file: Option<FSFile>,
     postprocessors: Postprocessors,
+    config: Config,
 }
 
 #[derive(Deserialize)]
@@ -44,10 +43,10 @@ impl offramp::Impl for File {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            let file = FSFile::create(config.file)?;
-            Ok(Box::new(Self {
-                file,
-                pipelines: HashMap::new(),
+
+            Ok(SinkManager::new_box(Self {
+                file: None,
+                config,
                 postprocessors: vec![],
             }))
         } else {
@@ -57,35 +56,40 @@ impl offramp::Impl for File {
 }
 
 #[async_trait::async_trait]
-impl Offramp for File {
+impl Sink for File {
     // TODO
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         eprint!("offramp");
-        for value in event.value_iter() {
-            let raw = codec.encode(value)?;
-            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
-            for packet in packets {
-                self.file
-                    .write_all(&packet)
-                    .and_then(|_| self.file.write_all(b"\n"))?;
+        if let Some(file) = &mut self.file {
+            for value in event.value_iter() {
+                let raw = codec.encode(value)?;
+                let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+                for packet in packets {
+                    file.write_all(&packet).await?;
+                    file.write_all(b"\n").await?;
+                }
             }
         }
-        Ok(())
-    }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+        Ok(None)
     }
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
+    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
+        let file = FSFile::create(&self.config.file).await?;
+        self.file = Some(file);
         Ok(())
+    }
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        Ok(None)
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

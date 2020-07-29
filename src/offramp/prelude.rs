@@ -29,8 +29,6 @@ pub(crate) use tremor_pipeline::Ids;
 
 use std::mem;
 
-pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
-
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
     postprocessors
         .iter()

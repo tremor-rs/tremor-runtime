@@ -21,10 +21,10 @@
 //!
 //! This operator takes no configuration
 
-use crate::offramp::prelude::*;
+use crate::sink::prelude::*;
+use async_std::io;
 use halfbrown::HashMap;
 use std::time::{Duration, Instant};
-use tremor_script::prelude::*;
 
 #[derive(Debug, Clone)]
 struct DebugBucket {
@@ -36,37 +36,43 @@ pub struct Debug {
     update_time: Duration,
     buckets: HashMap<String, DebugBucket>,
     cnt: u64,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
-    postprocessors: Postprocessors,
+    stdout: io::Stdout,
 }
 
 impl offramp::Impl for Debug {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(Self {
+        Ok(SinkManager::new_box(Self {
             last: Instant::now(),
             update_time: Duration::from_secs(1),
             buckets: HashMap::new(),
             cnt: 0,
-            pipelines: HashMap::new(),
-            postprocessors: vec![],
+            stdout: io::stdout(),
         }))
     }
 }
 #[async_trait::async_trait]
-impl Offramp for Debug {
+impl Sink for Debug {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
-                println!();
-                println!("|{:20}| {:7}|", "classification", "total");
-                println!("|{:20}| {:7}|", "TOTAL", self.cnt);
+                self.stdout
+                    .write(
+                        format!(
+                            "\n|{:20}| {:7}|\n|{:20}| {:7}|\n",
+                            "classification", "total", "TOTAL", self.cnt
+                        )
+                        .as_bytes(),
+                    )
+                    .await?;
+
                 self.cnt = 0;
                 for (class, data) in &self.buckets {
-                    println!("|{:20}| {:7}|", class, data.cnt,);
+                    self.stdout
+                        .write(format!("|{:20}| {:7}|\n", class, data.cnt,).as_bytes())
+                        .await?;
                 }
-                println!();
                 self.buckets.clear();
             }
             let c = if let Some(s) = meta.get("class").and_then(Value::as_str) {
@@ -82,21 +88,26 @@ impl Offramp for Debug {
             }
             self.cnt += 1;
         }
-        Ok(())
+        Ok(None)
     }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
-    }
+
     fn default_codec(&self) -> &str {
         "json"
     }
+
     #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+    async fn init(&mut self, _postprocessors: &[String]) -> Result<()> {
         Ok(())
+    }
+
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        Ok(None)
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

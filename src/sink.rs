@@ -15,9 +15,16 @@ use crate::offramp::prelude::*;
 use hashbrown::HashMap;
 
 pub(crate) mod blackhole;
+pub(crate) mod debug;
+pub(crate) mod exit;
+pub(crate) mod file;
+pub(crate) mod prelude;
 pub(crate) mod rest;
 pub(crate) mod stderr;
 pub(crate) mod stdout;
+pub(crate) mod tcp;
+
+pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {

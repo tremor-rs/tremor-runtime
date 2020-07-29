@@ -17,7 +17,7 @@ use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::registry::ServantId;
-use crate::sink::{blackhole, rest, stderr, stdout};
+use crate::sink::{blackhole, debug, exit, file, rest, stderr, stdout, tcp};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
@@ -28,10 +28,7 @@ use hashbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 
-mod debug;
 mod elastic;
-mod exit;
-mod file;
 #[cfg(feature = "gcp")]
 mod gcs;
 #[cfg(feature = "gcp")]
@@ -40,7 +37,6 @@ mod kafka;
 mod newrelic;
 mod postgres;
 pub(crate) mod prelude;
-mod tcp;
 mod udp;
 mod ws;
 

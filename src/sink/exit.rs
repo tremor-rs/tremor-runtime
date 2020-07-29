@@ -20,29 +20,21 @@
 //!
 //! This operator takes no configuration
 
-use crate::offramp::prelude::*;
-use halfbrown::HashMap;
+use crate::sink::prelude::*;
 use std::time::Duration;
-use tremor_script::prelude::*;
 
-pub struct Exit {
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
-    postprocessors: Postprocessors,
-}
+pub struct Exit {}
 
 impl offramp::Impl for Exit {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(Box::new(Self {
-            pipelines: HashMap::new(),
-            postprocessors: vec![],
-        }))
+        Ok(SinkManager::new_box(Self {}))
     }
 }
 
 #[async_trait::async_trait]
-impl Offramp for Exit {
+impl Sink for Exit {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _codec: &dyn Codec, _input: &str, event: Event) -> Result<()> {
+    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(status) = value.get("exit").and_then(Value::as_i32) {
                 if let Some(delay) = value.get("delay").and_then(Value::as_u64) {
@@ -54,21 +46,23 @@ impl Offramp for Exit {
                 return Err("Unexpected event received in exit offramp".into());
             }
         }
-        Ok(())
-    }
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.pipelines.insert(id, addr);
-    }
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
-        self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+        Ok(None)
     }
     fn default_codec(&self) -> &str {
         "json"
     }
     #[allow(clippy::used_underscore_binding)]
-    async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+    async fn init(&mut self, _postprocessors: &[String]) -> Result<()> {
         Ok(())
+    }
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+        Ok(None)
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

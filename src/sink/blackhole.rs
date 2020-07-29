@@ -23,8 +23,7 @@
 // This is OK, Blackhole is benchmark only
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
-use crate::offramp::prelude::*;
-use crate::sink::{Event, OpConfig, Result, Sink, SinkManager};
+use crate::sink::prelude::*;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
 use std::fmt::Display;
