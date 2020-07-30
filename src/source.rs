@@ -75,6 +75,7 @@ pub(crate) trait Source {
     fn metrics(&mut self, t: u64) -> Vec<Event> {
         vec![]
     }
+    async fn terminate(&mut self) {}
 }
 
 pub(crate) struct SourceManager<T>
@@ -253,17 +254,16 @@ where
                     }
                 }
                 onramp::Msg::Disconnect { id, tx } => {
-                    for (pid, p) in &self.pipelines {
-                        if pid == &id {
-                            p.send_mgmt(pipeline::MgmtMsg::DisconnectInput(id.clone()))
-                                .await?;
-                        }
+                    if let Some((_, p)) = self.pipelines.iter().find(|(pid, _)| pid == &id) {
+                        p.send_mgmt(pipeline::MgmtMsg::DisconnectInput(id.clone()))
+                            .await?;
                     }
 
                     self.pipelines.retain(|(pipeline, _)| pipeline != &id);
                     if self.pipelines.is_empty() {
                         tx.send(true).await?;
-                        return Ok(self.pipelines.is_empty());
+                        self.source.terminate().await;
+                        return Ok(true);
                     } else {
                         tx.send(false).await?;
                     }
@@ -424,7 +424,7 @@ where
             //             return Ok(());
             //         }
             //     }
-            //     MaybeRead::Read(_) => panic!(),
+            //     MaybeRead::Read(_) => {},
             // }
 
             // In non transactional sources we get very few replies so we don't need to check

@@ -139,14 +139,9 @@ while getopts hauiprebldxc opt; do
                     echo "##[error] $file does not enforce clippy::pedantic."
                     count=$((count + 1))
                 fi
-                if  ! grep 'clippy::result_unwrap_used' "$file" > /dev/null
+                if  ! grep 'clippy::unwrap_used' "$file" > /dev/null
                 then
-                    echo "##[error] $file does not enforce clippy::result_unwrap_used."
-                    count=$((count + 1))
-                fi
-                if  ! grep 'clippy::option_unwrap_used' "$file" > /dev/null
-                then
-                    echo "##[error] $file does not enforce clippy::option_unwrap_used."
+                    echo "##[error] $file does not enforce clippy::unwrap_used."
                     count=$((count + 1))
                 fi
                 if  ! grep 'clippy::unnecessary_unwrap' "$file" > /dev/null

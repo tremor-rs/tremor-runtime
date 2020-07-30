@@ -62,6 +62,7 @@ pub trait Offramp: Send {
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
         None
     }
+    async fn terminate(&mut self) {}
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
@@ -237,6 +238,7 @@ impl Manager {
                         info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
                         if r {
                             info!("[Offramp::{}] Marked as done ", offramp_id);
+                            offramp.terminate().await
                         }
                         tx.send(r).await?
                     }

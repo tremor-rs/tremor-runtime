@@ -57,9 +57,16 @@ impl offramp::Impl for File {
 
 #[async_trait::async_trait]
 impl Sink for File {
+    async fn terminate(&mut self) {
+        if let Some(file) = &mut self.file {
+            if file.flush().await.is_ok() {
+                error!("Failed to flush file")
+            };
+        }
+    }
     // TODO
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, mut event: Event) -> ResultVec {
         eprint!("offramp");
         if let Some(file) = &mut self.file {
             for value in event.value_iter() {
@@ -70,8 +77,9 @@ impl Sink for File {
                     file.write_all(b"\n").await?;
                 }
             }
+            file.flush().await?
         }
-        Ok(None)
+        Ok(Some(vec![event.insight_ack()]))
     }
     fn default_codec(&self) -> &str {
         "json"

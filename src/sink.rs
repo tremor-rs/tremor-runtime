@@ -46,6 +46,7 @@ pub(crate) trait Sink {
     fn is_active(&self) -> bool;
     fn auto_ack(&self) -> bool;
     fn default_codec(&self) -> &str;
+    async fn terminate(&mut self) {}
 }
 
 pub(crate) struct SinkManager<T>
@@ -77,6 +78,9 @@ impl<T> Offramp for SinkManager<T>
 where
     T: Sink + Send,
 {
+    async fn terminate(&mut self) {
+        self.sink.terminate().await
+    }
     #[allow(clippy::used_underscore_binding)]
     async fn start(&mut self, _codec: &dyn Codec, postprocessors: &[String]) -> Result<()> {
         self.sink.init(postprocessors).await
