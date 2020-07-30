@@ -375,11 +375,11 @@ impl Event {
     }
     /// Creates a new ack insight from the event, consums the `op_meta` and
     /// `origin_uri` of the event may return None if no insight is needed
-    pub fn insight_ack(&mut self) -> Option<Event> {
+    pub fn insight_ack(&mut self) -> Event {
         let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
         swap(&mut e.op_meta, &mut self.op_meta);
         swap(&mut e.origin_uri, &mut self.origin_uri);
-        Some(e)
+        e
     }
 
     /// Creates a new fail insight from the event, consums the `op_meta` of the

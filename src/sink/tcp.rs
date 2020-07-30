@@ -79,7 +79,7 @@ impl Sink for Tcp {
             success = false
         };
         if success {
-            Ok(event.insight_ack().map(|e| vec![e]))
+            Ok(Some(vec![event.insight_ack()]))
         } else {
             Ok(event
                 .insight_trigger()
