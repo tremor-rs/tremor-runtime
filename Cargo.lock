@@ -1216,9 +1216,9 @@ dependencies = [
 
 [[package]]
 name = "error-chain"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d371106cc88ffdfb1eabd7111e432da544f16f3e2d7bf1dfe8bf575f1df045cd"
+checksum = "be51ed50e75656c17216bdd4326914466db0c91b9b246b12962a00284d06566b"
 dependencies = [
  "backtrace",
  "version_check 0.9.2",
@@ -3164,7 +3164,7 @@ version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bbaa49075179162b49acac1c6aa45fb4dafb5f13cf6794276d77bc7fd95757b"
 dependencies = [
- "error-chain 0.12.2",
+ "error-chain 0.12.3",
  "idna 0.2.0",
  "lazy_static",
  "regex",
@@ -3867,7 +3867,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f3acf84e23ab27c01cb5917551765c01c50b2000089db8fa47fe018a3260cf"
 dependencies = [
  "data-encoding",
- "error-chain 0.12.2",
+ "error-chain 0.12.3",
  "percent-encoding 2.1.0",
  "serde",
 ]
@@ -4845,7 +4845,7 @@ version = "0.8.0"
 dependencies = [
  "base64 0.12.3",
  "criterion",
- "error-chain 0.12.2",
+ "error-chain 0.12.3",
  "halfbrown",
  "indexmap",
  "lazy_static",
@@ -4892,7 +4892,7 @@ dependencies = [
  "crossbeam-channel 0.4.3",
  "elastic",
  "env_logger",
- "error-chain 0.12.2",
+ "error-chain 0.12.3",
  "futures 0.3.5",
  "glob",
  "google-pubsub1",
@@ -4953,7 +4953,7 @@ dependencies = [
  "dissect",
  "distance",
  "downcast-rs",
- "error-chain 0.12.2",
+ "error-chain 0.12.3",
  "float-cmp 0.8.0",
  "glob",
  "grok",
