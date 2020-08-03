@@ -127,9 +127,26 @@ fn is_fatal(e: &KafkaError) -> bool {
     }
 }
 
+unsafe fn get_fatal_error<C>(
+    client: &rdkafka::client::Client<C>,
+) -> Option<(rdkafka::types::RDKafkaRespErr, String)>
+where
+    C: rdkafka::ClientContext,
+{
+    const LEN: usize = 4096;
+    let mut buf: [i8; LEN] = std::mem::MaybeUninit::uninit().assume_init();
+    let client_ptr = client.native_ptr();
+
+    let code = rdkafka_sys::bindings::rd_kafka_fatal_error(client_ptr, buf.as_mut_ptr(), LEN);
+    if code == rdkafka::types::RDKafkaRespErr::RD_KAFKA_RESP_ERR_NO_ERROR {
+        None
+    } else {
+        Some((code, rdkafka::util::cstr_to_owned(buf.as_ptr())))
+    }
+}
+
 #[async_trait::async_trait]
 impl Sink for Kafka {
-    // TODO
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         let mut success = true;
@@ -152,6 +169,11 @@ impl Sink for Kafka {
                 Err((e, _r)) => {
                     error!("[Kafka Offramp] failed to enque message: {}", e);
                     if is_fatal(&e) {
+                        if let Some((code, fatal)) =
+                            unsafe { get_fatal_error(self.producer.client()) }
+                        {
+                            error!("[Kafka Offramp] Fatal Error({:?}): {}", code, fatal);
+                        }
                         self.producer = self.config.producer()?;
                         error!("[Kafka Offramp] reinitiating client");
                     }
