@@ -14,7 +14,7 @@
 
 use crate::op::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt};
-use simd_json_derive::Serialize;
+use simd_json_derive::{Deserialize, Serialize};
 use sled::IVec;
 use std::io::Cursor;
 use std::mem;
@@ -120,7 +120,7 @@ impl From<Idx> for IVec {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, serde::Deserialize, serde::Serialize)]
 pub struct Config {
     /// Maximum number of events to read per tick/event when filling
     /// up from the persistant storage
@@ -223,11 +223,11 @@ impl WAL {
             .events_tree
             .range(self.read..(self.read + self.config.read_count))
         {
-            let (_idx, e) = e?;
+            let (_idx, mut e) = e?;
             self.read += 1;
-            let e_slice: &[u8] = &e;
-            let mut ev = Vec::from(e_slice);
-            let event = simd_json::from_slice(&mut ev)?;
+            let e_slice: &mut [u8] = &mut e;
+            let mut event = Event::from_slice(e_slice)?;
+            event.transactional = true;
             events.push((OUT, event))
         }
         self.auto_commit(now)?;
@@ -260,9 +260,8 @@ impl WAL {
 }
 
 fn maybe_parse_ivec(e: Option<IVec>) -> Option<Event> {
-    let e_slice: &[u8] = &e?;
-    let mut ev: Vec<u8> = Vec::from(e_slice);
-    simd_json::from_slice(&mut ev).ok()
+    let e_slice: &mut [u8] = &mut e?;
+    Event::from_slice(e_slice).ok()
 }
 
 #[allow(unused_mut)]
@@ -368,11 +367,15 @@ impl Operator for WAL {
     ) -> Result<EventAndInsights> {
         let id = event.id.clone();
         let now = event.ingest_ns;
+        let transactional = event.transactional;
 
         self.store_event(uid, event)?;
 
-        let insight = Event::cb_ack(now, id);
-        let insights = vec![insight];
+        let insights = if transactional {
+            vec![Event::cb_ack(now, id)]
+        } else {
+            vec![]
+        };
         let events = if self.broken {
             Vec::new()
         } else {

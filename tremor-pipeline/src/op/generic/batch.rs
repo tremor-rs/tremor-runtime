@@ -169,6 +169,7 @@ impl Operator for Batch {
 #[cfg(test)]
 mod test {
     use super::*;
+    use simd_json_derive::Serialize;
     use tremor_script::Value;
 
     #[test]
@@ -252,12 +253,7 @@ mod test {
             ..Event::default()
         };
 
-        println!(
-            "{}",
-            simd_json::serde::to_owned_value(event1.clone())
-                .expect("")
-                .encode()
-        );
+        println!("{}", event1.json_string().expect(""));
 
         let mut state = Value::null();
 
