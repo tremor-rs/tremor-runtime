@@ -5190,6 +5190,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.7.3",
  "rdkafka",
+ "rdkafka-sys",
  "regex",
  "rental",
  "rmp-serde",
