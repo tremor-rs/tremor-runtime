@@ -23,6 +23,8 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
+// FIXME We need this for simd-json-derive
+#![allow(clippy::forget_copy)]
 #![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 /// The Tremor Script AST
@@ -69,8 +71,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rental;
 
-use serde::de::{Deserialize, Deserializer};
-use serde::ser::{self, Serialize};
 use simd_json::prelude::*;
 
 pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
@@ -96,7 +96,9 @@ pub fn recursion_limit() -> u32 {
 }
 
 /// Combined struct for an event value and metadata
-#[derive(Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize)]
+#[derive(
+    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,
     m: Value<'event>,
@@ -108,6 +110,19 @@ impl simd_json_derive::Serialize for LineValue {
         W: std::io::Write,
     {
         self.rent(|d| d.json_write(writer))
+    }
+}
+
+impl<'input> simd_json_derive::Deserialize<'input> for LineValue {
+    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self>
+    where
+        Self: Sized + 'input,
+    {
+        let ValueAndMeta { v, m } = simd_json_derive::Deserialize::from_tape(tape)?;
+
+        Ok(Self::new(vec![], |_| {
+            ValueAndMeta::from_parts(v.into_static(), m.into_static())
+        }))
     }
 }
 
@@ -278,15 +293,6 @@ impl Default for LineValue {
     }
 }
 
-impl Serialize for LineValue {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        self.rent(|d| d.serialize(serializer))
-    }
-}
-
 /// An error occurred while deserializing
 /// a value into an Event.
 pub enum LineValueDeserError {
@@ -294,36 +300,6 @@ pub enum LineValueDeserError {
     ValueMissing,
     /// The value was missing the `metadata` key
     MetaMissing,
-}
-
-impl<'de> Deserialize<'de> for LineValue {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::Error;
-        use simd_json::OwnedValue;
-        // We need to convert the data first into a owned value since
-        // serde doesn't like lifetimes. Then we convert it into a line
-        // value.
-        // FIXME we should find a way to not do this!
-        let r = OwnedValue::deserialize(deserializer)?;
-
-        // FIXME after POC
-        let value = if let Some(value) = r.get("v") {
-            value
-        } else {
-            return Err(D::Error::custom("value field missing"));
-        };
-        let meta = if let Some(meta) = r.get("m") {
-            meta
-        } else {
-            return Err(D::Error::custom("meta field missing"));
-        };
-        Ok(Self::new(vec![], |_| {
-            ValueAndMeta::from_parts(value.clone().into(), meta.clone().into())
-        }))
-    }
 }
 
 impl PartialEq for LineValue {

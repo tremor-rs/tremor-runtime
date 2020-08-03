@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::forget_copy)] // FIXME: we need this fir the derive
 
 use crate::errors::{Error, Result};
 use std::default;
@@ -18,7 +19,9 @@ use std::fmt;
 use url::Url;
 
 /// Event origin URI
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, simd_json_derive::Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub struct EventOriginUri {
     /// UID of the onramp
     pub uid: u64,
@@ -119,7 +122,7 @@ impl default::Default for EventOriginUri {
 // TODO check if we need all of these derives here still
 
 /// Context in that an event is executed
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
 pub struct EventContext {
     at: u64,
     /// URI of the origin

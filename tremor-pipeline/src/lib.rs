@@ -23,6 +23,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
+#![allow(clippy::forget_copy)] // FIXME needed for simd json derive
 #![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 #[macro_use]
@@ -91,54 +92,6 @@ pub struct PrimStr<T>(T)
 where
     T: Copy + Ord + Display + FromStr;
 
-impl<T> Serialize for PrimStr<T>
-where
-    T: Copy + Ord + Display + FromStr,
-{
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.collect_str(&self.0)
-    }
-}
-
-impl<'de, T> serde::Deserialize<'de> for PrimStr<T>
-where
-    T: Copy + Ord + Display + FromStr,
-{
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use std::marker::PhantomData;
-        struct Visitor<T>(PhantomData<T>);
-
-        impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
-        where
-            T: Copy + Ord + Display + FromStr,
-        {
-            type Value = PrimStr<T>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("number represented as string")
-            }
-
-            fn visit_str<E>(self, value: &str) -> std::result::Result<PrimStr<T>, E>
-            where
-                E: serde::de::Error,
-            {
-                match T::from_str(value) {
-                    Ok(id) => Ok(PrimStr(id)),
-                    Err(_) => Err(E::invalid_value(serde::de::Unexpected::Str(value), &self)),
-                }
-            }
-        }
-
-        deserializer.deserialize_str(Visitor(PhantomData))
-    }
-}
-
 impl<T> simd_json_derive::SerializeAsKey for PrimStr<T>
 where
     T: Copy + Ord + Display + FromStr,
@@ -163,8 +116,31 @@ where
     }
 }
 
+impl<'input, T> simd_json_derive::Deserialize<'input> for PrimStr<T>
+where
+    T: Copy + Ord + Display + FromStr,
+{
+    #[inline]
+    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self>
+    where
+        Self: std::marker::Sized + 'input,
+    {
+        if let Some(simd_json::Node::String(s)) = tape.next() {
+            Ok(PrimStr(FromStr::from_str(s).map_err(|_e| {
+                simd_json::Error::generic(simd_json::ErrorType::Serde("not a number".into()))
+            })?))
+        } else {
+            Err(simd_json::Error::generic(
+                simd_json::ErrorType::ExpectedNull,
+            ))
+        }
+    }
+}
+
 /// Operator metadata
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
+#[derive(
+    Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub struct OpMeta(BTreeMap<PrimStr<u64>, OwnedValue>);
 
 impl OpMeta {
@@ -230,7 +206,9 @@ pub enum NodeKind {
 }
 
 /// A circuit breaker action
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub enum CBAction {
     /// Nothing of note
     None,
@@ -275,7 +253,9 @@ impl CBAction {
 /// * Simplifies cloning (represented  inconsecutive memory) :sob:
 /// * Allows easier serialisation/deserialisation
 /// * We don't ever expect a huge number of sources at the same time
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, simd_json_derive::Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub struct Ids(Vec<(u64, u64)>);
 
 impl fmt::Display for Ids {
@@ -339,7 +319,9 @@ impl From<u64> for Ids {
 }
 
 /// A tremor event
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, simd_json_derive::Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub struct Event {
     /// The event ID
     pub id: Ids,
@@ -533,7 +515,9 @@ impl<'value> Iterator for ValueIter<'value> {
 }
 
 /// The kind of signal this is
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, simd_json_derive::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+)]
 pub enum SignalKind {
     // Lifecycle
     /// Init singnal

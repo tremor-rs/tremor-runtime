@@ -149,22 +149,26 @@ impl rentals::MessageStream {
         transmute(&self.suffix().stream)
     }
 
-    unsafe fn commit(
-        &mut self,
-        map: &StdMap<(String, i32), Offset>,
-        mode: CommitMode,
-    ) -> Result<()> {
+    unsafe fn consumer(&mut self) -> &mut LoggingConsumer {
         struct MessageStream {
             consumer: Box<LoggingConsumer>,
             stream: StreamAndMsgs<'static>,
         };
+        let s: &mut MessageStream = transmute(self);
+        &mut s.consumer
+    }
+    fn commit(&mut self, map: &StdMap<(String, i32), Offset>, mode: CommitMode) -> Result<()> {
         let offsets = TopicPartitionList::from_topic_map(map);
 
-        let s: &mut MessageStream = transmute(self);
+        unsafe { self.consumer().commit(&offsets, mode)? };
 
-        match mode {
-            CommitMode::Async => s.consumer.commit(&offsets, CommitMode::Async)?,
-            CommitMode::Sync => s.consumer.commit(&offsets, CommitMode::Sync)?,
+        Ok(())
+    }
+
+    fn seek(&mut self, map: &StdMap<(String, i32), Offset>) -> Result<()> {
+        let consumer = unsafe { self.consumer() };
+        for ((t, p), o) in map.iter() {
+            consumer.seek(t, *p, *o, Duration::from_millis(100))?;
         }
 
         Ok(())
@@ -172,6 +176,27 @@ impl rentals::MessageStream {
 }
 
 impl Int {
+    fn get_topic_map_for_id(&mut self, id: u64) -> StdMap<(String, i32), Offset> {
+        let mut split = self.messages.split_off(&(id + 1));
+        mem::swap(&mut split, &mut self.messages);
+        let mut tm = StdMap::with_capacity(split.len());
+        for (
+            _,
+            MsgOffset {
+                topic,
+                partition,
+                offset,
+            },
+        ) in split
+        {
+            let this_offset = tm.entry((topic, partition)).or_insert(offset);
+            match (this_offset, offset) {
+                (Offset::Offset(old), Offset::Offset(new)) if *old < new => *old = new,
+                _ => (),
+            }
+        }
+        tm
+    }
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
             uid,
@@ -232,6 +257,9 @@ pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
 #[async_trait::async_trait()]
 impl Source for Int {
+    fn is_transactional(&self) -> bool {
+        !self.auto_commit
+    }
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
@@ -381,31 +409,30 @@ impl Source for Int {
     }
     fn trigger_breaker(&mut self) {}
     fn restore_breaker(&mut self) {}
-    #[allow(unused_variables)]
-    fn fail(&mut self, id: u64) {}
-    fn ack(&mut self, id: u64) {
+
+    // If we fail a message we seek back to this failed
+    // message to replay data from here.
+    //
+    // This might seek over multiple topics but since we internally only keep
+    // track of a singular stream this is OK.
+    //
+    // If this is undesirable multiple onramps with an onramp per topic
+    // should be used.
+    fn fail(&mut self, id: u64) {
         if !self.auto_commit {
-            let mut split = self.messages.split_off(&(id + 1));
-            mem::swap(&mut split, &mut self.messages);
-            let mut tm = StdMap::with_capacity(split.len());
-            for (
-                _,
-                MsgOffset {
-                    topic,
-                    partition,
-                    offset,
-                },
-            ) in split
-            {
-                let this_offset = tm.entry((topic, partition)).or_insert(offset);
-                match (this_offset, offset) {
-                    (Offset::Offset(old), Offset::Offset(new)) if *old < new => *old = new,
-                    _ => (),
+            let tm = self.get_topic_map_for_id(id);
+            if let Some(stream) = self.stream.as_mut() {
+                if let Err(e) = stream.seek(&tm) {
+                    error!("[kafka] failed to seek message: {}", e)
                 }
             }
-
+        }
+    }
+    fn ack(&mut self, id: u64) {
+        if !self.auto_commit {
+            let tm = self.get_topic_map_for_id(id);
             if let Some(stream) = self.stream.as_mut() {
-                if let Err(e) = unsafe { stream.commit(&tm, CommitMode::Async) } {
+                if let Err(e) = stream.commit(&tm, CommitMode::Async) {
                     error!("[kafka] failed to commit message: {}", e)
                 }
             }

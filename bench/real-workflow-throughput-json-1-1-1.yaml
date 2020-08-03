@@ -18,11 +18,12 @@ offramp:
       stop_after_secs: 100
       significant_figures: 2
 
+
 binding:
   - id: bench
     links:
-      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
 
 pipeline:
   - id: main
@@ -32,13 +33,6 @@ pipeline:
       outputs:
         - out
     nodes:
-      - id: wal
-        op: qos::wal
-        config:
-          dir: wal
-          read_count: 10
-          max_elements: 1000
-          max_bytes: 10000000
       - id: runtime
         op: runtime::tremor
         config:
@@ -72,8 +66,7 @@ pipeline:
       - id: group
         op: grouper::bucket
     links:
-      in: [wal]
-      wal: [runtime]
-      runtime: [group]
-      group: [out]
-      group/overflow: [out]
+      in: [ runtime ]
+      runtime: [ group ]
+      group: [ out ]
+      group/overflow: [ out ]
