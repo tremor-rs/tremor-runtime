@@ -142,6 +142,7 @@ error_chain! {
         AsyncChannelRecvError(async_channel::RecvError);
         JSONAccessError(value_trait::AccessError);
         CronError(cron::error::Error);
+        Postgres(postgres::Error);
     }
 
     errors {

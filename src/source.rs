@@ -37,6 +37,7 @@ pub(crate) mod crononome;
 pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod metronome;
+pub(crate) mod postgres;
 pub(crate) mod tcp;
 
 pub(crate) enum SourceState {
@@ -436,8 +437,8 @@ where
             let pipelines_empty = self.pipelines.is_empty();
 
             if !self.triggered && !pipelines_empty {
-                match self.source.read(self.id).await? {
-                    SourceReply::StartStream(id) => {
+                match self.source.read(self.id).await {
+                    Ok(SourceReply::StartStream(id)) => {
                         while self.preprocessors.len() <= id {
                             self.preprocessors.push(None)
                         }
@@ -445,7 +446,7 @@ where
                         self.preprocessors
                             .push(Some(make_preprocessors(&self.pp_template)?));
                     }
-                    SourceReply::EndStream(id) => {
+                    Ok(SourceReply::EndStream(id)) => {
                         if let Some(v) = self.preprocessors.get_mut(id) {
                             *v = None
                         }
@@ -454,25 +455,29 @@ where
                             self.preprocessors.pop();
                         }
                     }
-                    SourceReply::Structured { origin_uri, data } => {
+                    Ok(SourceReply::Structured { origin_uri, data }) => {
                         let ingest_ns = nanotime();
 
                         self.transmit_event(data, ingest_ns, origin_uri).await;
                     }
-                    SourceReply::Data {
+                    Ok(SourceReply::Data {
                         mut origin_uri,
                         data,
                         stream,
-                    } => {
+                    }) => {
                         origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
                         self.send_event(stream, &mut ingest_ns, &origin_uri, data)
                             .await;
                     }
-                    SourceReply::StateChange(SourceState::Disconnected) => return Ok(()),
-                    SourceReply::StateChange(SourceState::Connected) => (),
-                    SourceReply::Empty(sleep_ms) => {
+                    Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
+                    Ok(SourceReply::StateChange(SourceState::Connected)) => (),
+                    Ok(SourceReply::Empty(sleep_ms)) => {
                         task::sleep(Duration::from_millis(sleep_ms)).await
+                    }
+                    Err(e) => {
+                        warn!("Source Error: {}", e);
+                        self.metrics_reporter.increment_error();
                     }
                 }
             }
