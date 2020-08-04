@@ -212,79 +212,44 @@ pub fn json_to_record<'a>(json: &'a simd_json::BorrowedValue<'a>) -> Result<Reco
 }
 pub fn row_to_json(
     row: &postgres::row::Row,
-) -> std::result::Result<Value, Box<dyn std::error::Error + Sync + Send>> {
-    let mut json = Value::object();
+) -> std::result::Result<Value<'static>, Box<dyn std::error::Error + Sync + Send>> {
+    let mut json: Value<'static> = Value::object();
 
     for (cid, col) in row.columns().iter().enumerate() {
-        let t: &'static str;
-        let mut obj = Value::object();
+        let mut obj: Value<'static> = Value::object();
 
-        let v = match *col.type_() {
-            postgres::types::Type::BOOL => {
-                t = "BOOL";
-                Value::from(row.get::<_, bool>(cid))
-            }
-            postgres::types::Type::CHAR => {
-                t = "CHAR";
-                Value::from(row.get::<_, String>(cid))
-            }
-            postgres::types::Type::INT8 => {
-                t = "INT8";
-                Value::from(row.get::<_, i64>(cid))
-            }
-            postgres::types::Type::INT2 => {
-                t = "INT2";
-                Value::from(row.get::<_, i64>(cid))
-            }
-            postgres::types::Type::INT4 => {
-                t = "INT4";
-                Value::from(row.get::<_, i64>(cid))
-            }
-            postgres::types::Type::JSON => {
-                t = "JSON";
-                let val = row.get::<usize, String>(cid);
-                Value::from(val)
-            }
-            postgres::types::Type::JSONB => {
-                t = "JSONB";
-                let val = row.get::<usize, String>(cid);
-                Value::from(val)
-            }
-            postgres::types::Type::NAME => {
-                t = "NAME";
-                Value::from(row.get::<_, String>(cid))
-            }
-            postgres::types::Type::TEXT => {
-                t = "TEXT";
-                Value::from(row.get::<_, String>(cid))
-            }
+        let (t, v) = match *col.type_() {
+            postgres::types::Type::BOOL => ("BOOL", Value::from(row.get::<_, bool>(cid))),
+            postgres::types::Type::CHAR => ("CHAR", Value::from(row.get::<_, String>(cid))),
+            postgres::types::Type::INT8 => ("INT8", Value::from(row.get::<_, i64>(cid))),
+            postgres::types::Type::INT2 => ("INT2", Value::from(row.get::<_, i64>(cid))),
+            postgres::types::Type::INT4 => ("INT4", Value::from(row.get::<_, i64>(cid))),
+            postgres::types::Type::JSON => ("JSON", Value::from(row.get::<_, String>(cid))),
+            postgres::types::Type::JSONB => ("JSONB", Value::from(row.get::<_, String>(cid))),
+            postgres::types::Type::NAME => ("NAME", Value::from(row.get::<_, String>(cid))),
+            postgres::types::Type::TEXT => ("TEXT", Value::from(row.get::<_, String>(cid))),
             // FIXME: We should specify timezone offset for data in config
             postgres::types::Type::TIMESTAMPTZ => {
-                t = "TIMESTAMPTZ";
-                let ts: DateTime<Utc> = row.get::<usize, SystemTime>(cid).into();
-                Value::from(ts.with_timezone(&FixedOffset::east(0)).to_string())
+                let ts: DateTime<Utc> = row.get::<_, SystemTime>(cid).into();
+                (
+                    "TIMESTAMPTZ",
+                    Value::from(ts.with_timezone(&FixedOffset::east(0)).to_string()),
+                )
             }
             postgres::types::Type::TIMESTAMP => {
-                t = "TIMESTAMP";
-                let ts: DateTime<Utc> = row.get::<usize, SystemTime>(cid).into();
-                Value::from(ts.to_string())
+                let ts: DateTime<Utc> = row.get::<_, SystemTime>(cid).into();
+                ("TIMESTAMP", Value::from(ts.to_string()))
             }
-            postgres::types::Type::UNKNOWN => {
-                t = "UNKNOWN";
-                Value::from(row.get::<_, String>(cid))
-            }
+            postgres::types::Type::UNKNOWN => ("UNKNOWN", Value::from(row.get::<_, String>(cid))),
             // FIXME: Encoding, see UTF-8
-            postgres::types::Type::VARCHAR => {
-                t = "VARCHAR";
-                Value::from(row.get::<_, String>(cid))
-            }
+            postgres::types::Type::VARCHAR => ("VARCHAR", Value::from(row.get::<_, String>(cid))),
             _ => return Err(format!("type not supported: {}", col.type_()).into()),
         };
         obj.insert("fieldType", Value::from(t))?;
         obj.insert("value", v)?;
         obj.insert("name", Value::from(String::from(col.name())))?;
 
-        json.insert(col.name(), obj)?;
+        json.insert(col.name().to_string(), obj)?;
     }
 
     Ok(json)

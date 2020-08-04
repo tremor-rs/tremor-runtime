@@ -122,7 +122,10 @@ pub struct Config {
 }
 
 impl MmapAnon {
-    fn from_config(config: Option<Config>, obj: &simd_json::OwnedValue) -> Result<Box<dyn KV>> {
+    fn from_config(
+        config: Option<Config>,
+        obj: &simd_json::OwnedValue,
+    ) -> Result<Box<dyn KV + Send>> {
         if let Some(_config) = config {
             let string = obj.encode();
             let bytes = string.as_bytes();
@@ -143,7 +146,10 @@ impl MmapAnon {
 }
 
 impl MmapFile {
-    fn from_config(config: Option<Config>, obj: &simd_json::OwnedValue) -> Result<Box<dyn KV>> {
+    fn from_config(
+        config: Option<Config>,
+        obj: &simd_json::OwnedValue,
+    ) -> Result<Box<dyn KV + Send>> {
         if let Some(config) = config {
             let p = Path::new(&config.path);
             let mut file = OpenOptions::new()
@@ -177,7 +183,7 @@ pub fn lookup(
     name: &str,
     config: Option<Config>,
     obj: &simd_json::OwnedValue,
-) -> Result<Box<dyn KV>> {
+) -> Result<Box<dyn KV + Send>> {
     match name {
         "mmap_file" => MmapFile::from_config(config, &obj),
         "mmap_anon" => MmapAnon::from_config(config, &obj),

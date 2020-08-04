@@ -16,13 +16,12 @@ use crate::metrics::RampReporter;
 use crate::onramp::prelude::*;
 use crate::pipeline;
 use crate::repository::ServantId;
-use crate::source::{blaster, crononome, file, kafka, metronome, tcp};
+use crate::source::{blaster, crononome, file, kafka, metronome, postgres, tcp};
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::fmt;
 
-mod postgres;
 pub(crate) mod prelude;
 mod udp;
 // mod rest;
