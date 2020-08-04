@@ -145,6 +145,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     //INSERT
+    patch_in_place,
     tuple_pattern,
     pattern_cmp,
     pass_args,
