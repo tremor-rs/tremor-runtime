@@ -1,0 +1,8 @@
+let obj = {};
+let obj = patch obj of
+   insert "a" => obj,
+   insert "b" => obj,
+   insert "c" => obj
+end;
+
+obj
