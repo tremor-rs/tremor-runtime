@@ -37,3 +37,6 @@ image = "tremorproject/tremor-builder:x86_64-alpine-linux-musl"
 
 [target.x86_64-unknown-linux-gnu]
 image = "tremorproject/tremor-builder:x86_64-unknown-linux-gnu"
+# useful if we want to support additional build on debian for debian packages
+# (above image is centos7 based).
+#image = "tremorproject/tremor-builder:x86_64-unknown-linux-gnu.debian"

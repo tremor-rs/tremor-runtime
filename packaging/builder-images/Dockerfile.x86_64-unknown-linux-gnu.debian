@@ -1,0 +1,12 @@
+ARG RUST_VERSION
+
+# update the version here as needed
+# may bring updates to things like glibc so proceed carefully.
+# via https://hub.docker.com/_/rust
+FROM rust:${RUST_VERSION}-buster
+
+COPY shared/install_dependencies_debian.sh /
+RUN /install_dependencies_debian.sh
+
+COPY shared/entrypoint.sh /
+ENTRYPOINT [ "/entrypoint.sh" ]
