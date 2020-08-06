@@ -18,7 +18,16 @@ RELEASE_TARGETS := \
 # fully static binaries (for easier distribution), but we are seeing up to
 # 25% slowdown for some of our benchmarks with musl builds. So we stick with
 # gnu builds for now.
-RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb,rpm
+#
+# The deb packaging is disabled here for now, since we currently make the binary
+# for x86_64-unknown-linux-gnu target in a centos7 docker container and binary
+# produced there does not easily port to debian (due to the dynamic ssl linking).
+# TODO resolve how we want to handle debian package building: either statically
+# link openssl from the centos7 image, or separate out binary building for debian
+# packaging using debian image itself (might also need to have separate build for
+# archive packaging too).
+#RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb,rpm
+RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,rpm
 RELEASE_FORMATS_x86_64-alpine-linux-musl := archive
 #RELEASE_FORMATS_x86_64-unknown-linux-musl := archive
 

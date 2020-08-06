@@ -101,7 +101,7 @@ grok = "1"
 
 # not used directly in tremor codebase, but present here so that we can turn
 # on features for these (see static-ssl feature here)
-openssl = { version = "0.10" }
+#openssl = { version = "0.10" }
 
 [dependencies.tungstenite]
 version = "0.11"
@@ -126,7 +126,7 @@ gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hype
 # for compiling and statically linking to openssl. helps us create more
 # portable builds by side-stepping issues with openssl dynamic linking
 # (eg: latest version of openssl not available in old distros like centos 7)
-static-ssl = ["openssl/vendored"]
+#static-ssl = ["openssl/vendored"]
 
 [patch.crates-io]
 

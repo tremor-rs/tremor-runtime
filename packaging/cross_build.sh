@@ -57,7 +57,7 @@ BUILD_ARGS=(
   "--target" "$TARGET"
 
   # useful features to turn on
-  "--features" "static-ssl"
+  #"--features" "static-ssl"
 
   # locked flag is good for reproducible builds -- ensures that Cargo.lock is
   # always up-to-date (i.e. build will error out if it needs an update). This
