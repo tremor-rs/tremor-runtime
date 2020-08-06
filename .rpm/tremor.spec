@@ -32,21 +32,12 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: systemd
 %endif
 
-# TODO make sure our package works on glibc 2.17 (for centos 7 support) for x86_64.
-# the binary is built on image tremorproject/tremor-builder:x86_64-unknown-linux-gnu,
-# (debian buster) which has glibc 2.28, so will probably need to try from older images
-# with older glibc (and still ensure that tremor compiles there).
-Requires: glibc >= 2.18
+# keep this in sync with the deb dependencies (in Cargo.toml)
+Requires: glibc >= 2.17
 # TODO link to these statically?
 # via snmalloc
 Requires: libstdc++
 Requires: libatomic
-# via surf
-Requires: libcurl
-# via surf and rdkafka. provides libz
-Requires: zlib
-# via xz2 (in tremor-script). provides liblzma
-Requires: xz
 
 # for user/group creation
 Requires(post): shadow-utils

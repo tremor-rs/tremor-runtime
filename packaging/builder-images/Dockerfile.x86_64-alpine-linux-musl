@@ -37,3 +37,6 @@ RUN apk add --update-cache \
 #ENV PATH="/root/.cargo/bin:${PATH}"
 #
 #RUN rustup target add x86_64-unknown-linux-musl
+
+COPY shared/entrypoint.sh /
+ENTRYPOINT [ "/entrypoint.sh" ]

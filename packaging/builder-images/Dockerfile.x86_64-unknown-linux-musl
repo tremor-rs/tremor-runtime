@@ -31,3 +31,6 @@ RUN rustup target add x86_64-unknown-linux-musl
 
 COPY shared/install_dependencies_debian.sh /
 RUN /install_dependencies_debian.sh
+
+COPY shared/entrypoint.sh /
+ENTRYPOINT [ "/entrypoint.sh" ]

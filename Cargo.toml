@@ -99,6 +99,10 @@ hyper = { version = "0.13", optional = true }  # chan't update this because of g
 # logstash grok patterns
 grok = "1"
 
+# not used directly in tremor codebase, but present here so that we can turn
+# on features for these (see static-ssl feature here)
+openssl = { version = "0.10" }
+
 [dependencies.tungstenite]
 version = "0.11"
 default-features = false
@@ -119,15 +123,20 @@ neon = [ "simd-json/neon" ]
 # Experimental suport for google cloud APIs
 gcp = [ "google-storage1", "google-pubsub1", "hyper-rustls", "yup-oauth2", "hyper" ]
 
+# for compiling and statically linking to openssl. helps us create more
+# portable builds by side-stepping issues with openssl dynamic linking
+# (eg: latest version of openssl not available in old distros like centos 7)
+static-ssl = ["openssl/vendored"]
+
 [patch.crates-io]
-#  waiting for https://github.com/http-rs/tide/pull/408
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
 [package.metadata.deb]
 name = "tremor"
 section = "net"
-depends = "$auto"
+# keep this in sync with the rpm dependencies (in rpm spec file)
+depends = "libc6 (>= 2.17), libstdc++6, libatomic1"
 maintainer-scripts = "packaging/distribution/debian/maintainer-scripts/"
 assets = [
   # target path will be automatically corrected when cross-compiling
