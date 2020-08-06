@@ -53,11 +53,18 @@ if ! command -v cross > /dev/null 2>&1; then
   cargo install --git https://github.com/rust-embedded/cross.git
 fi
 
-# locked flag is good for reproducible builds -- ensures that Cargo.lock is
-# always up-to-date (i.e. build will error out if it needs an update). This
-# also means it catches situations where we update versions in Cargo.toml
-# but forget to update Cargo.lock.
-BUILD_ARGS=("--target" "$TARGET" --locked)
+BUILD_ARGS=(
+  "--target" "$TARGET"
+
+  # useful features to turn on
+  "--features" "static-ssl"
+
+  # locked flag is good for reproducible builds -- ensures that Cargo.lock is
+  # always up-to-date (i.e. build will error out if it needs an update). This
+  # also means it catches situations where we update versions in Cargo.toml
+  # but forget to update Cargo.lock.
+  "--locked"
+)
 
 CUSTOM_RUSTFLAGS=()
 RUSTC_TARGET_FEATURES=()

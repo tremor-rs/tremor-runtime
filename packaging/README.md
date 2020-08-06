@@ -54,5 +54,6 @@ For the list of targets used during project release, please refer to the [projec
 
 * archive ([tar.gz](https://en.wikipedia.org/wiki/Tar_(computing)) for linux targets)
 * deb ([Debian package](https://www.debian.org/doc/debian-policy/ch-binary.html))
+* rpm ([RPM package](https://rpm.org/))
 
 For the list of formats used during project release (variable by target), please refer to the [project Makefile](../Makefile).
