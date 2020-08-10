@@ -10,7 +10,7 @@
 [actions-License-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22License+audit%22
 [Security Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Security%20audit/badge.svg
 [actions-Security-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
-[Code Coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/master/graph/badge.svg
+[Code Coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/main/graph/badge.svg
 [codecov.io]: https://codecov.io/gh/wayfair-tremor/tremor-runtime
 [Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=wayfair-tremor/tremor-runtime
 [dependabot.com]: https://dependabot.com
