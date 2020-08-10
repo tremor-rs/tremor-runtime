@@ -1751,9 +1751,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f595585f103464d8d2f6e9864682d74c1601fed5e07d62b1c9058dba8246fb"
+checksum = "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
 dependencies = [
  "ahash",
  "autocfg 1.0.0",
@@ -2091,7 +2091,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86b45e59b16c76b11bf9738fd5d38879d3bd28ad292d7b313608becb17ae2df9"
 dependencies = [
  "autocfg 1.0.0",
- "hashbrown 0.8.1",
+ "hashbrown 0.8.2",
  "serde",
 ]
 
@@ -2448,7 +2448,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "111b945ac72ec09eb7bc62a0fbdc3cc6e80555a7245f52a69d3921a75b53b153"
 dependencies = [
- "hashbrown 0.8.1",
+ "hashbrown 0.8.2",
 ]
 
 [[package]]
@@ -4795,7 +4795,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.8.0"
 dependencies = [
- "hashbrown 0.8.1",
+ "hashbrown 0.8.2",
  "http-types",
  "serde",
  "serde_derive",
@@ -4897,7 +4897,7 @@ dependencies = [
  "google-storage1",
  "grok",
  "halfbrown",
- "hashbrown 0.8.1",
+ "hashbrown 0.8.2",
  "hdrhistogram",
  "hostname",
  "http-types",
