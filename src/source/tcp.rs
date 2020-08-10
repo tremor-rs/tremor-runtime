@@ -13,15 +13,11 @@
 // limitations under the License.
 
 use crate::onramp::prelude::*;
-use mio::net::{TcpListener, TcpStream};
-use mio::{Events, Interest, Poll, Token};
+use async_channel::TryRecvError;
+use async_std::net::TcpListener;
+use async_std::prelude::*;
 use serde_yaml::Value;
-use std::io::{ErrorKind, Read};
-use std::net::SocketAddr;
-use std::time::Duration;
 use tremor_pipeline::EventOriginUri;
-
-const ONRAMP: Token = Token(0);
 
 // TODO expose this as config (would have to change buffer to be vector?)
 const BUFFER_SIZE_BYTES: usize = 8192;
@@ -42,15 +38,7 @@ pub struct Tcp {
 pub struct Int {
     uid: u64,
     config: Config,
-    poll: Poll,
-    listener: Option<TcpListener>,
-    events: Events,
-    event_offset: usize,
-    connections: Vec<Option<TremorTcpConnection>>,
-
-    /// to keep track of tokens that are returned for re-use (after connection is terminated)
-    returned_tokens: Vec<usize>,
-    new_streams: Vec<usize>,
+    listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
 }
 impl std::fmt::Debug for Int {
@@ -61,25 +49,11 @@ impl std::fmt::Debug for Int {
 impl Int {
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
         let config = config.clone();
-        let poll = Poll::new()?;
-        let events = Events::with_capacity(1024);
-        // initializing with a single None entry, since we match the indices of this
-        // vector with mio event tokens and we use 0 for the ONRAMP token
-        let connections: Vec<Option<TremorTcpConnection>> = vec![None];
-
-        // to keep track of tokens that are returned for re-use (after connection is terminated)
-        let returned_tokens: Vec<usize> = vec![];
 
         Ok(Self {
             uid,
             config,
-            poll,
             listener: None,
-            events,
-            connections,
-            event_offset: 0,
-            returned_tokens,
-            new_streams: Vec::new(),
             onramp_id,
         })
     }
@@ -99,51 +73,6 @@ impl onramp::Impl for Tcp {
     }
 }
 
-struct TremorTcpConnection {
-    stream: TcpStream,
-    origin_uri: EventOriginUri,
-}
-
-impl TremorTcpConnection {
-    fn register(&mut self, poll: &Poll, token: Token) -> std::io::Result<()> {
-        // register the socket w/ poll
-        poll.registry()
-            .register(&mut self.stream, token, Interest::READABLE)
-    }
-}
-
-impl Int {
-    // if there are any returned tokens, use it to keep track of the
-    // connection. otherwise create a new one.
-    fn next_token(&mut self, mut tcp_connection: TremorTcpConnection) -> Result<usize> {
-        let token_num = if let Some(token_num) = self.returned_tokens.pop() {
-            trace!(
-                "Tracking connection with returned token number: {}",
-                token_num
-            );
-            token_num
-        } else {
-            let token_num = self.connections.len();
-            trace!("Tracking connection with new token number: {}", token_num);
-            token_num
-        };
-        tcp_connection.register(&self.poll, Token(token_num))?;
-        self.connections[token_num] = Some(tcp_connection);
-        Ok(token_num)
-    }
-
-    fn uri(&self, client_addr: &SocketAddr) -> EventOriginUri {
-        EventOriginUri {
-            uid: self.uid,
-            scheme: "tremor-tcp".to_string(),
-            host: client_addr.ip().to_string(),
-            port: Some(client_addr.port()),
-            // TODO also add token_num here?
-            path: vec![self.config.port.to_string()], // captures server port
-        }
-    }
-}
-
 #[async_trait::async_trait()]
 impl Source for Int {
     fn id(&self) -> &TremorURL {
@@ -152,118 +81,68 @@ impl Source for Int {
 
     #[allow(unused_variables)]
     async fn read(&mut self, id: u64) -> Result<SourceReply> {
-        // temporary buffer to keep data read from the tcp socket
-        let mut buffer = [0; BUFFER_SIZE_BYTES];
-
-        if let Some(id) = self.new_streams.pop() {
-            return Ok(SourceReply::StartStream(id));
-        }
-
-        if let Some(event) = self.events.iter().nth(self.event_offset) {
-            self.event_offset += 1;
-            match event.token() {
-                ONRAMP => {
-                    loop {
-                        if let Some(ref mut listener) = self.listener {
-                            match listener.accept() {
-                                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-                                // end of successful accept
-                                Err(e) => {
-                                    error!("Failed to onboard new tcp client connection: {}", e);
-                                    return Err(e.into());
-                                }
-                                Ok((stream, client_addr)) => {
-                                    debug!("Accepted connection from client: {}", &client_addr);
-
-                                    let origin_uri = self.uri(&client_addr);
-
-                                    let id = self
-                                        .next_token(TremorTcpConnection { stream, origin_uri })?;
-
-                                    self.new_streams.push(id);
-                                }
-                            }
-                        }
-                    }
-                    if let Some(id) = self.new_streams.pop() {
-                        Ok(SourceReply::StartStream(id))
-                    } else {
-                        Ok(SourceReply::Empty(10))
-                    }
-                }
-                token => {
-                    if let Some(TremorTcpConnection {
-                        ref mut stream,
-                        ref origin_uri,
-                        ..
-                    }) = self.connections[token.0]
-                    {
-                        let mut data = Vec::with_capacity(BUFFER_SIZE_BYTES);
-
-                        loop {
-                            match stream.read(&mut buffer) {
-                                Ok(0) => {
-                                    // TODO test re-connections
-                                    debug!(
-                                        "Connection closed by client: {}",
-                                        origin_uri.host_port()
-                                    );
-                                    self.connections[token.0] = None;
-
-                                    // release the token for re-use. ensures that we don't run out of
-                                    // tokens (eg: if we were to just keep incrementing the token number)
-                                    self.returned_tokens.push(token.0);
-                                    trace!("Returned token number for reuse: {}", token.0);
-                                    return Ok(SourceReply::EndStream(token.0));
-                                }
-                                Ok(n) => {
-                                    // TODO remove later
-                                    trace!(
-                                        "Read {} bytes: {:?}",
-                                        n,
-                                        String::from_utf8_lossy(&buffer[0..n])
-                                    );
-                                    data.extend_from_slice(&buffer[0..n])
-                                }
-                                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break, // end of successful read
-                                Err(ref e) if e.kind() == ErrorKind::Interrupted => break,
-                                Err(e) => {
-                                    error!("Failed to read data from tcp client connection: {}", e);
-                                    return Err(e.into());
-                                }
-                            }
-                        }
-                        Ok(SourceReply::Data {
-                            origin_uri: origin_uri.clone(),
-                            data,
-                            stream: token.0,
-                        })
-                    // end of read
-                    } else {
-                        error!(
-                            "Failed to retrieve tcp client connection for token: {}",
-                            token.0
-                        );
-                        Ok(SourceReply::Empty(10))
-                    }
+        if let Some(listener) = self.listener.as_ref() {
+            match listener.try_recv() {
+                Ok(r) => Ok(r),
+                Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
+                Err(TryRecvError::Closed) => {
+                    Ok(SourceReply::StateChange(SourceState::Disconnected))
                 }
             }
         } else {
-            self.poll
-                .poll(&mut self.events, Some(Duration::from_millis(10)))?;
-            self.event_offset = 0;
-
-            Ok(SourceReply::Empty(10))
+            Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
 
     async fn init(&mut self) -> Result<SourceState> {
-        let server_addr = format!("{}:{}", self.config.host, self.config.port).parse()?;
-        let mut listener = TcpListener::bind(server_addr)?;
-        self.poll
-            .registry()
-            .register(&mut listener, ONRAMP, Interest::READABLE)?;
-        self.listener = Some(listener);
+        let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
+        let (tx, rx) = bounded(64);
+        let uid = self.uid;
+        let path = vec![self.config.port.to_string()];
+        task::spawn(async move {
+            let mut stream_id = 0;
+            while let Ok((mut stream, peer)) = listener.accept().await {
+                let tx = tx.clone();
+                stream_id += 1;
+                let origin_uri = EventOriginUri {
+                    uid,
+                    scheme: "tremor-tcp".to_string(),
+                    host: peer.ip().to_string(),
+                    port: Some(peer.port()),
+                    // TODO also add token_num here?
+                    path: path.clone(), // captures server port
+                };
+                task::spawn(async move {
+                    //let (reader, writer) = &mut (&stream, &stream);
+                    let mut buffer = [0; BUFFER_SIZE_BYTES];
+                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
+                        error!("TCP Error: {}", e);
+                        return;
+                    }
+
+                    while let Ok(n) = stream.read(&mut buffer).await {
+                        if n == 0 {
+                            if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
+                                error!("TCP Error: {}", e);
+                            };
+                            break;
+                        };
+                        if let Err(e) = tx
+                            .send(SourceReply::Data {
+                                origin_uri: origin_uri.clone(),
+                                data: buffer[0..n].to_vec(),
+                                stream: stream_id,
+                            })
+                            .await
+                        {
+                            error!("TCP Error: {}", e);
+                            break;
+                        };
+                    }
+                });
+            }
+        });
+        self.listener = Some(rx);
 
         Ok(SourceState::Connected)
     }
