@@ -368,6 +368,22 @@ where
         codec: &str,
         metrics_reporter: RampReporter,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
+        // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
+        // there is soundness to this.
+        // The unbounded channel ensures that on counterflow we never have to block, or in other
+        // words that sinks or pipelines sending data backwards always can progress passt
+        // the sending.
+        // This prevents a livelock where the pipeline is waiting for a full channel to send data to
+        // the source and the source is waiting for a full channel to send data to the pipeline.
+        // We prevent unbounded groth by two mechanisms:
+        // 1) counterflow is ALWAYS and ONLY created in response to a message
+        // 2) we always process counterflow prior to forward flow
+        //
+        // As long as we have counterflow messages to process, and channel size is growing we do
+        // not process any forward flow. Without forwardflow we stave the counterflow ensuring that
+        // the counterflow channel is always bounded by the forward flow in a 1:N relationship where
+        // N is the maximum number of counterflow events a single event can trigger.
+        // N is normally < 1.
         let (tx, rx) = unbounded();
         let codec = codec::lookup(&codec)?;
         let pp_template = preprocessors.to_vec();
