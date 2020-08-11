@@ -14,7 +14,7 @@
 
 use crate::dflt;
 use crate::errors::Result;
-use crate::onramp::prelude::*;
+use crate::source::prelude::*;
 
 //NOTE: This is required for StreamHander's stream
 use futures::future::{self, FutureExt};
@@ -28,7 +28,6 @@ use rdkafka::error::KafkaResult;
 use rdkafka::message::BorrowedMessage;
 use rdkafka::util::AsyncRuntime;
 use rdkafka::{Message, Offset, TopicPartitionList};
-use serde_yaml::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap as StdMap;
 use std::future::Future;
@@ -226,7 +225,7 @@ impl Int {
 }
 
 impl onramp::Impl for Kafka {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -450,12 +449,7 @@ impl Onramp for Kafka {
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config);
-        let (manager, tx) =
-            SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
-        task::Builder::new()
-            .name(self.onramp_id.short_id("src"))
-            .spawn(manager.run())?;
-        Ok(tx)
+        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
     }
     fn default_codec(&self) -> &str {
         "json"

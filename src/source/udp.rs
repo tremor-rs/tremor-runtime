@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::onramp::prelude::*;
+use crate::source::prelude::*;
 use async_std::net::UdpSocket;
-use serde_yaml::Value;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -60,7 +59,7 @@ impl Int {
     }
 }
 impl onramp::Impl for Udp {
-    fn from_config(onramp_id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(onramp_id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {

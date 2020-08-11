@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::onramp::prelude::*;
+use crate::source::prelude::*;
 use crate::utils::nanotime;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
-use serde_yaml::Value;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use std::clone::Clone;
@@ -31,7 +30,7 @@ use std::str::FromStr;
 pub struct CronEntry {
     pub name: String,
     pub expr: String,
-    pub payload: Option<Value>,
+    pub payload: Option<YamlValue>,
 }
 
 #[derive(Clone)]
@@ -99,7 +98,7 @@ impl std::fmt::Debug for Crononome {
 }
 
 impl onramp::Impl for Crononome {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = tremor_pipeline::EventOriginUri {

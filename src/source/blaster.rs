@@ -13,10 +13,9 @@
 // limitations under the License.
 
 use crate::dflt;
-use crate::onramp::prelude::*;
-use serde_yaml::Value;
+use crate::source::prelude::*;
 use std::fs::File;
-use std::io::{BufRead, Read};
+use std::io::{BufRead as StdBufRead, BufReader, Read};
 use std::path::Path;
 use std::time::Duration;
 use xz2::read::XzDecoder;
@@ -51,7 +50,7 @@ impl std::fmt::Debug for Blaster {
 }
 
 impl onramp::Impl for Blaster {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = File::open(&config.source)?;
@@ -123,17 +122,16 @@ impl Source for Blaster {
         })
     }
     async fn init(&mut self) -> Result<SourceState> {
-        let elements: Result<Vec<Vec<u8>>> = self
-            .data
-            .lines()
-            .map(|e| -> Result<Vec<u8>> {
-                if self.config.base64 {
-                    Ok(base64::decode(&e?.as_bytes())?)
-                } else {
-                    Ok(e?.as_bytes().to_vec())
-                }
-            })
-            .collect();
+        let elements: Result<Vec<Vec<u8>>> =
+            StdBufRead::lines(BufReader::new(self.data.as_slice()))
+                .map(|e| -> Result<Vec<u8>> {
+                    if self.config.base64 {
+                        Ok(base64::decode(&e?.as_bytes())?)
+                    } else {
+                        Ok(e?.as_bytes().to_vec())
+                    }
+                })
+                .collect();
         self.acc.elements = elements?;
         Ok(SourceState::Connected)
     }
