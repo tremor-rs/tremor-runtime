@@ -4829,9 +4829,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-kv"
-version = "0.1.2"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b3a702a97b05880e71d8380b886fe244bd09ca30f775ea2157bdc2d363487cf"
+checksum = "4e5b783151f084c0cb225aea29969a11d0389671ef877466949cf5e8c34440c1"
 dependencies = [
  "serde",
  "simd-json",
