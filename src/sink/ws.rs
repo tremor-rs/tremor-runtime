@@ -111,9 +111,10 @@ impl offramp::Impl for Ws {
 
 impl Ws {
     async fn drain_insights(&mut self, ingest_ns: u64) -> ResultVec {
-        let mut v = Vec::with_capacity(self.rx.len() + 1);
-        while let Ok(e) = self.rx.try_recv() {
-            match e {
+        let len = self.rx.len();
+        let mut v = Vec::with_capacity(len);
+        for _ in 0..len {
+            match self.rx.recv().await? {
                 WSResult::Connected(addr) => {
                     self.addr = Some(addr);
                     v.push(Event::cb_restore(ingest_ns));

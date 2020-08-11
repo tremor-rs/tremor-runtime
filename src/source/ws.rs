@@ -13,24 +13,37 @@
 // limitations under the License.
 
 use crate::source::prelude::*;
-use async_channel::TryRecvError;
-use async_std::net::TcpListener;
-use tremor_pipeline::EventOriginUri;
+use async_channel::{Sender, TryRecvError};
+use async_std::net::{TcpListener, TcpStream};
+use async_std::task;
+use futures::StreamExt;
+use tungstenite::protocol::Message;
 
-// TODO expose this as config (would have to change buffer to be vector?)
-const BUFFER_SIZE_BYTES: usize = 8192;
-
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    /// The port to listen on.
     pub port: u16,
+    /// Host to listen on
     pub host: String,
 }
 
-impl ConfigImpl for Config {}
-
-pub struct Tcp {
+pub struct Ws {
     pub config: Config,
     onramp_id: TremorURL,
+}
+
+impl onramp::Impl for Ws {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+        if let Some(config) = config {
+            let config: Config = serde_yaml::from_value(config.clone())?;
+            Ok(Box::new(Self {
+                config,
+                onramp_id: id.clone(),
+            }))
+        } else {
+            Err("Missing config for blaster onramp".into())
+        }
+    }
 }
 
 pub struct Int {
@@ -39,11 +52,13 @@ pub struct Int {
     listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
 }
+
 impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TCP")
+        write!(f, "WS")
     }
 }
+
 impl Int {
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
         let config = config.clone();
@@ -57,26 +72,56 @@ impl Int {
     }
 }
 
-impl onramp::Impl for Tcp {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
-        if let Some(config) = config {
-            let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
-                config,
-                onramp_id: id.clone(),
-            }))
-        } else {
-            Err("Missing config for tcp onramp".into())
+async fn handle_connection(
+    uid: u64,
+    tx: Sender<SourceReply>,
+    raw_stream: TcpStream,
+    stream: usize,
+) -> Result<()> {
+    let mut ws_stream = async_tungstenite::accept_async(raw_stream).await?;
+
+    let uri = tremor_pipeline::EventOriginUri {
+        uid,
+        scheme: "tremor-ws".to_string(),
+        host: "tremor-ws-client-host.remote".to_string(),
+        port: None,
+        // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
+        path: vec![String::default()],
+    };
+
+    tx.send(SourceReply::StartStream(stream)).await?;
+
+    while let Some(msg) = ws_stream.next().await {
+        match msg {
+            Ok(Message::Text(t)) => {
+                tx.send(SourceReply::Data {
+                    origin_uri: uri.clone(),
+                    data: t.into_bytes(),
+                    stream,
+                })
+                .await?;
+            }
+            Ok(Message::Binary(data)) => {
+                tx.send(SourceReply::Data {
+                    origin_uri: uri.clone(),
+                    data,
+                    stream,
+                })
+                .await?;
+            }
+            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => (),
+            Ok(Message::Close(_)) => {
+                tx.send(SourceReply::EndStream(stream)).await?;
+                break;
+            }
+            Err(e) => error!("WS error returned while waiting for client data: {}", e),
         }
     }
+    Ok(())
 }
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    fn id(&self) -> &TremorURL {
-        &self.onramp_id
-    }
-
     #[allow(unused_variables)]
     async fn read(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
@@ -91,63 +136,30 @@ impl Source for Int {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
-
     async fn init(&mut self) -> Result<SourceState> {
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
-        let path = vec![self.config.port.to_string()];
+
         task::spawn(async move {
             let mut stream_id = 0;
-            while let Ok((mut stream, peer)) = listener.accept().await {
-                let tx = tx.clone();
+            while let Ok((stream, _socket)) = listener.accept().await {
                 stream_id += 1;
-                let origin_uri = EventOriginUri {
-                    uid,
-                    scheme: "tremor-tcp".to_string(),
-                    host: peer.ip().to_string(),
-                    port: Some(peer.port()),
-                    // TODO also add token_num here?
-                    path: path.clone(), // captures server port
-                };
-                task::spawn(async move {
-                    //let (reader, writer) = &mut (&stream, &stream);
-                    let mut buffer = [0; BUFFER_SIZE_BYTES];
-                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
-                        error!("TCP Error: {}", e);
-                        return;
-                    }
-
-                    while let Ok(n) = stream.read(&mut buffer).await {
-                        if n == 0 {
-                            if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
-                                error!("TCP Error: {}", e);
-                            };
-                            break;
-                        };
-                        if let Err(e) = tx
-                            .send(SourceReply::Data {
-                                origin_uri: origin_uri.clone(),
-                                data: buffer[0..n].to_vec(),
-                                stream: stream_id,
-                            })
-                            .await
-                        {
-                            error!("TCP Error: {}", e);
-                            break;
-                        };
-                    }
-                });
+                task::spawn(handle_connection(uid, tx.clone(), stream, stream_id));
             }
         });
+
         self.listener = Some(rx);
 
         Ok(SourceState::Connected)
     }
+    fn id(&self) -> &TremorURL {
+        &self.onramp_id
+    }
 }
 
 #[async_trait::async_trait]
-impl Onramp for Tcp {
+impl Onramp for Ws {
     async fn start(
         &mut self,
         onramp_uid: u64,
@@ -160,6 +172,6 @@ impl Onramp for Tcp {
     }
 
     fn default_codec(&self) -> &str {
-        "json"
+        "string"
     }
 }

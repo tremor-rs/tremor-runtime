@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::onramp::prelude::*;
+use crate::source::prelude::*;
 //NOTE: This is required for StreamHander's stream
 use crate::utils::nanotime;
-use serde_yaml::Value;
-use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use std::time::Duration;
 
@@ -37,7 +35,7 @@ pub struct Metronome {
 }
 
 impl onramp::Impl for Metronome {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {

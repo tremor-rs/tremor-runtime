@@ -13,13 +13,12 @@
 // limitations under the License.
 
 use crate::dflt;
-use crate::onramp::prelude::*;
+use crate::source::prelude::*;
 use async_compression::futures::bufread::XzDecoder;
 use async_std::fs::File as FSFile;
 use async_std::io::prelude::*;
 use async_std::io::{BufReader, Lines};
 use async_std::prelude::*;
-use serde_yaml::Value;
 use std::path::Path;
 use std::process;
 
@@ -55,18 +54,18 @@ impl ArghDyn {
     }
 }
 
-struct FileInt {
+struct Int {
     pub config: Config,
     lines: ArghDyn,
     origin_uri: EventOriginUri,
     onramp_id: TremorURL,
 }
-impl std::fmt::Debug for FileInt {
+impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "File")
     }
 }
-impl FileInt {
+impl Int {
     async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(FSFile::open(&config.source).await?);
         let ext = Path::new(&config.source)
@@ -97,7 +96,7 @@ impl FileInt {
 }
 
 impl onramp::Impl for File {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -111,7 +110,7 @@ impl onramp::Impl for File {
 }
 
 #[async_trait::async_trait()]
-impl Source for FileInt {
+impl Source for Int {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
@@ -154,13 +153,8 @@ impl Onramp for File {
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source =
-            FileInt::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
-        let (manager, tx) =
-            SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
-        task::Builder::new()
-            .name(format!("on-file-{}", self.config.source))
-            .spawn(manager.run())?;
-        Ok(tx)
+            Int::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
+        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
     }
     fn default_codec(&self) -> &str {
         "json"

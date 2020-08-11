@@ -13,18 +13,14 @@
 // limitations under the License.
 use crate::errors::Result;
 use crate::metrics::RampReporter;
-use crate::onramp::prelude::*;
 use crate::pipeline;
 use crate::repository::ServantId;
-use crate::source::{blaster, crononome, file, kafka, metronome, postgres, tcp, udp};
+use crate::source::prelude::*;
+use crate::source::{blaster, crononome, file, kafka, metronome, postgres, tcp, udp, ws};
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::fmt;
-
-pub(crate) mod prelude;
-// mod rest;
-mod ws;
 
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 

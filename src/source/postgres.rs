@@ -17,14 +17,13 @@
 //! See [Config](struct.Config.html) for details.
 
 use crate::errors::Result;
-use crate::onramp::prelude::*;
 use crate::ramp;
 use crate::ramp::postgres::row_to_json;
 use crate::ramp::{Config as CacheConfig, KV};
+use crate::source::prelude::*;
 use chrono::prelude::*;
 use postgres::{Client, NoTls, Row, Statement};
-use serde_yaml::Value;
-use simd_json::{prelude::*, OwnedValue};
+use simd_json::OwnedValue;
 use std::fmt;
 use tokio_postgres::error::SqlState;
 
@@ -67,7 +66,7 @@ impl fmt::Debug for Int {
 }
 
 impl onramp::Impl for Postgres {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
@@ -225,13 +224,7 @@ impl Onramp for Postgres {
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config).await?;
-
-        let (manager, tx) =
-            SourceManager::new(onramp_uid, source, preprocessors, codec, metrics_reporter).await?;
-        task::Builder::new()
-            .name(format!("on-pg-{}", self.config.dbname))
-            .spawn(manager.run())?;
-        Ok(tx)
+        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
     }
 
     fn default_codec(&self) -> &str {

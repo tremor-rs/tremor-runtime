@@ -13,21 +13,15 @@
 // limitations under the License.
 use crate::codec::{self, Codec};
 use crate::metrics::RampReporter;
-use crate::onramp::{self, prelude::make_preprocessors};
+use crate::onramp;
 use crate::pipeline;
-use crate::preprocessor::Preprocessors;
+use crate::preprocessor::{self, Preprocessors};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
-// use async_std::stream::Stream;
 use async_std::task;
-// use core::task::{Context, Poll};
-// use futures_timer::Delay;
-// use pin_project_lite::pin_project;
-// use std::future::Future;
-// use std::pin::Pin;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
@@ -38,8 +32,17 @@ pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod metronome;
 pub(crate) mod postgres;
+pub(crate) mod prelude;
 pub(crate) mod tcp;
 pub(crate) mod udp;
+pub(crate) mod ws;
+
+pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
+    preprocessors
+        .iter()
+        .map(|n| preprocessor::lookup(&n))
+        .collect()
+}
 
 pub(crate) enum SourceState {
     Connected,
@@ -61,6 +64,7 @@ pub(crate) enum SourceReply {
     StateChange(SourceState),
     Empty(u64),
 }
+
 #[async_trait::async_trait]
 #[allow(unused_variables)]
 pub(crate) trait Source {
@@ -99,68 +103,6 @@ where
     /// Unique Id for the source
     uid: u64,
 }
-
-// pin_project! {
-//     struct DelayedRead<'r>
-//     {
-//         ready: bool,
-//         delayed: bool,
-//         #[pin]
-//         delay: Delay,
-//         #[pin]
-//         ramp: Pin<Box<dyn Future<Output = Result<SourceReply>> + Send + 'r>>,
-//     }
-// }
-// impl<'r> Future for DelayedRead<'r> {
-//     type Output = MaybeRead;
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         let this = self.project();
-//         if !*this.ready {
-//             cx.waker().wake_by_ref();
-//             return Poll::Pending;
-//         }
-//         if *this.delayed {
-//             match this.delay.poll(cx) {
-//                 Poll::Ready(_) => {
-//                     *this.delayed = false;
-//                     this.ramp.poll(cx).map(MaybeRead::Read)
-//                 }
-//                 Poll::Pending => Poll::Pending,
-//             }
-//         } else {
-//             this.ramp.poll(cx).map(MaybeRead::Read)
-//         }
-//     }
-// }
-
-// pin_project! {
-//     struct SourceRead<'r>
-//     {
-//         #[pin]
-//         channel: Receiver<CachePadded<onramp::Msg>>,
-
-//         #[pin]
-//         ramp: DelayedRead<'r>,
-//     }
-// }
-
-// enum MaybeRead {
-//     CounterFlow(onramp::Msg),
-//     Read(Result<SourceReply>),
-//     // Read(()),
-// }
-
-// impl<'r> Future for SourceRead<'r> {
-//     type Output = MaybeRead;
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         let this = self.project();
-
-//         match this.channel.poll_next(cx) {
-//             Poll::Ready(Some(item)) => Poll::Ready(MaybeRead::CounterFlow(item.into_inner())),
-//             Poll::Ready(None) | Poll::Pending => this.ramp.poll(cx),
-//         }
-//     }
-// }
 
 impl<T> SourceManager<T>
 where
@@ -303,15 +245,6 @@ where
         ingest_ns: u64,
         origin_uri: EventOriginUri,
     ) -> bool {
-        // We only try to send here since we can't guarantee
-        // that nothing else has send (and overfilled) the pipelines
-        // inbox.
-        // We try to avoid this situation by checking but given
-        // we can't coordinate w/ other onramps we got to
-        // ensure that we are ready to discard messages and prioritize
-        // progress.
-        //
-        // Notably in a Guaranteed delivery scenario those discarded
         let event = Event {
             id: Ids::new(self.uid, self.id),
             data,
@@ -425,28 +358,7 @@ where
     }
 
     async fn run(mut self) -> Result<()> {
-        // let SourceManager { mut source, .. } = self;
-        // let mut thing = SourceRead {
-        //     channel: self.rx.clone(),
-        //     ramp: DelayedRead {
-        //         delayed: true,
-        //         delay: Delay::new(Duration::from_millis(1)),
-        //         ready: false,
-        //         ramp: source.read(self.id),
-        //     },
-        // };
         loop {
-            // match (&thing).await {
-            //     MaybeRead::CounterFlow(cf) => {
-            //         if self.handle_pipelines().await? {
-            //             return Ok(());
-            //         }
-            //     }
-            //     MaybeRead::Read(_) => {},
-            // }
-
-            // In non transactional sources we get very few replies so we don't need to check
-            // as often
             if self.handle_pipelines().await? {
                 return Ok(());
             }

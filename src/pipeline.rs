@@ -26,7 +26,7 @@ use std::fmt;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
 
-const TICK_MS: u64 = 1000;
+const TICK_MS: u64 = 100;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 type Onramps = halfbrown::HashMap<TremorURL, (bool, onramp::Addr)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>;
@@ -233,7 +233,7 @@ async fn tick(tick_tx: async_channel::Sender<Msg>) {
     };
 
     while tick_tx.send(Msg::Signal(e.clone())).await.is_ok() {
-        task::sleep(Duration::from_secs(TICK_MS)).await;
+        task::sleep(Duration::from_millis(TICK_MS)).await;
         e.ingest_ns = nanotime();
     }
 }
@@ -277,9 +277,6 @@ async fn pipeline_task(
     let mf = mgmt_rx.map(M::M);
 
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
-    // let mut no_yield = 0;
-
-    // let s = PriorityMergeChannel::new(mgmt_rx, cf_rx, rx);
     while let Some(msg) = s.next().await {
         match msg {
             M::C(msg) => {
@@ -342,13 +339,8 @@ async fn pipeline_task(
                 onramps.remove(&onramp_id);
             }
         }
-        // this lead to no termination
-        // if no_yield > 32 {
-        // no_yield = 0;
+        // FIXME: we can get rid of that with the new runtime
         task::yield_now().await;
-        // } else {
-        // no_yield += 1;
-        // }
     }
 
     info!("[Pipeline:{}] stopping task.", id);
