@@ -148,7 +148,6 @@ fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
     })
 }
 
-#[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     functions::load()?;

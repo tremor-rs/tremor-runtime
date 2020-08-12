@@ -167,7 +167,7 @@ where
     }
 
     /// Highlights a script with a given highlighter.
-    #[cfg_attr(tarpaulin, skip)]
+
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .filter_map(Result::ok)

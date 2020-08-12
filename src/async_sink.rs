@@ -23,7 +23,6 @@ use std::result;
 pub struct AsyncSink<T> {
     queue: VecDeque<Receiver<Result<T>>>,
     capacity: usize,
-    size: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -32,7 +31,6 @@ pub enum SinkEnqueueError {
 }
 impl error::Error for SinkEnqueueError {}
 
-#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for SinkEnqueueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -46,7 +44,6 @@ pub enum SinkDequeueError {
 }
 impl error::Error for SinkDequeueError {}
 
-#[cfg_attr(tarpaulin, skip)]
 impl fmt::Display for SinkDequeueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -60,14 +57,12 @@ impl<T> AsyncSink<T> {
         Self {
             queue: VecDeque::with_capacity(capacity),
             capacity,
-            size: 0,
         }
     }
     pub fn enqueue(&mut self, value: Receiver<Result<T>>) -> result::Result<(), SinkEnqueueError> {
-        if self.size >= self.capacity {
+        if self.queue.len() >= self.capacity {
             Err(SinkEnqueueError::AtCapacity)
         } else {
-            self.size += 1;
             self.queue.push_back(value);
             Ok(())
         }
@@ -80,16 +75,13 @@ impl<T> AsyncSink<T> {
                     self.queue.push_front(rx);
                     Err(SinkDequeueError::NotReady)
                 }
-                Ok(result) => {
-                    self.size -= 1;
-                    Ok(result)
-                }
+                Ok(result) => Ok(result),
             },
         }
     }
 
     pub fn has_capacity(&self) -> bool {
-        self.size < self.capacity
+        self.queue.len() < self.capacity
     }
 }
 

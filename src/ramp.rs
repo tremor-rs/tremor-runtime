@@ -178,7 +178,6 @@ impl MmapFile {
     }
 }
 
-#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(
     name: &str,
     config: Option<Config>,

@@ -334,7 +334,7 @@ impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     #[cfg_attr(tarpaulin, skip)]
-    pub fn is_ignorable(&self) -> bool {
+    pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
             Token::SingleLineComment(_)
             | Token::Whitespace(_)
@@ -345,7 +345,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
-    #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_keyword(&self) -> bool {
         match *self {
             Token::Absent
@@ -401,7 +400,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a literal, excluding list and record literals
-    #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_literal(&self) -> bool {
         match *self {
             Token::DontCare
@@ -414,7 +412,6 @@ impl<'input> Token<'input> {
     }
 
     // It's text-like or string-like notation such as String, char, regex ...
-    #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_string_like(&self) -> bool {
         match *self {
             Token::StringLiteral(_)
@@ -426,7 +423,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a builtin delimiter symbol
-    #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_symbol(&self) -> bool {
         match *self {
             Token::BSlash
@@ -452,7 +448,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
-    #[cfg_attr(tarpaulin, skip)]
     pub(crate) fn is_operator(&self) -> bool {
         match *self {
             Token::Not
@@ -501,7 +496,7 @@ impl<'input> __ToTriple<'input> for Spanned<Token<'input>> {
 
 // Format a token for display
 //
-#[cfg_attr(tarpaulin, skip)]
+
 impl<'input> fmt::Display for Token<'input> {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

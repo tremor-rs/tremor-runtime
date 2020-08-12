@@ -21,7 +21,6 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;
 
-#[cfg_attr(tarpaulin, skip)]
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
     // let aggr_reg: AggrRegistry = registry::aggr_registry();
@@ -46,7 +45,7 @@ fn eval(src: &str) -> Result<String> {
 }
 
 #[no_mangle]
-#[cfg_attr(tarpaulin, skip)]
+
 pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len: usize) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr

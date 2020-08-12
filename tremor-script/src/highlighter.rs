@@ -450,7 +450,7 @@ pub struct Term {
 
 // This is a terminal highlighter it simply adds colors
 // so we skip it in tests.
-#[cfg_attr(tarpaulin, skip)]
+
 #[allow(clippy::new_without_default)]
 impl Term {
     /// Creates a new highlighter
@@ -461,7 +461,6 @@ impl Term {
     }
 }
 
-#[cfg_attr(tarpaulin, skip)]
 impl Highlighter for Term {
     type W = Buffer;
     fn set_color(&mut self, spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {

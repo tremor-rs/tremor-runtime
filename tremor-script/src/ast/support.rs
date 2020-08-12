@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Don't cover this file it's only simple helpers
-#![cfg_attr(tarpaulin, skip)]
-
 use super::{
     BinOpKind, EventPath, Invoke, InvokeAggr, InvokeAggrFn, LocalPath, MetadataPath, Segment,
     StatePath, UnaryOpKind,
@@ -56,6 +53,7 @@ impl<'script> PartialEq for Segment<'script> {
         }
     }
 }
+
 impl<'script> PartialEq for LocalPath<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.idx == other.idx && self.is_const == other.is_const && self.segments == other.segments

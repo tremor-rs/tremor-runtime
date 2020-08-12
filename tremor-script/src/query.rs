@@ -63,7 +63,6 @@ rental! {
 pub use rentals::Query as QueryRental;
 pub use rentals::Stmt as StmtRental;
 
-#[cfg_attr(tarpaulin, skip)]
 impl PartialEq for rentals::Stmt {
     fn eq(&self, other: &Self) -> bool {
         self.suffix() == other.suffix()
@@ -72,7 +71,6 @@ impl PartialEq for rentals::Stmt {
 
 impl Eq for rentals::Stmt {}
 
-#[cfg_attr(tarpaulin, skip)]
 impl PartialOrd for rentals::Stmt {
     fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
         None // NOTE Here be dragons FIXME
@@ -160,7 +158,7 @@ where
     }
 
     /// Highlights a script with a given highlighter.
-    #[cfg_attr(tarpaulin, skip)]
+
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
         script.push('\n');
@@ -171,7 +169,7 @@ where
     }
 
     /// Preprocessesa and highlights a script with a given highlighter.
-    #[cfg_attr(tarpaulin, skip)]
+
     pub fn highlight_preprocess_script_with<H: Highlighter>(
         file_name: &str,
         script: &'script str,

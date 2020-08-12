@@ -12,22 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This are just default values
+
 use std::convert;
 
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_true() -> bool {
     true
 }
 
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_false() -> bool {
     false
 }
 
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_4<T>() -> T
 where
     T: convert::From<u8>,
@@ -35,23 +31,13 @@ where
     T::from(4)
 }
 
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d_ttl() -> u32 {
     64
 }
 
-// just a default
-#[cfg_attr(tarpaulin, skip)]
 pub fn d<T>() -> T
 where
     T: Default,
 {
-    T::default()
-}
-
-// just a default
-#[cfg_attr(tarpaulin, skip)]
-pub fn dflt<T: Default>() -> T {
     T::default()
 }

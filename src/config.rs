@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dflt::dflt;
 use crate::url::TremorURL;
 use hashbrown::HashMap;
 use tremor_pipeline::config as dynaconfig;
@@ -29,15 +28,15 @@ pub(crate) type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) onramp: OnRampVec,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) offramp: OffRampVec,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) binding: Vec<Binding>,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) pipeline: PipelineVec,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) mapping: MappingMap,
 }
 
@@ -49,11 +48,11 @@ pub struct OnRamp {
     pub id: ID,
     #[serde(rename = "type")]
     pub(crate) binding_type: String,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) description: String,
-    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
-    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) preprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
@@ -69,11 +68,11 @@ pub struct OffRamp {
     pub id: ID,
     #[serde(rename = "type")]
     pub(crate) binding_type: String,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) description: String,
-    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
-    #[serde(default = "dflt", skip_serializing_if = "Option::is_none")]
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) postprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
@@ -87,7 +86,7 @@ pub struct OffRamp {
 pub struct Binding {
     /// ID of the binding
     pub id: ID,
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub(crate) description: String,
     pub(crate) links: BindingMap, // is this right? this should be url to url?
 }
