@@ -16,7 +16,7 @@ error-chain="0.12"
 tremor-script = { path = "../tremor-script" }
 tremor-influx = { path = "../tremor-influx" }
 lazy_static = "1"
-window = { git = "https://github.com/wayfair-tremor/window.git" }
+window = { git = "https://github.com/wayfair-tremor/window.git",  tag = "v0.1.1"}
 indexmap = { version = "1", features=["serde-1"] }
 lru = "0.6"
 halfbrown = "0.1"
