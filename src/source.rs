@@ -144,7 +144,6 @@ where
     ) {
         let original_id = self.id;
         let mut error = false;
-        // FIXME record 1st id for pp data
         if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
             for d in data {
                 match self.codec.decode(d, *ingest_ns) {

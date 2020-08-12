@@ -125,11 +125,8 @@ mod tests {
 
     #[test]
     fn parse_example() {
-        let mut s = String::from(
-            r#"{"measurement":"swap","tags":{"host":"56a6f1b85709","window":"10secs"},"fields":{"count_free":2,"min_free":2139095040,"max_free":2147483647,"mean_free":2143289344.0,"stdev_free":0.0,"var_free":0.0,"p50_free":2147483647,"p90_free":2147483647,"p99_free":2147483647,"p99.9_free":2147483647},"timestamp":1465839830100400200}"#,
-        );
-
-        let v = simd_json::borrowed::to_value(unsafe { s.as_bytes_mut() }).unwrap();
+        let mut s = br#"{"measurement":"swap","tags":{"host":"56a6f1b85709","window":"10secs"},"fields":{"count_free":2,"min_free":2139095040,"max_free":2147483647,"mean_free":2143289344.0,"stdev_free":0.0,"var_free":0.0,"p50_free":2147483647,"p90_free":2147483647,"p99_free":2147483647,"p99.9_free":2147483647},"timestamp":1465839830100400200}"#.to_vec();
+        let v = simd_json::borrowed::to_value(s.as_mut_slice()).unwrap();
         encode(&v).unwrap();
     }
 

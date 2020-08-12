@@ -146,32 +146,23 @@ pub(crate) struct Manager {
 async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
     for (output, event) in eventset.drain(..) {
         if let Some(dest) = dests.get_mut(&output) {
-            let len = dest.len();
-            //We know we have len, so grabbing len - 1 elementsis safe
-            for (id, offramp) in unsafe { dest.get_unchecked_mut(..len - 1) } {
-                offramp
-                    .send_event(
-                        id.instance_port()
-                            .ok_or_else(|| {
-                                Error::from(format!("missing instance port in {}.", id))
-                            })?
-                            .to_string()
-                            .into(),
-                        event.clone(),
-                    )
-                    .await?;
-            }
-            //We know we have len, so grabbing the last elementsis safe
-            let (id, offramp) = unsafe { dest.get_unchecked_mut(len - 1) };
-            offramp
-                .send_event(
-                    id.instance_port()
+            if let Some((last, rest)) = dest.split_last_mut() {
+                for (id, offramp) in rest {
+                    let port = id
+                        .instance_port()
                         .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
                         .to_string()
-                        .into(),
-                    event,
-                )
-                .await?;
+                        .into();
+                    offramp.send_event(port, event.clone()).await?;
+                }
+                let last_port = last
+                    .0
+                    .instance_port()
+                    .ok_or_else(|| Error::from(format!("missing instance port in {}.", last.0)))?
+                    .to_string()
+                    .into();
+                last.1.send_event(last_port, event).await?;
+            }
         };
     }
     Ok(())

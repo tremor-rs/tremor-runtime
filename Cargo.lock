@@ -1337,19 +1337,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enum-ordinalize"
-version = "3.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1676e1daadfd216bda88d3a6fedd1bf53b829a085f5cc4d81c6f3054f50ef983"
-dependencies = [
- "num-bigint",
- "num-traits",
- "proc-macro2",
- "quote 1.0.7",
- "syn 1.0.38",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

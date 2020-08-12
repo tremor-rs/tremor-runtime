@@ -66,7 +66,6 @@ impl Codec for Influx {
             // This is safe as from_utf8 does not change the memory locaiton
             // of the bytes, simply validatges that it's UTF8 and if so
             // change the type.
-            //let s: &'static str = unsafe { mem::transmute(str::from_utf8(&raw[0])?) };
             let s: &str = unsafe { mem::transmute(str::from_utf8(&raw[0])?) };
             match influx::decode::<'static, Value<'static>>(s, ingest_ns) {
                 Ok(None) => Err(RentalSnot::Skip),

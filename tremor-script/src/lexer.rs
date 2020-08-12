@@ -851,7 +851,6 @@ impl<'input> Preprocessor {
     ) -> Result<(usize, Box<Path>)> {
         let mut file = PathBuf::from(rel_module_path);
         file.set_extension("tremor");
-        // FIXME consider raw JSON: let json = Path::new(format!("{}.json", rel_module_path));
 
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {

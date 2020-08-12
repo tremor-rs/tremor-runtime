@@ -51,13 +51,7 @@ rental! {
         use halfbrown::HashMap;
         use super::*;
 
-        #[rental(covariant,debug,clone)]
-        pub struct Dims {
-            query: Arc<StmtRental>,
-            groups: Groups<'query>,
-        }
-
-        #[rental(covariant,debug)]
+        #[rental(covariant, debug)]
         pub struct Select {
             stmt: Arc<StmtRental>,
             select: tremor_script::ast::SelectStmt<'stmt>,
@@ -69,15 +63,20 @@ rental! {
         }
     }
 }
-pub use rentals::Dims as SelectDims;
 
-impl SelectDims {
-    pub fn from_query(stmt: Arc<StmtRental>) -> Self {
-        Self::new(stmt, |_| HashMap::new())
-    }
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
-    unsafe fn mut_suffix(&self) -> &mut Groups<'static> {
-        std::mem::transmute(self.suffix())
+/// Select dimensions
+#[derive(Debug, Clone)]
+pub struct Dims {
+    query: Arc<StmtRental>,
+    groups: Groups<'static>,
+}
+
+impl Dims {
+    pub fn new(query: Arc<StmtRental>) -> Self {
+        Self {
+            query,
+            groups: HashMap::new(),
+        }
     }
 }
 
@@ -99,8 +98,8 @@ pub struct Window {
     window_impl: WindowImpl,
     module: Vec<String>,
     name: String,
-    dims: SelectDims,
-    last_dims: SelectDims,
+    dims: Dims,
+    last_dims: Dims,
     next_swap: u64,
 }
 
@@ -375,7 +374,7 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 impl TrickleSelect {
     pub fn with_stmt(
         id: String,
-        dims: &SelectDims,
+        dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
         stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
@@ -456,7 +455,6 @@ impl Operator for TrickleSelect {
         //
         // Before any select processing, we filter by where clause
         //
-        // FIXME: ?
         if let Some(guard) = &stmt.maybe_where {
             let (unwind_event, event_meta) = event.data.parts();
             let env = Env {
@@ -542,15 +540,8 @@ impl Operator for TrickleSelect {
             if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                 if window.next_swap < event.ingest_ns {
                     window.next_swap = event.ingest_ns + eviction_ns;
-                    unsafe {
-                        // Windows are never added or deleted, we can argue that no
-                        // data allocated in one window will be accessed after
-                        // any other window is dropped
-                        let this_groups = window.dims.mut_suffix();
-                        let last_groups = window.last_dims.mut_suffix();
-                        last_groups.clear();
-                        std::mem::swap(this_groups, last_groups);
-                    }
+                    window.last_dims.groups.clear();
+                    std::mem::swap(&mut window.dims, &mut window.last_dims);
                 }
             }
         }
@@ -564,17 +555,18 @@ impl Operator for TrickleSelect {
             // We first iterate through the windows and emit as far as we would have to emit.
             while let Some(this) = windows.next() {
                 // This is sound since we only add mutability to groups
-                let this_groups = unsafe { this.dims.mut_suffix() };
+                let this_groups = &mut this.dims.groups;
+                let last_groups = &mut this.last_dims.groups;
+                let window_impl = &this.window_impl;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
                         // This is sound since we only add mutability to groups
-                        let last_groups = unsafe { this.last_dims.mut_suffix() };
                         (
                             group_str.clone(),
                             last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                window: this.window_impl.clone(),
+                                window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
                                 id: event.id.clone(),
@@ -692,18 +684,17 @@ impl Operator for TrickleSelect {
             while let Some(this) = windows.next() {
                 // First start with getting our group
 
-                // FIXME: reason about soundness
-                let this_groups = unsafe { this.dims.mut_suffix() };
+                let this_groups = &mut this.dims.groups;
+                let last_groups = &mut this.last_dims.groups;
+                let window_impl = &this.window_impl;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
                     .or_insert_with(|| {
-                        // FIXME: reason about soundness
-                        let last_groups = unsafe { this.last_dims.mut_suffix() };
                         (
                             group_str.clone(),
                             last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                window: this.window_impl.clone(),
+                                window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
                                 id: event.id.clone(),
@@ -714,11 +705,8 @@ impl Operator for TrickleSelect {
                 // Check if we want to clear all the following window
                 // this is false for a non terminal widest window
                 if clear_all {
-                    for aggr in &this_group.aggrs {
-                        // FIXME: reason about soundness
-                        let aggr_static: &mut InvokeAggrFn<'static> =
-                            unsafe { std::mem::transmute(aggr) };
-                        aggr_static.invocable.init();
+                    for aggr in &mut this_group.aggrs {
+                        aggr.invocable.init();
                     }
                 } else {
                     // If we skipped the widest window we can clear the rest
@@ -731,18 +719,19 @@ impl Operator for TrickleSelect {
                 // This ensures that in the next iteration of the leep we can clear
                 // the previous window since we already pulled all needed data out here.
                 if let Some(prev) = windows.peek() {
-                    // FIXME: reason about soundness
-                    let prev_groups = unsafe { prev.dims.mut_suffix() };
+                    // FIXME: All the data we use mutably is in a pin
+                    let prev: &mut Window = unsafe { std::mem::transmute(&**prev) };
+                    let prev_groups = &mut prev.dims.groups;
+                    let last_groups = &mut prev.last_dims.groups;
+                    let window_impl = &prev.window_impl;
                     let (_, prev_group) = prev_groups
                         .raw_entry_mut()
                         .from_key(&group_str)
                         .or_insert_with(|| {
-                            // FIXME: reason about soundness
-                            let last_groups = unsafe { prev.last_dims.mut_suffix() };
                             (
                                 group_str.clone(),
                                 last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                    window: prev.window_impl.clone(),
+                                    window: window_impl.clone(),
                                     aggrs: aggregates.clone(),
                                     group: group_value.clone_static(),
                                     id: event.id.clone(),
@@ -750,14 +739,10 @@ impl Operator for TrickleSelect {
                             )
                         });
                     for (i, aggr) in prev_group.aggrs.iter().enumerate() {
-                        // FIXME: reason about soundness
-                        let aggr_static: &InvokeAggrFn<'static> =
-                            unsafe { std::mem::transmute(aggr) };
                         this_group.aggrs[i]
                             .invocable
-                            .merge(&aggr_static.invocable)
+                            .merge(&aggr.invocable)
                             .map_err(|e| {
-                                // FIXME nice error
                                 let r: Option<&Registry> = None;
                                 e.into_err(aggr, aggr, r, &node_meta)
                             })?;
@@ -766,11 +751,11 @@ impl Operator for TrickleSelect {
             }
 
             // If we had at least one window ingest the event into this window
-            if let Some(this) = self.windows.first() {
+            if let Some(this) = self.windows.first_mut() {
                 let (unwind_event, event_meta) = event.data.parts();
                 consts[WINDOW_CONST_ID] = Value::from(this.name.to_string());
-                // FIXME: reason about soundness
-                let this_groups = unsafe { this.dims.mut_suffix() };
+                let this_groups = &mut this.dims.groups;
+                let window_impl = &this.window_impl;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
@@ -778,7 +763,7 @@ impl Operator for TrickleSelect {
                         (
                             group_str.clone(),
                             GroupData {
-                                window: this.window_impl.clone(),
+                                window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
                                 id: event.id.clone(),
@@ -804,11 +789,10 @@ impl Operator for TrickleSelect {
                             arg.run(opts, &env, unwind_event, state, &event_meta, &local_stack)?;
                         argv.push(result);
                     }
-                    unsafe {
-                        for i in 0..argv.len() {
-                            argv1.push(argv.get_unchecked(i));
-                        }
+                    for arg in &argv {
+                        argv1.push(arg);
                     }
+
                     invocable.accumulate(argv1.as_slice()).map_err(|e| {
                         // FIXME nice error
                         let r: Option<&Registry> = None;
@@ -925,7 +909,7 @@ mod test {
     use std::sync::Arc;
 
     fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
-        let groups = SelectDims::from_query(stmt.stmt.clone());
+        let groups = Dims::new(stmt.stmt.clone());
         let windows = vec![
             (
                 "15s".into(),

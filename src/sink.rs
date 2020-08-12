@@ -36,8 +36,6 @@ pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
-    /// FIXME we can't make this async right now
-    /// https://github.com/rust-lang/rust/issues/63033
     async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec;
     async fn init(&mut self, postprocessors: &[String]) -> Result<()>;
 

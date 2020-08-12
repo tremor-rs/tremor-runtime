@@ -204,17 +204,17 @@ mod tests {
             path: "/this/is/never/used.json".to_string(),
             size: 4096,
         };
-        let mut data = "{\"foo\": \"bar\"}".to_string();
-        let bytes = unsafe { data.as_bytes_mut() };
-        let opt = std::option::Option::from(config);
+        let mut data = b"{\"foo\": \"bar\"}".to_vec();
+        let bytes = data.as_mut_slice();
+        let opt = Some(config);
         let obj = simd_json::to_owned_value(bytes).unwrap();
         let exp_obj = obj.clone();
         let mut mmap = MmapAnon::from_config(opt, &obj).expect("To create anon memory map");
 
         assert_eq!(mmap.get().expect("To retrieve object"), exp_obj);
 
-        let mut data2 = "{\"snot\": \"badger\"}".to_string();
-        let bytes2 = unsafe { data2.as_bytes_mut() };
+        let mut data2 = b"{\"snot\": \"badger\"}".to_vec();
+        let bytes2 = data2.as_mut_slice();
         let obj2 = simd_json::to_owned_value(bytes2).unwrap();
         let exp_obj2 = obj2.clone();
         mmap.set(obj2).expect("To set object in mmap");
@@ -233,24 +233,24 @@ mod tests {
             size: 12,
         };
         let opt = std::option::Option::from(config);
-        let mut data = "[0,1,2,3,4]".to_string();
-        let bytes = unsafe { data.as_bytes_mut() };
+        let mut data = b"[0,1,2,3,4]".to_vec();
+        let bytes = data.as_mut_slice();
         let obj = simd_json::to_owned_value(bytes).unwrap();
         let exp_obj = obj.clone();
         let mut mmap = MmapFile::from_config(opt, &obj).expect("To create file-backed memory map");
 
         assert_eq!(mmap.get().expect("To retrieve object"), exp_obj);
 
-        let mut data2 = "[5,6,7,8,9]".to_string();
-        let bytes2 = unsafe { data2.as_bytes_mut() };
+        let mut data2 = b"[5,6,7,8,9]".to_vec();
+        let bytes2 = data2.as_mut_slice();
         let obj2 = simd_json::to_owned_value(bytes2).unwrap();
         let exp_obj2 = obj2.clone();
         mmap.set(obj2).expect("To set object in mmap");
 
         assert_eq!(mmap.get().expect("To retrieve object"), exp_obj2);
 
-        let mut data3 = "{\"foozah\": \"barah\"}".to_string();
-        let bytes3 = unsafe { data3.as_bytes_mut() };
+        let mut data3 = b"{\"foozah\": \"barah\"}".to_vec();
+        let bytes3 = data3.as_mut_slice();
         let obj3 = simd_json::to_owned_value(bytes3).unwrap();
 
         assert!(

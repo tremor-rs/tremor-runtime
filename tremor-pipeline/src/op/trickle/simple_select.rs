@@ -108,7 +108,6 @@ impl Operator for TrickleSimpleSelect {
         //
         // Before any select processing, we filter by where clause
         //
-        // FIXME: ?
         if let Some(guard) = &stmt.maybe_where {
             let (unwind_event, event_meta) = event.data.parts();
             let env = Env {
@@ -151,9 +150,4 @@ impl Operator for TrickleSimpleSelect {
 
         Ok(vec![(OUT, event)].into())
     }
-}
-
-#[cfg(test)]
-mod test {
-    // FIXME: TODO
 }
