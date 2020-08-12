@@ -25,7 +25,7 @@ use op::identity::PassthroughFactory;
 use op::trickle::{
     operator::TrickleOperator,
     script::TrickleScript,
-    select::{SelectDims, TrickleSelect},
+    select::{Dims, TrickleSelect},
     simple_select::TrickleSimpleSelect,
 };
 use petgraph::algo::is_cyclic_directed;
@@ -576,7 +576,7 @@ pub(crate) fn supported_operators(
                     &node,
                 )?),
                 SelectType::Normal => {
-                    let groups = SelectDims::from_query(node.stmt.clone());
+                    let groups = Dims::new(node.stmt.clone());
                     let windows = if let Some(windows) = windows {
                         windows
                     } else {

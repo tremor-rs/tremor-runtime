@@ -1312,7 +1312,6 @@ impl<'script> GroupByInt<'script> {
             result_needed: true,
             aggr: AggrType::Emit,
         };
-        // FIXME
         let consts = vec![];
         let local_stack = LocalStack::with_size(0);
         let env = Env {

@@ -21,12 +21,11 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_const_fn! (json::decode(_context, _input: String) {
             // We need to clone here since we do not want to destroy the
             // original value
-            let mut s: String = _input.to_string();
-            println!("{}", &s);
+            let s: String = _input.to_string();
             // Screw you rust
-            let mut bytes = unsafe{s.as_bytes_mut()};
+            let mut bytes = s.into_bytes();
             // We need to do this since otherwise we depend on the clone of s
-            to_owned_value(&mut bytes).map_err(to_runtime_error).map(Value::from)
+            to_owned_value(bytes.as_mut_slice()).map_err(to_runtime_error).map(Value::from)
         }))
         .insert(tremor_const_fn! (json::encode(_context, _input) {
             simd_json::to_string(_input).map(Value::from).map_err(to_runtime_error)

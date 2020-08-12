@@ -106,7 +106,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                         + u64::from(bin[9]),
                     seq: bin[10],
                     count: bin[11],
-                    data: bin[12..].to_vec(), // FIXME: can we skip that
+                    data: bin[12..].to_vec(),
                 })
             }
         }

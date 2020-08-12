@@ -41,7 +41,7 @@ use clap::{App, ArgMatches};
 use globwalk::glob;
 use std::io::BufReader;
 use std::mem;
-use std::path::Path;
+use std::{path::Path, sync::atomic::Ordering};
 use tremor_api as api;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
@@ -175,19 +175,11 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         metrics::INSTANCE = forget_s;
     }
 
-    unsafe {
-        // We know that recursion-limit will only get set once at
-        // the very beginning nothing can access it yet,
-        // this makes it allowable to use unsafe here.
-        let l: u32 = matches
-            .value_of("recursion-limit")
-            .ok_or_else(|| Error::from("recursion not set"))
-            .and_then(|l| {
-                l.parse()
-                    .map_err(|e| Error::from(format!("invalid recursion limit: {}", e)))
-            })?;
-        tremor_script::RECURSION_LIMIT = l;
-    }
+    let l: u32 = matches
+        .value_of("recursion-limit")
+        .and_then(|l| l.parse().ok())
+        .ok_or_else(|| Error::from("invalid recursion limit"))?;
+    tremor_script::RECURSION_LIMIT.store(l, Ordering::Relaxed);
 
     let storage_directory = matches
         .value_of("storage-directory")

@@ -119,7 +119,6 @@ impl Elastic {
             let mut m = Value::object_with_capacity(2);
             let cb;
             if let Ok(t) = r {
-                // FIXME println!("Elastic search ok: {:?}", t);
                 if m.insert("time", t).is_err() {
                     // ALLOW: this is OK
                     unreachable!()
@@ -128,7 +127,6 @@ impl Elastic {
             } else {
                 // TODO update error metric here?
                 error!("Elastic search error: {:?}", r);
-                // FIXME println!("Elastic search error: {:?}", r);
                 cb = CBAction::Fail;
             };
             let insight = Event {

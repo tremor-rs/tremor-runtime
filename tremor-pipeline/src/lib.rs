@@ -1083,16 +1083,13 @@ impl ExecutableGraph {
             } else {
                 let EventAndInsights { events, insights } =
                     node.on_event(0, &port, &mut self.state.ops[idx], event)?;
+
                 for (out_port, _) in &events {
-                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(idx) }
-                        .outputs
-                        .get_mut(out_port)
-                    {
+                    let metrics = unsafe { self.metrics.get_unchecked_mut(idx) };
+                    if let Some(count) = metrics.outputs.get_mut(out_port) {
                         *count += 1;
                     } else {
-                        unsafe { self.metrics.get_unchecked_mut(idx) }
-                            .outputs
-                            .insert(out_port.clone(), 1);
+                        metrics.outputs.insert(out_port.clone(), 1);
                     }
                 }
                 for insight in insights {
@@ -1155,32 +1152,26 @@ impl ExecutableGraph {
     fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
-                let len = outgoing.len();
-                for (idx, in_port) in outgoing.iter().take(len - 1) {
-                    if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
-                        .inputs
-                        .get_mut(in_port)
-                    {
+                if let Some((last, rest)) = outgoing.split_last() {
+                    for (idx, in_port) in rest {
+                        let metrics = unsafe { self.metrics.get_unchecked_mut(*idx) };
+
+                        if let Some(count) = metrics.inputs.get_mut(in_port) {
+                            *count += 1;
+                        } else {
+                            metrics.inputs.insert(in_port.clone(), 1);
+                        }
+                        self.stack.push((*idx, in_port.clone(), event.clone()));
+                    }
+                    let (idx, in_port) = last;
+                    let metrics = unsafe { self.metrics.get_unchecked_mut(*idx) };
+                    if let Some(count) = metrics.inputs.get_mut(in_port) {
                         *count += 1;
                     } else {
-                        unsafe { self.metrics.get_unchecked_mut(*idx) }
-                            .inputs
-                            .insert(in_port.clone(), 1);
+                        metrics.inputs.insert(in_port.clone(), 1);
                     }
-                    self.stack.push((*idx, in_port.clone(), event.clone()));
+                    self.stack.push((*idx, in_port.clone(), event))
                 }
-                let (idx, in_port) = unsafe { outgoing.get_unchecked(len - 1) };
-                if let Some(count) = unsafe { self.metrics.get_unchecked_mut(*idx) }
-                    .inputs
-                    .get_mut(in_port)
-                {
-                    *count += 1;
-                } else {
-                    unsafe { self.metrics.get_unchecked_mut(*idx) }
-                        .inputs
-                        .insert(in_port.clone(), 1);
-                }
-                self.stack.push((*idx, in_port.clone(), event))
             }
         }
     }

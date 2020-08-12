@@ -72,6 +72,7 @@ extern crate serde_derive;
 extern crate rental;
 
 use simd_json::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
 pub use crate::ctx::{EventContext, EventOriginUri};
@@ -87,12 +88,12 @@ pub use simd_json::value::borrowed::Object;
 pub use simd_json::value::borrowed::Value;
 
 /// Default recursion limit
-pub static mut RECURSION_LIMIT: u32 = 1024;
+pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);
 
 /// recursion limit
 #[inline]
 pub fn recursion_limit() -> u32 {
-    unsafe { RECURSION_LIMIT }
+    RECURSION_LIMIT.load(Ordering::Relaxed)
 }
 
 /// Combined struct for an event value and metadata
