@@ -119,7 +119,6 @@ impl<'script> ScriptRaw<'script> {
                     });
                 }
                 #[allow(unreachable_code, unused_variables)]
-                #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
 
@@ -233,7 +232,6 @@ impl<'script> ModuleRaw<'script> {
                     let v = reduce2(expr, &helper)?;
                     helper.const_values.push(v);
                 }
-                #[cfg_attr(tarpaulin, skip)]
                 ExprRaw::FnDecl(f) => {
                     let f = f.up(helper)?;
                     let f = CustomFn {
@@ -620,7 +618,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
                 // an error then unreachable
-                #[cfg_attr(tarpaulin, skip)]
+
                 return Err(ErrorKind::InvalidMod(
                     Range::from((start, end)).expand_lines(2),
                     Range::from((start, end)),
@@ -631,7 +629,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
                 // an error then unreachable
-                #[cfg_attr(tarpaulin, skip)]
+
                 return Err(ErrorKind::InvalidConst(
                     Range::from((start, end)).expand_lines(2),
                     Range::from((start, end)),
@@ -690,7 +688,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 // There is no code path that leads here,
                 // we still rather have an error in case we made
                 // an error then unreachable
-                #[cfg_attr(tarpaulin, skip)]
+
                 return Err(ErrorKind::InvalidFn(
                     f.extent(&helper.meta).expand_lines(2),
                     f.extent(&helper.meta),
@@ -761,7 +759,6 @@ impl<'script> FnDeclRaw<'script> {
 
 impl<'script> Upable<'script> for FnDeclRaw<'script> {
     type Target = FnDecl<'script>;
-    #[cfg_attr(tarpaulin, skip)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
@@ -814,7 +811,6 @@ impl<'script> AnyFnRaw<'script> {
 
 impl<'script> Upable<'script> for AnyFnRaw<'script> {
     type Target = FnDecl<'script>;
-    #[cfg_attr(tarpaulin, skip)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             AnyFnRaw::Normal(f) => f.up(helper),
@@ -873,7 +869,6 @@ impl<'script> MatchFnDeclRaw<'script> {
 
 impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
     type Target = FnDecl<'script>;
-    #[cfg_attr(tarpaulin, skip)]
     fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();

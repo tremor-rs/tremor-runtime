@@ -48,7 +48,6 @@ pub trait Codec: Send + Sync {
 }
 
 /// Codec lookup function
-#[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
         "json" => Ok(Box::new(json::JSON {})),

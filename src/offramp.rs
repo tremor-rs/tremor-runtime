@@ -79,7 +79,7 @@ pub trait Impl {
 }
 
 // just a lookup
-#[cfg_attr(tarpaulin, skip)]
+
 pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
     match name {
         "blackhole" => blackhole::Blackhole::from_config(config),

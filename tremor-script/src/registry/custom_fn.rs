@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Nopt yet implemented - this is behind a feature flag
-#![cfg_attr(tarpaulin, skip)]
-
 use super::{FResult, FunctionError, Result};
 use crate::ast::query::ARGS_CONST_ID;
 use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
