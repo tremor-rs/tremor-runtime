@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
@@ -94,22 +94,32 @@ impl fmt::Display for TremorURL {
 
 impl TremorURL {
     /// Generates a minimal id of the form "{pfx}-{artefact}.{instance}"
+    #[must_use]
     pub fn short_id(&self, pfx: &str) -> String {
         let artefact_id = self.artefact().unwrap_or("-");
         let instance_id = self.instance().unwrap_or("-");
         format!("{}-{}.{}", pfx, artefact_id, instance_id)
     }
     /// Creates an URL from a given onramp id
+    ///
+    /// # Errors
+    ///  * if the id isn't a valid onramp id
     pub fn from_onramp_id(id: &str) -> Result<Self> {
         Self::parse(&format!("/onramp/{}", id))
     }
 
     /// Creates an URL from a given offramp id
+    ///
+    /// # Errors
+    ///  * if the passed ID isn't a valid offramp id
     pub fn from_offramp_id(id: &str) -> Result<Self> {
         Self::parse(&format!("/offramp/{}", id))
     }
 
     /// Parses a string into a Trmeor URL
+    ///
+    /// # Errors
+    ///  * If the url is not a valid tremor url
     pub fn parse(url: &str) -> Result<Self> {
         let (r, relative) = Self::parse_url(url, false)?;
 
@@ -242,25 +252,36 @@ impl TremorURL {
             self.scope = Scope::Port;
         }
     }
-
     /// Retrives the instance
+    #[must_use]
     pub fn instance(&self) -> Option<&str> {
         self.instance.as_deref()
     }
-
     /// Retrives the artefact
+    #[must_use]
     pub fn artefact(&self) -> Option<&str> {
         self.artefact.as_deref()
     }
     /// Retrives the port
+    #[must_use]
     pub fn instance_port(&self) -> Option<&str> {
         self.instance_port.as_deref()
     }
+    /// Retrives the port
+    ///
+    /// # Errors
+    ///  * if the URL has no port
+    pub fn instance_port_required(&self) -> Result<&str> {
+        self.instance_port()
+            .ok_or_else(|| Error::from(format!("{} is missing an instnace port", self)))
+    }
     /// Retrives the type
+    #[must_use]
     pub fn resource_type(&self) -> Option<ResourceType> {
         self.resource_type
     }
     /// Retrives the scope
+    #[must_use]
     pub fn scope(&self) -> Scope {
         self.scope
     }

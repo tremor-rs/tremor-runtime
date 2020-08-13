@@ -228,6 +228,7 @@ impl Default for Repositories {
 
 impl Repositories {
     /// Creates an empty repository
+    #[must_use]
     pub fn new() -> Self {
         Self {
             pipeline: Repository::new().start(),
@@ -238,6 +239,9 @@ impl Repositories {
     }
 
     /// List the pipelines
+    ///
+    /// # Errors
+    ///  * if we can't list the pipelines
     pub async fn list_pipelines(&self) -> Result<Vec<ArtefactId>> {
         let (tx, rx) = bounded(1);
         self.pipeline.send(Msg::ListArtefacts(tx)).await?;
@@ -245,6 +249,9 @@ impl Repositories {
     }
 
     /// Serialises the pipelines
+    ///
+    /// # Errors
+    ///  * if we can't serialize a pipeline
     pub async fn serialize_pipelines(&self) -> Result<Vec<PipelineArtefact>> {
         let (tx, rx) = bounded(1);
         self.pipeline.send(Msg::SerializeArtefacts(tx)).await?;
@@ -252,6 +259,9 @@ impl Repositories {
     }
 
     /// Find a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't find a pipeline
     pub async fn find_pipeline(
         &self,
         id: &TremorURL,
@@ -264,6 +274,9 @@ impl Repositories {
     }
 
     /// Publish a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't publish a pipeline
     pub async fn publish_pipeline(
         &self,
         id: &TremorURL,
@@ -278,6 +291,9 @@ impl Repositories {
     }
 
     /// Unpublish a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't unpublish a pipeline
     pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
@@ -287,6 +303,9 @@ impl Repositories {
     }
 
     /// Bind a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't bind a pipeline
     pub async fn bind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
@@ -296,6 +315,9 @@ impl Repositories {
     }
 
     /// Unbinds a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't unbound a pipeline
     pub async fn unbind_pipeline(&self, id: &TremorURL) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
@@ -305,6 +327,9 @@ impl Repositories {
     }
 
     /// List onramps
+    ///
+    /// # Errors
+    ///  * if we can't list onramps
     pub async fn list_onramps(&self) -> Result<Vec<ArtefactId>> {
         let (tx, rx) = bounded(1);
         self.onramp.send(Msg::ListArtefacts(tx)).await?;
@@ -312,6 +337,9 @@ impl Repositories {
     }
 
     /// serializes onramps
+    ///
+    /// # Errors
+    ///  * if we can't serialize onramp
     pub async fn serialize_onramps(&self) -> Result<Vec<OnrampArtefact>> {
         let (tx, rx) = bounded(1);
         self.onramp.send(Msg::SerializeArtefacts(tx)).await?;
@@ -319,6 +347,9 @@ impl Repositories {
     }
 
     /// find an onramp
+    ///
+    /// # Errors
+    ///  * if we can't find an onramp
     pub async fn find_onramp(&self, id: &TremorURL) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
         let (tx, rx) = bounded(1);
         self.onramp.send(Msg::FindArtefact(tx, id.clone())).await?;
@@ -326,6 +357,9 @@ impl Repositories {
     }
 
     /// Publish onramp
+    ///
+    /// # Errors
+    ///  * if we can't publish the onramp
     pub async fn publish_onramp(
         &self,
         id: &TremorURL,
@@ -340,6 +374,9 @@ impl Repositories {
     }
 
     /// Unpublish an onramp
+    ///
+    /// # Errors
+    ///  * if we can't unpublish the onramp
     pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         let (tx, rx) = bounded(1);
         self.onramp
@@ -349,6 +386,9 @@ impl Repositories {
     }
 
     /// Binds an onramp
+    ///
+    /// # Errors
+    ///  * if we can't bind the onrampo
     pub async fn bind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         let (tx, rx) = bounded(1);
         self.onramp
@@ -358,6 +398,9 @@ impl Repositories {
     }
 
     /// Unbinds an onramp
+    ///
+    /// # Errors
+    ///  * if we can't unbind the onramp
     pub async fn unbind_onramp(&self, id: &TremorURL) -> Result<OnrampArtefact> {
         let (tx, rx) = bounded(1);
         self.onramp
@@ -367,6 +410,9 @@ impl Repositories {
     }
 
     /// List offramps
+    ///
+    /// # Errors
+    ///  * if we can't list offramp
     pub async fn list_offramps(&self) -> Result<Vec<ArtefactId>> {
         let (tx, rx) = bounded(1);
         self.offramp.send(Msg::ListArtefacts(tx)).await?;
@@ -374,6 +420,9 @@ impl Repositories {
     }
 
     /// Serialises offramps
+    ///
+    /// # Errors
+    ///  * if we cna't serialize a offramp
     pub async fn serialize_offramps(&self) -> Result<Vec<OfframpArtefact>> {
         let (tx, rx) = bounded(1);
         self.offramp.send(Msg::SerializeArtefacts(tx)).await?;
@@ -381,6 +430,9 @@ impl Repositories {
     }
 
     /// Find an offramp
+    ///
+    /// # Errors
+    ///  * if we can't find an offramp
     pub async fn find_offramp(
         &self,
         id: &TremorURL,
@@ -391,6 +443,9 @@ impl Repositories {
     }
 
     /// Publishes an offramp
+    ///
+    /// # Errors
+    ///  * if we can't publish a offramp
     pub async fn publish_offramp(
         &self,
         id: &TremorURL,
@@ -405,6 +460,9 @@ impl Repositories {
     }
 
     /// Unpublishes an offramp
+    ///
+    /// # Errors
+    ///  * if we can't unpublish an onramp
     pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         let (tx, rx) = bounded(1);
         self.offramp
@@ -414,6 +472,9 @@ impl Repositories {
     }
 
     /// Binds an offramp
+    ///
+    /// # Errors
+    ///  * if we can't bind an oframp
     pub async fn bind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         let (tx, rx) = bounded(1);
         self.offramp
@@ -423,6 +484,9 @@ impl Repositories {
     }
 
     /// Unbinds an offramp
+    ///
+    /// # Errors
+    ///  * if we can't unbind the offramp
     pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<OfframpArtefact> {
         let (tx, rx) = bounded(1);
         self.offramp
@@ -432,6 +496,9 @@ impl Repositories {
     }
 
     /// Lists bindings
+    ///
+    /// # Errors
+    ///  * if we can't list all bindings
     pub async fn list_bindings(&self) -> Result<Vec<ArtefactId>> {
         let (tx, rx) = bounded(1);
         self.binding.send(Msg::ListArtefacts(tx)).await?;
@@ -439,6 +506,9 @@ impl Repositories {
     }
 
     /// Serialises bindings
+    ///
+    /// # Errors
+    ///  * if we can't serialize the binding
     pub async fn serialize_bindings(&self) -> Result<Vec<BindingArtefact>> {
         let (tx, rx) = bounded(1);
         self.binding.send(Msg::SerializeArtefacts(tx)).await?;
@@ -446,6 +516,9 @@ impl Repositories {
     }
 
     /// Find a binding
+    ///
+    /// # Errors
+    ///  * if finding the binding failed
     pub async fn find_binding(
         &self,
         id: &TremorURL,
@@ -456,6 +529,9 @@ impl Repositories {
     }
 
     /// Publish a binding
+    ///
+    /// # Errors
+    ///  * if we can't publish the binding
     pub async fn publish_binding(
         &self,
         id: &TremorURL,
@@ -470,6 +546,9 @@ impl Repositories {
     }
 
     /// Unpublishes a binding
+    ///
+    /// # Errors
+    ///  * if we can't unpublish the binding
     pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         let (tx, rx) = bounded(1);
         self.binding
@@ -479,6 +558,9 @@ impl Repositories {
     }
 
     /// Binds a binding
+    ///
+    /// # Errors
+    ///  * if we can't bind the binding
     pub async fn bind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         let (tx, rx) = bounded(1);
         self.binding
@@ -488,6 +570,9 @@ impl Repositories {
     }
 
     /// Unbinds a binding
+    ///
+    /// # Errors
+    ///  * if we can't unbound the binding
     pub async fn unbind_binding(&self, id: &TremorURL) -> Result<BindingArtefact> {
         let (tx, rx) = bounded(1);
         self.binding

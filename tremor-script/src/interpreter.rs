@@ -93,6 +93,24 @@ where
     pub recursion_limit: u32,
 }
 
+impl<'run, 'event, 'script> Env<'run, 'event, 'script>
+where
+    'script: 'event,
+    'event: 'run,
+{
+    /// Fetches the value for a constant
+    pub fn get_const<O>(&self, idx: usize, outer: &O, meta: &NodeMetas) -> Result<&Value<'event>>
+    where
+        O: BaseExpr,
+    {
+        if let Some(v) = self.consts.get(idx) {
+            Ok(v)
+        } else {
+            error_oops(outer, 0xdead_0010, "Unknown constant", &meta)
+        }
+    }
+}
+
 /// Local variable stack
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {
@@ -104,6 +122,29 @@ impl<'stack> LocalStack<'stack> {
     pub fn with_size(size: usize) -> Self {
         Self {
             values: vec![None; size],
+        }
+    }
+
+    /// Fetches a local variable
+    pub fn get<O>(
+        &self,
+        idx: usize,
+        outer: &O,
+        mid: usize,
+        meta: &NodeMetas,
+    ) -> Result<&Option<Value<'stack>>>
+    where
+        O: BaseExpr,
+    {
+        if let Some(v) = self.values.get(idx) {
+            Ok(v)
+        } else {
+            error_oops(
+                outer,
+                0xdead_000f,
+                &format!("Unknown local variable: `{}`", meta.name_dflt(mid)),
+                meta,
+            )
         }
     }
 }
@@ -208,11 +249,117 @@ where
     }
 }
 
-#[allow(
-    clippy::cognitive_complexity,
-    clippy::cast_precision_loss,
-    clippy::too_many_lines
-)]
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+fn exec_binary_numeric<'run, 'event, OuterExpr, InnerExpr>(
+    outer: &'run OuterExpr,
+    inner: &'run InnerExpr,
+    node_meta: &'run NodeMetas,
+    op: BinOpKind,
+    lhs: &Value<'event>,
+    rhs: &Value<'event>,
+) -> Result<Cow<'run, Value<'event>>>
+where
+    OuterExpr: BaseExpr,
+    InnerExpr: BaseExpr,
+    'event: 'run,
+{
+    use BinOpKind::{
+        Add, BitAnd, BitOr, BitXor, Div, Gt, Gte, LBitShift, Lt, Lte, Mod, Mul, RBitShiftSigned,
+        RBitShiftUnsigned, Sub,
+    };
+    if let (Some(l), Some(r)) = (lhs.as_u64(), rhs.as_u64()) {
+        match op {
+            BitAnd => Ok(Cow::Owned(Value::from(l & r))),
+            BitOr => Ok(Cow::Owned(Value::from(l | r))),
+            BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
+            Gt => Ok(static_bool!(l > r)),
+            Gte => Ok(static_bool!(l >= r)),
+            Lt => Ok(static_bool!(l < r)),
+            Lte => Ok(static_bool!(l <= r)),
+            Add => Ok(Cow::Owned(Value::from(l + r))),
+            Sub if l >= r => Ok(Cow::Owned(Value::from(l - r))),
+            Sub => {
+                // Handle substraction that would turn this into a negative
+                // to do that we calculate r-i (the inverse) and then
+                // try to turn this into a i64 and negate it;
+                let d = r - l;
+
+                if let Some(res) = d.try_into().ok().and_then(i64::checked_neg) {
+                    Ok(Cow::Owned(Value::from(res)))
+                } else {
+                    error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
+                }
+            }
+            Mul => Ok(Cow::Owned(Value::from(l * r))),
+            Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
+            Mod => Ok(Cow::Owned(Value::from(l % r))),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            RBitShiftSigned => match (l).checked_shr(r as u32) {
+                Some(n) => Ok(Cow::Owned(Value::from(n))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
+                #[allow(clippy::cast_possible_wrap)]
+                Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            LBitShift => match l.checked_shl(r as u32) {
+                Some(n) => Ok(Cow::Owned(Value::from(n))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            _ => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        }
+    } else if let (Some(l), Some(r)) = (lhs.as_i64(), rhs.as_i64()) {
+        match op {
+            BitAnd => Ok(Cow::Owned(Value::from(l & r))),
+            BitOr => Ok(Cow::Owned(Value::from(l | r))),
+            BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
+            Gt => Ok(static_bool!(l > r)),
+            Gte => Ok(static_bool!(l >= r)),
+            Lt => Ok(static_bool!(l < r)),
+            Lte => Ok(static_bool!(l <= r)),
+            Add => Ok(Cow::Owned(Value::from(l + r))),
+            Sub => Ok(Cow::Owned(Value::from(l - r))),
+            Mul => Ok(Cow::Owned(Value::from(l * r))),
+            Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
+            Mod => Ok(Cow::Owned(Value::from(l % r))),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            RBitShiftSigned => match (l).checked_shr(r as u32) {
+                Some(n) => Ok(Cow::Owned(Value::from(n))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
+                #[allow(clippy::cast_possible_wrap)]
+                Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            LBitShift => match l.checked_shl(r as u32) {
+                Some(n) => Ok(Cow::Owned(Value::from(n))),
+                None => error_invalid_bitshift(outer, inner, node_meta),
+            },
+            _ => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        }
+    } else if let (Some(l), Some(r)) = (lhs.cast_f64(), rhs.cast_f64()) {
+        match op {
+            Gte => Ok(static_bool!(l >= r)),
+            Gt => Ok(static_bool!(l > r)),
+            Lt => Ok(static_bool!(l < r)),
+            Lte => Ok(static_bool!(l <= r)),
+            Add => Ok(Cow::Owned(Value::from(l + r))),
+            Sub => Ok(Cow::Owned(Value::from(l - r))),
+            Mul => Ok(Cow::Owned(Value::from(l * r))),
+            Div => Ok(Cow::Owned(Value::from(l / r))),
+            _ => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        }
+    } else {
+        error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
+    }
+}
 #[inline]
 pub(crate) fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
     outer: &'run OuterExpr,
@@ -229,138 +376,36 @@ where
 {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use BinOpKind::{
-        Add, And, BitAnd, BitOr, BitXor, Div, Eq, Gt, Gte, LBitShift, Lt, Lte, Mod, Mul, NotEq, Or,
-        RBitShiftSigned, RBitShiftUnsigned, Sub, Xor,
-    };
+    use BinOpKind::{Add, And, BitAnd, BitOr, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
+    use StaticNode::Bool;
     use Value::{Static, String};
-    match (&op, lhs, rhs) {
+    match (op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
 
         (Eq, l, r) => Ok(static_bool!(val_eq(l, r))),
 
-        (NotEq, l, r) =>
-        {
-            #[allow(clippy::if_not_else)]
-            Ok(static_bool!(!val_eq(l, r)))
-        }
+        (NotEq, l, r) => Ok(static_bool!(!val_eq(l, r))),
 
-        (op, Static(StaticNode::Bool(l)), Static(StaticNode::Bool(r))) => match op {
-            And => Ok(static_bool!(*l && *r)),
-            Or => Ok(static_bool!(*l || *r)),
-            #[allow(clippy::if_not_else)]
-            Xor =>
-            {
-                #[allow(clippy::if_not_else)]
-                Ok(static_bool!(*l != *r))
-            }
-            BitAnd => Ok(static_bool!(*l & *r)),
-            BitOr => Ok(static_bool!(*l | *r)),
-            BitXor => Ok(static_bool!(*l ^ *r)),
-            _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
-        },
-        (op, String(l), String(r)) => match op {
-            Gt => Ok(static_bool!(l > r)),
-            Gte => Ok(static_bool!(l >= r)),
-            Lt => Ok(static_bool!(l < r)),
-            Lte => Ok(static_bool!(l <= r)),
-            Add => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
-            _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
-        },
-        (op, l, r) => {
-            if let (Some(l), Some(r)) = (l.as_u64(), r.as_u64()) {
-                match op {
-                    BitAnd => Ok(Cow::Owned(Value::from(l & r))),
-                    BitOr => Ok(Cow::Owned(Value::from(l | r))),
-                    BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
-                    Gt => Ok(static_bool!(l > r)),
-                    Gte => Ok(static_bool!(l >= r)),
-                    Lt => Ok(static_bool!(l < r)),
-                    Lte => Ok(static_bool!(l <= r)),
-                    Add => Ok(Cow::Owned(Value::from(l + r))),
-                    Sub if l >= r => Ok(Cow::Owned(Value::from(l - r))),
-                    Sub => {
-                        // Handle substraction that would turn this into a negative
-                        // to do that we calculate r-i (the inverse) and then
-                        // try to turn this into a i64 and negate it;
-                        let d = r - l;
-
-                        if let Some(res) = d.try_into().ok().and_then(i64::checked_neg) {
-                            Ok(Cow::Owned(Value::from(res)))
-                        } else {
-                            error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta)
-                        }
-                    }
-                    Mul => Ok(Cow::Owned(Value::from(l * r))),
-                    Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
-                    Mod => Ok(Cow::Owned(Value::from(l % r))),
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    RBitShiftSigned => match (l).checked_shr(r as u32) {
-                        Some(n) => Ok(Cow::Owned(Value::from(n))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
-                        #[allow(clippy::cast_possible_wrap)]
-                        Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    LBitShift => match (l).checked_shl(r as u32) {
-                        Some(n) => Ok(Cow::Owned(Value::from(n))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
-                }
-            } else if let (Some(l), Some(r)) = (l.as_i64(), r.as_i64()) {
-                match op {
-                    BitAnd => Ok(Cow::Owned(Value::from(l & r))),
-                    BitOr => Ok(Cow::Owned(Value::from(l | r))),
-                    BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
-                    Gt => Ok(static_bool!(l > r)),
-                    Gte => Ok(static_bool!(l >= r)),
-                    Lt => Ok(static_bool!(l < r)),
-                    Lte => Ok(static_bool!(l <= r)),
-                    Add => Ok(Cow::Owned(Value::from(l + r))),
-                    Sub => Ok(Cow::Owned(Value::from(l - r))),
-                    Mul => Ok(Cow::Owned(Value::from(l * r))),
-                    Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
-                    Mod => Ok(Cow::Owned(Value::from(l % r))),
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    RBitShiftSigned => match (l).checked_shr(r as u32) {
-                        Some(n) => Ok(Cow::Owned(Value::from(n))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
-                        #[allow(clippy::cast_possible_wrap)]
-                        Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    LBitShift => match (l).checked_shl(r as u32) {
-                        Some(n) => Ok(Cow::Owned(Value::from(n))),
-                        None => error_invalid_bitshift(outer, inner, &node_meta),
-                    },
-                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
-                }
-            } else if let (Some(l), Some(r)) = (l.cast_f64(), r.cast_f64()) {
-                match op {
-                    Gte => Ok(static_bool!(l >= r)),
-                    Gt => Ok(static_bool!(l > r)),
-                    Lt => Ok(static_bool!(l < r)),
-                    Lte => Ok(static_bool!(l <= r)),
-                    Add => Ok(Cow::Owned(Value::from(l + r))),
-                    Sub => Ok(Cow::Owned(Value::from(l - r))),
-                    Mul => Ok(Cow::Owned(Value::from(l * r))),
-                    Div => Ok(Cow::Owned(Value::from(l / r))),
-                    _ => error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta),
-                }
-            } else {
-                error_invalid_binary(outer, inner, *op, lhs, rhs, &node_meta)
-            }
+        // Bool
+        (And, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
+        (Or, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
+        (Xor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
+        (BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l & *r)),
+        (BitOr, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l | *r)),
+        (BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l ^ *r)),
+        (op, Static(Bool(_)), Static(Bool(_))) => {
+            error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
         }
+        // String
+        (Gt, String(l), String(r)) => Ok(static_bool!(l > r)),
+        (Gte, String(l), String(r)) => Ok(static_bool!(l >= r)),
+        (Lt, String(l), String(r)) => Ok(static_bool!(l < r)),
+        (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
+        (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
+        (op, String(_), String(_)) => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        // numeric
+        (op, l, r) => exec_binary_numeric(outer, inner, node_meta, op, l, r),
     }
 }
 
@@ -427,9 +472,10 @@ where
     // Fetch the base of the path
     // TODO: Extract this into a method on `Path`?
     let base_value: &Value = match path {
-        Path::Local(lpath) => match local.values.get(lpath.idx) {
-            Some(Some(l)) => l,
-            Some(None) => {
+        Path::Local(lpath) => {
+            if let Some(l) = stry!(local.get(lpath.idx, outer, lpath.mid, &env.meta)) {
+                l
+            } else {
                 return error_bad_key(
                     outer,
                     lpath,
@@ -439,20 +485,8 @@ where
                     &env.meta,
                 );
             }
-
-            _ => return error_oops(outer, 0xdead_0001, "Use of unknown local value", &env.meta),
-        },
-        Path::Const(lpath) => match env.consts.get(lpath.idx) {
-            Some(v) => v,
-            None => {
-                return error_oops(
-                    outer,
-                    0xdead_0002,
-                    "Use of uninitialized constant",
-                    &env.meta,
-                )
-            }
-        },
+        }
+        Path::Const(lpath) => stry!(env.get_const(lpath.idx, outer, &env.meta)),
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,
@@ -970,7 +1004,6 @@ where
 }
 
 #[inline]
-#[allow(clippy::too_many_lines)]
 fn match_rp_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
@@ -993,16 +1026,22 @@ where
     } else {
         0
     });
+
     for pp in &rp.fields {
         let known_key = pp.key();
+
+        macro_rules! store {
+            ($value:expr) => {
+                if opts.result_needed {
+                    known_key.insert(&mut acc, $value)?;
+                }
+            };
+        }
 
         match pp {
             PredicatePattern::FieldPresent { .. } => {
                 if let Some(v) = known_key.lookup(target) {
-                    if opts.result_needed {
-                        known_key.insert(&mut acc, v.clone())?;
-                    }
-                    continue;
+                    store!(v.clone());
                 } else {
                     return Ok(None);
                 }
@@ -1010,8 +1049,6 @@ where
             PredicatePattern::FieldAbsent { .. } => {
                 if known_key.lookup(target).is_some() {
                     return Ok(None);
-                } else {
-                    continue;
                 }
             }
             PredicatePattern::TildeEq { test, .. } => {
@@ -1024,9 +1061,7 @@ where
                     .extractor
                     .extract(opts.result_needed, &testee, &env.context)
                 {
-                    if opts.result_needed {
-                        known_key.insert(&mut acc, x)?;
-                    }
+                    store!(x);
                 } else {
                     return Ok(None);
                 }
@@ -1042,9 +1077,7 @@ where
                 let vb: &Value = rhs.borrow();
                 let r = exec_binary(outer, outer, &env.meta, *kind, testee, vb)?;
 
-                if r.as_bool().unwrap_or_default() {
-                    continue;
-                } else {
+                if !r.as_bool().unwrap_or_default() {
                     return Ok(None);
                 }
             }
@@ -1059,10 +1092,7 @@ where
                     if let Some(m) = stry!(match_rp_expr(
                         outer, opts, env, event, state, meta, local, testee, pattern,
                     )) {
-                        if opts.result_needed {
-                            known_key.insert(&mut acc, m)?;
-                        }
-                        continue;
+                        store!(m);
                     } else {
                         return Ok(None);
                     }
@@ -1081,11 +1111,7 @@ where
                     if let Some(r) = stry!(match_ap_expr(
                         outer, opts, env, event, state, meta, local, testee, pattern,
                     )) {
-                        if opts.result_needed {
-                            known_key.insert(&mut acc, r)?;
-                        }
-
-                        continue;
+                        store!(r);
                     } else {
                         return Ok(None);
                     }

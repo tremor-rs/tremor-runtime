@@ -29,8 +29,8 @@ use crate::stry;
 use matches::matches;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::Value;
-
 use std::borrow::{Borrow, Cow};
+use std::mem;
 
 #[derive(Debug)]
 /// Continuation context to control program flow
@@ -140,7 +140,6 @@ where
         local: &'run LocalStack<'event>,
         expr: &'script Patch,
     ) -> Result<Cow<'run, Value<'event>>> {
-        use std::mem;
         // This function is called when we encounter code that consumes a value
         // to patch it. So the following code:
         // ```tremor
@@ -201,7 +200,6 @@ where
         local: &'run mut LocalStack<'event>,
         expr: &'script Merge,
     ) -> Result<Cow<'run, Value<'event>>> {
-        use std::mem;
         // Please see the soundness reasoning in `patch_in_place` for details
         // those functions perform the same function just with slighty different
         // operations.
@@ -316,12 +314,27 @@ where
         Ok(Cont::Cont(Cow::Owned(Value::from(value_vec))))
     }
 
-    #[allow(
-        mutable_transmutes,
-        clippy::transmute_ptr_to_ptr,
-        clippy::too_many_lines
-    )]
+    #[inline]
     fn assign(
+        &'script self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event, 'script>,
+        event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut LocalStack<'event>,
+        path: &'script Path,
+        value: Value<'event>,
+    ) -> Result<Cow<'run, Value<'event>>> {
+        if path.segments().is_empty() {
+            self.assign_direct(opts, env, event, state, meta, local, path, value)
+        } else {
+            self.assign_nested(opts, env, event, state, meta, local, path, value)
+        }
+    }
+
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    fn assign_nested(
         &'script self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -350,115 +363,66 @@ where
          * So even if the map the Cow originally came from we won't
          * lose the referenced data. (Famous last words)
          */
-        use std::mem;
         let segments = path.segments();
 
-        if segments.is_empty() {
-            if let Path::Event(segments) = path {
-                if segments.segments.is_empty() {
-                    *event = value;
-                    return Ok(Cow::Borrowed(event));
+        let mut current: &Value = match path {
+            Path::Const(p) => {
+                return error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta)
+            }
+            Path::Local(lpath) => {
+                if let Some(l) = stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
+                    let l: &mut Value<'event> = unsafe { mem::transmute(l) };
+                    l
+                } else {
+                    return error_bad_key(
+                        self,
+                        lpath,
+                        &path,
+                        env.meta.name_dflt(lpath.mid),
+                        vec![],
+                        &env.meta,
+                    );
                 }
             }
-        }
-        let mut current: &Value = unsafe {
-            match path {
-                Path::Const(p) => {
-                    return error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta)
-                }
-                Path::Local(lpath) => match local.values.get(lpath.idx) {
-                    Some(Some(l)) => {
-                        let l: &mut Value<'event> = mem::transmute(l);
-                        if segments.is_empty() {
-                            *l = value;
-                            return Ok(Cow::Borrowed(l));
-                        }
-                        l
-                    }
-                    Some(d) => {
-                        let d: &mut Option<Value<'event>> = mem::transmute(d);
-                        if segments.is_empty() {
-                            *d = Some(value);
-                            if let Some(l) = d {
-                                return Ok(Cow::Borrowed(l));
-                            } else {
-                                return error_oops(self, 0xdead_0009, "Unreacable code", &env.meta);
-                            }
-                        }
-                        return error_bad_key(
-                            self,
-                            lpath,
-                            &path,
-                            env.meta.name_dflt(lpath.mid),
-                            vec![],
-                            &env.meta,
-                        );
-                    }
-
-                    None => {
-                        return error_oops(self, 0xdead_000a, "Unknown local varialbe", &env.meta)
-                    }
-                },
-                Path::Meta(_path) => {
-                    if segments.is_empty() {
-                        return error_invalid_assign_target(self, &env.meta);
-                    }
-                    meta
-                }
-                Path::Event(_path) => {
-                    if segments.is_empty() {
-                        *event = value;
-                        return Ok(Cow::Borrowed(event));
-                    };
-                    event
-                }
-                Path::State(_path) => {
-                    // Extend the lifetime of value to be static (also forces all strings and
-                    // object keys in value to be owned COW's). This ensures that the current
-                    // value is kept as part of state across subsequent state assignments (if
-                    // users choose to do so).
-                    value = value.into_static();
-                    if segments.is_empty() {
-                        // for the compiler, the type of value still has 'event as the lifetime
-                        // so we transmute it to conform with the lifetime of state ('static).
-                        *state = mem::transmute(value);
-                        return Ok(Cow::Borrowed(state));
-                    };
-                    state
-                }
+            Path::Meta(_path) => meta,
+            Path::Event(_path) => event,
+            Path::State(_path) => {
+                // Extend the lifetime of value to be static (also forces all strings and
+                // object keys in value to be owned COW's). This ensures that the current
+                // value is kept as part of state across subsequent state assignments (if
+                // users choose to do so).
+                value = value.into_static();
+                state
             }
         };
-
         for segment in segments {
-            unsafe {
-                match segment {
-                    Segment::Id { key, .. } => {
-                        current = if let Ok(next) = key.lookup_or_insert_mut(
-                            mem::transmute::<&Value, &mut Value>(current),
-                            || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
-                        ) {
-                            next
+            match segment {
+                Segment::Id { key, .. } => {
+                    current = if let Ok(next) = key.lookup_or_insert_mut(
+                        unsafe { mem::transmute::<&Value, &mut Value>(current) },
+                        || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
+                    ) {
+                        next
+                    } else {
+                        return error_need_obj(self, segment, current.value_type(), &env.meta);
+                    };
+                }
+                Segment::Element { expr, .. } => {
+                    let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
+                    let v: &mut Value<'event> = unsafe { mem::transmute(current) };
+                    if let Some(map) = v.as_object_mut() {
+                        current = if let Some(v) = map.get_mut(&id) {
+                            v
                         } else {
-                            return error_need_obj(self, segment, current.value_type(), &env.meta);
-                        };
-                    }
-                    Segment::Element { expr, .. } => {
-                        let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
-                        let v: &mut Value<'event> = mem::transmute(current);
-                        if let Some(map) = v.as_object_mut() {
-                            current = if let Some(v) = map.get_mut(&id) {
-                                v
-                            } else {
-                                map.entry(id)
-                                    .or_insert_with(|| Value::object_with_capacity(32))
-                            }
-                        } else {
-                            return error_need_obj(self, segment, current.value_type(), &env.meta);
+                            map.entry(id)
+                                .or_insert_with(|| Value::object_with_capacity(32))
                         }
+                    } else {
+                        return error_need_obj(self, segment, current.value_type(), &env.meta);
                     }
-                    Segment::Idx { .. } | Segment::Range { .. } => {
-                        return error_assign_array(self, segment, &env.meta)
-                    }
+                }
+                Segment::Idx { .. } | Segment::Range { .. } => {
+                    return error_assign_array(self, segment, &env.meta)
                 }
             }
         }
@@ -466,10 +430,59 @@ where
             *mem::transmute::<&Value<'event>, &mut Value<'event>>(current) = value;
         }
         if opts.result_needed {
-            //Ok(Cow::Borrowed(current))
             resolve(self, opts, env, event, state, meta, local, path)
         } else {
             Ok(Cow::Borrowed(&NULL))
+        }
+    }
+
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    fn assign_direct(
+        &'script self,
+        _opts: ExecOpts,
+        env: &'run Env<'run, 'event, 'script>,
+        event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
+        _meta: &'run mut Value<'event>,
+        local: &'run mut LocalStack<'event>,
+        path: &'script Path,
+        mut value: Value<'event>,
+    ) -> Result<Cow<'run, Value<'event>>> {
+        match path {
+            Path::Const(p) => error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta),
+            Path::Local(lpath) => match stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
+                Some(l) => {
+                    let l: &mut Value<'event> = unsafe { mem::transmute(l) };
+                    *l = value;
+                    Ok(Cow::Borrowed(l))
+                }
+                d => {
+                    let d: &mut Option<Value<'event>> = unsafe { mem::transmute(d) };
+                    *d = Some(value);
+                    if let Some(l) = d {
+                        Ok(Cow::Borrowed(l))
+                    } else {
+                        // ALLOW: we assign d in the line above the access, we know it is Some
+                        unreachable!()
+                    }
+                }
+            },
+            Path::Meta(_path) => error_invalid_assign_target(self, &env.meta),
+            Path::Event(_path) => {
+                *event = value;
+                Ok(Cow::Borrowed(event))
+            }
+            Path::State(_path) => {
+                // Extend the lifetime of value to be static (also forces all strings and
+                // object keys in value to be owned COW's). This ensures that the current
+                // value is kept as part of state across subsequent state assignments (if
+                // users choose to do so).
+                value = value.into_static();
+                // for the compiler, the type of value still has 'event as the lifetime
+                // so we transmute it to conform with the lifetime of state ('static).
+                *state = unsafe { mem::transmute(value) };
+                Ok(Cow::Borrowed(state))
+            }
         }
     }
 

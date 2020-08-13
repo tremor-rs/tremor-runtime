@@ -23,7 +23,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -89,7 +88,7 @@ pub(crate) use serde_yaml::Value as OpConfig;
 pub(crate) use tremor_pipeline::Event;
 
 /// Default Q Size
-pub const QSIZE: usize = 1024 * 4;
+pub const QSIZE: usize = 128;
 
 /// In incarnated config
 #[derive(Debug)]
@@ -107,6 +106,9 @@ pub struct IncarnatedConfig {
 }
 
 /// Incarnates a configuration into it's runnable state
+///
+/// # Errors
+///  * if the pipeline can not be incarnated
 pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
     let onramps = incarnate_onramps(config.onramp.clone());
     let offramps = incarnate_offramps(config.offramp.clone());

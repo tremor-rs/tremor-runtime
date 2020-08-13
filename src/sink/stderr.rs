@@ -39,8 +39,8 @@ impl offramp::Impl for StdErr {
 }
 #[async_trait::async_trait]
 impl Sink for StdErr {
-    #[allow(unused_variables)]
-    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
@@ -53,7 +53,6 @@ impl Sink for StdErr {
         }
         Ok(None)
     }
-    #[allow(unused_variables)]
     async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
@@ -61,8 +60,8 @@ impl Sink for StdErr {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }
     fn is_active(&self) -> bool {

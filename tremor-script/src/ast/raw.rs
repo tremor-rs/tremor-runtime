@@ -17,32 +17,28 @@
 #![allow(clippy::module_name_repetitions)]
 use super::upable::Upable;
 use super::{
-    base_expr, is_lit, path_eq, query, replace_last_shadow_use, ArrayPattern,
-    ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Comprehension, ComprehensionCase,
-    ConstDoc, EmitExpr, Env, EventPath, Expr, Field, FnDecl, FnDoc, Helper, Ident,
-    ImutComprehension, ImutComprehensionCase, ImutExpr, ImutExprInt, ImutMatch,
-    ImutPredicateClause, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath,
-    Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern,
-    PredicateClause, PredicatePattern, Predicates, Record, RecordPattern, Recur, Script, Segment,
-    StatePath, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+    base_expr, path_eq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
+    AssignPattern, BinExpr, BinOpKind, Comprehension, ComprehensionCase, EmitExpr, EventPath, Expr,
+    Field, FnDecl, FnDoc, Helper, Ident, ImutComprehension, ImutComprehensionCase, ImutExpr,
+    ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List,
+    Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path,
+    Pattern, PredicateClause, PredicatePattern, Predicates, Record, RecordPattern, Recur, Script,
+    Segment, StatePath, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };
 use crate::errors::{error_generic, error_oops, ErrorKind, Result};
 use crate::impl_expr;
-use crate::interpreter::{exec_binary, exec_unary};
 use crate::pos::{Location, Range};
 use crate::registry::CustomFn;
 use crate::tilde::Extractor;
-use crate::EventContext;
 pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::value::borrowed;
 use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::Cow;
 
-const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-const NO_CONSTS: Vec<Value<'static>> = Vec::new();
+pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+pub(crate) const NO_CONSTS: Vec<Value<'static>> = Vec::new();
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -55,21 +51,11 @@ impl<'script> ScriptRaw<'script> {
     pub(crate) fn new(exprs: ExprsRaw<'script>, doc: Option<Vec<Cow<'script, str>>>) -> Self {
         Self { exprs, doc }
     }
-    #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
         self,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
-        helper
-            .consts
-            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
-        helper
-            .consts
-            .insert(vec!["group".to_owned()], GROUP_CONST_ID);
-        helper.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
-
-        // TODO: Document why three `null` values are put in the constants vector.
-        helper.const_values = vec![Value::null(); 3];
+        helper.init_consts();
         let mut exprs = vec![];
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
@@ -85,55 +71,34 @@ impl<'script> ScriptRaw<'script> {
                     comment,
                 } => {
                     let name_v = vec![name.to_string()];
-                    if helper
-                        .consts
-                        .insert(name_v.clone(), helper.const_values.len())
-                        .is_some()
-                    {
-                        return Err(ErrorKind::DoubleConst(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            name.to_string(),
-                        )
-                        .into());
+                    let idx = helper.const_values.len();
+                    if helper.consts.insert(name_v, idx).is_some() {
+                        let r = Range::from((start, end));
+                        return Err(
+                            ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string()).into(),
+                        );
                     }
 
                     let expr = expr.up(&mut helper)?;
                     if i == last_idx {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
-                            idx: helper.const_values.len(),
+                            idx,
                             mid: helper.add_meta_w_name(start, end, &name),
                         }))
                     }
-                    let expr = expr.reduce(&helper)?;
+                    let expr = expr.try_reduce(&helper)?;
 
                     let v = reduce2(expr, &helper)?;
                     let value_type = v.value_type();
                     helper.const_values.push(v);
-                    helper.docs.consts.push(ConstDoc {
-                        name,
-                        doc: comment
-                            .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
-                        value_type,
-                    });
+                    helper.add_const_doc(name, comment, value_type);
                 }
                 #[allow(unreachable_code, unused_variables)]
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
-
                     let f = f.up(&mut helper)?;
-                    let f = CustomFn {
-                        name: f.name.id,
-                        args: f.args.iter().map(|i| i.id.to_string()).collect(),
-                        locals: f.locals,
-                        body: f.body,
-                        is_const: false, // FIXME we should find a way to examine this!
-                        open: f.open,
-                        inline: f.inline,
-                    };
-
-                    helper.register_fun(f)?;
+                    helper.register_fun(f.into())?;
                 }
                 other => exprs.push(other.up(&mut helper)?),
             }
@@ -415,157 +380,17 @@ pub(crate) fn reduce2<'script>(
 }
 
 impl<'script> ImutExprInt<'script> {
-    #[allow(clippy::too_many_lines)]
-    pub(crate) fn reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
+    pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
-            ImutExprInt::Unary(u) => match *u {
-                u1
-                @
-                UnaryExpr {
-                    expr: ImutExprInt::Literal(_),
-                    ..
-                } => {
-                    let expr = reduce2(u1.expr.clone(), &helper)?;
-                    let value = if let Some(v) = exec_unary(u1.kind, &expr) {
-                        v.into_owned()
-                    } else {
-                        let ex = u1.extent(&helper.meta);
-                        return Err(ErrorKind::InvalidUnary(
-                            ex.expand_lines(2),
-                            ex,
-                            u1.kind,
-                            expr.value_type(),
-                        )
-                        .into());
-                    };
-
-                    let lit = Literal { mid: u1.mid, value };
-                    Ok(ImutExprInt::Literal(lit))
-                }
-                u1 => Ok(ImutExprInt::Unary(Box::new(u1))),
-            },
-
-            ImutExprInt::Binary(b) => {
-                match *b {
-                    b1
-                    @
-                    BinExpr {
-                        lhs: ImutExprInt::Literal(_),
-                        rhs: ImutExprInt::Literal(_),
-                        ..
-                    } => {
-                        let lhs = reduce2(b1.lhs.clone(), &helper)?;
-                        let rhs = reduce2(b1.rhs.clone(), &helper)?;
-                        // TODO remove duplicate params?
-                        let value =
-                            exec_binary(&b1, &b1, &helper.meta, b1.kind, &lhs, &rhs)?.into_owned();
-                        let lit = Literal { mid: b1.mid, value };
-                        Ok(ImutExprInt::Literal(lit))
-                    }
-                    b1 => Ok(ImutExprInt::Binary(Box::new(b1))),
-                }
-            }
-            ImutExprInt::List(l) => {
-                if l.exprs.iter().map(|v| &v.0).all(is_lit) {
-                    let elements: Result<Vec<Value>> =
-                        l.exprs.into_iter().map(|v| reduce2(v.0, &helper)).collect();
-                    Ok(ImutExprInt::Literal(Literal {
-                        mid: l.mid,
-                        value: Value::from(elements?),
-                    }))
-                } else {
-                    Ok(ImutExprInt::List(l))
-                }
-            }
-            ImutExprInt::Record(r) => {
-                if r.fields.iter().all(|f| is_lit(&f.name) && is_lit(&f.value)) {
-                    let obj: Result<borrowed::Object> = r
-                        .fields
-                        .into_iter()
-                        .map(|f| {
-                            reduce2(f.name.clone(), &helper).and_then(|n| {
-                                // ALLOW: The grammer guarantees the key of a record is always a string
-                                let n = n.as_str().unwrap_or_else(|| unreachable!());
-                                reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
-                            })
-                        })
-                        .collect();
-                    Ok(ImutExprInt::Literal(Literal {
-                        mid: r.mid,
-                        value: Value::from(obj?),
-                    }))
-                } else {
-                    Ok(ImutExprInt::Record(r))
-                }
-            }
-            ImutExprInt::Path(Path::Const(LocalPath {
-                is_const: true,
-                segments,
-                idx,
-                mid,
-            })) if segments.is_empty() && idx > LAST_RESERVED_CONST => {
-                if let Some(v) = helper.const_values.get(idx) {
-                    let lit = Literal {
-                        mid,
-                        value: v.clone(),
-                    };
-                    Ok(ImutExprInt::Literal(lit))
-                } else {
-                    error_generic(
-                        &Range::from((
-                            helper.meta.start(mid).unwrap_or_default(),
-                            helper.meta.end(mid).unwrap_or_default(),
-                        ))
-                        .expand_lines(2),
-                        &Range::from((
-                            helper.meta.start(mid).unwrap_or_default(),
-                            helper.meta.end(mid).unwrap_or_default(),
-                        )),
-                        &format!(
-                            "Invalid const reference to '{}'",
-                            helper.meta.name_dflt(mid),
-                        ),
-                        &helper.meta,
-                    )
-                }
-            }
+            ImutExprInt::Unary(u) => u.try_reduce(helper),
+            ImutExprInt::Binary(b) => b.try_reduce(helper),
+            ImutExprInt::List(l) => l.try_reduce(helper),
+            ImutExprInt::Record(r) => r.try_reduce(helper),
+            ImutExprInt::Path(p) => p.try_reduce(helper),
             ImutExprInt::Invoke1(i)
             | ImutExprInt::Invoke2(i)
             | ImutExprInt::Invoke3(i)
-            | ImutExprInt::Invoke(i) => {
-                if i.invocable.is_const() && i.args.iter().all(|f| is_lit(&f.0)) {
-                    let ex = i.extent(&helper.meta);
-                    let args: Result<Vec<Value<'script>>> =
-                        i.args.into_iter().map(|v| reduce2(v.0, &helper)).collect();
-                    let args = args?;
-                    // Construct a view into `args`, since `invoke` expects a slice of references.
-                    let args2: Vec<&Value<'script>> = args.iter().collect();
-                    let env = Env {
-                        context: &EventContext::default(),
-                        consts: &NO_CONSTS,
-                        aggrs: &NO_AGGRS,
-                        meta: &helper.meta,
-                        recursion_limit: crate::recursion_limit(),
-                    };
-
-                    let v = i
-                        .invocable
-                        .invoke(&env, &args2)
-                        .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
-                        .into_static();
-                    Ok(ImutExprInt::Literal(Literal {
-                        value: v,
-                        mid: i.mid,
-                    }))
-                } else {
-                    Ok(match i.args.len() {
-                        1 => ImutExprInt::Invoke1(i),
-                        2 => ImutExprInt::Invoke2(i),
-                        3 => ImutExprInt::Invoke3(i),
-                        _ => ImutExprInt::Invoke(i),
-                    })
-                }
-            }
+            | ImutExprInt::Invoke(i) => i.try_reduce(helper),
             other => Ok(other),
         }
     }
@@ -1013,19 +838,20 @@ pub enum ImutExprRaw<'script> {
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExprInt<'script>;
-    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
-        let r = Ok(match self {
+        let r = match self {
             ImutExprRaw::Recur(r) => {
                 helper.possible_leaf = was_leaf;
                 ImutExprInt::Recur(r.up(helper)?)
             }
             ImutExprRaw::Binary(b) => {
-                ImutExprInt::Binary(Box::new(b.up(helper)?)).reduce(helper)?
+                ImutExprInt::Binary(Box::new(b.up(helper)?)).try_reduce(helper)?
             }
-            ImutExprRaw::Unary(u) => ImutExprInt::Unary(Box::new(u.up(helper)?)).reduce(helper)?,
+            ImutExprRaw::Unary(u) => {
+                ImutExprInt::Unary(Box::new(u.up(helper)?)).try_reduce(helper)?
+            }
             ImutExprRaw::String(mut s) => {
                 let lit = ImutExprRaw::Literal(LiteralRaw {
                     start: s.start,
@@ -1045,18 +871,22 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                         args,
                     })
                     .up(helper)?
-                    .reduce(helper)?
+                    .try_reduce(helper)?
                 }
             }
-            ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).reduce(helper)?,
-            ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).reduce(helper)?,
-            ImutExprRaw::Patch(p) => ImutExprInt::Patch(Box::new(p.up(helper)?)).reduce(helper)?,
-            ImutExprRaw::Merge(m) => ImutExprInt::Merge(Box::new(m.up(helper)?)).reduce(helper)?,
+            ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).try_reduce(helper)?,
+            ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).try_reduce(helper)?,
+            ImutExprRaw::Patch(p) => {
+                ImutExprInt::Patch(Box::new(p.up(helper)?)).try_reduce(helper)?
+            }
+            ImutExprRaw::Merge(m) => {
+                ImutExprInt::Merge(Box::new(m.up(helper)?)).try_reduce(helper)?
+            }
             ImutExprRaw::Present { path, start, end } => ImutExprInt::Present {
                 path: path.up(helper)?,
                 mid: helper.add_meta(start, end),
             }
-            .reduce(helper)?,
+            .try_reduce(helper)?,
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
                     is_const,
@@ -1066,8 +896,8 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 }) if segments.is_empty() => ImutExprInt::Local { mid, idx, is_const },
                 p => ImutExprInt::Path(p),
             }
-            .reduce(helper)?,
-            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?).reduce(helper)?,
+            .try_reduce(helper)?,
+            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?).try_reduce(helper)?,
             ImutExprRaw::Invoke(i) => {
                 if i.is_aggregate(helper) {
                     ImutExprInt::InvokeAggr(i.into_aggregate().up(helper)?)
@@ -1083,18 +913,17 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                             _ => ImutExprInt::Invoke(i),
                         }
                     };
-                    i.reduce(helper)?
+                    i.try_reduce(helper)?
                 }
             }
             ImutExprRaw::Match(m) => {
                 helper.possible_leaf = was_leaf;
-
                 ImutExprInt::Match(Box::new(m.up(helper)?))
             }
             ImutExprRaw::Comprehension(c) => ImutExprInt::Comprehension(Box::new(c.up(helper)?)),
-        });
+        };
         helper.possible_leaf = was_leaf;
-        r
+        Ok(r)
     }
 }
 

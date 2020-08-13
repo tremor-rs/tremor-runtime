@@ -51,7 +51,6 @@ fn mk_node_confiug<'script>(
 }
 
 impl TrickleOperator {
-    #[allow(clippy::too_many_lines)]
     pub fn with_stmt(
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,

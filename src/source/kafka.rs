@@ -139,7 +139,7 @@ rental! {
     }
 }
 
-#[allow(dead_code, clippy::transmute_ptr_to_ptr)]
+#[allow(clippy::transmute_ptr_to_ptr)]
 impl rentals::MessageStream {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     unsafe fn mut_suffix(
@@ -151,7 +151,7 @@ impl rentals::MessageStream {
     unsafe fn consumer(&mut self) -> &mut LoggingConsumer {
         struct MessageStream {
             consumer: Box<LoggingConsumer>,
-            stream: StreamAndMsgs<'static>,
+            _stream: StreamAndMsgs<'static>,
         };
         let s: &mut MessageStream = transmute(self);
         &mut s.consumer

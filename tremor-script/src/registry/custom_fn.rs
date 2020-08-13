@@ -14,7 +14,7 @@
 
 use super::{FResult, FunctionError, Result};
 use crate::ast::query::ARGS_CONST_ID;
-use crate::ast::{Expr, Exprs, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
+use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
@@ -41,6 +41,20 @@ pub struct CustomFn<'script> {
     pub is_const: bool,
     /// Should the function be inlined?
     pub inline: bool,
+}
+
+impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
+    fn from(f: FnDecl<'script>) -> Self {
+        CustomFn {
+            name: f.name.id,
+            args: f.args.iter().map(|i| i.id.to_string()).collect(),
+            locals: f.locals,
+            body: f.body,
+            is_const: false, // FIXME we should find a way to examine this!
+            open: f.open,
+            inline: f.inline,
+        }
+    }
 }
 
 impl<'script> CustomFn<'script> {

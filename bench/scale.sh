@@ -6,10 +6,14 @@ else
 	TARGET=target/release/tremor-server
 fi
 
+echo "(3 cores)"
+for i in 1 2 4 8 16 32 64 
+do
+	taskset -c 0,1,2 $TARGET --no-api -c ./bench/real-workflow-throughput-json-$i-$i-1.yaml bench/link.yaml 2>&1 | grep Throughput | sed -e 's/Throughput: //' -e 's; MB/s;;'
+done
+
+echo "(all cores)"
 for i in 1 2 4 8 16 32 64
 do
-	echo "$i (3 cores)"
-	taskset -c 0,1,2 $TARGET --no-api -c ./bench/real-workflow-throughput-json-$i-$i-1.yaml bench/link.yaml | grep Throughput
-	echo "$i (all cores)"
-	$TARGET --no-api -c ./bench/real-workflow-throughput-json-$i-$i-1.yaml bench/link.yaml | grep Throughput
+	$TARGET --no-api -c ./bench/real-workflow-throughput-json-$i-$i-1.yaml bench/link.yaml 2>&1 | grep Throughput | sed -e 's/Throughput: //' -e 's; MB/s;;'
 done

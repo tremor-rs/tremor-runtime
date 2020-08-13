@@ -17,6 +17,7 @@ use std::time::Duration;
 pub use tremor_pipeline::ConfigImpl;
 
 /// Fetches a hostname with `tremor-host.local` being the default
+#[must_use]
 pub fn hostname() -> String {
     hostname::get()
         .map_err(|_| ())
@@ -30,6 +31,7 @@ pub(crate) fn duration_to_millis(at: Duration) -> u64 {
 
 /// Get a nanosecond timestamp
 #[allow(clippy::cast_sign_loss)]
+#[must_use]
 pub fn nanotime() -> u64 {
     let now = Utc::now();
     let seconds: u64 = now.timestamp() as u64;

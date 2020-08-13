@@ -60,8 +60,8 @@ impl Sink for StdOut {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    #[allow(clippy::used_underscore_binding)]
+    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }
     fn is_active(&self) -> bool {

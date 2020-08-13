@@ -165,8 +165,8 @@ pub trait Highlighter {
         file: Option<&str>,
         tokens: &[TokenSpan],
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors2(true, file, &tokens.iter().collect::<Vec<_>>(), None)?;
-        Ok(())
+        self.highlight_errors(file, &tokens.iter().collect::<Vec<_>>(), None)?;
+        self.finalize()
     }
 
     /// highlights a runtime error
@@ -179,12 +179,12 @@ pub trait Highlighter {
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
-        self.highlight_errors2(true, file, &extracted, error)
+        self.highlight_errors(file, &extracted, error)
     }
 
     /// highlights compile time errors
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
-    fn highlight_errors2(
+    fn highlight_errors(
         &mut self,
         emit_linenos: bool,
         file: Option<&str>,
