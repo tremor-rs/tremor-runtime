@@ -18,7 +18,7 @@ use crate::op;
 use crate::op::prelude::{IN, OUT};
 use crate::op::trickle::select::WindowImpl;
 use crate::OperatorNode;
-use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, PortIndexMap};
+use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, Operator, PortIndexMap};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use op::identity::PassthroughFactory;
@@ -110,7 +110,6 @@ impl Query {
     /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, uid: &mut u64) -> Result<crate::ExecutableGraph> {
-        use crate::op::Operator;
         use crate::ExecutableGraph;
         use crate::NodeMetrics;
         use crate::State;
@@ -537,7 +536,110 @@ impl Query {
     }
 }
 
-#[allow(clippy::implicit_hasher, clippy::too_many_lines)]
+fn select(
+    config: &NodeConfig,
+    node: Option<tremor_script::query::StmtRentalWrapper>,
+    windows: Option<HashMap<String, WindowImpl>>,
+) -> Result<Box<dyn Operator>> {
+    let node = if let Some(node) = node {
+        node
+    } else {
+        return Err(
+            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
+        );
+    };
+    let select_type = match node.stmt.suffix() {
+        tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
+        _ => {
+            return Err(ErrorKind::PipelineError(
+                "Trying to turn a non select into a select operator".into(),
+            )
+            .into())
+        }
+    };
+    match select_type {
+        SelectType::Passthrough => {
+            let op = PassthroughFactory::new_boxed();
+            op.from_node(config)
+        }
+        SelectType::Simple => Ok(Box::new(TrickleSimpleSelect::with_stmt(
+            config.id.clone().to_string(),
+            &node,
+        )?)),
+        SelectType::Normal => {
+            let groups = Dims::new(node.stmt.clone());
+            let windows = if let Some(windows) = windows {
+                windows
+            } else {
+                return Err(ErrorKind::MissingOpConfig(
+                    "select operators require a window mapping".into(),
+                )
+                .into());
+            };
+            let windows: Result<Vec<(String, WindowImpl)>> =
+                if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
+                    s.stmt
+                        .windows
+                        .iter()
+                        .map(|w| {
+                            let fqwn = w.fqwn();
+                            Ok(windows
+                                .get(&fqwn)
+                                .map(|imp| (w.id.to_string(), imp.clone()))
+                                .ok_or_else(|| {
+                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
+                                })?)
+                        })
+                        .collect()
+                } else {
+                    Err("Declared as select but isn't a select".into())
+                };
+
+            Ok(Box::new(TrickleSelect::with_stmt(
+                config.id.clone().to_string(),
+                &groups,
+                windows?,
+                &node,
+            )?))
+        }
+    }
+}
+
+fn operator(
+    config: &NodeConfig,
+    node: Option<tremor_script::query::StmtRentalWrapper>,
+) -> Result<Box<dyn Operator>> {
+    let node = if let Some(node) = node {
+        node
+    } else {
+        return Err(
+            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
+        );
+    };
+    Ok(Box::new(TrickleOperator::with_stmt(
+        config.id.clone().to_string(),
+        node,
+    )?))
+}
+
+fn script(
+    config: &NodeConfig,
+    defn: Option<tremor_script::query::StmtRentalWrapper>,
+    node: Option<tremor_script::query::StmtRentalWrapper>,
+) -> Result<Box<dyn Operator>> {
+    let node = if let Some(node) = node {
+        node
+    } else {
+        return Err(
+            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
+        );
+    };
+    Ok(Box::new(TrickleScript::with_stmt(
+        config.id.clone().to_string(),
+        defn.ok_or_else(|| Error::from("Script definition missing"))?,
+        node,
+    )?))
+}
 pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
@@ -548,103 +650,9 @@ pub(crate) fn supported_operators(
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
-        ["trickle", "select"] => {
-            let node = if let Some(node) = node {
-                node
-            } else {
-                return Err(ErrorKind::MissingOpConfig(
-                    "trickle operators require a statement".into(),
-                )
-                .into());
-            };
-            let select_type = match node.stmt.suffix() {
-                tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
-                _ => {
-                    return Err(ErrorKind::PipelineError(
-                        "Trying to turn a non select into a select operator".into(),
-                    )
-                    .into())
-                }
-            };
-            match select_type {
-                SelectType::Passthrough => {
-                    let op = PassthroughFactory::new_boxed();
-                    op.from_node(config)?
-                }
-                SelectType::Simple => Box::new(TrickleSimpleSelect::with_stmt(
-                    config.id.clone().to_string(),
-                    &node,
-                )?),
-                SelectType::Normal => {
-                    let groups = Dims::new(node.stmt.clone());
-                    let windows = if let Some(windows) = windows {
-                        windows
-                    } else {
-                        return Err(ErrorKind::MissingOpConfig(
-                            "select operators require a window mapping".into(),
-                        )
-                        .into());
-                    };
-                    let windows: Result<Vec<(String, WindowImpl)>> =
-                        if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
-                            s.stmt
-                                .windows
-                                .iter()
-                                .map(|w| {
-                                    let fqwn = w.fqwn();
-                                    Ok(windows
-                                        .get(&fqwn)
-                                        .map(|imp| (w.id.to_string(), imp.clone()))
-                                        .ok_or_else(|| {
-                                            ErrorKind::BadOpConfig(format!(
-                                                "Unknown window: {}",
-                                                &fqwn
-                                            ))
-                                        })?)
-                                })
-                                .collect()
-                        } else {
-                            Err("Declared as select but isn't a select".into())
-                        };
-
-                    Box::new(TrickleSelect::with_stmt(
-                        config.id.clone().to_string(),
-                        &groups,
-                        windows?,
-                        &node,
-                    )?)
-                }
-            }
-        }
-        ["trickle", "operator"] => {
-            let node = if let Some(node) = node {
-                node
-            } else {
-                return Err(ErrorKind::MissingOpConfig(
-                    "trickle operators require a statement".into(),
-                )
-                .into());
-            };
-            Box::new(TrickleOperator::with_stmt(
-                config.id.clone().to_string(),
-                node,
-            )?)
-        }
-        ["trickle", "script"] => {
-            let node = if let Some(node) = node {
-                node
-            } else {
-                return Err(ErrorKind::MissingOpConfig(
-                    "trickle operators require a statement".into(),
-                )
-                .into());
-            };
-            Box::new(TrickleScript::with_stmt(
-                config.id.clone().to_string(),
-                defn.ok_or_else(|| Error::from("Script definition missing"))?,
-                node,
-            )?)
-        }
+        ["trickle", "select"] => select(config, node, windows)?,
+        ["trickle", "operator"] => operator(config, node)?,
+        ["trickle", "script"] => script(config, defn, node)?,
         _ => crate::operator(&config)?,
     };
     Ok(OperatorNode {

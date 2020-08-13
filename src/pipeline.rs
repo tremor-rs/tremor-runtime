@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
@@ -148,19 +148,10 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
         if let Some(dest) = dests.get_mut(&output) {
             if let Some((last, rest)) = dest.split_last_mut() {
                 for (id, offramp) in rest {
-                    let port = id
-                        .instance_port()
-                        .ok_or_else(|| Error::from(format!("missing instance port in {}.", id)))?
-                        .to_string()
-                        .into();
+                    let port = id.instance_port_required()?.to_string().into();
                     offramp.send_event(port, event.clone()).await?;
                 }
-                let last_port = last
-                    .0
-                    .instance_port()
-                    .ok_or_else(|| Error::from(format!("missing instance port in {}.", last.0)))?
-                    .to_string()
-                    .into();
+                let last_port = last.0.instance_port_required()?.to_string().into();
                 last.1.send_event(last_port, event).await?;
             }
         };
@@ -330,8 +321,6 @@ async fn pipeline_task(
                 onramps.remove(&onramp_id);
             }
         }
-        // FIXME: we can get rid of that with the new runtime
-        task::yield_now().await;
     }
 
     info!("[Pipeline:{}] stopping task.", id);

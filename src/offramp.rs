@@ -50,15 +50,11 @@ pub enum Msg {
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 pub type Addr = async_channel::Sender<Msg>;
 
-// We allow this here since we can't pass in &dyn Code as that would taint the
-// overlying object with lifetimes.
-// We also can't pass in Box<dyn Codec> as that would try to move it out of
-// borrowed contest
-#[allow(unused_variables)]
 #[async_trait::async_trait]
 pub trait Offramp: Send {
     async fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
+    #[allow(unused_variables)]
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
         None
     }

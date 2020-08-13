@@ -129,7 +129,60 @@ pub struct World {
 }
 
 impl World {
+    /// Ensures the existance of an onramp, creating it if required.
+    ///
+    /// # Errors
+    ///  * if we can't ensure the onramp is bound
+    pub async fn ensure_onramp(&self, id: &TremorURL) -> Result<()> {
+        if self.reg.find_onramp(&id).await?.is_none() {
+            info!(
+                "Onramp not found during binding process, binding {} to create a new instance.",
+                &id
+            );
+            self.bind_onramp(&id).await?;
+        } else {
+            info!("Existing onramp {} found", id);
+        }
+        Ok(())
+    }
+
+    /// Ensures the existance of an offramp, creating it if required.
+    ///
+    /// # Errors
+    ///  * if we can't ensure the offramp is bound
+    pub async fn ensure_offramp(&self, id: &TremorURL) -> Result<()> {
+        if self.reg.find_offramp(&id).await?.is_none() {
+            info!(
+                "Offramp not found during binding process, binding {} to create a new instance.",
+                &id
+            );
+            self.bind_offramp(&id).await?;
+        } else {
+            info!("Existing offramp {} found", id);
+        }
+        Ok(())
+    }
+    /// Ensures the existance of an pipeline, creating it if required.
+    ///
+    /// # Errors
+    ///  * if we can't ensure the pipeline is bound
+    pub async fn ensure_pipeline(&self, id: &TremorURL) -> Result<()> {
+        if self.reg.find_pipeline(&id).await?.is_none() {
+            info!(
+                "Pipeline not found during binding process, binding {} to create a new instance.",
+                &id
+            );
+            self.bind_pipeline(&id).await?;
+        } else {
+            info!("Existing pipeline {} found", id);
+        }
+        Ok(())
+    }
+
     /// Bind a pipeline
+    ///
+    /// # Errors
+    ///  * if the id isn't a pipeline instance or can't be bound
     pub async fn bind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
@@ -157,6 +210,9 @@ impl World {
     }
 
     /// Unbind a pipeline
+    ///
+    /// # Errors
+    ///  * if the id isn't an pipeline instance or the pipeline can't be unbound
     pub async fn unbind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
@@ -171,10 +227,16 @@ impl World {
     }
 
     /// Stop the runtime
+    ///
+    /// # Errors
+    ///  * if the system failed to stop
     pub async fn stop(&self) -> Result<()> {
         Ok(self.system.send(ManagerMsg::Stop).await?)
     }
     /// Links a pipeline
+    ///
+    /// # Errors
+    ///  * if the id isn't a pipeline or the pipeline can't be linked
     pub async fn link_pipeline(
         &self,
         id: &TremorURL,
@@ -212,6 +274,9 @@ impl World {
     }
 
     /// Unlink a pipelein
+    ///
+    /// # Errors
+    ///  * if the id isn't a pipeline or the pipeline can't be unlinked
     pub async fn unlink_pipeline(
         &self,
         id: &TremorURL,
@@ -241,6 +306,9 @@ impl World {
         self.bind_pipeline(id).await
     }
     /// Bind an onramp
+    ///
+    /// # Errors
+    ///  * if the id isn't a onramp instance or the onramp can't be bound
     pub async fn bind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
@@ -267,6 +335,9 @@ impl World {
         }
     }
     /// Unbind an onramp
+    ///
+    /// # Errors
+    ///  * if the id isn't an onramp or the onramp can't be unbound
     pub async fn unbind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
@@ -281,6 +352,9 @@ impl World {
     }
 
     /// Link an onramp
+    ///
+    /// # Errors
+    ///  * if the id isn't an onramp or the onramp can't be linked
     pub async fn link_onramp(
         &self,
         id: &TremorURL,
@@ -315,6 +389,9 @@ impl World {
     }
 
     /// Unlink an onramp
+    ///
+    /// # Errors
+    ///  * if the id isn't a onramp or it cna't be unlinked
     pub async fn unlink_onramp(
         &self,
         id: &TremorURL,
@@ -335,6 +412,9 @@ impl World {
     }
 
     /// Bind an offramp
+    ///
+    /// # Errors
+    ///  * if the id isn't a offramp instance or it can't be bound
     pub async fn bind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
@@ -360,6 +440,9 @@ impl World {
     }
 
     /// Unbind an offramp
+    ///
+    /// # Errors
+    ///  * if the id isn't an offramp instance or the offramp can't be unbound
     pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         info!("Unbinding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
@@ -374,6 +457,9 @@ impl World {
     }
 
     /// Link an offramp
+    ///
+    /// # Errors
+    ///  * if the id isn't an offramp or can't be linked
     pub async fn link_offramp(
         &self,
         id: &TremorURL,
@@ -408,6 +494,9 @@ impl World {
     }
 
     /// Unlink an offramp
+    ///
+    /// # Errors
+    ///  * if the id isn't an offramp or it cna't be unlinked
     pub async fn unlink_offramp(
         &self,
         id: &TremorURL,
@@ -462,6 +551,9 @@ impl World {
     }
 
     /// Links a binding
+    ///
+    /// # Errors
+    ///  * If the id isn't a binding or the bindig can't be linked
     pub async fn link_binding(
         &self,
         id: &TremorURL,
@@ -482,6 +574,9 @@ impl World {
     }
 
     /// Turns the running system into a config
+    ///
+    /// # Errors
+    ///  * If the systems configuration can't be stored
     pub async fn to_config(&self) -> Result<Config> {
         let pipeline: PipelineVec = self
             .repo
@@ -514,6 +609,9 @@ impl World {
     }
 
     /// Saves the current config
+    ///
+    /// # Errors
+    ///  * if the config can't be saved
     pub async fn save_config(&self) -> Result<String> {
         if let Some(storage_directory) = &self.storage_directory {
             let config = self.to_config().await?;
@@ -538,6 +636,9 @@ impl World {
     }
 
     /// Unlinks a binding
+    ///
+    /// # Errors
+    ///  * if the id isn't an binding or the binding can't be unbound
     pub async fn unlink_binding(
         &self,
         id: &TremorURL,
@@ -556,6 +657,9 @@ impl World {
     }
 
     /// Starts the runtime system
+    ///
+    /// # Errors
+    ///  * if the world manager can't be started
     pub async fn start(
         qsize: usize,
         storage_directory: Option<String>,

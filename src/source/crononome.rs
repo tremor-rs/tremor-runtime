@@ -127,12 +127,6 @@ struct TemporalItem<I> {
     what: I,
 }
 
-impl<I: Clone> TemporalItem<I> {
-    #[allow(dead_code)]
-    pub fn value(&self) -> &I {
-        &self.what
-    }
-}
 impl<I> PartialEq for TemporalItem<I> {
     fn eq(&self, other: &Self) -> bool {
         self.at.eq(&other.at)
@@ -182,7 +176,6 @@ struct TemporalPriorityQueue<I> {
     q: BinaryHeap<Reverse<TemporalItem<I>>>,
 }
 
-#[allow(dead_code)]
 impl<I> TemporalPriorityQueue<I> {
     pub fn default() -> Self {
         Self {
@@ -207,7 +200,7 @@ impl<I> TemporalPriorityQueue<I> {
             None
         }
     }
-
+    #[cfg(test)]
     pub fn drain(&mut self) -> Vec<TemporalItem<I>> {
         let now = Utc::now().timestamp();
         let mut sched: Vec<TemporalItem<I>> = vec![];
@@ -242,7 +235,6 @@ struct ChronomicQueue {
     tpq: TemporalPriorityQueue<CronEntryInt>,
 }
 
-#[allow(dead_code)]
 impl ChronomicQueue {
     pub fn default() -> Self {
         Self {
@@ -258,7 +250,7 @@ impl ChronomicQueue {
             });
         }
     }
-
+    #[cfg(test)]
     pub fn drain(&mut self) -> Vec<(String, Option<BorrowedValue<'static>>)> {
         let due = self.tpq.drain();
         let mut trigger: Vec<(String, Option<BorrowedValue<'static>>)> = vec![];

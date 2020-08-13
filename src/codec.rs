@@ -36,10 +36,19 @@ pub trait Codec: Send + Sync {
     /// The canonical name for this codec
     fn name(&self) -> std::string::String;
     /// Decode a binary, into an Value
+    ///
+    /// # Errors
+    ///  * if we cna't decode the data
     fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
     /// Encodes a Value into a binary
+    ///
+    /// # Errors
+    ///  * If the encoding fails
     fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
     /// Encodes into an existing buffer
+    ///
+    /// # Errors
+    ///  * when we can't write encode to the given vector
     fn encode_into(&self, data: &BorrowedValue, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);
@@ -48,6 +57,9 @@ pub trait Codec: Send + Sync {
 }
 
 /// Codec lookup function
+///
+/// # Errors
+///  * if the codec doesn't exist
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
         "json" => Ok(Box::new(json::JSON {})),

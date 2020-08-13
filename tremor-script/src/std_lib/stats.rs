@@ -472,7 +472,6 @@ impl TremorAggrFn for Dds {
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         fn err<T>(e: &T) -> FunctionError
         where
@@ -484,116 +483,53 @@ impl TremorAggrFn for Dds {
             }
         }
         let mut p = hashmap! {};
-        if let Some(histo) = &self.histo {
-            let count = histo.count();
-            if count == 0 {
-                for (pcn, _percentile) in &self.percentiles {
-                    p.insert(pcn.clone().into(), Value::from(0.0));
-                }
-            } else {
-                for (pcn, percentile) in &self.percentiles {
-                    match histo.quantile(*percentile) {
-                        Ok(Some(quantile)) => {
-                            let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
-                            p.insert(pcn.clone().into(), Value::from(quantile_dsp));
-                        }
-                        _ => {
-                            return Err(FunctionError::RuntimeError {
-                                mfa: mfa("stats", "dds", 2),
-                                error: format!("Unable to calculate percentile '{}'", *percentile),
-                            })
-                        }
-                    }
-                }
-            }
-            let min = histo.min().ok_or_else(|| err(&"Unable to calculate min"))?;
-            let max = histo.max().ok_or_else(|| err(&"Unable to calculate max"))?;
-            let sum = histo.sum().ok_or_else(|| err(&"Unable to calculate sum"))?;
-            Ok(Value::from(hashmap! {
-                            "count".into() => Value::from(count),
-                            "min".into() => Value::from(min),
-                            "max".into() => Value::from(max),
-                            "mean".into() => Value::from(sum / count as f64),
-            //                "stdev".into() => Value::from(histo.stdev()),
-            //                "var".into() => Value::from(histo.stdev().powf(2.0)),
-                            "percentiles".into() => Value::from(p),
-                        }))
+        let histo = if let Some(histo) = self.histo.as_ref() {
+            histo
         } else {
             let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
             for v in self.cache.drain(..) {
                 histo.add(v);
             }
-            let count = histo.count();
-
-            if count == 0 {
-                for (pcn, _percentile) in &self.percentiles {
-                    p.insert(pcn.clone().into(), Value::from(0.0));
-                }
+            self.histo = Some(histo);
+            if let Some(histo) = self.histo.as_ref() {
+                histo
             } else {
-                for (pcn, percentile) in &self.percentiles {
-                    match histo.quantile(*percentile) {
-                        Ok(Some(quantile)) => {
-                            let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
-                            p.insert(pcn.clone().into(), Value::from(quantile_dsp));
-                        }
-                        _ => {
-                            return Err(FunctionError::RuntimeError {
-                                mfa: mfa("stats", "dds", 2),
-                                error: format!("Unable to calculate percentile '{}'", *percentile),
-                            })
-                        }
-                    }
+                // ALLOW: we just set it, we know it exisdts
+                unreachable!()
+            }
+        };
+
+        let count = histo.count();
+        let (min, max, sum) = if count == 0 {
+            for (pcn, _percentile) in &self.percentiles {
+                p.insert(pcn.clone().into(), Value::from(0.0));
+            }
+            (0_f64, f64::MAX, 0_f64)
+        } else {
+            for (pcn, percentile) in &self.percentiles {
+                if let Ok(Some(quantile)) = histo.quantile(*percentile) {
+                    let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                    p.insert(pcn.clone().into(), Value::from(quantile_dsp));
+                } else {
+                    return Err(err(&format!(
+                        "Unable to calculate percentile '{}'",
+                        *percentile
+                    )));
                 }
             }
-            let min = if count == 0 {
-                0_f64
-            } else {
-                match histo.min() {
-                    Some(min) => min,
-                    None => {
-                        return Err(FunctionError::RuntimeError {
-                            mfa: mfa("stats", "dds", 2),
-                            error: "Unable to calculate min".to_string(),
-                        })
-                    }
-                }
-            };
-            let max = if count == 0 {
-                f64::MAX
-            } else {
-                match histo.max() {
-                    Some(max) => max,
-                    None => {
-                        return Err(FunctionError::RuntimeError {
-                            mfa: mfa("stats", "dds", 2),
-                            error: "Unable to calculate max".to_string(),
-                        })
-                    }
-                }
-            };
-            let sum = if count == 0 {
-                0_f64
-            } else {
-                match histo.sum() {
-                    Some(sum) => sum,
-                    None => {
-                        return Err(FunctionError::RuntimeError {
-                            mfa: mfa("stats", "dds", 2),
-                            error: "Unable to calculate sum".to_string(),
-                        })
-                    }
-                }
-            };
-            Ok(Value::from(hashmap! {
-                            "count".into() => Value::from(count),
-                            "min".into() => Value::from(min),
-                            "max".into() => Value::from(max),
-                            "mean".into() => Value::from(sum / count as f64),
-            //                "stdev".into() => Value::from(histo.stdev()),
-            //                "var".into() => Value::from(histo.stdev().powf(2.0)),
-                            "percentiles".into() => Value::from(p),
-            }))
-        }
+            (
+                histo.min().ok_or_else(|| err(&"Unable to calculate min"))?,
+                histo.max().ok_or_else(|| err(&"Unable to calculate max"))?,
+                histo.sum().ok_or_else(|| err(&"Unable to calculate sum"))?,
+            )
+        };
+        Ok(Value::from(hashmap! {
+            "count".into() => Value::from(count),
+            "min".into() => Value::from(min),
+            "max".into() => Value::from(max),
+            "mean".into() => Value::from(sum / count as f64),
+            "percentiles".into() => Value::from(p),
+        }))
     }
 
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {

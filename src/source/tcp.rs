@@ -77,8 +77,8 @@ impl Source for Int {
         &self.onramp_id
     }
 
-    #[allow(unused_variables)]
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    #[allow(clippy::used_underscore_binding)]
+    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
                 Ok(r) => Ok(r),

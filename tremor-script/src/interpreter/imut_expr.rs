@@ -102,7 +102,6 @@ where
         value_to_index(outer, self, val.borrow(), env, path, array)
     }
 
-    #[allow(clippy::too_many_lines)]
     #[inline]
     /// Invokes expression
     pub fn run(
@@ -176,9 +175,10 @@ where
                 idx,
                 mid,
                 is_const: false,
-            } => match local.values.get(*idx) {
-                Some(Some(l)) => Ok(Cow::Borrowed(l)),
-                Some(None) => {
+            } => {
+                if let Some(l) = stry!(local.get(*idx, self, *mid, &env.meta)) {
+                    Ok(Cow::Borrowed(l))
+                } else {
                     let path: Path = Path::Local(LocalPath {
                         is_const: false,
                         idx: *idx,
@@ -195,25 +195,12 @@ where
                         &env.meta,
                     )
                 }
-
-                _ => error_oops(
-                    self,
-                    0xdead_000d,
-                    &format!(
-                        "Unknown local variable in ImutExprInt::Local: '{}'",
-                        env.meta.name_dflt(*mid)
-                    ),
-                    &env.meta,
-                ),
-            },
+            }
             ImutExprInt::Local {
                 idx,
                 is_const: true,
                 ..
-            } => match env.consts.get(*idx) {
-                Some(v) => Ok(Cow::Borrowed(v)),
-                None => error_oops(self, 0xdead_000e, "Unknown const variable", &env.meta),
-            },
+            } => env.get_const(*idx, self, &env.meta).map(Cow::Borrowed),
             ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExprInt::Binary(ref expr) => {
                 self.binary(opts, env, event, state, meta, local, expr)
@@ -388,7 +375,6 @@ where
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     // FIXME: Quite some overlap with `interpreter::resolve` (and some with `expr::assign`)
     fn present(
         &'script self,
@@ -403,24 +389,14 @@ where
         // Fetch the base of the path
         // TODO: Extract this into a method on `Path`?
         let base_value: &Value = match path {
-            Path::Local(path) => match local.values.get(path.idx) {
-                Some(Some(l)) => l,
-                Some(None) => return Ok(Cow::Borrowed(&FALSE)),
-                _ => {
-                    return error_oops(
-                        self,
-                        0xdead_000f,
-                        "Unknown local variable in present",
-                        &env.meta,
-                    )
+            Path::Local(path) => {
+                if let Some(l) = stry!(local.get(path.idx, self, path.mid, &env.meta)) {
+                    l
+                } else {
+                    return Ok(Cow::Borrowed(&FALSE));
                 }
-            },
-            Path::Const(path) => match env.consts.get(path.idx) {
-                Some(v) => v,
-                None => {
-                    return error_oops(self, 0xdead_0010, "Unknown constant variable", &env.meta)
-                }
-            },
+            }
+            Path::Const(path) => stry!(env.get_const(path.idx, self, &env.meta)),
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
             Path::State(_path) => state,

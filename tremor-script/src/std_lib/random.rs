@@ -20,131 +20,131 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 
-#[allow(clippy::too_many_lines)]
-pub fn load(registry: &mut Registry) {
-    // TODO see if we can cache the RNG here across function calls (or at least
-    // at the thread level, like via rand::thread_rng()
-    //
-    // also, `rng.gen_range()` calls here are optimized for a single sample from
-    // the range. we will be sampling a lot during a typical use case, so swap it
-    // for a distribution based sampling (if we can cache the distribution):
-    // https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.gen_range
-    #[derive(Clone, Debug, Default)]
-    struct RandomInteger {}
-    impl TremorFn for RandomInteger {
-        fn invoke<'event, 'c>(
-            &self,
-            ctx: &'c EventContext,
-            args: &[&Value<'event>],
-        ) -> FResult<Value<'event>> {
-            let this_mfa = || mfa("random", "integer", args.len());
-            // TODO add event id to the seed? also change ingest_ns() for tremor-script binary runs too
-            let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
-            match args.len() {
-                2 => {
-                    let (low, high) = (&args[0], &args[1]);
-                    if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
-                        if low < high {
-                            // random integer between low and high (not including high)
-                            Ok(Value::from(rng.gen_range(low, high)))
-                        } else {
-                            Err(FunctionError::RuntimeError {
+// TODO see if we can cache the RNG here across function calls (or at least
+// at the thread level, like via rand::thread_rng()
+//
+// also, `rng.gen_range()` calls here are optimized for a single sample from
+// the range. we will be sampling a lot during a typical use case, so swap it
+// for a distribution based sampling (if we can cache the distribution):
+// https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.gen_range
+#[derive(Clone, Debug, Default)]
+struct RandomInteger {}
+impl TremorFn for RandomInteger {
+    fn invoke<'event, 'c>(
+        &self,
+        ctx: &'c EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>> {
+        let this_mfa = || mfa("random", "integer", args.len());
+        // TODO add event id to the seed? also change ingest_ns() for tremor-script binary runs too
+        let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
+        match args.len() {
+            2 => {
+                let (low, high) = (&args[0], &args[1]);
+                if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
+                    if low < high {
+                        // random integer between low and high (not including high)
+                        Ok(Value::from(rng.gen_range(low, high)))
+                    } else {
+                        Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
                                 error:
                                     "Invalid arguments. First argument must be lower than second argument".to_string(),
                             })
-                        }
-                    } else {
-                        Err(FunctionError::BadType { mfa: this_mfa() })
                     }
+                } else {
+                    Err(FunctionError::BadType { mfa: this_mfa() })
                 }
-                1 => {
-                    let input = &args[0];
-                    if let Some(input) = input.as_u64() {
-                        // random integer between 0 and input (not including input)
-                        Ok(Value::from(rng.gen_range(0, input)))
-                    } else {
-                        Err(FunctionError::BadType { mfa: this_mfa() })
-                    }
-                }
-                0 => Ok(Value::from(
-                    rng.gen::<i64>(), // random integer
-                )),
-                _ => Err(FunctionError::BadArity {
-                    mfa: this_mfa(),
-                    calling_a: args.len(),
-                }),
             }
-        }
-        fn snot_clone(&self) -> Box<dyn TremorFn> {
-            Box::new(self.clone())
-        }
-        fn arity(&self) -> std::ops::RangeInclusive<usize> {
-            0..=2
-        }
-        fn is_const(&self) -> bool {
-            false
+            1 => {
+                let input = &args[0];
+                if let Some(input) = input.as_u64() {
+                    // random integer between 0 and input (not including input)
+                    Ok(Value::from(rng.gen_range(0, input)))
+                } else {
+                    Err(FunctionError::BadType { mfa: this_mfa() })
+                }
+            }
+            0 => Ok(Value::from(
+                rng.gen::<i64>(), // random integer
+            )),
+            _ => Err(FunctionError::BadArity {
+                mfa: this_mfa(),
+                calling_a: args.len(),
+            }),
         }
     }
-    // TODO try to consolidate this with the integer implementation -- mostly a copy-pasta
-    // of that right now, with types changed
-    #[derive(Clone, Debug, Default)]
-    struct RandomFloat {}
-    impl TremorFn for RandomFloat {
-        fn invoke<'event, 'c>(
-            &self,
-            ctx: &'c EventContext,
-            args: &[&Value<'event>],
-        ) -> FResult<Value<'event>> {
-            let this_mfa = || mfa("random", "float", args.len());
-            let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
-            match args.len() {
-                2 => {
-                    let (low, high) = (&args[0], &args[1]);
-                    if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
-                        if low < high {
-                            // random integer between low and high (not including high)
-                            Ok(Value::from(rng.gen_range(low, high)))
-                        } else {
-                            Err(FunctionError::RuntimeError {
+    fn snot_clone(&self) -> Box<dyn TremorFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> std::ops::RangeInclusive<usize> {
+        0..=2
+    }
+    fn is_const(&self) -> bool {
+        false
+    }
+}
+// TODO try to consolidate this with the integer implementation -- mostly a copy-pasta
+// of that right now, with types changed
+#[derive(Clone, Debug, Default)]
+struct RandomFloat {}
+impl TremorFn for RandomFloat {
+    fn invoke<'event, 'c>(
+        &self,
+        ctx: &'c EventContext,
+        args: &[&Value<'event>],
+    ) -> FResult<Value<'event>> {
+        let this_mfa = || mfa("random", "float", args.len());
+        let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
+        match args.len() {
+            2 => {
+                let (low, high) = (&args[0], &args[1]);
+                if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
+                    if low < high {
+                        // random integer between low and high (not including high)
+                        Ok(Value::from(rng.gen_range(low, high)))
+                    } else {
+                        Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
                                 error:
                                     "Invalid arguments. First argument must be lower than second argument".to_string(),
                             })
-                        }
-                    } else {
-                        Err(FunctionError::BadType { mfa: this_mfa() })
                     }
+                } else {
+                    Err(FunctionError::BadType { mfa: this_mfa() })
                 }
-                1 => {
-                    let input = &args[0];
-                    if let Some(input) = input.cast_f64() {
-                        // random integer between 0 and input (not including input)
-                        Ok(Value::from(rng.gen_range(0.0, input)))
-                    } else {
-                        Err(FunctionError::BadType { mfa: this_mfa() })
-                    }
-                }
-                0 => Ok(Value::from(
-                    rng.gen::<f64>(), // random integer
-                )),
-                _ => Err(FunctionError::BadArity {
-                    mfa: this_mfa(),
-                    calling_a: args.len(),
-                }),
             }
+            1 => {
+                let input = &args[0];
+                if let Some(input) = input.cast_f64() {
+                    // random integer between 0 and input (not including input)
+                    Ok(Value::from(rng.gen_range(0.0, input)))
+                } else {
+                    Err(FunctionError::BadType { mfa: this_mfa() })
+                }
+            }
+            0 => Ok(Value::from(
+                rng.gen::<f64>(), // random integer
+            )),
+            _ => Err(FunctionError::BadArity {
+                mfa: this_mfa(),
+                calling_a: args.len(),
+            }),
         }
+    }
 
-        fn snot_clone(&self) -> Box<dyn TremorFn> {
-            Box::new(self.clone())
-        }
-        fn arity(&self) -> std::ops::RangeInclusive<usize> {
-            0..=2
-        }
-        fn is_const(&self) -> bool {
-            false
-        }
+    fn snot_clone(&self) -> Box<dyn TremorFn> {
+        Box::new(self.clone())
     }
+    fn arity(&self) -> std::ops::RangeInclusive<usize> {
+        0..=2
+    }
+    fn is_const(&self) -> bool {
+        false
+    }
+}
+
+pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (random::bool(_context) {
             Ok(Value::from(

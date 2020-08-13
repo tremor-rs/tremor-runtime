@@ -19,21 +19,24 @@ pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
-use crate::errors::{error_generic, error_no_consts, error_no_locals, Result};
+use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
 use crate::impl_expr2;
-use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
+use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
-pub use crate::registry::CustomFn;
-use crate::registry::{Aggr as AggrRegistry, Registry, TremorAggrFnWrapper, TremorFnWrapper};
+use crate::registry::FResult;
+use crate::registry::{
+    Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
+};
 use crate::script::Return;
 use crate::stry;
-use crate::tilde::Extractor;
+use crate::{tilde::Extractor, EventContext};
 pub use base_expr::BaseExpr;
 use halfbrown::HashMap;
 pub use query::*;
+use raw::{reduce2, NO_AGGRS, NO_CONSTS};
 use serde::Serialize;
-use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
+use simd_json::{borrowed, prelude::*, BorrowedValue as Value, KnownKey};
 use std::borrow::{Borrow, Cow};
 use std::mem;
 use upable::Upable;
@@ -289,6 +292,28 @@ impl<'script, 'registry> Helper<'script, 'registry>
 where
     'script: 'registry,
 {
+    pub fn init_consts(&mut self) {
+        self.consts
+            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
+        self.consts.insert(vec!["group".to_owned()], GROUP_CONST_ID);
+        self.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
+
+        // TODO: Document why three `null` values are put in the constants vector.
+        self.const_values = vec![Value::null(); 3];
+    }
+    fn add_const_doc(
+        &mut self,
+        name: Cow<'script, str>,
+        doc: Option<Vec<Cow<'script, str>>>,
+        value_type: ValueType,
+    ) {
+        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
+        self.docs.consts.push(ConstDoc {
+            name,
+            doc,
+            value_type,
+        })
+    }
     pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta
             .add_meta(start - self.file_offset, end - self.file_offset, self.cu)
@@ -575,6 +600,33 @@ pub struct Record<'script> {
     pub fields: Fields<'script>,
 }
 impl_expr2!(Record);
+impl<'script> Record<'script> {
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        if self
+            .fields
+            .iter()
+            .all(|f| is_lit(&f.name) && is_lit(&f.value))
+        {
+            let obj: Result<borrowed::Object> = self
+                .fields
+                .into_iter()
+                .map(|f| {
+                    reduce2(f.name.clone(), &helper).and_then(|n| {
+                        // ALLOW: The grammer guarantees the key of a record is always a string
+                        let n = n.as_str().unwrap_or_else(|| unreachable!());
+                        reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
+                    })
+                })
+                .collect();
+            Ok(ImutExprInt::Literal(Literal {
+                mid: self.mid,
+                value: Value::from(obj?),
+            }))
+        } else {
+            Ok(ImutExprInt::Record(self))
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a list structure
@@ -586,7 +638,25 @@ pub struct List<'script> {
 }
 impl_expr2!(List);
 
-/// A Literal value
+impl<'script> List<'script> {
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        if self.exprs.iter().map(|v| &v.0).all(is_lit) {
+            let elements: Result<Vec<Value>> = self
+                .exprs
+                .into_iter()
+                .map(|v| reduce2(v.0, &helper))
+                .collect();
+            Ok(ImutExprInt::Literal(Literal {
+                mid: self.mid,
+                value: Value::from(elements?),
+            }))
+        } else {
+            Ok(ImutExprInt::List(self))
+        }
+    }
+}
+
+/// A Literal
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
     /// Id
@@ -798,6 +868,44 @@ impl<'script> Invoke<'script> {
     fn can_inline(&self) -> bool {
         self.invocable.can_inline()
     }
+
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        if self.invocable.is_const() && self.args.iter().all(|f| is_lit(&f.0)) {
+            let ex = self.extent(&helper.meta);
+            let args: Result<Vec<Value<'script>>> = self
+                .args
+                .into_iter()
+                .map(|v| reduce2(v.0, &helper))
+                .collect();
+            let args = args?;
+            // Construct a view into `args`, since `invoke` expects a slice of references.
+            let args2: Vec<&Value<'script>> = args.iter().collect();
+            let env = Env {
+                context: &EventContext::default(),
+                consts: &NO_CONSTS,
+                aggrs: &NO_AGGRS,
+                meta: &helper.meta,
+                recursion_limit: crate::recursion_limit(),
+            };
+
+            let v = self
+                .invocable
+                .invoke(&env, &args2)
+                .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
+                .into_static();
+            Ok(ImutExprInt::Literal(Literal {
+                value: v,
+                mid: self.mid,
+            }))
+        } else {
+            Ok(match self.args.len() {
+                1 => ImutExprInt::Invoke1(self),
+                2 => ImutExprInt::Invoke2(self),
+                3 => ImutExprInt::Invoke3(self),
+                _ => ImutExprInt::Invoke(self),
+            })
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -808,8 +916,6 @@ pub enum Invocable<'script> {
     /// A user defined or standard library function
     Tremor(CustomFn<'script>),
 }
-
-use crate::registry::FResult;
 
 impl<'script> Invocable<'script> {
     fn inline(self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExprInt<'script>> {
@@ -1313,6 +1419,42 @@ impl<'script> Path<'script> {
             Path::State(path) => &path.segments,
         }
     }
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        match self {
+            Path::Const(LocalPath {
+                is_const: true,
+                segments,
+                idx,
+                mid,
+            }) if segments.is_empty() && idx > LAST_RESERVED_CONST => {
+                if let Some(v) = helper.const_values.get(idx) {
+                    let lit = Literal {
+                        mid,
+                        value: v.clone(),
+                    };
+                    Ok(ImutExprInt::Literal(lit))
+                } else {
+                    error_generic(
+                        &Range::from((
+                            helper.meta.start(mid).unwrap_or_default(),
+                            helper.meta.end(mid).unwrap_or_default(),
+                        ))
+                        .expand_lines(2),
+                        &Range::from((
+                            helper.meta.start(mid).unwrap_or_default(),
+                            helper.meta.end(mid).unwrap_or_default(),
+                        )),
+                        &format!(
+                            "Invalid const reference to '{}'",
+                            helper.meta.name_dflt(mid),
+                        ),
+                        &helper.meta,
+                    )
+                }
+            }
+            other => Ok(ImutExprInt::Path(other)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1463,6 +1605,27 @@ pub struct BinExpr<'script> {
 }
 impl_expr2!(BinExpr);
 
+impl<'script> BinExpr<'script> {
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        match self {
+            b
+            @
+            BinExpr {
+                lhs: ImutExprInt::Literal(_),
+                rhs: ImutExprInt::Literal(_),
+                ..
+            } => {
+                let lhs = reduce2(b.lhs.clone(), helper)?;
+                let rhs = reduce2(b.rhs.clone(), helper)?;
+                let value = exec_binary(&b, &b, &helper.meta, b.kind, &lhs, &rhs)?.into_owned();
+                let lit = Literal { mid: b.mid, value };
+                Ok(ImutExprInt::Literal(lit))
+            }
+            b => Ok(ImutExprInt::Binary(Box::new(b))),
+        }
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum UnaryOpKind {
@@ -1488,8 +1651,38 @@ pub struct UnaryExpr<'script> {
 }
 impl_expr2!(UnaryExpr);
 
-/// A list of expressions
-pub type Exprs<'script> = Vec<Expr<'script>>;
+impl<'script> UnaryExpr<'script> {
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        match self {
+            u1
+            @
+            UnaryExpr {
+                expr: ImutExprInt::Literal(_),
+                ..
+            } => {
+                let expr = reduce2(u1.expr.clone(), &helper)?;
+                let value = if let Some(v) = exec_unary(u1.kind, &expr) {
+                    v.into_owned()
+                } else {
+                    let ex = u1.extent(&helper.meta);
+                    return Err(ErrorKind::InvalidUnary(
+                        ex.expand_lines(2),
+                        ex,
+                        u1.kind,
+                        expr.value_type(),
+                    )
+                    .into());
+                };
+
+                let lit = Literal { mid: u1.mid, value };
+                Ok(ImutExprInt::Literal(lit))
+            }
+            u1 => Ok(ImutExprInt::Unary(Box::new(u1))),
+        }
+    }
+}
+
+pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
 /// A list of lexical compilation units
 pub type Imports<'script> = Vec<LexicalUnit<'script>>;
 /// A list of immutable expressions

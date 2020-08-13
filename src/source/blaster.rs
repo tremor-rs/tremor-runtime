@@ -105,8 +105,8 @@ impl Source for Blaster {
         &self.onramp_id
     }
 
-    #[allow(unused_variables)]
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    #[allow(clippy::used_underscore_binding)]
+    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
             task::sleep(Duration::from_nanos(ival)).await;

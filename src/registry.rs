@@ -201,6 +201,7 @@ impl Default for Registries {
 
 impl Registries {
     /// Create a new Registry
+    #[must_use]
     pub fn new() -> Self {
         Self {
             binding: Registry::new().start(),
@@ -210,6 +211,9 @@ impl Registries {
         }
     }
     /// serialize the mappings of this registry
+    ///
+    /// # Errors
+    ///  * if we can't serialize the mappings
     pub async fn serialize_mappings(&self) -> Result<crate::config::MappingMap> {
         let (tx, rx) = bounded(1);
         self.binding.send(Msg::SerializeServants(tx)).await?;
@@ -222,6 +226,9 @@ impl Registries {
         ))
     }
     /// Finds a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't find a pipeline
     pub async fn find_pipeline(
         &self,
         id: &TremorURL,
@@ -231,6 +238,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Publishes a pipeline
+    ///
+    /// # Errors
+    ///  * if I can't publish a pipeline
     pub async fn publish_pipeline(
         &self,
         id: &TremorURL,
@@ -244,6 +254,9 @@ impl Registries {
     }
 
     /// unpublishes a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't unpublish a pipeline
     pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.pipeline
@@ -253,6 +266,9 @@ impl Registries {
     }
 
     /// Transitions a pipeline
+    ///
+    /// # Errors
+    ///  * if we can't transition a pipeline
     pub async fn transition_pipeline(
         &self,
         id: &TremorURL,
@@ -265,6 +281,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Finds an onramp
+    ///
+    /// # Errors
+    ///  * if we can't find a onramp
     pub async fn find_onramp(
         &self,
         id: &TremorURL,
@@ -274,6 +293,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Publishes an onramp
+    ///
+    /// # Errors
+    ///  * if we can't publish the onramp
     pub async fn publish_onramp(
         &self,
         id: &TremorURL,
@@ -286,6 +308,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Usnpublishes an onramp
+    ///
+    /// # Errors
+    ///  * if we can't unpublish an onramp
     pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.onramp
@@ -308,6 +333,9 @@ impl Registries {
     }
 
     /// Finds an onramp
+    ///
+    /// # Errors
+    ///  * if we can't find an offramp
     pub async fn find_offramp(
         &self,
         id: &TremorURL,
@@ -318,6 +346,9 @@ impl Registries {
     }
 
     /// Publishes an offramp
+    ///
+    /// # Errors
+    ///  * if we can't pubish an offramp
     pub async fn publish_offramp(
         &self,
         id: &TremorURL,
@@ -330,6 +361,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Unpublishes an offramp
+    ///
+    /// # Errors
+    ///  * if we can't unpublish an offramp
     pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.offramp
@@ -350,7 +384,11 @@ impl Registries {
             .await?;
         rx.recv().await?
     }
+
     /// Finds a binding
+    ///
+    /// # Errors
+    ///  * if we can't find a binding
     pub async fn find_binding(
         &self,
         id: &TremorURL,
@@ -360,6 +398,9 @@ impl Registries {
         rx.recv().await?
     }
     /// Publishes a binding
+    ///
+    /// # Errors
+    ///  * if we can't publish a binding
     pub async fn publish_binding(
         &self,
         id: &TremorURL,
@@ -373,6 +414,9 @@ impl Registries {
     }
 
     /// Unpublishes a binding
+    ///
+    /// # Errors
+    ///  * if we can't unpublish a binding
     pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.binding

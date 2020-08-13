@@ -44,7 +44,6 @@ use tremor_influx as influx;
 pub struct Influx {}
 
 // This is ugly but we need to handle comments, thanks rental!
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum RentalSnot {
     Error(Error),
     Skip,
@@ -330,7 +329,7 @@ mod tests {
 
             let decoded = codec.decode(encoded.clone(), 0)?.expect("failed to decode");
             let expected: Value = case.1.clone();
-            let got = &decoded.suffix().value();
+            let got = decoded.suffix().value();
             let bin = BInflux::encode(&expected)?;
             if *got != &expected {
                 println!("{} fails while decoding", &case.2);

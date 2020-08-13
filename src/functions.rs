@@ -17,6 +17,9 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_script::tremor_fn;
 
 /// Loads the function library
+///
+/// # Errors
+///  * if we can't load the registry
 pub fn load() -> Result<()> {
     FN_REGISTRY
         .lock()?

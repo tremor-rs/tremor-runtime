@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(dead_code)]
+
 // Based on merge from async_std
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -75,14 +75,4 @@ pub(crate) enum M {
     F(Msg),
     C(CfMsg),
     M(MgmtMsg),
-}
-
-impl M {
-    pub(crate) fn msg_type(&self) -> &'static str {
-        match self {
-            M::F(_) => "fwd",
-            M::C(_) => "cf",
-            M::M(_) => "mgmt",
-        }
-    }
 }
