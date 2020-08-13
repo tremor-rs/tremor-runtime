@@ -81,6 +81,7 @@ impl Sink for Tcp {
         if success {
             Ok(Some(vec![event.insight_ack()]))
         } else {
+            self.stream = None;
             Ok(event
                 .insight_trigger()
                 .and_then(|e1| event.insight_fail().map(|e2| (e1, e2)))
