@@ -48,14 +48,6 @@ pub struct Config {
     /// The default is 0.1% (`0.001`).
     #[serde(default = "d_step_up")]
     pub step_up: f64,
-
-    /// If set to true will propagate circuit breaker events when the
-    /// backpressure is introduced.
-    ///
-    /// This should be used with caution as it does, to a degree defeate the
-    /// purpose of escalating backpressure
-    #[serde(default)]
-    pub circuit_breaker: bool,
 }
 
 impl ConfigImpl for Config {}
