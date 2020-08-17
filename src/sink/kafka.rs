@@ -37,9 +37,6 @@ pub struct Config {
     pub brokers: Vec<String>,
     /// the topic to send to
     pub topic: String,
-    /// the number of threads in the async worker pool handling writing to kafka (default: 4)
-    #[serde(default = "dflt::d_4")]
-    pub threads: usize,
     /// a map (string keys and string values) of [librdkafka options](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) (default: None) - Note this can overwrite default settings.
     ///
     /// Default settings for librdkafka:
