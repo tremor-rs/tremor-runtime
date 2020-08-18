@@ -116,7 +116,7 @@ impl Source for Int {
     }
 
     #[allow(clippy::used_underscore_binding)]
-    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),

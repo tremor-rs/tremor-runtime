@@ -64,7 +64,7 @@ impl Source for Metronome {
         &self.onramp_id
     }
 
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         task::sleep(self.duration).await;
         let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(3);
         data.insert("onramp", "metronome")?;

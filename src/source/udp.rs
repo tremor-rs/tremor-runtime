@@ -75,7 +75,7 @@ impl onramp::Impl for Udp {
 #[async_trait::async_trait]
 impl Source for Int {
     #[allow(unused_variables)]
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         let mut buf = [0; 65535];
 
         if let Some(socket) = self.socket.as_mut() {
