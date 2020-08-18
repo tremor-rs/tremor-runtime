@@ -144,6 +144,21 @@ impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]
 // TODO add seed value and field name as config items
+/// A Write Ahead Log that will persist data to disk and feed the following operators from this disk
+/// cache. It allows to run onramps that do not provide any support for delivery guarantees with
+/// offramps that do.
+///
+/// The wal operator will intercept and generate it's own circuit breaker events. You can think about it
+/// as a firewall that will protect all operators before itself from issues beyond it. On the other hand
+/// it will indiscriminately consume data from sources and operators before itself until it's own
+/// circuit breaking conditions are met.
+///
+/// At the same time will it interact with tremors guaranteed delivery system, events are only removed
+/// from disk once they're acknowledged. In case of delivery failure the WAL operator will replay the
+/// failed events. On the same way the WAL operator will acknowledge events that it persists to disk.
+///
+/// The WAL operator should be used with caution, since every event that passes through it will be
+/// written to the hard drive it has a significant performance impact.
 pub struct WAL {
     /// Elements currently in the event storage
     cnt: u64,
@@ -336,7 +351,7 @@ impl Operator for WAL {
         let now = signal.ingest_ns;
         // Are we currently full
         let now_full = self.limit_reached()?;
-        // If we jsut became full or we went from full to non full
+        // If we just became full or we went from full to non full
         // update the CB status
         let insights = if self.full && !now_full {
             let mut e = Event::cb_restore(signal.ingest_ns);

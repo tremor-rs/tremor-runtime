@@ -32,19 +32,33 @@ pub(crate) mod tcp;
 pub(crate) mod udp;
 pub(crate) mod ws;
 
+/// Result for a sink function that may provide insights.
+///
+/// It can return None or Some(vec![]) if no insights were generated.
+///
+/// An insight is a contraflowevent containing control information for the runtime like
+/// circuit breaker events, guaranteed delivery events, etc.
 pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
     async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec;
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()>;
-
     async fn on_signal(&mut self, signal: Event) -> ResultVec;
 
-    fn is_active(&self) -> bool;
-    fn auto_ack(&self) -> bool;
-    fn default_codec(&self) -> &str;
+    /// This function should be implemented to be idempotent
+    async fn init(&mut self, postprocessors: &[String]) -> Result<()>;
+
+    /// Callback for graceful shutdown (default behaviour: do nothing)
     async fn terminate(&mut self) {}
+
+    /// Is the sink active and ready to process events
+    fn is_active(&self) -> bool;
+
+    /// Is the sink automatically acknowleding events or engaged in some form of delivery
+    /// guarantee
+    fn auto_ack(&self) -> bool;
+
+    fn default_codec(&self) -> &str;
 }
 
 pub(crate) struct SinkManager<T>

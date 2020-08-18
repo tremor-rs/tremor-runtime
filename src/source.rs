@@ -50,38 +50,58 @@ pub(crate) enum SourceState {
 }
 
 pub(crate) enum SourceReply {
+    /// A normal data event with a `Vec<u8>` for data
     Data {
         origin_uri: EventOriginUri,
         data: Vec<u8>,
         stream: usize,
     },
+    /// Allow for passthrough of already structured events
     Structured {
         origin_uri: EventOriginUri,
         data: LineValue,
     },
+    /// A stream is opened
     StartStream(usize),
+    /// A stream is closed
     EndStream(usize),
+    /// We change the connection state of the source
     StateChange(SourceState),
+    /// There is no event currently ready and we're asked to wait an ammount of ms
     Empty(u64),
 }
 
 #[async_trait::async_trait]
 #[allow(unused_variables)]
 pub(crate) trait Source {
-    async fn read(&mut self, id: u64) -> Result<SourceReply>;
-    async fn init(&mut self) -> Result<SourceState>;
-    fn id(&self) -> &TremorURL;
-    fn trigger_breaker(&mut self) {}
-    fn restore_breaker(&mut self) {}
-    fn ack(&mut self, id: u64) {}
-    fn fail(&mut self, id: u64) {}
-    fn is_transactional(&self) -> bool {
-        false
-    }
+    /// Pulls an event from the source if one exists
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply>;
+    /// Pulls metrics from the source
     fn metrics(&mut self, t: u64) -> Vec<Event> {
         vec![]
     }
+
+    /// Initializes the onramp (ideally this should be idempotent)
+    async fn init(&mut self) -> Result<SourceState>;
+    /// Graceful shutdown
     async fn terminate(&mut self) {}
+
+    /// Trigger the circuit breaker on the source
+    fn trigger_breaker(&mut self) {}
+    /// Restore the circuit breaker on the source
+    fn restore_breaker(&mut self) {}
+
+    /// Acknowledge an event
+    fn ack(&mut self, id: u64) {}
+    /// Fail an event
+    fn fail(&mut self, id: u64) {}
+
+    /// Gives a human readable ID for the source
+    fn id(&self) -> &TremorURL;
+    /// Is this source transactional or can acks/fails be ignored
+    fn is_transactional(&self) -> bool {
+        false
+    }
 }
 
 pub(crate) struct SourceManager<T>
@@ -172,10 +192,8 @@ where
 
     async fn handle_pipelines(&mut self) -> Result<bool> {
         loop {
-            let msg = if self.pipelines.is_empty() || self.triggered {
+            let msg = if self.pipelines.is_empty() || self.triggered || !self.rx.is_empty() {
                 self.rx.recv().await?
-            } else if let Ok(msg) = self.rx.try_recv() {
-                msg
             } else {
                 return Ok(false);
             };
@@ -365,7 +383,7 @@ where
             let pipelines_empty = self.pipelines.is_empty();
 
             if !self.triggered && !pipelines_empty {
-                match self.source.read(self.id).await {
+                match self.source.pull_event(self.id).await {
                     Ok(SourceReply::StartStream(id)) => {
                         while self.preprocessors.len() <= id {
                             self.preprocessors.push(None)

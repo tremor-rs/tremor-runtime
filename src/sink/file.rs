@@ -67,7 +67,6 @@ impl Sink for File {
     // TODO
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, mut event: Event) -> ResultVec {
-        eprint!("offramp");
         if let Some(file) = &mut self.file {
             for value in event.value_iter() {
                 let raw = codec.encode(value)?;

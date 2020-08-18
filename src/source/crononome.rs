@@ -277,7 +277,7 @@ impl Source for Crononome {
         &self.onramp_id
     }
 
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(trigger) = self.cq.next() {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.path.push(trigger.0.clone());

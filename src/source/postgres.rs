@@ -132,7 +132,7 @@ impl Int {
 #[async_trait::async_trait]
 impl Source for Int {
     #[allow(clippy::used_underscore_binding)]
-    async fn read(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(row) = self.rows.pop() {
             return Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),

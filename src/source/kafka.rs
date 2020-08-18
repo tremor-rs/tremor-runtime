@@ -262,7 +262,7 @@ impl Source for Int {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
-    async fn read(&mut self, id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(stream) = self.stream.as_mut() {
             let s = unsafe { stream.mut_suffix() };
             if let Some(Ok(m)) = s.next().await {
