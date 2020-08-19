@@ -3995,9 +3995,9 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "simd-json"
-version = "0.3.17"
+version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57f0585022e3fc7ef6dcf0eba135a78c0e3ff33989d4939002840df1fb5bf896"
+checksum = "aa7bd58cc9323a0db16713ada63e7ab8c51b4d1fa0b2bce1afd964e19b6f0c56"
 dependencies = [
  "halfbrown",
  "serde",
@@ -5224,9 +5224,9 @@ dependencies = [
 
 [[package]]
 name = "value-trait"
-version = "0.1.12"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3384a4788567e35113300281d737ab1b77917bd35cb99ffd8a4283345da9a825"
+checksum = "5112b70ab6063a29f79904a24c6c94a0e8c766b96a43e8fcd1f8b067fc03118a"
 dependencies = [
  "float-cmp 0.7.0",
  "halfbrown",
