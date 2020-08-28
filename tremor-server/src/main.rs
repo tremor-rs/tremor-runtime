@@ -253,29 +253,29 @@ async fn run_dun() -> Result<()> {
     app.at("/binding")
         .get(|r| async { fix_tide(api::binding::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::binding::publish_artefact(r).await) });
-    app.at("/binding/{aid}")
+    app.at("/binding/:aid")
         .get(|r| async { fix_tide(api::binding::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::binding::unpublish_artefact(r).await) });
-    app.at("/binding/{aid}/{sid}")
+    app.at("/binding/:aid/:sid")
         .get(|r| async { fix_tide(api::binding::get_servant(r).await) })
         .post(|r| async { fix_tide(api::binding::link_servant(r).await) })
         .delete(|r| async { fix_tide(api::binding::unlink_servant(r).await) });
     app.at("/pipeline")
         .get(|r| async { fix_tide(api::pipeline::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::pipeline::publish_artefact(r).await) });
-    app.at("/pipeline/{aid}")
+    app.at("/pipeline/:aid")
         .get(|r| async { fix_tide(api::pipeline::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::pipeline::unpublish_artefact(r).await) });
     app.at("/onramp")
         .get(|r| async { fix_tide(api::onramp::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::onramp::publish_artefact(r).await) });
-    app.at("/onramp/{aid}")
+    app.at("/onramp/:aid")
         .get(|r| async { fix_tide(api::onramp::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::onramp::unpublish_artefact(r).await) });
     app.at("/offramp")
         .get(|r| async { fix_tide(api::offramp::list_artefact(r).await) })
         .post(|r| async { fix_tide(api::offramp::publish_artefact(r).await) });
-    app.at("/offramp/{aid}")
+    app.at("/offramp/:aid")
         .get(|r| async { fix_tide(api::offramp::get_artefact(r).await) })
         .delete(|r| async { fix_tide(api::offramp::unpublish_artefact(r).await) });
 
