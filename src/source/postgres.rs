@@ -21,12 +21,12 @@ use crate::ramp;
 use crate::ramp::postgres::row_to_json;
 use crate::ramp::{Config as CacheConfig, KV};
 use crate::source::prelude::*;
+use async_compat::Compat;
 use chrono::prelude::*;
-use postgres::{Client, NoTls, Row, Statement};
 use simd_json::OwnedValue;
 use std::fmt;
 use tokio_postgres::error::SqlState;
-
+use tokio_postgres::{Client, NoTls, Row, Statement};
 const TIME_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f %:z";
 
 #[derive(Deserialize, Debug, Clone)]
@@ -116,7 +116,8 @@ impl Int {
             rows: Vec::new(),
         })
     }
-    fn init_cli(&self) -> Result<Client> {
+
+    async fn init_cli(&mut self) -> Result<()> {
         let conn_str = format!(
             "host={} user={} password={} port={} dbname={}",
             self.config.host,
@@ -125,7 +126,14 @@ impl Int {
             self.config.port,
             self.config.dbname
         );
-        Ok(Client::connect(&conn_str, NoTls)?)
+        let (client, connection) = Compat::new(tokio_postgres::connect(&conn_str, NoTls)).await?;
+        task::spawn(async move {
+            if let Err(e) = Compat::new(connection).await {
+                error!("connection error: {}", e);
+            }
+        });
+        self.cli = Some(client);
+        Ok(())
     }
 }
 
@@ -138,17 +146,22 @@ impl Source for Int {
                 origin_uri: self.origin_uri.clone(),
                 data: row_to_json(&row)?.into(),
             });
-        }
-        if self.cli.is_none() {
-            self.cli = Some(self.init_cli()?);
         };
+
+        if self.cli.is_none() {
+            self.init_cli().await?;
+        };
+
         let client = self
             .cli
             .as_mut()
             .ok_or_else(|| Error::from("No CLI connection"))?;
+
         if self.stmt.is_none() {
-            self.stmt = Some(client.prepare(&self.config.query)?);
+            let q = &self.config.query;
+            self.stmt = Some(Compat::new(client.prepare(q)).await?);
         };
+
         let statement = self
             .stmt
             .as_mut()
@@ -169,7 +182,7 @@ impl Source for Int {
         let cf = DateTime::parse_from_str(consume_from, TIME_FMT)?;
         let ct = DateTime::parse_from_str(consume_until, TIME_FMT)?;
 
-        self.rows = match client.query(statement, &[&cf, &ct]) {
+        self.rows = match Compat::new(client.query(statement, &[&cf, &ct])).await {
             Ok(v) => v,
             Err(e) => {
                 let code = if let Some(v) = e.code() {
@@ -206,9 +219,11 @@ impl Source for Int {
             Ok(SourceReply::Empty(100))
         }
     }
+
     async fn init(&mut self) -> Result<SourceState> {
         Ok(SourceState::Connected)
     }
+
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
