@@ -30,8 +30,9 @@ async-std = {version = "1.6.3", features = ["unstable", "attributes"]}
 async-trait = "0.1"
 async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
-smol = { version = "0.3", features = ["tokio02"] }
-async-io = "0.1"
+smol = "0.4"
+async-io = "0.2"
+async-compat = "0.1"
 base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"
