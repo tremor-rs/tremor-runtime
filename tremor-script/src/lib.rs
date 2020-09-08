@@ -78,8 +78,8 @@ pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
 pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::query::Query;
 pub use crate::registry::{
-    aggr as aggr_registry, registry, Aggr as AggrRegistry, Registry, TremorAggrFn,
-    TremorAggrFnWrapper, TremorFn, TremorFnWrapper, CustomFn,
+    aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
+    TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
 

@@ -56,13 +56,13 @@ fn humanize(ts: u64) -> String {
         ns = ts % 1000;
         let us = (ts / 1000) as u64;
         if us > 999 {
-            let ms = (ts / 1000000) as u64;
+            let ms = (ts / 1_000_000) as u64;
             if ms > 999 {
-                let secs = (ts / 1000000000) as u64;
+                let secs = (ts / 1_000_000_000) as u64;
                 if secs > 59 {
-                    let mins = (ts / 60000000000) as u64;
+                    let mins = (ts / 60_000_000_000) as u64;
                     if mins > 59 {
-                        let hrs = (ts / 3600000000000) as u64;
+                        let hrs = (ts / 3_600_000_000_000) as u64;
                         return format!("{}h {}m {:02}s", hrs, mins % 60, secs % 60);
                     } else {
                         return format!("{}m {}s", mins, secs % 60);
@@ -131,7 +131,7 @@ pub(crate) fn assert(
         fg_bold!(h, Red);
         write!(h.get_writer(), " != {}", actual)?;
     }
-    writeln!(h.get_writer(), "")?;
+    writeln!(h.get_writer())?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -178,7 +178,7 @@ pub(crate) fn stats(stats: &stats::Stats) -> Result<()> {
     fg_bold!(h, Yellow);
     write!(h.get_writer(), "Skip ")?;
     write!(h.get_writer(), "{} ", stats.skip)?;
-    writeln!(h.get_writer(), "")?;
+    writeln!(h.get_writer())?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -186,7 +186,7 @@ pub(crate) fn stats(stats: &stats::Stats) -> Result<()> {
 }
 
 pub(crate) fn hr() -> Result<()> {
-    println!("");
+    println!();
     Ok(())
 }
 
@@ -203,7 +203,7 @@ pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
     fg_bold!(h, Yellow);
     write!(h.get_writer(), "Skip ")?;
     write!(h.get_writer(), "{} ", stats.skip)?;
-    writeln!(h.get_writer(), "")?;
+    writeln!(h.get_writer())?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -225,7 +225,7 @@ pub(crate) fn tags(filter: &TagFilter, tags: &Option<&Vec<String>>) -> Result<()
                 }
                 write!(h.get_writer(), " {}", tag)?;
             }
-            writeln!(h.get_writer(), "")?;
+            writeln!(h.get_writer())?;
             h.finalize()?;
             drop(h);
         }

@@ -63,7 +63,7 @@ pub(crate) fn run_process(
     let bench_rootx = bench_root.to_string();
     let cmd = "/Code/oss/wayfair-tremor/tremor-runtime/target/release/tremor";
     let mut process = job::TargetProcess::new_with_stderr(cmd, &args);
-    let status = process.wait_with_output();
+    let process_status = process.wait_with_output();
 
     let fg_out_file = format!("{}/fg.out.log", bench_root);
     let fg_err_file = format!("{}/fg.err.log", bench_root);
@@ -97,7 +97,7 @@ pub(crate) fn run_process(
         Ok(assert_yaml) => Some(assert::process(
             &fg_out_file,
             &fg_err_file,
-            status?.code(),
+            process_status?.code(),
             &assert_yaml,
         )?),
         _not_found => None,

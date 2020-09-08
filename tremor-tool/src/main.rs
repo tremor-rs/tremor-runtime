@@ -157,10 +157,9 @@ fn main() -> Result<()> {
     } else if let Some(matches) = cmd.subcommand_matches("api") {
         task::block_on(conductor_cmd(&mut cfg, &matches))?
     } else {
-        if let Err(_) = app.print_help() {
-            // ALLOW: main.rs
-            std::process::exit(0);
-        }
+        app.print_help().ok();
+        // ALLOW: main.rs
+        std::process::exit(0);
     };
 
     Ok(())

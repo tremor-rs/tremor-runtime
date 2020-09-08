@@ -331,7 +331,7 @@ impl<'input> Token<'input> {
         if self.is_keyword() || self.is_symbol() || self.is_ignorable() {
             format!("{}", self)
         } else {
-            format!("{}", std::any::type_name::<Self>())
+            std::any::type_name::<Self>().to_string()
         }
     }
     /// Is the token ignorable except when syntax or error highlighting.
@@ -1657,8 +1657,7 @@ impl<'input> Lexer<'input> {
                         Some((start, '\n')) => {
                             res = vec![self.spanned2(start, end, Token::HereDoc)]; // (0, vec![]))];
                             string = String::new();
-                            let x = self.hd(start, end, false, string, res);
-                            x
+                            self.hd(start, end, false, &string, res)
                         }
                         Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
                             Range::from((start, end)).expand_lines(2),
@@ -1701,29 +1700,29 @@ impl<'input> Lexer<'input> {
         mut start: Location,
         mut end: Location,
         mut has_escapes: bool,
-        _string: String,
+        _string: &str,
         mut res: Vec<TokenSpan<'input>>,
     ) -> Result<Vec<TokenSpan<'input>>> {
-        let mut string = String::new();
+        let mut tmp = String::new();
         loop {
             let ch = self.bump();
             match ch {
                 Some((e, '\n')) => {
                     end = e;
-                    string.push('\n');
-                    res.push(self.spanned2(start, end, Token::StringLiteral(string.into())));
-                    string = String::new();
+                    tmp.push('\n');
+                    res.push(self.spanned2(start, end, Token::StringLiteral(tmp.into())));
+                    tmp = String::new();
                 }
                 Some((e, '\\')) => {
                     has_escapes = true;
-                    if let Some(c) = self.escape_code(&string, start)? {
-                        string.push(c);
+                    if let Some(c) = self.escape_code(&tmp, start)? {
+                        tmp.push(c);
                     };
                     end = e;
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
-                        string.push('}');
+                        tmp.push('}');
                         end = e;
                         continue;
                     }
@@ -1731,18 +1730,18 @@ impl<'input> Lexer<'input> {
                     let mut s = start;
                     s.column += 1;
                     s.absolute += 1;
-                    if !string.is_empty() {
+                    if !tmp.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
-                            Token::StringLiteral(string.into())
+                            Token::StringLiteral(tmp.into())
                         } else if let Some(slice) = self.slice(s, e) {
                             Token::StringLiteral(slice.into())
                         } else {
                             // Invalid start end case :(
-                            Token::StringLiteral(string.into())
+                            Token::StringLiteral(tmp.into())
                         };
                         res.push(self.spanned2(start, end_inner, token));
-                        string = String::new();
+                        tmp = String::new();
                     }
                     start = end_inner;
                     end = end_inner;
@@ -1773,12 +1772,12 @@ impl<'input> Lexer<'input> {
                 }
                 Some((_e, '"')) => {
                     // If the current line is just a `"""` then we are at the end of the heardoc
-                    res.push(self.spanned2(start, end, Token::StringLiteral(string.into())));
-                    string = String::new();
-                    string.push('"');
+                    res.push(self.spanned2(start, end, Token::StringLiteral(tmp.into())));
+                    tmp = String::new();
+                    tmp.push('"');
                     if let Some((_, '"')) = self.lookahead() {
                         self.bump();
-                        string.push('"');
+                        tmp.push('"');
                         if let Some((end, '"')) = self.lookahead() {
                             self.bump();
                             let mut end = end;
@@ -1790,14 +1789,14 @@ impl<'input> Lexer<'input> {
                     }
                 }
                 Some((_e, other)) => {
-                    string.push(other as char);
+                    tmp.push(other as char);
                 }
 
                 None => {
                     return Err(ErrorKind::UnterminatedHereDoc(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!("\"{}", string),
+                        format!("\"{}", tmp),
                     )
                     .into())
                 }

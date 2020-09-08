@@ -55,7 +55,7 @@ mod test {
         let mut codec = String {};
         let as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw, 0);
-         assert!(as_json.is_ok());
+        assert!(as_json.is_ok());
 
         Ok(())
     }

@@ -86,7 +86,7 @@ where
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
                     h.set_color(&mut directive)?;
-                    writeln!(h.get_writer(), " #!config {}", "")?;
+                    writeln!(h.get_writer(), " #!config ")?;
                 }
                 Token::LineDirective(_location, file) => {
                     h.set_color(&mut line)?;
@@ -115,7 +115,7 @@ where
                         None,
                         &[Spanned {
                             span: Span { start, end },
-                            value: value,
+                            value,
                         }],
                     )?;
                 }
@@ -336,18 +336,18 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
 
-    if !matches.is_present("no-highlight") {
+    if matches.is_present("no-highlight") {
+        let mut h = TermNoHighlighter::new();
+        match run_debug(script_file, &mut h, matches) {
+            Ok(()) => println!("{}", h.to_string()),
+            Err(_e) => {}
+        };
+    } else {
         let mut h = TermHighlighter::new();
         match run_debug(script_file, &mut h, matches) {
             Ok(()) => {
                 h.finalize()?;
             }
-            Err(_e) => {}
-        };
-    } else {
-        let mut h = TermNoHighlighter::new();
-        match run_debug(script_file, &mut h, matches) {
-            Ok(()) => println!("{}", h.to_string()),
             Err(_e) => {}
         };
     };

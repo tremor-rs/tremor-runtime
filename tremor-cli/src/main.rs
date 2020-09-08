@@ -69,10 +69,10 @@ fn main() -> Result<()> {
     let app = app.global_setting(AppSettings::ColoredHelp);
     let app = app.global_setting(AppSettings::ColorAlways);
     let matches = app.clone().get_matches();
-    run(app, matches)
+    run(app, &matches)
 }
 
-fn run(mut app: App, cmd: ArgMatches) -> Result<()> {
+fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     let format = match &cmd.value_of("format") {
         Some("json") => FormatKind::Json,
         _ => FormatKind::Yaml,

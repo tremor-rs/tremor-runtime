@@ -32,9 +32,10 @@ pub fn log() {
 }
 
 /// Gets the librdkafka version string
+#[allow(clippy::module_name_repetitions)]
 pub fn rdkafka_version() -> String {
-    let (_, version_s) = get_rdkafka_version();
-    version_s
+    let (_, version) = get_rdkafka_version();
+    version
 }
 
 #[cfg(test)]

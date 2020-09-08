@@ -189,38 +189,49 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let start = nanotime();
     for meta in found {
         let root = meta.path().parent();
-        let meta: Meta =
-            serde_json::from_str(&slurp_string(&meta.path().to_string_lossy()).unwrap()).unwrap();
+        if let Some(root) = root {
+            if let Ok(meta_str) = slurp_string(&meta.path().to_string_lossy()) {
+                let meta: Option<Meta> = serde_json::from_str(&meta_str).ok();
+                if let Some(meta) = meta {
+                    if meta.kind == TestKind::Bench
+                        && (kind == TestKind::All || kind == TestKind::Bench)
+                    {
+                        let (stats, test_reports) = suite_bench(root, &meta, &filter_by_tags)?;
+                        reports.insert("bench".to_string(), test_reports);
+                        bench_stats.merge(&stats);
+                        status::hr().ok();
+                    }
 
-        if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
-            let (stats, test_reports) = suite_bench(root.unwrap(), &meta, &filter_by_tags)?;
-            reports.insert("bench".to_string(), test_reports);
-            bench_stats.merge(&stats);
-            status::hr().ok();
-        }
+                    if meta.kind == TestKind::Integration
+                        && (kind == TestKind::All || kind == TestKind::Integration)
+                    {
+                        let (stats, test_reports) =
+                            suite_integration(root, &meta, &filter_by_tags)?;
+                        reports.insert("integration".to_string(), test_reports);
+                        integration_stats.merge(&stats);
+                        status::hr().ok();
+                    }
 
-        if meta.kind == TestKind::Integration
-            && (kind == TestKind::All || kind == TestKind::Integration)
-        {
-            let (stats, test_reports) = suite_integration(root.unwrap(), &meta, &filter_by_tags)?;
-            reports.insert("integration".to_string(), test_reports);
-            integration_stats.merge(&stats);
-            status::hr().ok();
-        }
+                    if meta.kind == TestKind::Command
+                        && (kind == TestKind::All || kind == TestKind::Command)
+                    {
+                        let (stats, test_reports) =
+                            command::suite_command(root, &meta, &filter_by_tags)?;
+                        reports.insert("api".to_string(), test_reports);
+                        cmd_stats.merge(&stats);
+                        status::hr().ok();
+                    }
 
-        if meta.kind == TestKind::Command && (kind == TestKind::All || kind == TestKind::Command) {
-            let (stats, test_reports) =
-                command::suite_command(root.unwrap(), &meta, &filter_by_tags)?;
-            reports.insert("api".to_string(), test_reports);
-            cmd_stats.merge(&stats);
-            status::hr().ok();
-        }
-
-        if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
-            let (stats, test_reports) = suite_unit(root.unwrap(), &meta, &filter_by_tags)?;
-            reports.insert("unit".to_string(), test_reports);
-            unit_stats.merge(&stats);
-            status::hr().ok();
+                    if meta.kind == TestKind::Unit
+                        && (kind == TestKind::All || kind == TestKind::Unit)
+                    {
+                        let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
+                        reports.insert("unit".to_string(), test_reports);
+                        unit_stats.merge(&stats);
+                        status::hr().ok();
+                    }
+                }
+            }
         }
     }
     let elapsed = nanotime() - start;
@@ -251,9 +262,12 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         reports,
         stats: stats_map,
     };
-    let mut file = File::create("report.txt").unwrap();
-    file.write_all(&serde_json::to_string(&test_run).unwrap().as_bytes())
-        .unwrap();
+    let file = File::create("report.txt").ok();
+    if let Some(mut file) = file {
+        if let Ok(result) = serde_json::to_string(&test_run) {
+            file.write_all(&result.as_bytes()).ok();
+        }
+    };
 
     Ok(())
 }
@@ -267,16 +281,19 @@ mod tests {
         // TODO Investigate a richer include/exclude model
         // TODO Current implementation is simplest that could possibly work
         let tf: TagFilter = TagFilter::new(vec![], vec![]);
-        assert!(tf.matches(vec!["foo".to_string()]));
-        assert!(tf.matches(vec![]));
-        assert!(tf.matches(vec![
-            "foo".to_string(),
-            "bar".to_string(),
-            "baz".to_string()
-        ]));
+        assert!(tf.matches(&vec!["foo".to_string()]).1);
+        assert!(tf.matches(&vec![]).1);
+        assert!(
+            tf.matches(&vec![
+                "foo".to_string(),
+                "bar".to_string(),
+                "baz".to_string()
+            ])
+            .1
+        );
         let tf = TagFilter::new(vec!["no".to_string()], vec!["yes".to_string()]);
-        assert!(tf.matches(vec!["yes".to_string()]));
-        assert!(!tf.matches(vec!["no".to_string()]));
-        assert!(!tf.matches(vec!["snot".to_string()]));
+        assert!(tf.matches(&vec!["yes".to_string()]).1);
+        assert!(!tf.matches(&vec!["no".to_string()]).1);
+        assert!(!tf.matches(&vec!["snot".to_string()]).1);
     }
 }
