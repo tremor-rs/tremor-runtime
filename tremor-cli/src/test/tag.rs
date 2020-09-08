@@ -60,7 +60,10 @@ impl TagFilter {
             // If the current tags matched at least one include
             // and there were no excluded tags matched, then
             // we have a match
-            (accepted.iter().map(|x| x.to_string()).collect(), accepted.len() > 0 && redacted.len() == 0)
+            (
+                accepted.iter().map(|x| x.to_string()).collect(),
+                accepted.len() > 0 && redacted.len() == 0,
+            )
         }
     }
 

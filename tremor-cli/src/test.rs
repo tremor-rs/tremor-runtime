@@ -24,9 +24,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 mod after;
-mod command;
 mod assert;
 mod before;
+mod command;
 mod kind;
 mod metadata;
 mod process;
@@ -209,7 +209,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         }
 
         if meta.kind == TestKind::Command && (kind == TestKind::All || kind == TestKind::Command) {
-            let (stats, test_reports) = command::suite_command(root.unwrap(), &meta, &filter_by_tags)?;
+            let (stats, test_reports) =
+                command::suite_command(root.unwrap(), &meta, &filter_by_tags)?;
             reports.insert("api".to_string(), test_reports);
             cmd_stats.merge(&stats);
             status::hr().ok();
@@ -238,7 +239,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut stats_map = HashMap::new();
     stats_map.insert("all".to_string(), all_stats);
     stats_map.insert("bench".to_string(), bench_stats);
-    stats_map.insert("integration".to_string(),integration_stats);
+    stats_map.insert("integration".to_string(), integration_stats);
     stats_map.insert("command".to_string(), cmd_stats);
     stats_map.insert("unit".to_string(), unit_stats);
     status::total_duration(elapsed).ok();

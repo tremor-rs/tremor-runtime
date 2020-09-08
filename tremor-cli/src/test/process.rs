@@ -94,7 +94,12 @@ pub(crate) fn run_process(
     let assert_str = &format!("{}/assert.yaml", bench_root);
     let assert_yaml = assert::load_assert(assert_str);
     let report = match assert_yaml {
-        Ok(assert_yaml) => Some(assert::process(&fg_out_file, &fg_err_file, status?.code(), &assert_yaml)?),
+        Ok(assert_yaml) => Some(assert::process(
+            &fg_out_file,
+            &fg_err_file,
+            status?.code(),
+            &assert_yaml,
+        )?),
         _not_found => None,
     };
 
