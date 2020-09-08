@@ -88,10 +88,9 @@ pub(crate) fn suite_command(
                 } else {
                     status::tags(&by_tag, &Some(&tags)).ok();
                 }
-            },
-            None => ()
+            }
+            None => (),
         }
-
 
         for suite in suite.suites {
             for case in suite.cases {
@@ -112,7 +111,8 @@ pub(crate) fn suite_command(
 
                 counter += 1;
 
-                let (case_stats, elements) = process_testcase(&fg_out_file, &fg_err_file, status?.code(), elapsed, &case)?;
+                let (case_stats, elements) =
+                    process_testcase(&fg_out_file, &fg_err_file, status?.code(), elapsed, &case)?;
 
                 stats.merge(&case_stats);
                 let suite = report::TestSuite {
@@ -127,7 +127,6 @@ pub(crate) fn suite_command(
             }
             api_stats.merge(&stats);
             status::stats(&api_stats).ok();
-
         }
     }
     status::rollups("\nCommand", &api_stats).ok();
@@ -188,7 +187,8 @@ fn process_testcase(
         });
     };
 
-    let (stats, mut filebased_assert_elements) = assert::process_filebased_asserts(stdout_path, stderr_path, &spec.expects)?;
+    let (stats, mut filebased_assert_elements) =
+        assert::process_filebased_asserts(stdout_path, stderr_path, &spec.expects)?;
     elements.append(&mut filebased_assert_elements);
 
     Ok((stats, elements))

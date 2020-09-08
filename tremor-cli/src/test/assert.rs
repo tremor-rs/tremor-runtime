@@ -111,7 +111,7 @@ pub(crate) fn load_assert(path_str: &str) -> Result<AssertSpec> {
 pub(crate) fn process(
     stdout_path: &str,
     stderr_path: &str,
-    status: Option<i32>,    
+    status: Option<i32>,
     spec: &AssertSpec,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
@@ -145,7 +145,8 @@ pub(crate) fn process(
         });
     };
 
-    let (s, mut filebased_assert_elements) = process_filebased_asserts(stdout_path, stderr_path, &spec.asserts)?;
+    let (s, mut filebased_assert_elements) =
+        process_filebased_asserts(stdout_path, stderr_path, &spec.asserts)?;
     stats.merge(&s);
     elements.append(&mut filebased_assert_elements);
 
@@ -203,10 +204,7 @@ pub(crate) fn process_filebased_asserts(
                     },
                 });
             }
-            FileBasedAssert {
-                contains: None,
-                ..
-            } => {
+            FileBasedAssert { contains: None, .. } => {
                 stats.skip();
                 // skip
             }

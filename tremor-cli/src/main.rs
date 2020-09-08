@@ -84,7 +84,7 @@ fn run(mut app: App, cmd: ArgMatches) -> Result<()> {
     };
 
     if let Some(_matches) = cmd.subcommand_matches("explain") {
-        return Err("Not yet implemented".into())
+        return Err("Not yet implemented".into());
     } else if let Some(matches) = cmd.subcommand_matches("completions") {
         completions::run_cmd(app, matches)?;
     } else if let Some(matches) = cmd.subcommand_matches("server") {

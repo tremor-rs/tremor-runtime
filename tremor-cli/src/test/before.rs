@@ -61,7 +61,7 @@ impl Before {
                                             break;
                                         }
                                     }
-                                    Err(_) => ()
+                                    Err(_) => (),
                                 }
                             }
                         }

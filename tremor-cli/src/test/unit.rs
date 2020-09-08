@@ -371,7 +371,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                     .iter()
                                                     .map(|x| x.to_string())
                                                     .collect::<Vec<String>>();
-                                                    // FIXME revisit tags in unit tests
+                                                // FIXME revisit tags in unit tests
                                                 if let (_matched, true) = by_tag.matches(&arr) {
                                                     let (test_stats, mut test_reports) =
                                                         eval_suite_entrypoint(

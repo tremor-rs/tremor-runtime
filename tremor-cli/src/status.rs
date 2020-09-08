@@ -51,34 +51,34 @@ pub(crate) fn skip(what: &str) -> Result<()> {
 }
 
 fn humanize(ts: u64) -> String {
-  let mut ns = ts;
-  if ns > 999 {
-     ns = ts % 1000;
-     let us = (ts / 1000) as u64;
-     if us > 999 {
-       let ms = (ts / 1000000) as u64;
-       if ms > 999 {
-         let secs = (ts / 1000000000) as u64;
-          if secs > 59 {
-            let mins = (ts / 60000000000) as u64;
-            if mins > 59 {
-              let hrs = (ts / 3600000000000) as u64;
-              return format!("{}h {}m {:02}s", hrs, mins % 60, secs % 60);
+    let mut ns = ts;
+    if ns > 999 {
+        ns = ts % 1000;
+        let us = (ts / 1000) as u64;
+        if us > 999 {
+            let ms = (ts / 1000000) as u64;
+            if ms > 999 {
+                let secs = (ts / 1000000000) as u64;
+                if secs > 59 {
+                    let mins = (ts / 60000000000) as u64;
+                    if mins > 59 {
+                        let hrs = (ts / 3600000000000) as u64;
+                        return format!("{}h {}m {:02}s", hrs, mins % 60, secs % 60);
+                    } else {
+                        return format!("{}m {}s", mins, secs % 60);
+                    }
+                } else {
+                    return format!("{}s {}ms", secs, ms % 1000);
+                }
             } else {
-              return format!("{}m {}s", mins, secs % 60);
+                return format!("{}ms {}us", ms, us % 1000);
             }
-          } else {
-            return format!("{}s {}ms", secs, ms % 1000);
-          }
-       } else {
-           return format!("{}ms {}us", ms, us % 1000);
-       }
-     } else {
-         return format!("{}us {}ns", us, ns % 1000);
+        } else {
+            return format!("{}us {}ns", us, ns % 1000);
+        }
+    } else {
+        return format!("{}ns", ns);
     }
-  } else {
-      return format!("{}ns", ns);
-  }
 }
 
 pub(crate) fn duration(what: u64) -> Result<()> {
@@ -229,7 +229,7 @@ pub(crate) fn tags(filter: &TagFilter, tags: &Option<&Vec<String>>) -> Result<()
             h.finalize()?;
             drop(h);
         }
-        None => ()
+        None => (),
     }
     Ok(())
 }
