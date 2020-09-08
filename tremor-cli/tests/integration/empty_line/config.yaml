@@ -1,0 +1,41 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: "tests/integration/empty_line/in.json.xz"
+      close_on_done: true
+      sleep_on_done: 500
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: "tests/integration/empty_line/events.log"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            let $class = "default";
+            let $rate = 100;
+            event;
+      - id: b
+        op: grouper::bucket
+    links:
+      in: [r]
+      r: [b]
+      b: [out]
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

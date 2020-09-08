@@ -1,0 +1,7 @@
+{
+    "kind": "Bench",
+    "tags": [
+        "bench"
+    ],
+    "includes": "{bench,through}*"
+}

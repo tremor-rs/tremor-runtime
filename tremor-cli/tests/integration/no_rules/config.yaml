@@ -1,0 +1,35 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: "tests/integration/no_rules/in.json.xz"
+      close_on_done: true
+      sleep_on_done: 500
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: "tests/integration/no_rules/gen.json"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: ""
+    links:
+      in: [r]
+      r: [out]
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

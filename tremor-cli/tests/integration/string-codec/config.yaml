@@ -1,0 +1,42 @@
+onramp:
+  - id: in
+    type: file
+    codec: string
+    config:
+      source: "tests/integration/string-codec/in.json.xz"
+      close_on_done: true
+      sleep_on_done: 500
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: "tests/integration/string-codec/events.log"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            let in = {"message": event};
+            let event =  match in of
+              case r = %{ message ~= dissect|%{first} %{last}| } => r.message
+              default => drop
+            end;
+            event
+    links:
+      in: [r]
+      r: [out]
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

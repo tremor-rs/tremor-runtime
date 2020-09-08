@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::{Error, Result};
 use crate::util::*;
 use clap::ArgMatches;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tremor_runtime::errors::{Error, Result};
 use tremor_script::path::load as load_module_path;
 use tremor_script::registry;
 use tremor_script::registry::Registry;
@@ -119,8 +119,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let dest_path = matches.value_of("OUTDIR").ok_or("docs")?.to_string();
     let is_interactive: bool = matches.is_present("interactive");
 
-    visit_path_str(src_path, &move |rel_path, src_path| {
-        // The clojure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
+    Ok(visit_path_str(src_path, &move |rel_path, src_path| {
+        // The closure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
         // whilst binding the locally defined is_interactive and dest_path command parameters
         // thereby adapting the 3-arity gen_doc to a 1-arity visitor callback fn
         //
@@ -132,5 +132,5 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             &Some(dest_path.clone()),
             src_path,
         )
-    })
+    })?)
 }

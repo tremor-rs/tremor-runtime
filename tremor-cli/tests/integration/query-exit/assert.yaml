@@ -1,0 +1,7 @@
+status: 1
+name: Query exit with zero status code
+asserts:
+  - source: events.log
+    contains:
+      - |
+        {"done":true}

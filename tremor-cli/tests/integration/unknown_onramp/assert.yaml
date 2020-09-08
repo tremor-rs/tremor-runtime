@@ -1,0 +1,7 @@
+status: 1
+name: Crash on unknown onramp type
+asserts:
+  - source: tests/integration/unknown_onramp/fg.err.log
+    contains:
+      - | 
+        error: Onramp bad_onramp not known

@@ -36,11 +36,17 @@ pub(crate) fn get_filename_extension(path: &str) -> Option<&str> {
 }
 
 pub(crate) fn slurp_string(file: &str) -> Result<String> {
-    let file = File::open(file)?;
-    let mut buffered_reader = BufReader::new(file);
-    let mut data = String::new();
-    buffered_reader.read_to_string(&mut data)?;
-    Ok(data)
+    match File::open(file) {
+        Ok(data) => {
+            let mut buffered_reader = BufReader::new(data);
+            let mut data = String::new();
+            buffered_reader.read_to_string(&mut data)?;
+            Ok(data)
+        }
+        Err(std::io::Error { .. }) => {
+            Err(format!("File `{}` not found or not readable", file.to_string()).into())
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -178,9 +184,7 @@ fn relative_path(
 
 pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor) -> Result<()> {
     if path.is_file() {
-        if let Err(e) = visitor(None, &path) {
-            return Err(e);
-        }
+        visitor(None, &path)?
     } else if path.is_dir() {
         // We process files first, followed by directories to impose
         // an order of visitation that follows the nested heirarchy from
@@ -194,9 +198,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             let path = entry.path();
             let rel_path = relative_path(base, &path);
             if path.is_file() {
-                if let Err(e) = visitor(Some(Path::new(&rel_path.unwrap())), path.as_path()) {
-                    return Err(e);
-                }
+                visitor(Some(Path::new(&rel_path.unwrap())), path.as_path())?
             }
         }
 
@@ -204,9 +206,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                if let Err(e) = visit_path(base, path.as_path(), visitor) {
-                    return Err(e);
-                }
+                visit_path(base, path.as_path(), visitor)?
             }
         }
     }
@@ -253,4 +253,13 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
     h.finalize()?;
     h.reset()?;
     Ok(())
+}
+
+pub(crate) fn basename(path: &str) -> String {
+    // FIXME wintel
+    let mut pieces = path.rsplit('/');
+    match pieces.next() {
+        Some(p) => p.into(),
+        None => path.into(),
+    }
 }

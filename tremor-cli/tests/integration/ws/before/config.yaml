@@ -1,0 +1,24 @@
+onramp:
+  - id: ws-in
+    type: ws
+    codec: json
+    config:
+      host: 127.0.0.1
+      port: 4242
+
+offramp:
+  - id: out
+    type: file
+    codec: json
+    config:
+      file: "tests/integration/ws/gen.log"
+  - id: exit
+    type: exit
+
+binding:
+  - id: main
+    links:
+      "/onramp/ws-in/{instance}/out": ["/pipeline/ws/{instance}/in"]
+      "/pipeline/ws/{instance}/out": ["/offramp/out/{instance}/in" ]
+      "/pipeline/ws/{instance}/exit": ["/offramp/exit/{instance}/in" ]
+

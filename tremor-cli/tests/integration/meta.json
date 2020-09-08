@@ -1,0 +1,7 @@
+{
+    "kind": "Integration",
+    "tags": [
+        "integration"
+    ],
+    "includes": "*"
+}

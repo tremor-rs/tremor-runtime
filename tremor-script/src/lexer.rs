@@ -119,8 +119,8 @@ pub enum Token<'input> {
     FloatLiteral(f64, String),
     /// a test literal
     TestLiteral(usize, Vec<String>),
-    /// an heredoc
-    HereDoc(usize, Vec<String>),
+    /// a heredoc
+    HereDoc, // (usize, Vec<String>),
 
     /// a double quote `"`
     DQuote,
@@ -423,7 +423,7 @@ impl<'input> Token<'input> {
             Token::StringLiteral(_)
             | Token::DQuote
             | Token::TestLiteral(_, _)
-            | Token::HereDoc(_, _) => true,
+            | Token::HereDoc /*(_,_)*/ => true,
             _ => false,
         }
     }
@@ -526,12 +526,13 @@ impl<'input> fmt::Display for Token<'input> {
                 // Strip the quotes
                 write!(f, "{}", &s[1..s.len() - 1])
             }
-            Token::HereDoc(indent, lines) => {
-                writeln!(f, r#"""""#)?;
-                for l in lines {
-                    writeln!(f, "{}{}", " ".repeat(*indent), l)?
-                }
-                write!(f, r#"""""#)
+            Token::HereDoc => {
+                // (indent, lines) => {
+                writeln!(f, r#"""""#)
+                // for l in lines {
+                //     writeln!(f, "{}{}", " ".repeat(*indent), l)?
+                // }
+                //                write!(f, r#"""""#)
             }
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
@@ -1643,7 +1644,7 @@ impl<'input> Lexer<'input> {
         end.absolute += 1;
         let q1 = self.spanned2(start, end, Token::DQuote);
         let mut res = vec![q1];
-        let string = String::new();
+        let mut string = String::new();
 
         match self.lookahead() {
             // This would be the second quote
@@ -1653,7 +1654,12 @@ impl<'input> Lexer<'input> {
                     self.bump();
                     // We don't allow anything tailing the initial `"""`
                     match self.bump() {
-                        Some((_, '\n')) => self.hd(start).map(|e| vec![e]),
+                        Some((start, '\n')) => {
+                            res = vec![self.spanned2(start, end, Token::HereDoc)]; // (0, vec![]))];
+                            string = String::new();
+                            let x = self.hd(start, end, false, string, res);
+                            x
+                        }
                         Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
@@ -1689,43 +1695,114 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn hd(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    /// Handle heredoc strings `"""`  ...
+    fn hd(
+        &mut self,
+        mut start: Location,
+        mut end: Location,
+        mut has_escapes: bool,
+        _string: String,
+        mut res: Vec<TokenSpan<'input>>,
+    ) -> Result<Vec<TokenSpan<'input>>> {
         let mut string = String::new();
-        let mut strings = Vec::new();
-        let mut end = start;
         loop {
-            match self.bump() {
+            let ch = self.bump();
+            match ch {
                 Some((e, '\n')) => {
                     end = e;
-                    strings.push(string);
+                    string.push('\n');
+                    res.push(self.spanned2(start, end, Token::StringLiteral(string.into())));
                     string = String::new();
                 }
-                Some((mut end, ch)) => {
-                    string.push(ch);
-                    // If the current line is just a `"""` then we are at the end of the heardoc
-                    if string.trim_start() == r#"""""# {
-                        let indent = indentation(&strings);
-                        let strings = strings
-                            .iter()
-                            .map(|s| s.split_at(indent).1.to_string())
-                            .collect();
-                        let token = Token::HereDoc(indent, strings);
-                        end.column += 1;
-                        end.absolute += 1;
-                        return Ok(self.spanned2(start, end, token));
+                Some((e, '\\')) => {
+                    has_escapes = true;
+                    if let Some(c) = self.escape_code(&string, start)? {
+                        string.push(c);
+                    };
+                    end = e;
+                }
+                Some((end_inner, '{')) => {
+                    if let Some((e, '}')) = self.lookahead() {
+                        string.push('}');
+                        end = e;
+                        continue;
+                    }
+                    let e = end_inner;
+                    let mut s = start;
+                    s.column += 1;
+                    s.absolute += 1;
+                    if !string.is_empty() {
+                        let token = if has_escapes {
+                            // The string was modified so we can't use the slice
+                            Token::StringLiteral(string.into())
+                        } else if let Some(slice) = self.slice(s, e) {
+                            Token::StringLiteral(slice.into())
+                        } else {
+                            // Invalid start end case :(
+                            Token::StringLiteral(string.into())
+                        };
+                        res.push(self.spanned2(start, end_inner, token));
+                        string = String::new();
+                    }
+                    start = end_inner;
+                    end = end_inner;
+                    end.column += 1;
+                    end.absolute += 1;
+                    res.push(self.spanned2(start, end, Token::LBrace));
+                    let mut pcount = 0;
+                    // We can't use for because of the borrow checker ...
+                    #[allow(clippy::while_let_on_iterator)]
+                    while let Some(s) = self.next() {
+                        let s = s?;
+                        match &s.value {
+                            Token::RBrace if pcount == 0 => {
+                                start = s.span.start();
+                                res.push(s);
+                                break;
+                            }
+                            Token::RBrace => {
+                                pcount -= 1;
+                            }
+                            Token::LBrace => {
+                                pcount += 1;
+                            }
+                            _ => {}
+                        };
+                        res.push(s);
                     }
                 }
+                Some((_e, '"')) => {
+                    // If the current line is just a `"""` then we are at the end of the heardoc
+                    res.push(self.spanned2(start, end, Token::StringLiteral(string.into())));
+                    string = String::new();
+                    string.push('"');
+                    if let Some((_, '"')) = self.lookahead() {
+                        self.bump();
+                        string.push('"');
+                        if let Some((end, '"')) = self.lookahead() {
+                            self.bump();
+                            let mut end = end;
+                            end.column += 1;
+                            end.absolute += 1;
+                            res.push(self.spanned2(start, end, Token::HereDoc)); // (0, vec![])));
+                            return Ok(res);
+                        }
+                    }
+                }
+                Some((_e, other)) => {
+                    string.push(other as char);
+                }
+
                 None => {
                     return Err(ErrorKind::UnterminatedHereDoc(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!(r#""""{}\n"#, strings.join("\n")),
+                        format!("\"{}", string),
                     )
                     .into())
                 }
             }
         }
-        //let mut strings = Vec::new();
     }
 
     /// Handle quote strings `"`  ...

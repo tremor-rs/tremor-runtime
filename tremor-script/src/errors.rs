@@ -32,7 +32,7 @@ use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 
-/// A Compiletime error capturing the prerpocessors cus at the time of the error
+/// A Compiletime error capturing the preprocessors cus at the time of the error
 #[derive(Debug)]
 pub struct CompilerError {
     /// The original error

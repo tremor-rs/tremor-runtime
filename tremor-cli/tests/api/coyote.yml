@@ -1,0 +1,59 @@
+name: Curl validation of API tests
+tags:
+  - curl
+  - api
+  - rest
+suites:
+  - name: REST API - Initial state after empty deployment
+    cases:
+        - name: GET /version
+          command: curl -vs --stderr - http://localhost:9898/version
+          tags:
+            - get
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - HTTP/1.1 200 OK
+                - '{"version":"0.8.0"}'
+        - name: GET /onramp
+          command: curl -vs --stderr - http://localhost:9898/onramp
+          tags:
+            - get
+          status: 0
+          expects:
+            - source: tests/api/fg.1.out.log
+              contains:
+                - HTTP/1.1 200 OK
+                - '["ws-in"]'
+        - name: GET /offramp
+          command: curl -vs --stderr - http://localhost:9898/offramp
+          tags:
+            - get
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - HTTP/1.1 200 OK
+                - "system::stdout"
+                - "system::stderr"
+        - name: GET /pipeline
+          command: curl -vs --stderr - http://localhost:9898/pipeline
+          tags:
+            - get
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+              - HTTP/1.1 200 OK
+              - "system::metrics"
+        - name: GET /binding
+          command: curl -vs --stderr - http://localhost:9898/binding
+          tags:
+            - get
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+              - HTTP/1.1 200 OK
+              - '["main"]'

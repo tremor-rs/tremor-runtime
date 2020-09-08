@@ -30,7 +30,7 @@ pub(crate) fn run_cmd(mut app: clap::App, matches: &ArgMatches) -> Result<()> {
     } else if let Some(_) = matches.subcommand_matches("zsh") {
         generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
     } else {
-        return Err("Bad command".into());
+        app.print_long_help().ok();
     }
     Ok(())
 }

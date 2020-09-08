@@ -642,11 +642,11 @@ Float: Value<'input> = {
 }
 
 StringLiteral: StringLitRaw<'input> = {
-    <start:@L> <doc:"heredoc"> <end:@L> =>   StringLitRaw {
-        start,
-        end,
-        string: doc.join("\n").into(),
-        exprs: vec![],
+    <start:@L> "heredoc" <es:StrLitElements> "heredoc" <end:@L> => {
+        let mut sl: StringLitRaw = es.into();
+        sl.start = start;
+        sl.end = end;
+        sl
     },
     <start:@L> "\"" <es:StrLitElements> "\"" <end:@L> => {
         let mut sl: StringLitRaw = es.into();
@@ -1350,11 +1350,12 @@ extern {
         "int" => Token::IntLiteral(<i64>),
         "float" => Token::FloatLiteral(<f64>, <String>),
         "string" => Token::StringLiteral(<Cow<'input, str>>),
-        "heredoc" => Token::HereDoc(_, <Vec<String>>),
+        "heredoc" => Token::HereDoc, //(_, <Vec<String>>),
         "<extractor>" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
         "<end-of-stream>" => Token::EndOfStream,
+        "<newline>" => Token::NewLine,
         
 
         "select" => Token::Select,

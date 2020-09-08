@@ -1,0 +1,38 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: "tests/integration/rewrite-meta/in.json.xz"
+      close_on_done: true
+      sleep_on_done: 500
+
+offramp:
+  - id: out
+    type: file
+    config:
+      file: "tests/integration/rewrite-meta/events.log"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            let $ = {"new": "data"};
+            $;
+    links:
+      in: [r]
+      r: [out]
+      r/error: [out]
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
