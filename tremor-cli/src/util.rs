@@ -197,8 +197,13 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             let entry = entry?;
             let path = entry.path();
             let rel_path = relative_path(base, &path);
-            if path.is_file() {
-                visitor(Some(Path::new(&rel_path.unwrap())), path.as_path())?
+            match rel_path {
+                Ok(rel_path) => {
+                    if path.is_file() {
+                        visitor(Some(Path::new(&rel_path)), path.as_path())?;
+                    }
+                }
+                _otherwise => (), // FIXME emit warning?
             }
         }
 

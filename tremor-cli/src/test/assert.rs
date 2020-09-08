@@ -115,7 +115,7 @@ pub(crate) fn process(
     spec: &AssertSpec,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
-    let mut stats = stats::Stats::new();
+    let mut s = stats::Stats::new();
 
     if let Some(code) = status {
         let success = code == spec.status;
@@ -134,10 +134,10 @@ pub(crate) fn process(
             keyword: report::KeywordKind::Predicate,
             result: report::ResultKind {
                 status: if success {
-                    stats.pass();
+                    s.pass();
                     report::StatusKind::Passed
                 } else {
-                    stats.fail();
+                    s.fail();
                     report::StatusKind::Failed
                 },
                 duration: 0,
@@ -145,12 +145,12 @@ pub(crate) fn process(
         });
     };
 
-    let (s, mut filebased_assert_elements) =
+    let (assert_stats, mut filebased_assert_elements) =
         process_filebased_asserts(stdout_path, stderr_path, &spec.asserts)?;
-    stats.merge(&s);
+    s.merge(&assert_stats);
     elements.append(&mut filebased_assert_elements);
 
-    Ok((stats, elements))
+    Ok((s, elements))
 }
 
 pub(crate) fn process_filebased_asserts(

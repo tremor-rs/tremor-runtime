@@ -101,7 +101,7 @@ pub(crate) fn suite_command(
                     "/usr/bin/env",
                     &shell_words::split(&case.command).unwrap(),
                 );
-                let status = fg_process.wait_with_output();
+                let exit_status = fg_process.wait_with_output();
 
                 let fg_out_file = format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
                 let fg_err_file = format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
@@ -111,8 +111,13 @@ pub(crate) fn suite_command(
 
                 counter += 1;
 
-                let (case_stats, elements) =
-                    process_testcase(&fg_out_file, &fg_err_file, status?.code(), elapsed, &case)?;
+                let (case_stats, elements) = process_testcase(
+                    &fg_out_file,
+                    &fg_err_file,
+                    exit_status?.code(),
+                    elapsed,
+                    &case,
+                )?;
 
                 stats.merge(&case_stats);
                 let suite = report::TestSuite {
@@ -153,13 +158,13 @@ pub(crate) fn suite_command(
 fn process_testcase(
     stdout_path: &str,
     stderr_path: &str,
-    status: Option<i32>,
+    process_status: Option<i32>,
     duration: u64,
     spec: &CommandTest,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
-    let mut stats = stats::Stats::new();
-    if let Some(code) = status {
+    let mut stat_s = stats::Stats::new();
+    if let Some(code) = process_status {
         let success = code == spec.status;
         status::assert(
             "Assert 0",
@@ -176,10 +181,10 @@ fn process_testcase(
             keyword: report::KeywordKind::Predicate,
             result: report::ResultKind {
                 status: if success {
-                    stats.pass();
+                    stat_s.pass();
                     report::StatusKind::Passed
                 } else {
-                    stats.fail();
+                    stat_s.fail();
                     report::StatusKind::Failed
                 },
                 duration,
@@ -187,9 +192,9 @@ fn process_testcase(
         });
     };
 
-    let (stats, mut filebased_assert_elements) =
+    let (stat_s, mut filebased_assert_elements) =
         assert::process_filebased_asserts(stdout_path, stderr_path, &spec.expects)?;
     elements.append(&mut filebased_assert_elements);
 
-    Ok((stats, elements))
+    Ok((stat_s, elements))
 }

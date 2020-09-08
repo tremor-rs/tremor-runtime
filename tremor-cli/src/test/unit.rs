@@ -134,7 +134,7 @@ fn eval_suite_tests(
                             })
                             .unwrap();
                         let item = &fields[test_spec_index].value;
-                        let mut state = Value::Object(Box::new(hashmap! {}));
+                        let mut test_state = Value::Object(Box::new(hashmap! {}));
                         let mut event = Value::Object(Box::new(hashmap! {}));
                         let mut meta = Value::Object(Box::new(hashmap! {}));
 
@@ -159,7 +159,12 @@ fn eval_suite_tests(
                         let start = nanotime();
                         let value = item
                             .run(
-                                EXEC_OPTS, &env, &mut event, &mut state, &mut meta, &mut local,
+                                EXEC_OPTS,
+                                &env,
+                                &mut event,
+                                &mut test_state,
+                                &mut meta,
+                                &mut local,
                             )
                             .unwrap();
                         let elapsed = nanotime() - start;
@@ -246,9 +251,9 @@ fn eval_suite_tests(
 }
 
 pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report::TestReport> {
-    println!("");
-    println!("");
-    println!("");
+    println!();
+    println!();
+    println!();
 
     let mut suites: HashMap<String, report::TestSuite> = HashMap::new();
 
@@ -305,7 +310,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                 specs.push(value.into_owned());
                             }
                             if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) = &args[0] {
-                                let mut stats = stats::Stats::new();
+                                let mut stat_s = stats::Stats::new();
 
                                 let suite_spec_index = fields
                                     .iter()
@@ -319,7 +324,6 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                     })
                                     .unwrap();
                                 let item = &fields[suite_spec_index].value;
-                                //                                dbg!(&item);
                                 let tag_spec_index = fields.iter().position(|f| {
                                     if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
                                         value == "tags"
@@ -356,7 +360,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                     by_tag,
                                                 );
                                             elements.append(&mut test_reports);
-                                            stats.merge(&test_stats);
+                                            stat_s.merge(&test_stats);
                                         }
                                     }
                                     Some(tag_spec_index) => {
@@ -383,7 +387,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                             specs,
                                                             by_tag,
                                                         );
-                                                    stats.merge(&test_stats);
+                                                    stat_s.merge(&test_stats);
                                                     elements.append(&mut test_reports);
                                                 }
                                             }
@@ -397,7 +401,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                         description: "Value".into(),
                                         elements,
                                         evidence: None,
-                                        stats,
+                                        stats: stat_s,
                                         duration: nanotime() - suite_start,
                                     },
                                 );
@@ -418,15 +422,15 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
         }
     }
 
-    let mut stats = stats::Stats::new();
+    let mut stat_s = stats::Stats::new();
     for v in suites.values() {
-        stats.merge(&v.stats)
+        stat_s.merge(&v.stats)
     }
 
     Ok(report::TestReport {
         description: "unit test suites".into(),
         elements: suites,
-        stats,
+        stats: stat_s,
         duration: nanotime() - report_start,
     })
 }

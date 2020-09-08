@@ -80,7 +80,7 @@ impl Ingress {
         Ok(Self {
             is_interactive,
             is_pretty,
-            buf: [0u8; 4096],
+            buf: [0_u8; 4096],
             preprocessor,
             codec,
             buffer,
@@ -225,7 +225,7 @@ impl Egress {
             }
             Err(e) => {
                 eprintln!("error processing event: {}", e);
-                return Err(e.into());
+                Err(e.into())
             }
         }
     }
@@ -250,7 +250,7 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
 
             let mut ingress = Ingress::from_args(&matches)?;
             let mut egress = Egress::from_args(&matches)?;
-            let id = 0u64;
+            let id = 0_u64;
 
             ingress.process(
                 &mut script,
@@ -270,19 +270,19 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
                         Ok(r) => egress.process(&src, event.clone(), Ok(r)),
                         Err(e) => egress.process(&src, event, Err(e.into())),
                     }?;
-                    return Ok(());
+                    Ok(())
                 },
             )?;
 
-            return Ok(());
+            Ok(())
         }
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);
             };
-            return Err(e.into());
+            Err(e.into())
         }
-    };
+    }
 }
 
 fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
@@ -317,7 +317,7 @@ fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
 
     let runnable = tremor_pipeline::query::Query(runnable);
     let mut pipeline = runnable.to_pipe()?;
-    let id = 0u64;
+    let id = 0_u64;
 
     ingress.process(
         &mut pipeline,
@@ -372,7 +372,7 @@ fn run_pipeline_source(matches: ArgMatches, src: String) -> Result<()> {
 
     let mut ingress = Ingress::from_args(&matches)?;
     let mut egress = Egress::from_args(&matches)?;
-    let id = 0u64;
+    let id = 0_u64;
 
     ingress.process(
         &mut pipeline,
