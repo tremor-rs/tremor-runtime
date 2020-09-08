@@ -119,7 +119,7 @@ impl BeforeController {
         let bg_err_file = format!("{}/bg.err.log", &root);
         match process {
             Some(mut process) => {
-                process.tail(&bg_out_file, &bg_err_file).unwrap();
+                process.tail(&bg_out_file, &bg_err_file).ok();
             }
             None => (),
         };

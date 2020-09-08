@@ -22,7 +22,7 @@ use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 macro_rules! fg_bold {
     ($h:ident, $c:ident) => {
         $h.set_color(ColorSpec::new().set_fg(Some(Color::$c)).set_bold(true))
-            .unwrap();
+            .ok();
     };
 }
 
@@ -116,7 +116,7 @@ pub(crate) fn assert(
     if ok {
         fg_bold!(h, Green);
     } else {
-        fg_bold!(h, Red)
+        fg_bold!(h, Red);
     }
     write!(h.get_writer(), "  {}", &label)?;
     h.reset()?;
@@ -143,7 +143,7 @@ pub(crate) fn assert_has(label: &str, what: &str, ok: bool) -> Result<()> {
     if ok {
         fg_bold!(h, Green);
     } else {
-        fg_bold!(h, Red)
+        fg_bold!(h, Red);
     }
     write!(h.get_writer(), "  {}", &label)?;
     h.reset()?;

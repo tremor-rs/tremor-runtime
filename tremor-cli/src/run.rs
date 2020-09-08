@@ -102,8 +102,8 @@ impl Ingress {
                 }
                 Ok(n) => {
                     let mut at = nanotime();
-                    let x = self.preprocessor.process(&mut at, &self.buf[0..n]);
-                    for data in x.unwrap() {
+                    let x = self.preprocessor.process(&mut at, &self.buf[0..n])?;
+                    for data in x {
                         let event = match self.codec.decode(data, at) {
                             Ok(Some(data)) => data,
                             Ok(None) => continue,

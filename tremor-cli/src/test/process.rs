@@ -70,7 +70,7 @@ pub(crate) fn run_process(
     let fg = std::thread::spawn(move || -> Result<std::process::ExitStatus> {
         let fg_out_file = format!("{}/fg.out.log", bench_rootx.clone());
         let fg_err_file = format!("{}/fg.err.log", bench_rootx.clone());
-        process.tail(&fg_out_file, &fg_err_file).unwrap();
+        process.tail(&fg_out_file, &fg_err_file).ok();
         Ok(process.wait_with_output()?)
     });
 

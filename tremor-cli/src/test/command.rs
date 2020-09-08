@@ -96,39 +96,44 @@ pub(crate) fn suite_command(
             for case in suite.cases {
                 status::h1("Command Test", &case.name).ok();
 
-                // FIXME wintel
-                let mut fg_process = job::TargetProcess::new_with_stderr(
-                    "/usr/bin/env",
-                    &shell_words::split(&case.command).unwrap(),
-                );
-                let exit_status = fg_process.wait_with_output();
+                match shell_words::split(&case.command) {
+                    Ok(args) => {
+                        // FIXME wintel
+                        let mut fg_process =
+                            job::TargetProcess::new_with_stderr("/usr/bin/env", &args);
+                        let exit_status = fg_process.wait_with_output();
 
-                let fg_out_file = format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
-                let fg_err_file = format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
-                let start = nanotime();
-                fg_process.tail(&fg_out_file, &fg_err_file).ok();
-                let elapsed = nanotime() - start;
+                        let fg_out_file =
+                            format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
+                        let fg_err_file =
+                            format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
+                        let start = nanotime();
+                        fg_process.tail(&fg_out_file, &fg_err_file).ok();
+                        let elapsed = nanotime() - start;
 
-                counter += 1;
+                        counter += 1;
 
-                let (case_stats, elements) = process_testcase(
-                    &fg_out_file,
-                    &fg_err_file,
-                    exit_status?.code(),
-                    elapsed,
-                    &case,
-                )?;
+                        let (case_stats, elements) = process_testcase(
+                            &fg_out_file,
+                            &fg_err_file,
+                            exit_status?.code(),
+                            elapsed,
+                            &case,
+                        )?;
 
-                stats.merge(&case_stats);
-                let suite = report::TestSuite {
-                    name: case.name.trim().into(),
-                    description: "Command-driven test".to_string(),
-                    elements,
-                    evidence: None,
-                    stats: case_stats,
-                    duration: nanotime() - suite_start,
-                };
-                suites.insert(case.name, suite);
+                        stats.merge(&case_stats);
+                        let suite = report::TestSuite {
+                            name: case.name.trim().into(),
+                            description: "Command-driven test".to_string(),
+                            elements,
+                            evidence: None,
+                            stats: case_stats,
+                            duration: nanotime() - suite_start,
+                        };
+                        suites.insert(case.name, suite);
+                    }
+                    Err(_) => (), // FIXME improve error handling
+                }
             }
             api_stats.merge(&stats);
             status::stats(&api_stats).ok();

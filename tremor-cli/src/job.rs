@@ -163,7 +163,7 @@ impl Drop for TargetProcess {
                 .unwrap_or_else(|_| {
                     process::exit(1);
                 })
-                .unwrap();
+                .ok();
         }
 
         if let Some(handle) = self.stderr_thread.take() {
@@ -172,7 +172,7 @@ impl Drop for TargetProcess {
                 .unwrap_or_else(|_| {
                     process::exit(1);
                 })
-                .unwrap();
+                .ok();
         }
 
         match self.process.wait() {
