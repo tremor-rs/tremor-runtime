@@ -157,7 +157,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         matches
             .values_of("INCLUDES")
             .unwrap()
-            .map(|x| x.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     } else {
         vec![]
@@ -166,7 +166,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         matches
             .values_of("EXCLUDES")
             .unwrap()
-            .map(|x| x.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     } else {
         vec![]
