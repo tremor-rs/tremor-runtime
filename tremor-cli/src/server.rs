@@ -122,7 +122,6 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
 }
 
 fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
-    dbg!(&r);
     Ok(match r {
         Ok(r) => r,
         Err(e) => e.into(),
@@ -234,7 +233,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         eprintln!("Listening at: http://{}", host);
         info!("Listening at: http://{}", host);
 
-        if let Err(e) = app.listen(&host).await {
+        if let Err(e) = app.listen(host).await {
             error!("API Error: {}", e);
         }
         warn!("API stopped");

@@ -232,14 +232,14 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut all_stats = stats::Stats::new();
     all_stats.merge(&bench_stats);
     all_stats.merge(&integration_stats);
-    all_stats.merge(&api_stats);
+    all_stats.merge(&cmd_stats);
     all_stats.merge(&unit_stats);
     status::rollups("Total Stats", &all_stats).ok();
     let mut stats_map = HashMap::new();
     stats_map.insert("all".to_string(), all_stats);
     stats_map.insert("bench".to_string(), bench_stats);
     stats_map.insert("integration".to_string(),integration_stats);
-    stats_map.insert("command".to_string(), api_stats);
+    stats_map.insert("command".to_string(), cmd_stats);
     stats_map.insert("unit".to_string(), unit_stats);
     status::total_duration(elapsed).ok();
 
