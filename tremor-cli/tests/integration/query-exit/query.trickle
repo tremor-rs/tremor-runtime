@@ -1,0 +1,2 @@
+select event from in into out;
+select { "exit": 0, "delay": 100 } from in where event.done into out/done;

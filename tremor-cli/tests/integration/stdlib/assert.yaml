@@ -1,0 +1,7 @@
+status: 1
+name: Test stdlib is usable
+asserts:
+  - source: events.log
+    contains:
+      - |
+        {"done":true}

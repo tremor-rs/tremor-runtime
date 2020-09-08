@@ -1,0 +1,19 @@
+{
+  "run": "tests/api/before",
+  "cmd": "tremor",
+  "args": [
+    "server",
+    "run",
+    "-f",
+    "tests/api/before/ws.trickle",
+    "tests/api/before/config.yaml",
+    "tests/api/before/server.yaml"
+  ],
+  "await": {
+    "port-open": [
+      "9898",
+      "4242"
+    ]
+  },
+  "max-await-secs": 15
+}

@@ -1,0 +1,7 @@
+{
+    "kind": "Command",
+    "tags": [
+        "api", "rest", "curl"
+    ],
+    "includes": "api*"
+}

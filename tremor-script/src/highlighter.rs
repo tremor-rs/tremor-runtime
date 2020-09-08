@@ -319,23 +319,25 @@ pub trait Highlighter {
             }
             self.set_color(&mut c)?;
             match &x.value {
-                Token::HereDoc(indent, lines) => {
+                Token::HereDoc => {
+                    // (indent, lines) => {
                     writeln!(self.get_writer(), r#"""""#)?;
-                    for l in lines {
-                        line += 1;
-                        self.reset()?;
-                        self.set_color(ColorSpec::new().set_bold(true))?;
-                        write!(self.get_writer(), "{:5} | ", line)?;
-                        self.reset()?;
-                        c.set_intense(true).set_fg(Some(Color::Magenta));
-                        writeln!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
-                    }
+                    // FIXME indentation sensing in heredoc's
+                    // for l in lines {
+                    //     line += 1;
+                    //     self.reset()?;
+                    //     self.set_color(ColorSpec::new().set_bold(true))?;
+                    //     write!(self.get_writer(), "{:5} | ", line)?;
+                    //     self.reset()?;
+                    //     c.set_intense(true).set_fg(Some(Color::Magenta));
+                    //     writeln!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
+                    // }
                     line += 1;
                     self.reset()?;
-                    self.set_color(ColorSpec::new().set_bold(true))?;
-                    write!(self.get_writer(), "{:5} | ", line)?;
-                    self.reset()?;
-                    write!(self.get_writer(), r#"""""#)?;
+                    // self.set_color(ColorSpec::new().set_bold(true))?;
+                    // write!(self.get_writer(), "{:5} | ", line)?;
+                    // self.reset()?;
+                    // write!(self.get_writer(), r#"""""#)?;
                 }
                 Token::TestLiteral(indent, lines) => {
                     write!(self.get_writer(), "|")?;

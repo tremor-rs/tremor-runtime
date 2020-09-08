@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
+use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::ArgMatches;
 use std::fs::File;
@@ -26,7 +27,6 @@ use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
 use tremor_runtime::{self, config, functions, metrics, version};
-use crate::util::{get_source_kind,SourceKind};
 
 #[cfg_attr(tarpaulin, skip)]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -141,7 +141,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         env_logger::init();
     }
     version::log();
-    println!("allocator: {}", crate::alloc::get_allocator_name());
+    eprintln!("allocator: {}", crate::alloc::get_allocator_name());
 
     unsafe {
         // We know that instance will only get set once at

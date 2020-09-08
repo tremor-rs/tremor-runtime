@@ -1,0 +1,7 @@
+status: 1
+name: Test string codec
+asserts:
+  - source: events.log
+    contains:
+      - |
+        {"done":true}

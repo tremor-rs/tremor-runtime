@@ -1,0 +1,170 @@
+name: Tremor Unified Client acceptance tests
+tags:
+  - cli
+  - acceptance
+suites:
+  - name: Calling cli with no args gets help / version information
+    cases:
+        - name: |
+            `tremor` no args returns help
+          command: tremor
+          tags:
+            - help
+          status: 2
+          expects:
+            - source: stderr
+              contains:
+                - USAGE
+                - FLAGS
+                - OPTIONS
+                - SUBCOMMANDS
+        - name: |
+            `tremor -h` returns help
+          command: tremor -h
+          tags:
+            - help
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - USAGE
+                - FLAGS
+                - OPTIONS
+                - SUBCOMMANDS
+        - name: |
+            `tremor help` returns help
+          command: tremor -h
+          tags:
+            - help
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - USAGE
+                - FLAGS
+                - OPTIONS
+                - SUBCOMMANDS
+        - name: |
+            `tremor --help` returns help
+          command: tremor --help
+          tags:
+            - help
+          status: 0
+          expects:
+            - source: tests/cli/fg.3.out.log
+              contains:
+                - USAGE
+                - FLAGS
+                - OPTIONS
+                - SUBCOMMANDS
+                - api            Tremor API client
+                - completions    Shell completions
+                - dbg            Advanced debugging commands
+                - doc            Run tremor script or query files against stdin or a json data archive, the data will be read from
+                - STDIN or an archive and written to STDOUT.
+                - explain        
+                - help           Prints this message or the help of the given subcommand(s)
+                - run            Run tremor script or query files against stdin or a json data archive, the data will be read from
+                - STDIN or an archive and written to STDOUT.
+                - server         Tremor server
+                - test           Testing facilities
+        - name: |
+            `tremor -V` returns version
+          command: tremor -V
+          tags:
+            - version
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - tremor
+        - name: |
+            `tremor --version` returns version
+          command: tremor --version
+          tags:
+            - version
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - tremor
+  - name: Calling cli with no args gets help and basic top level usage
+    cases:
+        - name: |
+            `tremor completions` returns help for completions
+          command: tremor help completions
+          tags:
+            - completions
+            - shell
+            - help
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - bash
+                - elvish
+                - fish
+                - powershell
+                - zsh
+        - name: |
+            `tremor completions bash` returns bash completions
+          command: tremor completions bash
+          tags:
+            - completions
+            - shell
+            - bash
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - _tremor() {
+        - name: |
+            `tremor completions elvish` returns elvish completions
+          command: tremor completions elvish
+          tags:
+            - completions
+            - shell
+            - elvish
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - edit:completion:arg-completer[tremor] = [@words]{
+        - name: |
+            `tremor completions fish` returns fish completions
+          command: tremor completions fish
+          tags:
+            - completions
+            - shell
+            - fish
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - complete -c tremor -n "__fish_use_subcommand" -s v -l verbose -d 'Sets the level of verbosity'
+        - name: |
+            `tremor completions powershell` returns powershell completions
+          command: tremor completions powershell
+          tags:
+            - completions
+            - shell
+            - powershell
+          status: 0
+          expects:
+            - source: stdout
+              contains:
+                - using namespace System.Management.Automation
+                - using namespace System.Management.Automation.Language
+        - name: |
+            `tremor completions zsh` returns zsh completions
+          command: tremor completions zsh
+          tags:
+            - completions
+            - shell
+            - zsh
+            - bug
+          status: 101
+          expects:
+            - source: stderr
+              contains:
+                - thread 'main' panicked at 'Fatal internal error.

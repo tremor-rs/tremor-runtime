@@ -1,0 +1,35 @@
+onramp:
+  - id: in
+    type: file
+    codec: json
+    config:
+      source: "tests/integration/ws/in.json"
+      close_on_done: true
+      sleep_on_done: 1000
+
+offramp:
+  - id: ws-out
+    type: ws
+    codec: json
+    config:
+      url: "ws://127.0.0.1:4242"
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+      
+binding:
+  - id: main
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/ws-out/{instance}/in"]
+
+mapping:
+  /binding/main/1:
+    instance: "1"

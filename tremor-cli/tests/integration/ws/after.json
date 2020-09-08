@@ -1,0 +1,7 @@
+{
+  "run": "tests/integration/ws/after",
+  "cmd": "bash",
+  "args": [
+    "./tests/integration/ws/after/stop.sh"
+  ]
+}

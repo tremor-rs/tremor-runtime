@@ -1,0 +1,7 @@
+status: 1
+name: Bad syntax in configuration
+asserts:
+  - source: tests/integration/bad_rule_syntax/fg.err.log
+    contains:
+      - bad {{
+      - An unexpected character 'b' was found

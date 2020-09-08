@@ -1,0 +1,31 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: "tests/integration/unknown_offramp/in.json.xz"
+      close_on_done: true
+      sleep_on_done: 500
+
+offramp:
+  - id: out
+    type: bad_offramp
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    nodes:
+      - id: p
+        op: passthrough
+    links:
+      in: [p]
+      p: [out]
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]

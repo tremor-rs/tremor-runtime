@@ -1,0 +1,7 @@
+status: 1
+name: Crash on unknown offramp type
+asserts:
+  - source: events.log
+    contains:
+      - |
+        {"done":true}

@@ -1,0 +1,19 @@
+{
+  "run": "tests/integration/ws/before",
+  "cmd": "tremor",
+  "args": [
+    "server",
+    "run",
+    "-n",
+    "-f",
+    "tests/integration/ws/before/ws.trickle",
+    "tests/integration/ws/before/config.yaml",
+    "tests/integration/ws/before/server.yaml"
+  ],
+  "await": {
+    "port-open": [
+      "4242"
+    ]
+  },
+  "max-await-secs": 15
+}

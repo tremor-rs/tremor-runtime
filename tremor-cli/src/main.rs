@@ -31,6 +31,9 @@ extern crate serde_derive;
 #[allow(unused_extern_crates)]
 extern crate serde;
 
+extern crate serde_yaml;
+extern crate simd_json;
+
 #[macro_use]
 extern crate log;
 
@@ -41,16 +44,21 @@ use crate::util::*;
 use async_std::task;
 use clap::App;
 use clap::{load_yaml, AppSettings, ArgMatches};
-use tremor_runtime::errors;
+// use tremor_runtime::errors;
 
 mod alloc;
 mod api;
 mod completions;
 mod debug;
 mod doc;
+mod errors;
 // mod explain;
+mod job;
+mod report;
 mod run;
 mod server;
+pub(crate) mod status;
+mod test;
 mod util;
 
 #[cfg_attr(tarpaulin, skip)]
@@ -76,24 +84,23 @@ fn run(mut app: App, cmd: ArgMatches) -> Result<()> {
     };
 
     if let Some(_matches) = cmd.subcommand_matches("explain") {
-        Err("Not yet implemented".into())
+        return Err("Not yet implemented".into())
     } else if let Some(matches) = cmd.subcommand_matches("completions") {
-        completions::run_cmd(app, matches)
+        completions::run_cmd(app, matches)?;
     } else if let Some(matches) = cmd.subcommand_matches("server") {
-        server::run_cmd(matches)
+        server::run_cmd(matches)?;
     } else if let Some(matches) = cmd.subcommand_matches("run") {
-        run::run_cmd(matches.clone())
+        run::run_cmd(matches.clone())?;
     } else if let Some(matches) = cmd.subcommand_matches("doc") {
-        doc::run_cmd(&matches)
+        doc::run_cmd(&matches)?;
     } else if let Some(matches) = cmd.subcommand_matches("api") {
-        task::block_on(api::run_cmd(&mut config, &matches))
+        task::block_on(api::run_cmd(&mut config, &matches))?;
     } else if let Some(matches) = cmd.subcommand_matches("dbg") {
-        debug::run_cmd(&matches)
+        debug::run_cmd(&matches)?;
+    } else if let Some(matches) = cmd.subcommand_matches("test") {
+        test::run_cmd(&matches)?;
     } else {
-        if let Err(_) = app.print_long_help() {
-            Err("Bad command".into())
-        } else {
-            Ok(())
-        }
+        app.print_long_help().ok();
     }
+    Ok(())
 }

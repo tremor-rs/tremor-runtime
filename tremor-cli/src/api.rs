@@ -34,7 +34,7 @@ pub(crate) async fn run_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()>
     } else if let Some(matches) = cmd.subcommand_matches("target") {
         conductor_target_cmd(app, &matches).await
     } else {
-        Err("Invalid command".into())
+        Err(Error::from("Invalid command"))
     }
 }
 

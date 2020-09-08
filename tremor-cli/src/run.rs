@@ -16,6 +16,7 @@
 // it is just a utility
 // This isn't a external crate so we don't worry about docs
 
+use crate::errors::{Error, Result};
 use crate::util::*;
 use clap::ArgMatches;
 use simd_json::borrowed::Value;
@@ -24,7 +25,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_runtime::codec::Codec;
-use tremor_runtime::errors::{Error, Result};
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_script::ctx::{EventContext, EventOriginUri};
@@ -107,7 +107,7 @@ impl Ingress {
                         let event = match self.codec.decode(data, at) {
                             Ok(Some(data)) => data,
                             Ok(None) => continue,
-                            Err(e) => return Err(e),
+                            Err(e) => return Err(e.into()),
                         };
                         let event = event.suffix().value().clone();
 
@@ -176,12 +176,7 @@ impl Egress {
         })
     }
 
-    fn process(
-        &mut self,
-        _src: &str,
-        event: Value,
-        ret: Result<Return>,
-    ) -> std::result::Result<(), Error> {
+    fn process(&mut self, _src: &str, event: Value, ret: Result<Return>) -> Result<()> {
         match ret {
             Ok(Return::Drop) => Ok(()),
             Ok(Return::Emit { value, port }) => {
@@ -275,7 +270,7 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
                         Ok(r) => egress.process(&src, event.clone(), Ok(r)),
                         Err(e) => egress.process(&src, event, Err(e.into())),
                     }?;
-            return Ok(());
+                    return Ok(());
                 },
             )?;
 
@@ -422,7 +417,6 @@ fn run_pipeline_source(matches: ArgMatches, src: String) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub(crate) fn run_cmd(matches: ArgMatches) -> Result<()> {
     let script_file = matches
         .value_of("SCRIPT")

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::{Error, Result};
 use crate::util::*;
 use clap::ArgMatches;
 use lexer::Tokenizer;
@@ -19,7 +20,6 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use termcolor::{Color, ColorSpec};
-use tremor_runtime::errors::{Error, Result};
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
 use tremor_script::lexer::Token;

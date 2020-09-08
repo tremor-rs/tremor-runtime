@@ -12,3 +12,17 @@
 ##
 ## Returns an `bool`.
 intrinsic fn assert(name, expected, got) as test::assert;
+
+## The `suite` function is an entrypoint into tremor's
+## integrated unit testing framework
+##
+fn suite(...) with
+  null # Nothing to do
+end;
+
+## The `test` function is an entrypoint into tremor's
+## integrated unit testing framework
+##
+fn test(...) with
+  null # Nothing to do
+end;
