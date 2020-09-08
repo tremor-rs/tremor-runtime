@@ -2257,9 +2257,9 @@ dependencies = [
 
 [[package]]
 name = "lalrpop"
-version = "0.19.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f55673d283313791404be21209bb433f128f7e5c451986df107eb5fdbd68d2"
+checksum = "60fb56191fb8ed5311597e5750debe6779c9fdb487dbaa5ff302592897d7a2c8"
 dependencies = [
  "ascii-canvas",
  "atty",
