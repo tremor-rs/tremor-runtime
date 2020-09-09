@@ -165,12 +165,12 @@ impl NewRelic {
         debug!("sending {} bytes", buffer.len());
 
         let mut request = surf::post(self.config.region.logs_url())
-            .set_header(key, value)
-            .body_bytes(buffer)
-            .set_header(CONTENT_TYPE, "application/json");
+            .header(key, value)
+            .body(buffer)
+            .header(CONTENT_TYPE, "application/json");
 
         if self.config.compress_logs {
-            request = request.set_header(CONTENT_ENCODING, "gzip");
+            request = request.header(CONTENT_ENCODING, "gzip");
         }
 
         trace!("Request: {:?}", request);
