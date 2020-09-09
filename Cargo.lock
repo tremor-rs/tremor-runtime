@@ -1544,7 +1544,6 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8764574ff08b701a084482c3c7031349104b07ac897393010494beaa18ce32c6"
 dependencies = [
- "futures 0.1.29",
  "futures-channel",
  "futures-core",
  "futures-io",
@@ -1557,7 +1556,6 @@ dependencies = [
  "proc-macro-hack",
  "proc-macro-nested",
  "slab",
- "tokio-io",
 ]
 
 [[package]]
@@ -1900,9 +1898,9 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdae064c76b75ced4793544e843478c8c9c2bebf16fe6913212df83e30dfdb46"
+checksum = "98d35c06c95b7739b0847bab73447afe2096142555af22ab86beeec596da3d85"
 dependencies = [
  "async-h1",
  "async-native-tls",
@@ -4230,17 +4228,17 @@ checksum = "502d53007c02d7605a05df1c1a73ee436952781653da5d0bf57ad608f66932c1"
 
 [[package]]
 name = "surf"
-version = "2.0.0-alpha.4"
+version = "2.0.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68bf1412b095b3a54da6ec3a969e2663cb3cf535652cd97c02e99443a400fd7d"
+checksum = "ae5820ffe3a4b7acffe28a567c8d64cf20053e455e37b2dc0b5d7d25ab377ee6"
 dependencies = [
  "async-std",
+ "async-trait",
  "encoding_rs",
- "futures 0.3.5",
+ "futures-util",
  "http-client",
  "http-types",
  "log 0.4.11",
- "mime 0.3.16",
  "mime_guess",
  "pin-project-lite",
  "serde",
