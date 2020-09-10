@@ -182,11 +182,7 @@ impl Drop for TargetProcess {
             handle.join().unwrap_or_else(|_| Ok(())).ok(); // FIXME error handling
         }
 
-        match self.process.wait() {
-            Ok(status) => if !status.success() {},
-            Err(_) => {
-                () // FIXME error handling
-            }
-        }
+        self.process.wait().ok();
+        // FIXME handle errors and exit status better
     }
 }
