@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// We allow dead code and unused code in the main line because
-// it is just a utility
-// This isn't a external crate so we don't worry about docs
 
 use crate::errors::{Error, Result};
 use crate::util::*;
