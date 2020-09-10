@@ -114,7 +114,7 @@ fn gen_doc(
                         Err("Bad path".into())
                     }
                 }
-                None => return Err("Could not isolate relative path".into()),
+                None => Err("Could not isolate relative path".into()),
             }
         } else {
             Err("Bad destination path".into())
