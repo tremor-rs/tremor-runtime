@@ -44,36 +44,38 @@ fn suite_bench(
     meta: &Meta,
     by_tag: &TagFilter,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    let benches = GlobWalkerBuilder::new(root, &meta.includes)
+    if let Ok(benches) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
         .file_type(FileType::DIR)
         .build()
-        .unwrap()
-        .into_iter()
-        .filter_map(std::result::Result::ok);
+    {
+        let benches = benches.into_iter().filter_map(std::result::Result::ok);
 
-    let mut suite = vec![];
-    let mut stats = stats::Stats::new();
-    for bench in benches {
-        let root = bench.path();
-        let bench_root = root.to_string_lossy();
-        let tags_str = &format!("{}/tags.json", bench_root);
-        let tags = tag::maybe_slurp_tags(tags_str)?;
+        let mut suite = vec![];
+        let mut stats = stats::Stats::new();
+        for bench in benches {
+            let root = bench.path();
+            let bench_root = root.to_string_lossy();
+            let tags_str = &format!("{}/tags.json", bench_root);
+            let tags = tag::maybe_slurp_tags(tags_str)?;
 
-        if let (_matched, true) = by_tag.matches(&tags) {
-            status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
-            let test_report = process::run_process("bench", root, by_tag)?;
-            status::duration(test_report.duration).ok();
-            status::tags(&by_tag, &Some(&tags)).ok();
-            suite.push(test_report);
-            stats.pass(); // FIXME invent a better way of capturing benchmark status
-        } else {
-            stats.skip();
-            status::h1("Benchmark", &format!("Skipping {}", &basename(&bench_root)))?;
+            if let (_matched, true) = by_tag.matches(&tags) {
+                status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
+                let test_report = process::run_process("bench", root, by_tag)?;
+                status::duration(test_report.duration).ok();
+                status::tags(&by_tag, &Some(&tags)).ok();
+                suite.push(test_report);
+                stats.pass(); // FIXME invent a better way of capturing benchmark status
+            } else {
+                stats.skip();
+                status::h1("Benchmark", &format!("Skipping {}", &basename(&bench_root)))?;
+            }
         }
-    }
 
-    Ok((stats, suite))
+        Ok((stats, suite))
+    } else {
+        Err("Unable to walk test path for benchmarks".into())
+    }
 }
 
 fn suite_integration(
@@ -81,45 +83,47 @@ fn suite_integration(
     meta: &Meta,
     by_tag: &TagFilter,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    let tests = GlobWalkerBuilder::new(root, &meta.includes)
+    if let Ok(tests) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
         .file_type(FileType::DIR)
         .build()
-        .unwrap()
-        .into_iter()
-        .filter_map(std::result::Result::ok);
+    {
+        let tests = tests.into_iter().filter_map(std::result::Result::ok);
 
-    let mut suite = vec![];
-    let mut stats = stats::Stats::new();
-    for test in tests {
-        let root = test.path();
-        let bench_root = root.to_string_lossy();
-        let tags_str = &format!("{}/tags.json", bench_root);
-        let tags = tag::maybe_slurp_tags(tags_str)?;
+        let mut suite = vec![];
+        let mut stats = stats::Stats::new();
+        for test in tests {
+            let root = test.path();
+            let bench_root = root.to_string_lossy();
+            let tags_str = &format!("{}/tags.json", bench_root);
+            let tags = tag::maybe_slurp_tags(tags_str)?;
 
-        if let (_matched, true) = by_tag.matches(&tags) {
-            status::h1(
-                "Integration",
-                &format!("Running {}", &basename(&bench_root)),
-            )?;
-            let test_report = process::run_process("integration", root, by_tag)?;
-            stats.merge(&test_report.stats);
-            status::stats(&test_report.stats).ok();
-            status::duration(test_report.duration).ok();
-            status::tags(&by_tag, &Some(&tags)).ok();
-            suite.push(test_report);
-        } else {
-            stats.skip();
-            status::h1(
-                "Integration",
-                &format!("Skipping {}", &basename(&bench_root)),
-            )?;
+            if let (_matched, true) = by_tag.matches(&tags) {
+                status::h1(
+                    "Integration",
+                    &format!("Running {}", &basename(&bench_root)),
+                )?;
+                let test_report = process::run_process("integration", root, by_tag)?;
+                stats.merge(&test_report.stats);
+                status::stats(&test_report.stats).ok();
+                status::duration(test_report.duration).ok();
+                status::tags(&by_tag, &Some(&tags)).ok();
+                suite.push(test_report);
+            } else {
+                stats.skip();
+                status::h1(
+                    "Integration",
+                    &format!("Skipping {}", &basename(&bench_root)),
+                )?;
+            }
         }
+
+        status::rollups("\nIntegration", &stats).ok();
+
+        Ok((stats, suite))
+    } else {
+        Err("Unable to walk test path for integration tests".into())
     }
-
-    status::rollups("\nIntegration", &stats).ok();
-
-    Ok((stats, suite))
 }
 
 fn suite_unit(
@@ -127,47 +131,48 @@ fn suite_unit(
     _meta: &Meta,
     by_tag: &TagFilter,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    let suites = GlobWalkerBuilder::new(root, "all.tremor")
+    if let Ok(suites) = GlobWalkerBuilder::new(root, "all.tremor")
         .case_insensitive(true)
         .file_type(FileType::FILE)
         .build()
-        .unwrap()
-        .into_iter()
-        .filter_map(std::result::Result::ok);
+    {
+        let suites = suites.into_iter().filter_map(std::result::Result::ok);
+        let mut reports = vec![];
+        let mut stats = stats::Stats::new();
+        for suite in suites {
+            let report = unit::run_suite(&suite.path(), by_tag)?;
+            stats.merge(&report.stats);
+            status::stats(&report.stats).ok();
+            status::duration(report.duration).ok();
+            reports.push(report);
+        }
 
-    let mut reports = vec![];
-    let mut stats = stats::Stats::new();
-    for suite in suites {
-        let report = unit::run_suite(&suite.path(), by_tag)?;
-        stats.merge(&report.stats);
-        status::stats(&report.stats).ok();
-        status::duration(report.duration).ok();
-        reports.push(report);
+        status::rollups("\nUnit", &stats).ok();
+
+        Ok((stats, reports))
+    } else {
+        Err("Unable to walk test path for unit tests".into())
     }
-
-    status::rollups("\nUnit", &stats).ok();
-
-    Ok((stats, reports))
 }
 
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().into();
     let path = matches.value_of("PATH").unwrap_or_default();
     let includes: Vec<String> = if matches.is_present("INCLUDES") {
-        matches
-            .values_of("INCLUDES")
-            .unwrap()
-            .map(std::string::ToString::to_string)
-            .collect()
+        if let Some(matches) = matches.values_of("INCLUDES") {
+            matches.map(std::string::ToString::to_string).collect()
+        } else {
+            vec![]
+        }
     } else {
         vec![]
     };
     let excludes: Vec<String> = if matches.is_present("EXCLUDES") {
-        matches
-            .values_of("EXCLUDES")
-            .unwrap()
-            .map(std::string::ToString::to_string)
-            .collect()
+        if let Some(matches) = matches.values_of("EXCLUDES") {
+            matches.map(std::string::ToString::to_string).collect()
+        } else {
+            vec![]
+        }
     } else {
         vec![]
     };
@@ -177,64 +182,68 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let found = GlobWalkerBuilder::new(Path::new(&path).canonicalize()?, "meta.json")
         .case_insensitive(true)
         .build()
-        .unwrap()
-        .into_iter()
-        .filter_map(std::result::Result::ok);
+        .ok();
 
     let mut reports = HashMap::new();
     let mut bench_stats = stats::Stats::new();
     let mut unit_stats = stats::Stats::new();
     let mut cmd_stats = stats::Stats::new();
     let mut integration_stats = stats::Stats::new();
-    let start = nanotime();
-    for meta in found {
-        let root = meta.path().parent();
-        if let Some(root) = root {
-            if let Ok(meta_str) = slurp_string(&meta.path().to_string_lossy()) {
-                let meta: Option<Meta> = serde_json::from_str(&meta_str).ok();
-                if let Some(meta) = meta {
-                    if meta.kind == TestKind::Bench
-                        && (kind == TestKind::All || kind == TestKind::Bench)
-                    {
-                        let (stats, test_reports) = suite_bench(root, &meta, &filter_by_tags)?;
-                        reports.insert("bench".to_string(), test_reports);
-                        bench_stats.merge(&stats);
-                        status::hr().ok();
-                    }
+    let mut elapsed = 0;
 
-                    if meta.kind == TestKind::Integration
-                        && (kind == TestKind::All || kind == TestKind::Integration)
-                    {
-                        let (stats, test_reports) =
-                            suite_integration(root, &meta, &filter_by_tags)?;
-                        reports.insert("integration".to_string(), test_reports);
-                        integration_stats.merge(&stats);
-                        status::hr().ok();
-                    }
+    if let Some(found) = found {
+        let found = found.into_iter().filter_map(std::result::Result::ok);
+        let start = nanotime();
+        for meta in found {
+            let root = meta.path().parent();
+            if let Some(root) = root {
+                if let Ok(meta_str) = slurp_string(&meta.path().to_string_lossy()) {
+                    let meta: Option<Meta> = serde_json::from_str(&meta_str).ok();
+                    if let Some(meta) = meta {
+                        if meta.kind == TestKind::Bench
+                            && (kind == TestKind::All || kind == TestKind::Bench)
+                        {
+                            let (stats, test_reports) = suite_bench(root, &meta, &filter_by_tags)?;
+                            reports.insert("bench".to_string(), test_reports);
+                            bench_stats.merge(&stats);
+                            status::hr().ok();
+                        }
 
-                    if meta.kind == TestKind::Command
-                        && (kind == TestKind::All || kind == TestKind::Command)
-                    {
-                        let (stats, test_reports) =
-                            command::suite_command(root, &meta, &filter_by_tags)?;
-                        reports.insert("api".to_string(), test_reports);
-                        cmd_stats.merge(&stats);
-                        status::hr().ok();
-                    }
+                        if meta.kind == TestKind::Integration
+                            && (kind == TestKind::All || kind == TestKind::Integration)
+                        {
+                            let (stats, test_reports) =
+                                suite_integration(root, &meta, &filter_by_tags)?;
+                            reports.insert("integration".to_string(), test_reports);
+                            integration_stats.merge(&stats);
+                            status::hr().ok();
+                        }
 
-                    if meta.kind == TestKind::Unit
-                        && (kind == TestKind::All || kind == TestKind::Unit)
-                    {
-                        let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
-                        reports.insert("unit".to_string(), test_reports);
-                        unit_stats.merge(&stats);
-                        status::hr().ok();
+                        if meta.kind == TestKind::Command
+                            && (kind == TestKind::All || kind == TestKind::Command)
+                        {
+                            let (stats, test_reports) =
+                                command::suite_command(root, &meta, &filter_by_tags)?;
+                            reports.insert("api".to_string(), test_reports);
+                            cmd_stats.merge(&stats);
+                            status::hr().ok();
+                        }
+
+                        if meta.kind == TestKind::Unit
+                            && (kind == TestKind::All || kind == TestKind::Unit)
+                        {
+                            let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
+                            reports.insert("unit".to_string(), test_reports);
+                            unit_stats.merge(&stats);
+                            status::hr().ok();
+                        }
                     }
                 }
             }
         }
+        elapsed = nanotime() - start;
     }
-    let elapsed = nanotime() - start;
+
     status::hr().ok();
     status::hr().ok();
     status::rollups("All Benchmark Stats", &bench_stats).ok();

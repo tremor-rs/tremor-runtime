@@ -53,47 +53,44 @@ fn eval_suite_entrypoint(
     let mut stats = stats::Stats::new();
     // TODO FIXME handle zero-args case
     if let Value::Object(o) = &suite_result[0] {
-        let suite_name = o.get("name").unwrap();
-        status::h1("Suite", &suite_name.to_string()).unwrap();
-        let suite_spec_index = suite_spec
-            .fields
-            .iter()
-            .position(|f| {
+        let suite_name = o.get("name");
+        if let Some(suite_name) = suite_name {
+            status::h1("Suite", &suite_name.to_string()).ok();
+            let suite_spec_index = suite_spec.fields.iter().position(|f| {
                 if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
                     value == "tests"
                 } else {
                     false
                 }
-            })
-            .unwrap();
-        let suite_name_index = suite_spec
-            .fields
-            .iter()
-            .position(|f| {
+            });
+            let suite_name_index = suite_spec.fields.iter().position(|f| {
                 if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
                     value == "name"
                 } else {
                     false
                 }
-            })
-            .unwrap();
-        let name = &suite_spec.fields[suite_name_index].value;
-        if let ImutExprInt::Literal(Literal { .. }) = name {
-            if let ImutExprInt::List(l) = &suite_spec.fields[suite_spec_index].value {
-                if let Value::Object(suite) = o.get("suite").unwrap() {
-                    let (s, mut e) = eval_suite_tests(
-                        &env,
-                        &local,
-                        script,
-                        meta,
-                        l,
-                        suite.get("tests").unwrap(),
-                        by_tag,
-                    );
-                    elements.append(&mut e);
-                    stats.merge(&s);
+            });
+
+            if let Some(suite_spec_index) = suite_spec_index {
+                if let Some(suite_name_index) = suite_name_index {
+                    let name = &suite_spec.fields[suite_name_index].value;
+                    if let ImutExprInt::Literal(Literal { .. }) = name {
+                        if let ImutExprInt::List(l) = &suite_spec.fields[suite_spec_index].value {
+                            if let Some(suite) = o.get("suite") {
+                                if let Value::Object(suite) = suite {
+                                    if let Some(tests) = suite.get("tests") {
+                                        let (s, mut e) = eval_suite_tests(
+                                            &env, &local, script, meta, l, tests, by_tag,
+                                        );
+                                        elements.append(&mut e);
+                                        stats.merge(&s);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            }
+            } // FIXME error/warning handling when no tests found
         }
     };
 
@@ -123,91 +120,77 @@ fn eval_suite_tests(
                 let m = module.join("").to_string();
                 if m == "test" && fun == "test" {
                     if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) = &args[0] {
-                        let test_spec_index = fields
-                            .iter()
-                            .position(|f| {
-                                if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                                    value == "test"
-                                } else {
-                                    false
+                        let test_spec_index = fields.iter().position(|f| {
+                            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                                value == "test"
+                            } else {
+                                false
+                            }
+                        });
+
+                        if let Some(test_spec_index) = test_spec_index {
+                            let item = &fields[test_spec_index].value;
+                            let mut test_state = Value::Object(Box::new(hashmap! {}));
+                            let mut event = Value::Object(Box::new(hashmap! {}));
+                            let mut meta = Value::Object(Box::new(hashmap! {}));
+
+                            // FIXME revisit tag filtering inside unit tests
+
+                            let start = nanotime();
+                            let value = item
+                                .run(
+                                    EXEC_OPTS,
+                                    &env,
+                                    &mut event,
+                                    &mut test_state,
+                                    &mut meta,
+                                    &mut local,
+                                )
+                                .ok();
+                            let elapsed = nanotime() - start;
+                            if let Some(value) = value {
+                                if let Value::Static(StaticNode::Bool(status)) = value.into_owned()
+                                {
+                                    // Non colorized test source extent for json report capture
+                                    let extent = suite_spec.exprs[i].extent(node_metas);
+                                    let mut hh = DumbHighlighter::new();
+                                    tremor_script::Script::highlight_script_with_range(
+                                        script, extent, &mut hh,
+                                    )
+                                    .ok();
+
+                                    // Test record
+                                    elements.push(report::TestElement {
+                                        description: format!("Executing test {} of {}", i + 1, ll),
+                                        keyword: report::KeywordKind::Test,
+                                        result: report::ResultKind {
+                                            status: if status {
+                                                stats.pass();
+                                                report::StatusKind::Passed
+                                            } else {
+                                                stats.fail();
+                                                report::StatusKind::Failed
+                                            },
+                                            duration: elapsed,
+                                        },
+                                        info: Some(hh.to_string()),
+                                        hidden: false,
+                                    });
+                                    drop(hh);
+
+                                    // Interactive console report
+                                    status::executing_unit_testcase(i, ll).ok();
+                                    let mut h = TermHighlighter::new();
+                                    tremor_script::Script::highlight_script_with_range(
+                                        script, extent, &mut h,
+                                    )
+                                    .ok();
+                                    h.finalize().ok();
+                                    drop(h);
                                 }
-                            })
-                            .unwrap();
-                        let item = &fields[test_spec_index].value;
-                        let mut test_state = Value::Object(Box::new(hashmap! {}));
-                        let mut event = Value::Object(Box::new(hashmap! {}));
-                        let mut meta = Value::Object(Box::new(hashmap! {}));
-
-                        // FIXME revisit tag filtering inside unit tests
-                        // let tag_spec_index = fields.iter().position(|f| {
-                        //     if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                        //         value == "tags"
-                        //     } else {
-                        //         false
-                        //     }
-                        // });
-
-                        // match tag_spec_index {
-                        //     None => {
-                        //         dbg!("Not specified");
-                        //     }
-                        //     Some(tag_spec_index) => {
-                        //         dbg!(("Executing", &fields[tag_spec_index].value));
-                        //     }
-                        // };
-
-                        let start = nanotime();
-                        let value = item
-                            .run(
-                                EXEC_OPTS,
-                                &env,
-                                &mut event,
-                                &mut test_state,
-                                &mut meta,
-                                &mut local,
-                            )
-                            .unwrap();
-                        let elapsed = nanotime() - start;
-
-                        if let Value::Static(StaticNode::Bool(status)) = &value.into_owned() {
-                            // Non colorized test source extent for json report capture
-                            let extent = suite_spec.exprs[i].extent(node_metas);
-                            let mut hh = DumbHighlighter::new();
-                            tremor_script::Script::highlight_script_with_range(
-                                script, extent, &mut hh,
-                            )
-                            .ok();
-
-                            // Test record
-                            elements.push(report::TestElement {
-                                description: format!("Executing test {} of {}", i + 1, ll),
-                                keyword: report::KeywordKind::Test,
-                                result: report::ResultKind {
-                                    status: if *status {
-                                        stats.pass();
-                                        report::StatusKind::Passed
-                                    } else {
-                                        stats.fail();
-                                        report::StatusKind::Failed
-                                    },
-                                    duration: elapsed,
-                                },
-                                info: Some(hh.to_string()),
-                                hidden: false,
-                            });
-                            drop(hh);
-
-                            // Interactive console report
-                            status::executing_unit_testcase(i, ll).ok();
-                            let mut h = TermHighlighter::new();
-                            tremor_script::Script::highlight_script_with_range(
-                                script, extent, &mut h,
-                            )
-                            .ok();
-                            h.finalize().ok();
-                            drop(h);
+                                continue;
+                            }
                         }
-                        continue;
                     };
                 }
             }
@@ -255,128 +238,112 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
     println!();
     println!();
 
-    let mut suites: HashMap<String, report::TestSuite> = HashMap::new();
+    let suites: HashMap<String, report::TestSuite> = HashMap::new();
 
     let script = path.to_string_lossy().to_string();
 
     let mut raw = String::new();
-    let mut input = File::open(&script).unwrap();
-    input.read_to_string(&mut raw).unwrap();
+    let input = File::open(&script).ok();
+    if let Some(mut input) = input {
+        input.read_to_string(&mut raw).ok();
 
-    let module_path = load_module_path();
-    let reg: Registry = registry::registry();
+        let module_path = load_module_path();
+        let reg: Registry = registry::registry();
 
-    let report_start = nanotime();
-    match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
-        Ok(runnable) => {
-            let mut local = LocalStack::default();
+        let report_start = nanotime();
+        match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
+            Ok(runnable) => {
+                let mut local = LocalStack::default();
 
-            let mut h = TermHighlighter::new();
-            runnable.format_warnings_with(&mut h).unwrap();
+                let mut h = TermHighlighter::new();
+                runnable.format_warnings_with(&mut h).ok();
 
-            let script = runnable.script.suffix();
+                let script = runnable.script.suffix();
 
-            let context = &EventContext::new(nanotime(), Some(EventOriginUri::default()));
-            let env = Env {
-                context,
-                consts: &script.consts,
-                aggrs: &script.aggregates,
-                meta: &script.node_meta,
-                recursion_limit: tremor_script::recursion_limit(),
-            };
+                let context = &EventContext::new(nanotime(), Some(EventOriginUri::default()));
+                let env = Env {
+                    context,
+                    consts: &script.consts,
+                    aggrs: &script.aggregates,
+                    meta: &script.node_meta,
+                    recursion_limit: tremor_script::recursion_limit(),
+                };
 
-            let suite_start = nanotime();
-            for expr in &script.exprs {
-                let mut state = Value::Object(Box::new(hashmap! {}));
-                let mut event = Value::Object(Box::new(hashmap! {}));
-                let mut meta = Value::Object(Box::new(hashmap! {}));
-                let mut elements = Vec::new();
+                //                let suite_start = nanotime();
+                for expr in &script.exprs {
+                    let mut state = Value::Object(Box::new(hashmap! {}));
+                    let mut event = Value::Object(Box::new(hashmap! {}));
+                    let mut meta = Value::Object(Box::new(hashmap! {}));
+                    let mut elements = Vec::new();
 
-                match expr {
-                    Expr::Imut(ImutExprInt::Invoke1(Invoke {
-                        module, fun, args, ..
-                    })) => {
-                        let m = module.join("").to_string();
-                        if m == "test" && fun == "suite" {
-                            // A Test suite
-                            let mut specs: Vec<Value> = vec![];
-                            for arg in args {
-                                let value = arg
-                                    .run(
-                                        EXEC_OPTS, &env, &mut event, &mut state, &mut meta,
-                                        &mut local,
-                                    )
-                                    .unwrap();
-                                specs.push(value.into_owned());
-                            }
-                            if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) = &args[0] {
-                                let mut stat_s = stats::Stats::new();
+                    match expr {
+                        Expr::Imut(ImutExprInt::Invoke1(Invoke {
+                            module, fun, args, ..
+                        })) => {
+                            let m = module.join("").to_string();
+                            if m == "test" && fun == "suite" {
+                                // A Test suite
+                                let mut specs: Vec<Value> = vec![];
+                                for arg in args {
+                                    let value = arg
+                                        .run(
+                                            EXEC_OPTS, &env, &mut event, &mut state, &mut meta,
+                                            &mut local,
+                                        )
+                                        .ok();
+                                    if let Some(value) = value {
+                                        specs.push(value.into_owned());
+                                    }
+                                }
+                                if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) =
+                                    &args[0]
+                                {
+                                    let mut stat_s = stats::Stats::new();
 
-                                let suite_spec_index = fields
-                                    .iter()
-                                    .position(|f| {
+                                    let suite_spec_index = fields.iter().position(|f| {
                                         if let ImutExprInt::Literal(Literal { value, .. }) = &f.name
                                         {
                                             value == "suite"
                                         } else {
                                             false
                                         }
-                                    })
-                                    .unwrap();
-                                let item = &fields[suite_spec_index].value;
-                                let tag_spec_index = fields.iter().position(|f| {
-                                    if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                                        value == "tags"
-                                    } else {
-                                        false
-                                    }
-                                });
-                                let name_spec_index = fields.iter().position(|f| {
-                                    if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                                        value == "name"
-                                    } else {
-                                        false
-                                    }
-                                });
-
-                                let name = if let ImutExprInt::Literal(Literal { value, .. }) =
-                                    &fields[name_spec_index.unwrap()].value
-                                {
-                                    value.to_string()
-                                } else {
-                                    "Unnamed Suite".to_string()
-                                };
-                                match tag_spec_index {
-                                    None => {
-                                        if let ImutExprInt::Record(r) = item {
-                                            let (test_stats, mut test_reports) =
-                                                eval_suite_entrypoint(
-                                                    &env,
-                                                    &local,
-                                                    &runnable.source,
-                                                    &script.node_meta,
-                                                    r,
-                                                    specs,
-                                                    by_tag,
-                                                );
-                                            elements.append(&mut test_reports);
-                                            stat_s.merge(&test_stats);
-                                        }
-                                    }
-                                    Some(tag_spec_index) => {
-                                        let tags = &fields[tag_spec_index].value;
-                                        if let ImutExprInt::Record(r) = item {
-                                            if let ImutExprInt::Literal(Literal {
-                                                value: Array(arr),
-                                                ..
-                                            }) = tags
+                                    });
+                                    if let Some(suite_spec_index) = suite_spec_index {
+                                        let item = &fields[suite_spec_index].value;
+                                        let tag_spec_index = fields.iter().position(|f| {
+                                            if let ImutExprInt::Literal(Literal { value, .. }) =
+                                                &f.name
                                             {
-                                                let arr = arr
-                                                    .iter()
-                                                    .map(|x| x.to_string())
-                                                    .collect::<Vec<String>>();
-                                                // FIXME revisit tags in unit tests
-                                                if let (_matched, true) = by_tag.matches(&arr) {
+                                                value == "tags"
+                                            } else {
+                                                false
+                                            }
+                                        });
+                                        // let name_spec_index = fields.iter().position(|f| {
+                                        //     if let ImutExprInt::Literal(Literal { value, .. }) =
+                                        //         &f.name
+                                        //     {
+                                        //         value == "name"
+                                        //     } else {
+                                        //         false
+                                        //     }
+                                        // });
+
+                                        // if let Some(name_spec_index) = name_spec_index {
+                                        // if let Some(tag_spec_index) = tag_spec_index {
+                                        //     let name = if let ImutExprInt::Literal(Literal {
+                                        //         value,
+                                        //         ..
+                                        //     }) = &fields[name_spec_index].value
+                                        //     {
+                                        //         value.to_string()
+                                        //     } else {
+                                        //         "Unnamed Suite".to_string()
+                                        //     };
+                                        // }
+                                        match tag_spec_index {
+                                            None => {
+                                                if let ImutExprInt::Record(r) = item {
                                                     let (test_stats, mut test_reports) =
                                                         eval_suite_entrypoint(
                                                             &env,
@@ -387,50 +354,74 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                             specs,
                                                             by_tag,
                                                         );
-                                                    stat_s.merge(&test_stats);
                                                     elements.append(&mut test_reports);
+                                                    stat_s.merge(&test_stats);
+                                                }
+                                            }
+                                            Some(tag_spec_index) => {
+                                                let tags = &fields[tag_spec_index].value;
+                                                if let ImutExprInt::Record(r) = item {
+                                                    if let ImutExprInt::Literal(Literal {
+                                                        value: Array(arr),
+                                                        ..
+                                                    }) = tags
+                                                    {
+                                                        let arr = arr
+                                                            .iter()
+                                                            .map(|x| x.to_string())
+                                                            .collect::<Vec<String>>();
+                                                        // FIXME revisit tags in unit tests
+                                                        if let (_matched, true) =
+                                                            by_tag.matches(&arr)
+                                                        {
+                                                            let (test_stats, mut test_reports) =
+                                                                eval_suite_entrypoint(
+                                                                    &env,
+                                                                    &local,
+                                                                    &runnable.source,
+                                                                    &script.node_meta,
+                                                                    r,
+                                                                    specs,
+                                                                    by_tag,
+                                                                );
+                                                            stat_s.merge(&test_stats);
+                                                            elements.append(&mut test_reports);
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
+                                        // }
                                     }
-                                }
-                                suites.insert(
-                                    name.clone().into(),
-                                    report::TestSuite {
-                                        name: name.into(),
-                                        description: "Value".into(),
-                                        elements,
-                                        evidence: None,
-                                        stats: stat_s,
-                                        duration: nanotime() - suite_start,
-                                    },
-                                );
-                            };
+                                };
+                            }
                         }
-                    }
-                    _ => {
-                        continue;
-                    }
+                        _ => {
+                            continue;
+                        }
+                    };
+                }
+            }
+            Err(e) => {
+                let mut h = TermHighlighter::new();
+                if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
+                    eprintln!("Error: {}", e);
                 };
             }
         }
-        Err(e) => {
-            let mut h = TermHighlighter::new();
-            if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
-            };
+
+        let mut stat_s = stats::Stats::new();
+        for v in suites.values() {
+            stat_s.merge(&v.stats)
         }
-    }
 
-    let mut stat_s = stats::Stats::new();
-    for v in suites.values() {
-        stat_s.merge(&v.stats)
+        Ok(report::TestReport {
+            description: "unit test suites".into(),
+            elements: suites,
+            stats: stat_s,
+            duration: nanotime() - report_start,
+        })
+    } else {
+        Err("Unable to open file".into())
     }
-
-    Ok(report::TestReport {
-        description: "unit test suites".into(),
-        elements: suites,
-        stats: stat_s,
-        duration: nanotime() - report_start,
-    })
 }

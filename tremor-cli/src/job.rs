@@ -69,42 +69,58 @@ pub(crate) struct TargetProcess {
 }
 
 impl TargetProcess {
-    pub fn new_with_stderr(cmd: &str, args: &[String]) -> Self {
+    pub fn new_with_stderr(cmd: &str, args: &[String]) -> Result<Self> {
         TargetProcess::new(cmd, args)
     }
 
     /// Spawn target process and pipe IO
-    fn new(cmd: &str, args: &[String]) -> Self {
-        let mut target_cmd = Command::new(cmd)
+    fn new(cmd: &str, args: &[String]) -> Result<Self> {
+        let target_cmd = Command::new(cmd)
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("Failed to start child sub-process");
+            .ok();
 
-        let stdout = target_cmd.stdout.take().expect("not opened with stdout");
-        let stderr = target_cmd.stderr.take().expect("not opened with stderr");
+        if let Some(mut target_cmd) = target_cmd {
+            let stdout = target_cmd.stdout.take();
+            let stderr = target_cmd.stderr.take();
 
-        let (stdout_tx, stdout_rx) = mpsc::channel();
-        let (stderr_tx, stderr_rx) = mpsc::channel();
+            if let Some(stdout) = stdout {
+                if let Some(stderr) = stderr {
+                    let (stdout_tx, stdout_rx) = mpsc::channel();
+                    let (stderr_tx, stderr_rx) = mpsc::channel();
 
-        let stdout_thread = Some(thread::spawn(move || -> Result<()> {
-            // Redirect target process stdout
-            readlines_until_eof(stdout, |resp| stdout_tx.send(resp).map_err(|e| e.into()))
-        }));
+                    let stdout_thread = Some(thread::spawn(move || -> Result<()> {
+                        // Redirect target process stdout
+                        readlines_until_eof(stdout, |resp| {
+                            stdout_tx.send(resp).map_err(|e| e.into())
+                        })
+                    }));
 
-        let stderr_thread = Some(thread::spawn(move || -> Result<()> {
-            // Redirect target process stderr
-            readlines_until_eof(stderr, |resp| stderr_tx.send(resp).map_err(|e| e.into()))
-        }));
+                    let stderr_thread = Some(thread::spawn(move || -> Result<()> {
+                        // Redirect target process stderr
+                        readlines_until_eof(stderr, |resp| {
+                            stderr_tx.send(resp).map_err(|e| e.into())
+                        })
+                    }));
 
-        Self {
-            process: target_cmd,
-            stdout_thread,
-            stderr_thread,
-            stdout_receiver: stdout_rx,
-            stderr_receiver: stderr_rx,
+                    Ok(Self {
+                        process: target_cmd,
+                        stdout_thread,
+                        stderr_thread,
+                        stdout_receiver: stdout_rx,
+                        stderr_receiver: stderr_rx,
+                    })
+                } else {
+                    Err("Unable to create error stream from target process".into())
+                }
+            } else {
+                Err("Unable to create output stream from target process".into())
+            }
+        } else {
+            Err("Unable to create target process".into())
         }
     }
 
@@ -153,31 +169,24 @@ impl TargetProcess {
 
 impl Drop for TargetProcess {
     fn drop(&mut self) {
-        if thread::panicking() {
-            process::exit(1);
-        }
-
         if let Some(handle) = self.stdout_thread.take() {
             handle
                 .join()
                 .unwrap_or_else(|_| {
-                    process::exit(1);
+                    Ok(()) // FIXME error handling
                 })
                 .ok();
         }
 
         if let Some(handle) = self.stderr_thread.take() {
-            handle
-                .join()
-                .unwrap_or_else(|_| {
-                    process::exit(1);
-                })
-                .ok();
+            handle.join().unwrap_or_else(|_| Ok(())).ok(); // FIXME error handling
         }
 
         match self.process.wait() {
             Ok(status) => if !status.success() {},
-            Err(_) => unreachable!("never ran error"),
+            Err(_) => {
+                () // FIXME error handling
+            }
         }
     }
 }

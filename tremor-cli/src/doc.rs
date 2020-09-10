@@ -45,80 +45,76 @@ fn gen_doc(
 
             let mp = load_module_path();
 
-            let name = rel_path
-                .to_string_lossy()
-                .to_string()
-                .rsplit("/")
-                .next()
-                .unwrap()
-                .replace(".tremor", "");
+            match rel_path.to_string_lossy().to_string().rsplit("/").next() {
+                Some(name) => {
+                    let name = name.replace(".tremor", "");
+                    if let Some(path) = path.to_str() {
+                        match Script::parse(&mp, &path, raw.clone(), &reg) {
+                            Ok(runnable) => {
+                                let docs = runnable.docs();
+                                let consts = &docs.consts;
+                                let fns = &docs.fns;
 
-            if let Some(path) = path.to_str() {
-                match Script::parse(&mp, &path, raw.clone(), &reg) {
-                    Ok(runnable) => {
-                        let docs = runnable.docs();
-                        let consts = &docs.consts;
-                        let fns = &docs.fns;
+                                let mut gen = String::new();
+                                if let Some(m) = &docs.module {
+                                    gen.push_str(&m.print_with_name(&name));
+                                }
+                                if !consts.is_empty() {
+                                    gen.push_str("## Constants");
+                                    for c in consts {
+                                        gen.push_str(&c.to_string())
+                                    }
+                                }
 
-                        let _x: &tremor_script::ast::Script = runnable.script.suffix();
+                                if !fns.is_empty() {
+                                    gen.push_str("## Functions");
+                                    for f in fns {
+                                        gen.push_str(&f.to_string())
+                                    }
+                                }
 
-                        let mut gen = String::new();
-                        if let Some(m) = &docs.module {
-                            gen.push_str(&m.print_with_name(&name));
-                        }
-                        if !consts.is_empty() {
-                            gen.push_str("## Constants");
-                            for c in consts {
-                                gen.push_str(&c.to_string())
+                                if is_interactive {
+                                    println!("{}", &gen);
+                                }
+
+                                let mut dest_file = PathBuf::new();
+                                dest_file.push(dest_path);
+                                dest_file.push(&rel_path);
+
+                                if let Some(parent) = dest_file.parent() {
+                                    if let Err(e) =
+                                        std::fs::create_dir_all(parent.to_string_lossy().as_ref())
+                                    {
+                                        return Err(format!(
+                                            "Unable to generate output module folder: {}",
+                                            &e.to_string()
+                                        )
+                                        .into());
+                                    };
+                                    if let Err(e) = std::fs::write(
+                                        &dest_file.to_string_lossy().replace(".tremor", ".md"),
+                                        &gen,
+                                    ) {
+                                        return Err(format!(
+                                            "Unable to generate output: {}",
+                                            &e.to_string()
+                                        )
+                                        .into());
+                                    }
+                                }
+
+                                Ok(())
+                            }
+                            Err(_error) => {
+                                // ALLOW: main.rs
+                                std::process::exit(1);
                             }
                         }
-
-                        if !fns.is_empty() {
-                            gen.push_str("## Functions");
-                            for f in fns {
-                                gen.push_str(&f.to_string())
-                            }
-                        }
-
-                        if is_interactive {
-                            println!("{}", &gen);
-                        }
-
-                        let mut dest_file = PathBuf::new();
-                        dest_file.push(dest_path);
-                        dest_file.push(&rel_path);
-
-                        if let Some(parent) = dest_file.parent() {
-                            if let Err(e) =
-                                std::fs::create_dir_all(parent.to_string_lossy().as_ref())
-                            {
-                                return Err(format!(
-                                    "Unable to generate output module folder: {}",
-                                    &e.to_string()
-                                )
-                                .into());
-                            };
-                            if let Err(e) = std::fs::write(
-                                &dest_file.to_string_lossy().replace(".tremor", ".md"),
-                                &gen,
-                            ) {
-                                return Err(format!(
-                                    "Unable to generate output: {}",
-                                    &e.to_string()
-                                )
-                                .into());
-                            }
-                        }
-
-                        Ok(())
-                    }
-                    Err(_error) => {
-                        // ALLOW: main.rs
-                        std::process::exit(1);
+                    } else {
+                        Err("Bad path".into())
                     }
                 }
-            } else {
-                Err("Bad path".into())
+                None => return Err("Could not isolate relative path".into()),
             }
         } else {
             Err("Bad destination path".into())

@@ -31,10 +31,8 @@ impl After {
             &self.cmd,
         )));
 
-        let mut process = job::TargetProcess::new_with_stderr(&cmd?, &self.args);
-
+        let mut process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
         process.wait_with_output()?;
-
         Ok(Some(process))
     }
 }

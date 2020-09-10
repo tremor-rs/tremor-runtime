@@ -36,10 +36,8 @@ impl Before {
             &self.cmd,
         )));
 
-        let process = job::TargetProcess::new_with_stderr(&cmd?, &self.args);
-
+        let process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
         self.block_on()?;
-
         Ok(Some(process))
     }
 
@@ -53,7 +51,7 @@ impl Before {
                             loop {
                                 let now = nanotime();
                                 if ((now - epoch) / 1_000_000_000) as u16 > self.until {
-                                    panic!("upper bound");
+                                    return Err("Upper bound exceeded error".into());
                                 }
                                 match port.parse::<u16>() {
                                     Ok(port) => {

@@ -198,19 +198,18 @@ where
         }
         SourceKind::Trickle => {
             let aggr_reg = registry::aggr();
-            let _runnable =
-                match Query::parse(&mp, src_file, &src_raw.to_string(), vec![], &reg, &aggr_reg) {
-                    Ok(runnable) => {
-                        let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
-                        println!();
-                        Script::highlight_script_with(&ast, h)?;
-                    }
-                    Err(e) => {
-                        if let Err(e) = Script::format_error_from_script(&src_raw, h, &e) {
-                            eprintln!("Error: {}", e);
-                        };
-                    }
-                };
+            match Query::parse(&mp, src_file, &src_raw.to_string(), vec![], &reg, &aggr_reg) {
+                Ok(runnable) => {
+                    let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
+                    println!();
+                    Script::highlight_script_with(&ast, h)?;
+                }
+                Err(e) => {
+                    if let Err(e) = Script::format_error_from_script(&src_raw, h, &e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            };
         }
         _otherwise => {
             eprintln!("Unsupported");

@@ -58,9 +58,8 @@ pub(crate) fn suite_command(
         .case_insensitive(true)
         .file_type(FileType::FILE)
         .build()
-        .unwrap()
-        .into_iter()
-        .filter_map(std::result::Result::ok);
+        .ok();
+
     let mut evidence = HashMap::new();
     let mut stats = stats::Stats::new();
     let api_test_root = root.to_string_lossy();
@@ -75,89 +74,97 @@ pub(crate) fn suite_command(
     let mut counter = 0;
     let mut api_stats = stats::Stats::new();
     let report_start = nanotime();
-    for suite in api_suites {
-        let suite_start = nanotime();
-        let suite: CommandRun =
-            serde_yaml::from_str(&slurp_string(&suite.path().to_string_lossy()).unwrap()).unwrap();
 
-        match &suite.tags {
-            Some(tags) => {
-                if let (_, false) = by_tag.matches(&tags) {
-                    status::skip(&suite.name).ok();
-                    continue; // SKIP
-                } else {
-                    status::tags(&by_tag, &Some(&tags)).ok();
-                }
-            }
-            None => (),
-        }
-
-        for suite in suite.suites {
-            for case in suite.cases {
-                status::h1("Command Test", &case.name).ok();
-
-                match shell_words::split(&case.command) {
-                    Ok(args) => {
-                        // FIXME wintel
-                        let mut fg_process =
-                            job::TargetProcess::new_with_stderr("/usr/bin/env", &args);
-                        let exit_status = fg_process.wait_with_output();
-
-                        let fg_out_file =
-                            format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
-                        let fg_err_file =
-                            format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
-                        let start = nanotime();
-                        fg_process.tail(&fg_out_file, &fg_err_file).ok();
-                        let elapsed = nanotime() - start;
-
-                        counter += 1;
-
-                        let (case_stats, elements) = process_testcase(
-                            &fg_out_file,
-                            &fg_err_file,
-                            exit_status?.code(),
-                            elapsed,
-                            &case,
-                        )?;
-
-                        stats.merge(&case_stats);
-                        let suite = report::TestSuite {
-                            name: case.name.trim().into(),
-                            description: "Command-driven test".to_string(),
-                            elements,
-                            evidence: None,
-                            stats: case_stats,
-                            duration: nanotime() - suite_start,
-                        };
-                        suites.insert(case.name, suite);
+    if let Some(api_suites) = api_suites {
+        let api_suites = api_suites.into_iter().filter_map(std::result::Result::ok);
+        for suite in api_suites {
+            let suite_start = nanotime();
+            if let Some(command_str) = slurp_string(&suite.path().to_string_lossy()).ok() {
+                if let Some(suite) = serde_yaml::from_str::<CommandRun>(&command_str).ok() {
+                    match &suite.tags {
+                        Some(tags) => {
+                            if let (_, false) = by_tag.matches(&tags) {
+                                status::skip(&suite.name).ok();
+                                continue; // SKIP
+                            } else {
+                                status::tags(&by_tag, &Some(&tags)).ok();
+                            }
+                        }
+                        None => (),
                     }
-                    Err(_) => (), // FIXME improve error handling
+
+                    for suite in suite.suites {
+                        for case in suite.cases {
+                            status::h1("Command Test", &case.name).ok();
+
+                            match shell_words::split(&case.command) {
+                                Ok(args) => {
+                                    // FIXME wintel
+                                    let mut fg_process =
+                                        job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
+                                    let exit_status = fg_process.wait_with_output();
+
+                                    let fg_out_file =
+                                        format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
+                                    let fg_err_file =
+                                        format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
+                                    let start = nanotime();
+                                    fg_process.tail(&fg_out_file, &fg_err_file).ok();
+                                    let elapsed = nanotime() - start;
+
+                                    counter += 1;
+
+                                    let (case_stats, elements) = process_testcase(
+                                        &fg_out_file,
+                                        &fg_err_file,
+                                        exit_status?.code(),
+                                        elapsed,
+                                        &case,
+                                    )?;
+
+                                    stats.merge(&case_stats);
+                                    let suite = report::TestSuite {
+                                        name: case.name.trim().into(),
+                                        description: "Command-driven test".to_string(),
+                                        elements,
+                                        evidence: None,
+                                        stats: case_stats,
+                                        duration: nanotime() - suite_start,
+                                    };
+                                    suites.insert(case.name, suite);
+                                }
+                                Err(_) => (), // FIXME improve error handling
+                            }
+                        }
+                        api_stats.merge(&stats);
+                        status::stats(&api_stats).ok();
+                    }
                 }
             }
-            api_stats.merge(&stats);
-            status::stats(&api_stats).ok();
         }
+
+        status::rollups("\nCommand", &api_stats).ok();
+
+        before::update_evidence(&api_test_root, &mut evidence)?;
+
+        let mut after = after::AfterController::new(&api_test_root);
+        after.spawn().ok();
+        after::update_evidence(&api_test_root, &mut evidence).ok();
+
+        let elapsed = nanotime() - report_start;
+        status::duration(elapsed).ok();
+        Ok((
+            stats.clone(),
+            vec![report::TestReport {
+                description: "Command-based test suite".into(),
+                elements: suites,
+                stats,
+                duration: elapsed,
+            }],
+        ))
+    } else {
+        Err("Unable to walk test path for command-driven tests".into())
     }
-    status::rollups("\nCommand", &api_stats).ok();
-
-    before::update_evidence(&api_test_root, &mut evidence)?;
-
-    let mut after = after::AfterController::new(&api_test_root);
-    after.spawn().ok();
-    after::update_evidence(&api_test_root, &mut evidence).ok();
-
-    let elapsed = nanotime() - report_start;
-    status::duration(elapsed).ok();
-    Ok((
-        stats.clone(),
-        vec![report::TestReport {
-            description: "Command-based test suite".into(),
-            elements: suites,
-            stats,
-            duration: elapsed,
-        }],
-    ))
 }
 
 fn process_testcase(
