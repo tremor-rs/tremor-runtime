@@ -59,8 +59,11 @@ pub(crate) fn run_process(
         let before_process = before.spawn()?;
         // FIXME consider using current exe
         let bench_rootx = bench_root.to_string();
-        let cmd = "/Code/oss/wayfair-tremor/tremor-runtime/target/release/tremor";
-        let mut process = job::TargetProcess::new_with_stderr(cmd, &args)?;
+
+        let mut process = match job::which("tremor") {
+            Some(cmd_exec_name) => job::TargetProcess::new_with_stderr(&cmd_exec_name, &args)?,
+            None => return Err("Unable to find suitable `tremor` binary on path".into()),
+        };
         let process_status = process.wait_with_output();
 
         let fg_out_file = format!("{}/fg.out.log", bench_root);
