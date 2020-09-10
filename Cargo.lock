@@ -4469,7 +4469,7 @@ dependencies = [
  "futures-util",
  "http-client",
  "http-types",
- "log 0.4.11",
+ "log",
  "mime_guess",
  "pin-project-lite",
  "serde",

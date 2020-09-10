@@ -200,10 +200,12 @@ async fn handle_insight(
 
 #[inline]
 async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Onramps) {
-    let mut insights = Vec::with_capacity(pipeline.insights.len());
-    std::mem::swap(&mut insights, &mut pipeline.insights);
-    for (skip_to, insight) in insights.drain(..) {
-        handle_insight(Some(skip_to), insight, pipeline, onramps).await
+    if !pipeline.insights.is_empty() {
+        let mut insights = Vec::with_capacity(pipeline.insights.len());
+        std::mem::swap(&mut insights, &mut pipeline.insights);
+        for (skip_to, insight) in insights.drain(..) {
+            handle_insight(Some(skip_to), insight, pipeline, onramps).await
+        }
     }
 }
 
@@ -220,7 +222,7 @@ async fn tick(tick_tx: async_channel::Sender<Msg>) {
     }
 }
 
-async fn handle_cfg_msg(
+async fn handle_cf_msg(
     msg: CfMsg,
     pipeline: &mut ExecutableGraph,
     onramps: &Onramps,
@@ -258,11 +260,13 @@ async fn pipeline_task(
     let cf = cf_rx.map(M::C);
     let mf = mgmt_rx.map(M::M);
 
+    // priotirize management flow over contra flow over forward event flow
+
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
     while let Some(msg) = s.next().await {
         match msg {
             M::C(msg) => {
-                handle_cfg_msg(msg, &mut pipeline, &onramps).await?;
+                handle_cf_msg(msg, &mut pipeline, &onramps).await?;
             }
             M::F(Msg::Event { input, event }) => {
                 match pipeline.enqueue(&input, event, &mut eventset) {
