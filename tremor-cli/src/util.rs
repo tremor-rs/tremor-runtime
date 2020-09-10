@@ -22,7 +22,6 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
-use std::path::PathBuf;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
 
@@ -191,7 +190,6 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
         // outermost to innermost as the native ordering typically does
         // not follow a heirarchic visitation order
         //
-        let _rel_path = PathBuf::new();
 
         for entry in std::fs::read_dir(&path)? {
             let entry = entry?;
