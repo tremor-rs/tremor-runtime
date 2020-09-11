@@ -37,7 +37,7 @@ subcommands:
             about: Runs the tremor server process
             args:
               - artefacts:
-                  help: Pipelines, onramps, offramps to provision
+                  help: Paths to files containing pipelines, onramps, offramps to provision
                   short: f
                   takes_value: true
                   min_values: 1
