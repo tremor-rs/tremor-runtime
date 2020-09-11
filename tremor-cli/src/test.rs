@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::*;
+use crate::errors::{ErrorKind, Result};
 use crate::job;
 use crate::report;
 use crate::status;
 use crate::test;
-use crate::util::*;
+use crate::util::{basename, nanotime, slurp_string};
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
 use std::collections::HashMap;
@@ -65,7 +65,7 @@ fn suite_bench(
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
                 let test_report = process::run_process("bench", root, by_tag)?;
                 status::duration(test_report.duration).ok();
-                status::tags(&by_tag, &Some(&tags)).ok();
+                status::tags(&by_tag, Some(&tags)).ok();
                 suite.push(test_report);
                 stats.pass(); // FIXME invent a better way of capturing benchmark status
             } else {
@@ -109,7 +109,7 @@ fn suite_integration(
                 stats.merge(&test_report.stats);
                 status::stats(&test_report.stats).ok();
                 status::duration(test_report.duration).ok();
-                status::tags(&by_tag, &Some(&tags)).ok();
+                status::tags(&by_tag, Some(&tags)).ok();
                 suite.push(test_report);
             } else {
                 stats.skip();

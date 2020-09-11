@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use std::{convert::TryFrom, error::Error, fmt::Debug, fmt::Display};
-
+/// Specifies a kind of test framework, or a composite `all` to capture all framework variants
 #[derive(Deserialize, Debug, PartialEq)]
+#[allow(clippy::module_name_repetitions)]
 pub(crate) enum TestKind {
     Bench,
     Integration,
@@ -40,13 +41,9 @@ impl TryFrom<&str> for TestKind {
     fn try_from(from: &str) -> Result<Self, UnknownKind> {
         match from.to_lowercase().as_str() {
             "all" => Ok(TestKind::All),
-            "api" => Ok(TestKind::Command),
-            "bench" => Ok(TestKind::Bench),
-            "benchmark" => Ok(TestKind::Bench),
-            "command" => Ok(TestKind::Command),
-            "integration" => Ok(TestKind::Integration),
-            "it" => Ok(TestKind::Integration),
-            "rest" => Ok(TestKind::Command),
+            "api" | "command" | "rest" => Ok(TestKind::Command),
+            "bench" | "benchmark" => Ok(TestKind::Bench),
+            "it" | "integration" => Ok(TestKind::Integration),
             "unit" => Ok(TestKind::Unit),
             default => Err(UnknownKind(default.into())),
         }

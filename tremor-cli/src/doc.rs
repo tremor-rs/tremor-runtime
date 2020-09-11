@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::util::*;
+use crate::util::visit_path_str;
 use clap::ArgMatches;
 use std::fs::File;
 use std::io::Read;
@@ -45,11 +45,11 @@ fn gen_doc(
 
             let mp = load_module_path();
 
-            match rel_path.to_string_lossy().to_string().rsplit("/").next() {
+            match rel_path.to_string_lossy().to_string().rsplit('/').next() {
                 Some(name) => {
                     let name = name.replace(".tremor", "");
                     if let Some(path) = path.to_str() {
-                        match Script::parse(&mp, &path, raw.clone(), &reg) {
+                        match Script::parse(&mp, &path, raw, &reg) {
                             Ok(runnable) => {
                                 let docs = runnable.docs();
                                 let consts = &docs.consts;

@@ -24,6 +24,7 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+#[allow(clippy::same_functions_in_if_condition)]
 pub(crate) fn get_allocator_name() -> &'static str {
     if cfg!(feature = "snmalloc") {
         "snmalloc"

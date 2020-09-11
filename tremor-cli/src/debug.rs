@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::util::*;
+use crate::util::{get_source_kind, SourceKind};
 use clap::ArgMatches;
 use lexer::Tokenizer;
 use std::fs::File;
@@ -109,7 +109,7 @@ where
                     write!(
                         &mut h.get_writer(),
                         " {:<30}    \u{2219}    ",
-                        format!("{:?}", value).split("(").collect::<Vec<&str>>()[0]
+                        format!("{:?}", value).split('(').collect::<Vec<&str>>()[0]
                     )?;
                     h.highlight_no_linenos(
                         None,
@@ -134,7 +134,7 @@ where
 
     let lexemes: Vec<Result<Spanned<Token>>> = Tokenizer::new(&src_raw)
         .filter_map(std::result::Result::ok)
-        .map(|v| Ok(v))
+        .map(Ok)
         .collect();
 
     dbg_tokens(h, lexemes)?;
@@ -152,7 +152,7 @@ where
 
     let mut include_stack = lexer::IncludeStack::default();
     let cu = include_stack.push(src_raw)?;
-    let mut src_raw_string = src_raw.to_string();
+    let mut src_raw_string = (*src_raw).to_string();
 
     let lexemes: Vec<Result<Spanned<Token>>> = lexer::Preprocessor::preprocess(
         &tremor_script::path::load(),
@@ -163,7 +163,7 @@ where
     )?
     .into_iter()
     .filter_map(std::result::Result::ok)
-    .map(|v| Ok(v))
+    .map(Ok)
     .collect();
 
     dbg_tokens(h, lexemes)?;
@@ -183,7 +183,7 @@ where
     let reg: Registry = registry::registry();
     match get_source_kind(src_file) {
         SourceKind::Tremor | SourceKind::Json => {
-            match Script::parse(&mp, src_file, src_raw.to_string(), &reg) {
+            match Script::parse(&mp, src_file, (*src_raw).to_string(), &reg) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
                     println!();
@@ -198,7 +198,14 @@ where
         }
         SourceKind::Trickle => {
             let aggr_reg = registry::aggr();
-            match Query::parse(&mp, src_file, &src_raw.to_string(), vec![], &reg, &aggr_reg) {
+            match Query::parse(
+                &mp,
+                src_file,
+                &(*src_raw).to_string(),
+                vec![],
+                &reg,
+                &aggr_reg,
+            ) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
                     println!();

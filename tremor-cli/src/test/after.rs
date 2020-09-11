@@ -26,10 +26,9 @@ pub(crate) struct After {
 
 impl After {
     pub(crate) fn spawn(&self, _base: &str) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd).ok_or(Error::from(format!(
-            "Could not find executable {} on path",
-            &self.cmd,
-        )));
+        let cmd = job::which(&self.cmd).ok_or_else(|| {
+            Error::from(format!("Could not find executable {} on path", &self.cmd,))
+        });
 
         let mut process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
         process.wait_with_output()?;
@@ -62,30 +61,19 @@ impl AfterController {
     pub(crate) fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
         let after_str = &format!("{}/after.json", root);
-        let after_json = load_after(after_str);
-        match after_json {
-            Ok(after_json) => {
-                let after_process = after_json.spawn(root)?;
-                match after_process {
-                    Some(mut process) => {
-                        let after_out_file = format!("{}/after.out.log", root);
-                        let after_err_file = format!("{}/after.err.log", root);
-                        let after_process = std::thread::spawn(move || {
-                            process.tail(&after_out_file, &after_err_file).ok();
-                        });
+        let after_json = load_after(after_str)?;
+        let after_process = after_json.spawn(root)?;
+        if let Some(mut process) = after_process {
+            let after_out_file = format!("{}/after.out.log", root);
+            let after_err_file = format!("{}/after.err.log", root);
+            let after_process = std::thread::spawn(move || {
+                process.tail(&after_out_file, &after_err_file).ok();
+            });
 
-                        match after_process.join() {
-                            Ok(()) => (),
-                            Err(_) => {
-                                return Err("Failed to join test after thread/process error".into())
-                            }
-                        }
-                    }
-                    None => (),
-                }
+            if after_process.join().is_err() {
+                return Err("Failed to join test after thread/process error".into());
             }
-            _not_found => (),
-        };
+        }
         Ok(())
     }
 }

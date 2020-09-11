@@ -47,7 +47,7 @@ fn eval_suite_entrypoint(
     script: &str,
     meta: &NodeMetas,
     suite_spec: &Record<'_>,
-    suite_result: Vec<Value<'_>>,
+    suite_result: &[Value<'_>],
     by_tag: &test::TagFilter,
 ) -> (stats::Stats, Vec<report::TestElement>) {
     let mut elements = Vec::new();
@@ -189,7 +189,7 @@ fn eval_suite_tests(
                 }
             }
 
-            if let &Value::Static(StaticNode::Bool(status)) = &suite_result[i] {
+            if let Value::Static(StaticNode::Bool(status)) = &suite_result[i] {
                 // Non colorized test source extent for json report capture
                 let extent = suite_spec.exprs[i].extent(node_metas);
                 let mut hh = DumbHighlighter::new();
@@ -200,7 +200,7 @@ fn eval_suite_tests(
                     description: format!("Executing test {} of {}", i + 1, al),
                     keyword: report::KeywordKind::Predicate,
                     result: report::ResultKind {
-                        status: if status {
+                        status: if *status {
                             stats.pass();
                             report::StatusKind::Passed
                         } else {
@@ -271,134 +271,121 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                     let meta = Value::Object(Box::new(hashmap! {}));
                     let mut elements = Vec::new();
 
-                    match expr {
-                        Expr::Imut(ImutExprInt::Invoke1(Invoke {
-                            module, fun, args, ..
-                        })) => {
-                            let m = module.join("").to_string();
-                            if m == "test" && fun == "suite" {
-                                // A Test suite
-                                let mut specs: Vec<Value> = vec![];
-                                for arg in args {
-                                    let value = arg
-                                        .run(EXEC_OPTS, &env, &event, &state, &meta, &local)
-                                        .ok();
-                                    if let Some(value) = value {
-                                        specs.push(value.into_owned());
-                                    }
+                    if let Expr::Imut(ImutExprInt::Invoke1(Invoke {
+                        module, fun, args, ..
+                    })) = expr
+                    {
+                        let m = module.join("").to_string();
+                        if m == "test" && fun == "suite" {
+                            // A Test suite
+                            let mut specs: Vec<Value> = vec![];
+                            for arg in args {
+                                let value =
+                                    arg.run(EXEC_OPTS, &env, &event, &state, &meta, &local).ok();
+                                if let Some(value) = value {
+                                    specs.push(value.into_owned());
                                 }
-                                if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) =
-                                    &args[0]
-                                {
-                                    let mut stat_s = stats::Stats::new();
+                            }
+                            if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) = &args[0] {
+                                let mut stat_s = stats::Stats::new();
 
-                                    let suite_spec_index = fields.iter().position(|f| {
+                                let suite_spec_index = fields.iter().position(|f| {
+                                    if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                                        value == "suite"
+                                    } else {
+                                        false
+                                    }
+                                });
+                                if let Some(suite_spec_index) = suite_spec_index {
+                                    let item = &fields[suite_spec_index].value;
+                                    let tag_spec_index = fields.iter().position(|f| {
                                         if let ImutExprInt::Literal(Literal { value, .. }) = &f.name
                                         {
-                                            value == "suite"
+                                            value == "tags"
                                         } else {
                                             false
                                         }
                                     });
-                                    if let Some(suite_spec_index) = suite_spec_index {
-                                        let item = &fields[suite_spec_index].value;
-                                        let tag_spec_index = fields.iter().position(|f| {
-                                            if let ImutExprInt::Literal(Literal { value, .. }) =
-                                                &f.name
-                                            {
-                                                value == "tags"
-                                            } else {
-                                                false
-                                            }
-                                        });
-                                        let name_spec_index = fields.iter().position(|f| {
-                                            if let ImutExprInt::Literal(Literal { value, .. }) =
-                                                &f.name
-                                            {
-                                                value == "name"
-                                            } else {
-                                                false
-                                            }
-                                        });
+                                    let name_spec_index = fields.iter().position(|f| {
+                                        if let ImutExprInt::Literal(Literal { value, .. }) = &f.name
+                                        {
+                                            value == "name"
+                                        } else {
+                                            false
+                                        }
+                                    });
 
-                                        if let Some(name_spec_index) = name_spec_index {
-                                            if let Some(_tag_spec_index) = tag_spec_index {
-                                                if let ImutExprInt::Literal(Literal {
-                                                    value, ..
-                                                }) = &fields[name_spec_index].value
-                                                {
-                                                    suite_name = value.to_string()
-                                                };
+                                    if let Some(name_spec_index) = name_spec_index {
+                                        if let Some(_tag_spec_index) = tag_spec_index {
+                                            if let ImutExprInt::Literal(Literal { value, .. }) =
+                                                &fields[name_spec_index].value
+                                            {
+                                                suite_name = value.to_string()
+                                            };
+                                        }
+                                    }
+                                    match tag_spec_index {
+                                        None => {
+                                            if let ImutExprInt::Record(r) = item {
+                                                let (test_stats, mut test_reports) =
+                                                    eval_suite_entrypoint(
+                                                        &env,
+                                                        &local,
+                                                        &runnable.source,
+                                                        &script.node_meta,
+                                                        r,
+                                                        &specs,
+                                                        by_tag,
+                                                    );
+                                                elements.append(&mut test_reports);
+                                                stat_s.merge(&test_stats);
                                             }
                                         }
-                                        match tag_spec_index {
-                                            None => {
-                                                if let ImutExprInt::Record(r) = item {
-                                                    let (test_stats, mut test_reports) =
-                                                        eval_suite_entrypoint(
-                                                            &env,
-                                                            &local,
-                                                            &runnable.source,
-                                                            &script.node_meta,
-                                                            r,
-                                                            specs,
-                                                            by_tag,
-                                                        );
-                                                    elements.append(&mut test_reports);
-                                                    stat_s.merge(&test_stats);
-                                                }
-                                            }
-                                            Some(tag_spec_index) => {
-                                                let tags = &fields[tag_spec_index].value;
-                                                if let ImutExprInt::Record(r) = item {
-                                                    if let ImutExprInt::Literal(Literal {
-                                                        value: Array(arr),
-                                                        ..
-                                                    }) = tags
-                                                    {
-                                                        let arr = arr
-                                                            .iter()
-                                                            .map(std::string::ToString::to_string)
-                                                            .collect::<Vec<String>>();
-                                                        // FIXME revisit tags in unit tests
-                                                        if let (_matched, true) =
-                                                            by_tag.matches(&arr)
-                                                        {
-                                                            let (test_stats, mut test_reports) =
-                                                                eval_suite_entrypoint(
-                                                                    &env,
-                                                                    &local,
-                                                                    &runnable.source,
-                                                                    &script.node_meta,
-                                                                    r,
-                                                                    specs,
-                                                                    by_tag,
-                                                                );
-                                                            stat_s.merge(&test_stats);
-                                                            elements.append(&mut test_reports);
-                                                        }
+                                        Some(tag_spec_index) => {
+                                            let tags = &fields[tag_spec_index].value;
+                                            if let ImutExprInt::Record(r) = item {
+                                                if let ImutExprInt::Literal(Literal {
+                                                    value: Array(arr),
+                                                    ..
+                                                }) = tags
+                                                {
+                                                    let arr = arr
+                                                        .iter()
+                                                        .map(std::string::ToString::to_string)
+                                                        .collect::<Vec<String>>();
+                                                    // FIXME revisit tags in unit tests
+                                                    if let (_matched, true) = by_tag.matches(&arr) {
+                                                        let (test_stats, mut test_reports) =
+                                                            eval_suite_entrypoint(
+                                                                &env,
+                                                                &local,
+                                                                &runnable.source,
+                                                                &script.node_meta,
+                                                                r,
+                                                                &specs,
+                                                                by_tag,
+                                                            );
+                                                        stat_s.merge(&test_stats);
+                                                        elements.append(&mut test_reports);
                                                     }
                                                 }
                                             }
                                         }
-                                        // }
                                     }
-                                    suites.insert(
-                                        suite_name.clone(),
-                                        TestSuite {
-                                            name: suite_name,
-                                            description: "A suite".into(),
-                                            elements: vec![],
-                                            evidence: None,
-                                            stats: stat_s,
-                                            duration: 0,
-                                        },
-                                    );
-                                };
-                            }
-                        }
-                        _ => {
-                            continue;
+                                    // }
+                                }
+                                suites.insert(
+                                    suite_name.clone(),
+                                    TestSuite {
+                                        name: suite_name,
+                                        description: "A suite".into(),
+                                        elements: vec![],
+                                        evidence: None,
+                                        stats: stat_s,
+                                        duration: 0,
+                                    },
+                                );
+                            };
                         }
                     };
                 }

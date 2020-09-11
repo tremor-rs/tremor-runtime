@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn file_contains(path_str: &str, what: &Vec<String>) -> bool {
+fn file_contains(path_str: &str, what: &[String]) -> bool {
     let f = File::open(path_str);
 
     let mut asserts = HashMap::new();
@@ -156,7 +156,7 @@ pub(crate) fn process(
 pub(crate) fn process_filebased_asserts(
     stdout_path: &str,
     stderr_path: &str,
-    asserts: &Vec<FileBasedAssert>,
+    asserts: &[FileBasedAssert],
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut counter = 0;
     let mut elements = Vec::new();
@@ -178,7 +178,7 @@ pub(crate) fn process_filebased_asserts(
                 // By line reporting
                 for c in contains {
                     counter += 1;
-                    let condition = file_contains(&file, &vec![c.to_string()]);
+                    let condition = file_contains(&file, &[c.to_string()]);
                     status::assert_has(
                         &format!("Assert {}", counter),
                         &format!("Contains `{}` in `{}`", &c.trim(), &file),

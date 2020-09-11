@@ -31,10 +31,10 @@ pub(crate) struct Before {
 
 impl Before {
     pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd).ok_or(Error::from(format!(
-            "Could not find executable {} on path",
-            &self.cmd,
-        )));
+        let cmd = job::which(&self.cmd).ok_or_else(|| Error::from(format!(
+             "Could not find executable {} on path",
+             &self.cmd,
+         )));
 
         let process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
         self.block_on()?;
@@ -50,16 +50,14 @@ impl Before {
                         for port in v {
                             loop {
                                 let now = nanotime();
+                                #[allow(clippy::cast_possible_truncation)]
                                 if ((now - epoch) / 1_000_000_000) as u16 > self.until {
                                     return Err("Upper bound exceeded error".into());
                                 }
-                                match port.parse::<u16>() {
-                                    Ok(port) => {
-                                        if !port_scanner::scan_port(port) {
-                                            break;
-                                        }
+                                if let Ok(port) = port.parse::<u16>() {
+                                    if !port_scanner::scan_port(port) {
+                                        break;
                                     }
-                                    Err(_) => (),
                                 }
                             }
                         }
@@ -115,11 +113,8 @@ impl BeforeController {
         let root = self.base.clone();
         let bg_out_file = format!("{}/bg.out.log", &root);
         let bg_err_file = format!("{}/bg.err.log", &root);
-        match process {
-            Some(mut process) => {
-                process.tail(&bg_out_file, &bg_err_file).ok();
-            }
-            None => (),
+        if let Some(mut process) = process {
+            process.tail(&bg_out_file, &bg_err_file).ok();
         };
         Ok(())
     }
