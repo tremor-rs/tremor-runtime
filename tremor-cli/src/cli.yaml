@@ -20,16 +20,16 @@ subcommands:
   - completions:
       about: Shell completions
       subcommands:
-          - bash:
-              about: Generate bash shell completions
-          - zsh:
-              about: Generate zsh shell completions
-          - elvish:
-              about: Generate elvish shell completions
-          - fish:
-              about: Generate fish shell completions
-          - powershell:
-              about: Generate powershell shell completions
+        - bash:
+            about: Generate bash shell completions
+        - zsh:
+            about: Generate zsh shell completions
+        - elvish:
+            about: Generate elvish shell completions
+        - fish:
+            about: Generate fish shell completions
+        - powershell:
+            about: Generate powershell shell completions
   - server:
       about: Tremor server
       subcommands:
@@ -113,7 +113,7 @@ subcommands:
             required: false
             multiple: true
             takes_value: true
-        
+
   - dbg:
       about: Advanced debugging commands
       args:
@@ -174,13 +174,13 @@ subcommands:
             default_value: "-"
         - PREPROCESSOR:
             long: pre-processor
-#            multiple: true
+            #            multiple: true
             help: preprocessor to pass data through before decoding
             default_value: lines
             takes_value: true
         - POSTPROCESSOR:
             long: post-processor
-#            multiple: true
+            #            multiple: true
             help: postprocessor to pass data through after encoding
             takes_value: true
         - output-port:
@@ -189,8 +189,7 @@ subcommands:
             help: selects the port to pull output
   - doc:
       about: >
-        Run tremor script or query files against stdin or a json data archive,
-        the data will be read from STDIN or an archive and written to STDOUT.
+        Generates documention from tremor script files
       args:
         - interactive:
             help: generates output to standard output
@@ -202,7 +201,7 @@ subcommands:
         - OUTDIR:
             help: directory to generate documents into
             takes_value: true
-            default_value: 'docs'
+            default_value: "docs"
             required: false
   - api:
       about: Tremor API client
