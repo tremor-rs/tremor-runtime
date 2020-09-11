@@ -1,7 +1,7 @@
 status: 1
 name: Crash on unknown offramp type
 asserts:
-  - source: events.log
+  - source: STDERR
     contains:
       - |
-        {"done":true}
+        bad_offramp not known

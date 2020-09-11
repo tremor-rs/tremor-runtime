@@ -1,7 +1,7 @@
-status: 1
-name: Query exit with non zero status code
+status: 0
+name: Query for locals
 asserts:
-  - source: events.log
+  - source: tests/integration/query-for-locals/events.log
     contains:
       - |
-        {"done":true}
+        {"test":[{"i":0,"d":1},{"i":1,"d":2}]}

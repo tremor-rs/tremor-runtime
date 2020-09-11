@@ -1,7 +1,7 @@
-status: 1
+status: 0
 name: Test stdlib is usable
 asserts:
-  - source: events.log
+  - source: tests/integration/stdlib/events.log
     contains:
       - |
-        {"done":true}
+        ["Excepteur consectetur veniam pariatur
