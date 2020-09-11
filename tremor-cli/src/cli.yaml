@@ -84,7 +84,7 @@ subcommands:
       about: Testing facilities
       args:
         - MODE:
-            help: One of `bench`, `integration`, `api`, `unit`, `all`
+            help: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
             required: true
             takes_value: true
             default_value: "all"

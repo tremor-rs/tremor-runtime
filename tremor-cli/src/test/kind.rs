@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::{convert::TryFrom, error::Error, fmt::Debug, fmt::Display};
+
 #[derive(Deserialize, Debug, PartialEq)]
 pub(crate) enum TestKind {
     Bench,
@@ -19,27 +21,36 @@ pub(crate) enum TestKind {
     Command,
     Unit,
     All,
+    Unknown(String),
 }
 
-impl From<String> for TestKind {
-    fn from(from: String) -> Self {
-        From::<&str>::from(from.as_str())
+/// An unknown test kind
+#[derive(Debug)]
+pub struct UnknownKind(String);
+
+impl Display for UnknownKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown test kind `{}`, please choose one of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`", self.0)
     }
 }
 
-impl From<&str> for TestKind {
-    fn from(from: &str) -> Self {
+impl Error for UnknownKind {}
+
+impl TryFrom<&str> for TestKind {
+    fn try_from(from: &str) -> Result<Self, UnknownKind> {
         match from.to_lowercase().as_str() {
-            "bench" => TestKind::Bench,
-            "benchmark" => TestKind::Bench,
-            "integration" => TestKind::Integration,
-            "it" => TestKind::Integration,
-            "api" => TestKind::Command,
-            "rest" => TestKind::Command,
-            "command" => TestKind::Command,
-            "unit" => TestKind::Unit,
-            "all" => TestKind::All,
-            _default => TestKind::All,
+            "all" => Ok(TestKind::All),
+            "api" => Ok(TestKind::Command),
+            "bench" => Ok(TestKind::Bench),
+            "benchmark" => Ok(TestKind::Bench),
+            "command" => Ok(TestKind::Command),
+            "integration" => Ok(TestKind::Integration),
+            "it" => Ok(TestKind::Integration),
+            "rest" => Ok(TestKind::Command),
+            "unit" => Ok(TestKind::Unit),
+            default => Err(UnknownKind(default.into())),
         }
     }
+
+    type Error = UnknownKind;
 }
