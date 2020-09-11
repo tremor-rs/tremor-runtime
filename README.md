@@ -2,17 +2,17 @@
 
 [![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
 
-[Build Status]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Tests/badge.svg
-[actions-Tests]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3ATests
-[Quality Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Checks/badge.svg
-[actions-Checks]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3AChecks
-[License Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/License%20audit/badge.svg
-[actions-License-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22License+audit%22
-[Security Checks]: https://github.com/wayfair-tremor/tremor-runtime/workflows/Security%20audit/badge.svg
-[actions-Security-audit]: https://github.com/wayfair-tremor/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
-[Code Coverage]: https://codecov.io/gh/wayfair-tremor/tremor-runtime/branch/main/graph/badge.svg
-[codecov.io]: https://codecov.io/gh/wayfair-tremor/tremor-runtime
-[Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=wayfair-tremor/tremor-runtime
+[Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
+[actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
+[Quality Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Checks/badge.svg
+[actions-Checks]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3AChecks
+[License Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
+[actions-License-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22License+audit%22
+[Security Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
+[actions-Security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
+[Code Coverage]: https://codecov.io/gh/tremor-rs/tremor-runtime/branch/main/graph/badge.svg
+[codecov.io]: https://codecov.io/gh/tremor-rs/tremor-runtime
+[Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=tremor-rs/tremor-runtime
 [dependabot.com]: https://dependabot.com
 
 ---

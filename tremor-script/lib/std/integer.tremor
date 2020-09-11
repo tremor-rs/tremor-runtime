@@ -13,7 +13,7 @@ mod signed with
   ## Minimal signed value
   ##
   ## This is slighty wrong, it should be `-9223372036854775808`
-  ## see https://github.com/wayfair-tremor/tremor-runtime/issues/127
+  ## see https://github.com/tremor-rs/tremor-runtime/issues/127
   const min = (-9223372036854775807);
 end;
 

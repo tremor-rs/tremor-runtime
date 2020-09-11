@@ -302,7 +302,7 @@ fn main() {
         name: env!("CARGO_PKG_NAME").into(),
         version: env!("CARGO_PKG_VERSION").into(),
         authors: "The Tremor Team".into(),
-        homepage: "https://github.com/wayfair-tremor/tremor-runtime".into(),
+        homepage: "https://github.com/tremor-rs/tremor-runtime".into(),
     });
     version::print();
     if let Err(ref e) = task::block_on(run_dun()) {

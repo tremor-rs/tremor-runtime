@@ -8,7 +8,7 @@ license = "Apache-2.0"
 readme = "README.md"
 homepage = "https://www.tremor.rs"
 documentation = "https://docs.tremor.rs"
-repository = "https://github.com/wayfair-tremor/tremor-runtime"
+repository = "https://github.com/tremor-rs/tremor-runtime"
 
 [workspace]
 
