@@ -69,10 +69,10 @@ fi
 
 case $build_target in
     debug)
-        cargo build -p tremor-server --features "${FEATURES}"
+        cargo build -p tremor-cli --features "${FEATURES}"
         ;;
     release)
-        cargo build --p tremor-server --release --features "${FEATURES}"
+        cargo build --p tremor-cli --release --features "${FEATURES}"
         ;;
     none)
         ;;
@@ -87,10 +87,10 @@ shift "$((OPTIND-1))"
 set -u
 case $build_target in
     debug)
-        run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor-server"}
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/debug/tremor"}
         ;;
     release)
-        run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor-server"}
+        run_cmd=${run_cmd:-"${BASEDIR}/../target/release/tremor"}
         ;;
     none)
         if [ -z ${run_cmd+x} ]
@@ -101,7 +101,7 @@ case $build_target in
 esac
 set +u
 
-run_cmd="$run_cmd --no-api"
+run_cmd="$run_cmd server run --no-api"
 
 echo "$run_cmd"
 
@@ -199,20 +199,20 @@ do
         warn "${test}:  skipped (ci)"
     else
         xzcat "$in_file" > "$data_file"
-        if [ -f "$pre_file" ] 
+        if [ -f "$pre_file" ]
         then
             $pre_file "${TEST_DIR}" "$run_cmd"
         fi
         if [ -f "${query_file}" ]
         then
-            additional_args="--query ${query_file}"
+            additional_args="${query_file}"
         else
             additional_args=""
         fi
 
-        if $run_cmd --config "${yaml_file}.out" "${mapping_file}" $additional_args 2> "${log_file}"
+        if $run_cmd -f "${yaml_file}.out" "${mapping_file}" $additional_args 2> "${log_file}"
         then
-            if [ -f "$post_file" ] 
+            if [ -f "$post_file" ]
             then
                 $post_file "${TEST_DIR}" 0
             fi
