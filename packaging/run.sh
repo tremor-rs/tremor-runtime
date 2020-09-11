@@ -81,7 +81,7 @@ pushd "$ROOT_DIR" > /dev/null
 ###############################################################################
 
 TARGET_BUILD_DIR="${ROOT_DIR}/target/${TARGET}/release" # we always package for release builds
-TARGET_BIN="${TARGET_BUILD_DIR}/tremor-server"
+TARGET_BIN="${TARGET_BUILD_DIR}/tremor"
 
 # assumes that the build's been done first
 if [ ! -f "$TARGET_BIN" ]; then
