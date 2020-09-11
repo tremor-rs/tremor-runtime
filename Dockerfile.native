@@ -1,4 +1,4 @@
-FROM rust:latest as builder
+FROM rust:1.43.1 as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -30,6 +30,7 @@ COPY tremor-influx ./tremor-influx
 COPY tremor-query ./tremor-query
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
+COPY tremor-cli ./tremor-cli
 
 RUN cargo build --release --all
 
@@ -44,8 +45,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY --from=builder target/release/tremor-server /tremor-server
-COPY --from=builder target/release/tremor-tool /tremor-tool
+COPY --from=builder target/release/tremor /tremor
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
