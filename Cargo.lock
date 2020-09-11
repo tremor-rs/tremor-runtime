@@ -5473,7 +5473,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "window"
 version = "0.1.1"
-source = "git+https://github.com/wayfair-tremor/window.git?tag=v0.1.1#de8324d0fe9db0d6c011a5c0f2fc316f66f1c996"
+source = "git+https://github.com/tremor-rs/window.git?tag=v0.1.1#de8324d0fe9db0d6c011a5c0f2fc316f66f1c996"
 dependencies = [
  "chrono",
 ]

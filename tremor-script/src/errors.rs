@@ -304,7 +304,7 @@ impl ErrorKind {
             MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/wayfair-tremor/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
+            Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
             _ => None,
         }
     }

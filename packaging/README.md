@@ -65,4 +65,4 @@ For the list of formats used during project release (variable by target), please
 | x86_64-unknown-linux-gnu | archive | Should work on linux systems with glibc (>=2.17), libstdc++, libatomic, libssl (==1.0.2) |
 | x86_64-unknown-linux-gnu | deb | ~Debian jessie/stretch/buster as well as its derivatives like Ubuntu~ TODO |
 | x86_64-unknown-linux-gnu | rpm | Centos7/8 |
-| x86_64-alpine-linux-musl | archive | Should work on all linux systems but not as [performant](https://github.com/wayfair-tremor/tremor-runtime/issues/377) as the gnu releases |
+| x86_64-alpine-linux-musl | archive | Should work on all linux systems but not as [performant](https://github.com/tremor-rs/tremor-runtime/issues/377) as the gnu releases |
