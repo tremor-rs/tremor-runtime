@@ -44,7 +44,7 @@ impl TagFilter {
         }
     }
 
-    pub(crate) fn matches(&self, tags: &Vec<String>) -> (Vec<String>, bool) {
+    pub(crate) fn matches(&self, tags: &[String]) -> (Vec<String>, bool) {
         let tags: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
         let includes: HashSet<String> = HashSet::from_iter(self.includes.iter().cloned());
         let excludes: HashSet<String> = HashSet::from_iter(self.excludes.iter().cloned());
@@ -61,8 +61,8 @@ impl TagFilter {
             // and there were no excluded tags matched, then
             // we have a match
             (
-                accepted.iter().map(|x| x.to_string()).collect(),
-                accepted.len() > 0 && redacted.len() == 0,
+                accepted.iter().map(|x| (*x).to_string()).collect(),
+                !accepted.is_empty() && redacted.is_empty(),
             )
         }
     }

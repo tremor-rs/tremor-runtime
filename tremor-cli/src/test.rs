@@ -51,7 +51,7 @@ fn suite_bench(
         .file_type(FileType::DIR)
         .build()
     {
-        let benches = benches.into_iter().filter_map(std::result::Result::ok);
+        let benches = benches.filter_map(std::result::Result::ok);
 
         let mut suite = vec![];
         let mut stats = stats::Stats::new();
@@ -90,7 +90,7 @@ fn suite_integration(
         .file_type(FileType::DIR)
         .build()
     {
-        let tests = tests.into_iter().filter_map(std::result::Result::ok);
+        let tests = tests.filter_map(std::result::Result::ok);
 
         let mut suite = vec![];
         let mut stats = stats::Stats::new();
@@ -138,7 +138,7 @@ fn suite_unit(
         .file_type(FileType::FILE)
         .build()
     {
-        let suites = suites.into_iter().filter_map(std::result::Result::ok);
+        let suites = suites.filter_map(std::result::Result::ok);
         let mut reports = vec![];
         let mut stats = stats::Stats::new();
         for suite in suites {
@@ -195,7 +195,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut elapsed = 0;
 
     if let Some(found) = found {
-        let found = found.into_iter().filter_map(std::result::Result::ok);
+        let found = found.filter_map(std::result::Result::ok);
         let start = nanotime();
         for meta in found {
             let root = meta.path().parent();

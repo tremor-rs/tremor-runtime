@@ -100,7 +100,7 @@ fn eval_suite_entrypoint(
 
 fn eval_suite_tests(
     env: &Env,
-    mut local: &LocalStack,
+    local: &LocalStack,
     script: &str,
     node_metas: &NodeMetas,
     suite_spec: &List,
@@ -131,22 +131,15 @@ fn eval_suite_tests(
 
                         if let Some(test_spec_index) = test_spec_index {
                             let item = &fields[test_spec_index].value;
-                            let mut test_state = Value::Object(Box::new(hashmap! {}));
-                            let mut event = Value::Object(Box::new(hashmap! {}));
-                            let mut meta = Value::Object(Box::new(hashmap! {}));
+                            let test_state = Value::Object(Box::new(hashmap! {}));
+                            let event = Value::Object(Box::new(hashmap! {}));
+                            let meta = Value::Object(Box::new(hashmap! {}));
 
                             // FIXME revisit tag filtering inside unit tests
 
                             let start = nanotime();
                             let value = item
-                                .run(
-                                    EXEC_OPTS,
-                                    &env,
-                                    &mut event,
-                                    &mut test_state,
-                                    &mut meta,
-                                    &mut local,
-                                )
+                                .run(EXEC_OPTS, &env, &event, &test_state, &meta, &local)
                                 .ok();
                             let elapsed = nanotime() - start;
                             if let Some(value) = value {
@@ -254,7 +247,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
         let report_start = nanotime();
         match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
             Ok(runnable) => {
-                let mut local = LocalStack::default();
+                let local = LocalStack::default();
 
                 let mut h = TermHighlighter::new();
                 runnable.format_warnings_with(&mut h).ok();
@@ -273,9 +266,9 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                 //                let suite_start = nanotime();
                 for expr in &script.exprs {
                     let mut suite_name = String::from("Unknown Suite");
-                    let mut state = Value::Object(Box::new(hashmap! {}));
-                    let mut event = Value::Object(Box::new(hashmap! {}));
-                    let mut meta = Value::Object(Box::new(hashmap! {}));
+                    let state = Value::Object(Box::new(hashmap! {}));
+                    let event = Value::Object(Box::new(hashmap! {}));
+                    let meta = Value::Object(Box::new(hashmap! {}));
                     let mut elements = Vec::new();
 
                     match expr {
@@ -288,10 +281,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                 let mut specs: Vec<Value> = vec![];
                                 for arg in args {
                                     let value = arg
-                                        .run(
-                                            EXEC_OPTS, &env, &mut event, &mut state, &mut meta,
-                                            &mut local,
-                                        )
+                                        .run(EXEC_OPTS, &env, &event, &state, &meta, &local)
                                         .ok();
                                     if let Some(value) = value {
                                         specs.push(value.into_owned());
@@ -368,7 +358,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                     {
                                                         let arr = arr
                                                             .iter()
-                                                            .map(|x| x.to_string())
+                                                            .map(std::string::ToString::to_string)
                                                             .collect::<Vec<String>>();
                                                         // FIXME revisit tags in unit tests
                                                         if let (_matched, true) =
