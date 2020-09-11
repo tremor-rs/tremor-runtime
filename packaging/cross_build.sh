@@ -30,7 +30,7 @@ else
   BUILD_MODE=release
 fi
 
-BIN_NAME="tremor-server"
+BIN_NAME="tremor"
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 
@@ -107,7 +107,7 @@ fi
 export RUSTFLAGS="${RUSTFLAGS} ${CUSTOM_RUSTFLAGS[@]}"
 echo "RUSTFLAGS set to: ${RUSTFLAGS}"
 
-cross build -p tremor-server "${BUILD_ARGS[@]}"
+cross build -p tremor-cli "${BUILD_ARGS[@]}"
 
 TARGET_BIN="${ROOT_DIR}/target/${TARGET}/${BUILD_MODE}/${BIN_NAME}"
 
