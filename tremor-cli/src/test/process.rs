@@ -25,6 +25,7 @@ use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_process(
     kind: &str,
     bench_root: &Path,
