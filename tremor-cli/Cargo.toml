@@ -6,9 +6,6 @@ authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
 
-# Additional `RUSTFLAGS` to set (default: none)
-rustc-args = [ "-C target-cpu=native" ]
-
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
@@ -27,7 +24,6 @@ float-cmp = "0.8"
 tremor-runtime = { path = "../" }
 tremor-api = { path = "../tremor-api" }
 tremor-script = { path = "../tremor-script" }
-tremor-query = { path = "../tremor-query" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-influx = { path = "../tremor-influx" }
 serde_derive = "1"
@@ -45,7 +41,7 @@ http-types = "2.1"
 env_logger = "0.7.1"
 log = "0.4"
 log4rs = "0.12.0"
-mimalloc = { version = "0.1", default-features = false, optional = true }
+mimalloc-rs = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
 rental = "0.5"
@@ -69,3 +65,4 @@ test = false
 default = ["snmalloc"]
 snmalloc = ["snmalloc-rs"]
 jemalloc = ["jemallocator"]
+mimalloc = ["mimalloc-rs"]

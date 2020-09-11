@@ -16,10 +16,7 @@ members = [
     "tremor-api",
     "tremor-influx",
     "tremor-pipeline",
-    "tremor-query",
     "tremor-script",
-    "tremor-server",
-    "tremor-tool",
     "tremor-cli",
 ]
 

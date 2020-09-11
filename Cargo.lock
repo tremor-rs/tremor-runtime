@@ -106,15 +106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ansi_term"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d52a9bb7ec0cf484c551830a7ce27bd20d67eac647e1befb56b0be4ee39a55d2"
-dependencies = [
- "winapi 0.3.9",
-]
-
-[[package]]
 name = "antidote"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -676,7 +667,7 @@ version = "2.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37e58ac78573c40708d45522f0d80fa2f01cc4f9b4e2bf749807255454312002"
 dependencies = [
- "ansi_term 0.11.0",
+ "ansi_term",
  "atty",
  "bitflags",
  "strsim 0.8.0",
@@ -706,42 +697,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap-v3"
-version = "3.0.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfac055d61c39ace5061621530f7f55651a261a4fba296ce1bad06d41a8de65e"
-dependencies = [
- "ansi_term 0.12.1",
- "atty",
- "bitflags",
- "clap_derive-v3",
- "indexmap",
- "lazy_static",
- "strsim 0.9.3",
- "textwrap",
- "unicode-width",
- "vec_map",
- "yaml-rust",
-]
-
-[[package]]
 name = "clap_derive"
 version = "3.0.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb51c9e75b94452505acd21d929323f5a5c6c4735a852adbd39ef5fb1b014f30"
-dependencies = [
- "heck",
- "proc-macro-error",
- "proc-macro2",
- "quote 1.0.7",
- "syn 1.0.40",
-]
-
-[[package]]
-name = "clap_derive-v3"
-version = "3.0.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6dd675567eb3e35787bd2583d129e85fabc7503b0a093d08c51198a307e2091"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -1188,15 +1147,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
 dependencies = [
  "cfg-if",
- "dirs-sys",
-]
-
-[[package]]
-name = "dirs"
-version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "142995ed02755914747cc6ca76fc7e4583cd18578746716d0508ea6ed558b9ff"
-dependencies = [
  "dirs-sys",
 ]
 
@@ -2087,21 +2037,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd179ae861f0c2e53da70d892f5f3029f9594be0c41dc5269cd371691b1dc2f9"
 
 [[package]]
-name = "human-panic"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39f357a500abcbd7c5f967c1d45c8838585b36743823b9d43488f24850534e36"
-dependencies = [
- "backtrace",
- "os_type",
- "serde",
- "serde_derive",
- "termcolor",
- "toml",
- "uuid 0.8.1",
-]
-
-[[package]]
 name = "humantime"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2555,15 +2490,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "677c4be79b14bd72496b87789b702ba02cd1a9f16a59369fe847082fd03efd88"
-dependencies = [
- "cmake",
-]
-
-[[package]]
 name = "libnghttp2-sys"
 version = "0.1.4+1.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2774,12 +2700,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "mimalloc"
-version = "0.1.20"
+name = "mimalloc-rs"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00759bcf69082fa629ae8823fcc72f7454a90c6476110297a1ae5fb3a559e474"
+checksum = "c47aa5ff26c03ae3a117efd8d53609c2e6acfa8e4d054bfd8197155a570b5fc0"
 dependencies = [
- "libmimalloc-sys",
+ "libc",
 ]
 
 [[package]]
@@ -3133,15 +3059,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ac6fe3538f701e339953a3ebbe4f39941aababa8a3f6964635b24ab526daeac"
 
 [[package]]
-name = "os_type"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7edc011af0ae98b7f88cf7e4a83b70a54a75d2b8cb013d6efd02e5956207e9eb"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "output_vt100"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3462,7 +3379,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f81e1644e1b54f5a68959a29aa86cde704219254669da328ecfdf6a1f09d427"
 dependencies = [
- "ansi_term 0.11.0",
+ "ansi_term",
  "ctor",
  "difference",
  "output_vt100",
@@ -5253,7 +5170,7 @@ dependencies = [
  "log 0.4.11",
  "log4rs 0.12.0",
  "matches",
- "mimalloc",
+ "mimalloc-rs",
  "port_scanner",
  "pretty_assertions",
  "regex",
@@ -5272,7 +5189,6 @@ dependencies = [
  "tremor-api",
  "tremor-influx",
  "tremor-pipeline",
- "tremor-query",
  "tremor-runtime",
  "tremor-script",
 ]
@@ -5321,19 +5237,6 @@ dependencies = [
  "tremor-script",
  "window",
  "xz2",
-]
-
-[[package]]
-name = "tremor-query"
-version = "0.8.0"
-dependencies = [
- "chrono",
- "clap 3.0.0-beta.1",
- "halfbrown",
- "simd-json",
- "tremor-influx",
- "tremor-pipeline",
- "tremor-script",
 ]
 
 [[package]]
@@ -5438,47 +5341,6 @@ dependencies = [
  "unicode-xid 0.2.1",
  "url 2.1.1",
  "xz2",
-]
-
-[[package]]
-name = "tremor-server"
-version = "0.8.0"
-dependencies = [
- "async-std",
- "clap 3.0.0-beta.1",
- "env_logger",
- "glob",
- "human-panic",
- "jemallocator",
- "log 0.4.11",
- "log4rs 0.13.0",
- "mimalloc",
- "serde_yaml",
- "snmalloc-rs",
- "tide",
- "tremor-api",
- "tremor-pipeline",
- "tremor-runtime",
- "tremor-script",
-]
-
-[[package]]
-name = "tremor-tool"
-version = "0.8.0"
-dependencies = [
- "async-std",
- "clap-v3",
- "dirs 3.0.1",
- "halfbrown",
- "http-types",
- "serde",
- "serde_derive",
- "serde_yaml",
- "simd-json",
- "surf",
- "tremor-pipeline",
- "tremor-runtime",
- "tremor-script",
 ]
 
 [[package]]
@@ -5667,15 +5529,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbc611eb48397705a6b0f6e917da23ae517e4d127123d2cf7674206627d32a"
 dependencies = [
  "rand 0.6.5",
-]
-
-[[package]]
-name = "uuid"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fde2f6a4bea1d6e007c4ad38c6839fa71cbb63b6dbf5b595aa38dc9b1093c11"
-dependencies = [
- "rand 0.7.3",
 ]
 
 [[package]]
