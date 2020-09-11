@@ -6,7 +6,7 @@ help() {
 Usage: ${0##*/} [-hd] [TEST]...
 code sanity checker
   -h         show this help
-  -a         run all chekcs
+  -a         run all checks
   -u         check for unwrap
   -i         check for unimplemented
   -r         check for unreachable
