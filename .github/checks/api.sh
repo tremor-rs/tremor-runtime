@@ -17,11 +17,11 @@ generate_json() {
     ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
 }
 start_tremor() {
-    target/debug/tremor-server &
+    target/debug/tremor server run &
 }
 
 stop_trempor() {
-    pkill tremor-server
+    pkill tremor
 }
 
 while getopts hacte opt; do
@@ -36,14 +36,14 @@ while getopts hacte opt; do
         c)
             start_tremor
             cd tremor-api || exit 1
-            ~/go/bin/coyote -c tests/coyote.yml
+            ~/go/bin/coyote -c tests/coyote.yml # FIXME replace coyote with tremor test api
             cd .. || exit 1
             stop_trempor
         ;;
         t)
             start_tremor
             cd tremor-tool || exit 1
-            ~/go/bin/coyote -c tests/coyote.yml
+            ~/go/bin/coyote -c tests/coyote.yml # FIXME replace coyote with tremor test api
             cd .. || exit 1
             stop_trempor
         ;;

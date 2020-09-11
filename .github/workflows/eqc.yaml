@@ -1,4 +1,4 @@
-name: EQC Tests
+nam-: EQC Tests
 
 on: [push]
 
@@ -25,6 +25,6 @@ jobs:
           override: true
           profile: minimal
       - name: Build
-        run: cargo build -p tremor-server -p tremor-tool
+        run: cargo build
       - name: Run eqc tests
         run: ./.github/checks/api.sh -e\
