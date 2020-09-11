@@ -322,7 +322,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                         });
 
                                         if let Some(name_spec_index) = name_spec_index {
-                                            if let Some(tag_spec_index) = tag_spec_index {
+                                            if let Some(_tag_spec_index) = tag_spec_index {
                                                 if let ImutExprInt::Literal(Literal {
                                                     value, ..
                                                 }) = &fields[name_spec_index].value
