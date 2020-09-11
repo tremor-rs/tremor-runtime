@@ -15,7 +15,7 @@
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
-use clap::ArgMatches;
+use clap::{App, ArgMatches};
 use std::fs::File;
 use std::io::BufReader;
 use std::mem;
@@ -270,10 +270,11 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
 }
 
 #[cfg_attr(tarpaulin, skip)]
-pub(crate) fn run_cmd(cmd: &ArgMatches) -> Result<()> {
+pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         server_run(matches)
     } else {
+        app.print_long_help().ok();
         // ALLOW: main.rs
         ::std::process::exit(1);
     }

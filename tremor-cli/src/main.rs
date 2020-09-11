@@ -99,7 +99,7 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     } else if let Some(matches) = cmd.subcommand_matches("completions") {
         completions::run_cmd(app, matches)
     } else if let Some(matches) = cmd.subcommand_matches("server") {
-        server::run_cmd(matches)
+        server::run_cmd(app, matches)
     } else if let Some(matches) = cmd.subcommand_matches("run") {
         run::run_cmd(&matches)
     } else if let Some(matches) = cmd.subcommand_matches("doc") {
