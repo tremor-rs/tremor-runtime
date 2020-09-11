@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::*;
 use crate::job;
 use crate::report;
 use crate::status;
@@ -236,6 +236,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                             && (kind == TestKind::All || kind == TestKind::Unit)
                         {
                             let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
+                            dbg!(&stats);
                             reports.insert("unit".to_string(), test_reports);
                             unit_stats.merge(&stats);
                             status::hr().ok();
@@ -260,7 +261,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     all_stats.merge(&unit_stats);
     status::rollups("Total Stats", &all_stats).ok();
     let mut stats_map = HashMap::new();
-    stats_map.insert("all".to_string(), all_stats);
+    stats_map.insert("all".to_string(), all_stats.clone());
     stats_map.insert("bench".to_string(), bench_stats);
     stats_map.insert("integration".to_string(), integration_stats);
     stats_map.insert("command".to_string(), cmd_stats);
@@ -281,7 +282,11 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         }
     };
 
-    Ok(())
+    if all_stats.fail > 0 {
+        Err(ErrorKind::TestFailures(all_stats).into())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

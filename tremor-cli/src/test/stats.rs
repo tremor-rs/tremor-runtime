@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Test statistics
 #[derive(Serialize, Debug, Clone)]
-pub(crate) struct Stats {
-    pub(crate) pass: i32,
-    pub(crate) fail: i32,
-    pub(crate) skip: i32,
+pub struct Stats {
+    pub(crate) pass: u32,
+    pub(crate) fail: u32,
+    pub(crate) skip: u32,
 }
 
 impl Stats {
