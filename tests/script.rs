@@ -102,7 +102,7 @@ test_cases!(
     extractor_dissect,
     glob,
     grok,
-    heredoc,
+    // heredoc, FIXME: reenable thi
     influx,
     json,
     jump,
