@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Safety cheks
+      - name: Safety checks
         run: ./.github/checks/safety.sh -a
   unused-deps:
     runs-on: ubuntu-latest
