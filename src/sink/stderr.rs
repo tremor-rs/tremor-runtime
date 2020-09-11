@@ -51,6 +51,7 @@ impl Sink for StdErr {
                     .await?
             }
         }
+        self.stderr.flush().await?;
         Ok(None)
     }
     async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
