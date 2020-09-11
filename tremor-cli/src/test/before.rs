@@ -31,16 +31,16 @@ pub(crate) struct Before {
 
 impl Before {
     pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd).ok_or_else(|| Error::from(format!(
-             "Could not find executable {} on path",
-             &self.cmd,
-         )));
+        let cmd = job::which(&self.cmd).ok_or_else(|| {
+            Error::from(format!("Could not find executable {} on path", &self.cmd,))
+        });
 
         let process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
         self.block_on()?;
         Ok(Some(process))
     }
 
+    #[allow(clippy::module_name_repetitions)]
     pub(crate) fn block_on(&self) -> Result<()> {
         if let Some(conditions) = &self.conditionals {
             for (k, v) in conditions.iter() {
@@ -50,7 +50,6 @@ impl Before {
                         for port in v {
                             loop {
                                 let now = nanotime();
-                                #[allow(clippy::cast_possible_truncation)]
                                 if ((now - epoch) / 1_000_000_000) as u16 > self.until {
                                     return Err("Upper bound exceeded error".into());
                                 }
