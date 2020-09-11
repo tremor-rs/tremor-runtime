@@ -20,9 +20,7 @@ jobs:
         with:
           override: true
           profile: minimal
-      - name: Build
-        run: cargo build --all
-      - name: Install tremor
+      - name: Build and install tremor
         run: cargo install --path tremor-cli
       - name: Run Integration Tests
         run: tremor test integration tremor-cli/tests -i integration -e ws
