@@ -43,7 +43,7 @@ impl std::fmt::Debug for Int {
 
 impl Int {
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
-        let origin_uri = tremor_pipeline::EventOriginUri {
+        let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-udp".to_string(),
             host: String::default(),

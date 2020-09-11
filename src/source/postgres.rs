@@ -82,7 +82,7 @@ impl onramp::Impl for Postgres {
 
 impl Int {
     async fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
-        let origin_uri = tremor_pipeline::EventOriginUri {
+        let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),

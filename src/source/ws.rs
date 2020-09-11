@@ -27,6 +27,8 @@ pub struct Config {
     pub host: String,
 }
 
+impl ConfigImpl for Config {}
+
 pub struct Ws {
     pub config: Config,
     onramp_id: TremorURL,
@@ -35,7 +37,7 @@ pub struct Ws {
 impl onramp::Impl for Ws {
     fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
                 config,
                 onramp_id: id.clone(),
@@ -80,7 +82,7 @@ async fn handle_connection(
 ) -> Result<()> {
     let mut ws_stream = async_tungstenite::accept_async(raw_stream).await?;
 
-    let uri = tremor_pipeline::EventOriginUri {
+    let uri = EventOriginUri {
         uid,
         scheme: "tremor-ws".to_string(),
         host: "tremor-ws-client-host.remote".to_string(),

@@ -41,7 +41,7 @@ pub struct Blaster {
     onramp_id: TremorURL,
     data: Vec<u8>,
     acc: Acc,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: EventOriginUri,
 }
 impl std::fmt::Debug for Blaster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -63,7 +63,7 @@ impl onramp::Impl for Blaster {
             } else {
                 source_data_file.read_to_end(&mut data)?;
             };
-            let origin_uri = tremor_pipeline::EventOriginUri {
+            let origin_uri = EventOriginUri {
                 uid: 0,
                 scheme: "tremor-blaster".to_string(),
                 host: hostname(),

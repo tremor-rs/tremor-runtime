@@ -87,7 +87,7 @@ impl ConfigImpl for Config {}
 #[derive(Clone)]
 pub struct Crononome {
     pub config: Config,
-    origin_uri: tremor_pipeline::EventOriginUri,
+    origin_uri: EventOriginUri,
     cq: ChronomicQueue,
     onramp_id: TremorURL,
 }
@@ -101,7 +101,7 @@ impl onramp::Impl for Crononome {
     fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            let origin_uri = tremor_pipeline::EventOriginUri {
+            let origin_uri = EventOriginUri {
                 uid: 0,
                 scheme: "tremor-crononome".to_string(),
                 host: hostname(),
