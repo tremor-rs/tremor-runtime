@@ -24,4 +24,4 @@ labels: bug
 
 Output of `rustup --version`:
 Output of `rustup show`:
-Output of `tremor-server --version`:
+Output of `tremor --version`:

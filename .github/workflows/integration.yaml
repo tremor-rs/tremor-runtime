@@ -21,7 +21,7 @@ jobs:
           override: true
           profile: minimal
       - name: Build
-        run: cargo build -p tremor-server -p tremor-tool
+        run: cargo build
       - name: Run Integration Tests
         run: make it
   api-tests:
@@ -44,7 +44,7 @@ jobs:
           override: true
           profile: minimal
       - name: Build
-        run: cargo build -p tremor-server -p tremor-tool
+        run: cargo build
       - name: Run curl tests
         run: ./.github/checks/api.sh -c
       - name: Run tremor-tool tests
