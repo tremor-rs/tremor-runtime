@@ -25,9 +25,6 @@ COPY tremor-script ./tremor-script
 COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
 # Binaries
-COPY tremor-query ./tremor-query
-COPY tremor-server ./tremor-server
-COPY tremor-tool ./tremor-tool
 COPY tremor-cli ./tremor-cli
 
 RUN cat /proc/cpuinfo
@@ -42,7 +39,6 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
-
 
 COPY --from=builder target/release/tremor /tremor
 
