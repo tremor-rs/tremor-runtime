@@ -18,20 +18,61 @@ use clap_generate::{
     generate,
     generators::{Bash, Elvish, Fish, PowerShell, Zsh},
 };
+use std::path::Path;
 
-pub(crate) fn run_cmd(mut app: clap::App, matches: &ArgMatches) -> Result<()> {
-    if matches.subcommand_matches("bash").is_some() {
-        generate::<Bash, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if matches.subcommand_matches("elvish").is_some() {
-        generate::<Elvish, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if matches.subcommand_matches("fish").is_some() {
-        generate::<Fish, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if matches.subcommand_matches("powershell").is_some() {
-        generate::<PowerShell, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if matches.subcommand_matches("zsh").is_some() {
-        generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else {
-        app.print_long_help().ok();
+const ERR_MSG: &str =
+    "Unable to guess your shell, please provide an explicit shell to create completions for.";
+
+pub(crate) fn run_cmd(app: clap::App, matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        Some((shell, _)) => generate_for_shell(app, shell),
+        None => guess_shell(app),
     }
-    Ok(())
+}
+
+fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
+    match shell {
+        "bash" => Ok(generate::<Bash, _>(
+            &mut app,
+            "tremor",
+            &mut std::io::stdout(),
+        )),
+        "elvish" => Ok(generate::<Elvish, _>(
+            &mut app,
+            "tremor",
+            &mut std::io::stdout(),
+        )),
+        "fish" => Ok(generate::<Fish, _>(
+            &mut app,
+            "tremor",
+            &mut std::io::stdout(),
+        )),
+        "powershell" => Ok(generate::<PowerShell, _>(
+            &mut app,
+            "tremor",
+            &mut std::io::stdout(),
+        )),
+        "zsh" => Ok(generate::<Zsh, _>(
+            &mut app,
+            "tremor",
+            &mut std::io::stdout(),
+        )),
+        _ => Err("Unsupported shell".into()),
+    }
+}
+
+fn guess_shell(app: clap::App) -> Result<()> {
+    if let Some(_) = std::env::var_os("ZSH_NAME") {
+        generate_for_shell(app, "zsh")
+    } else if let Some(_) = std::env::var_os("PSModulePath") {
+        generate_for_shell(app, "powershell")
+    } else if let Some(shell) = std::env::var_os("SHELL") {
+        if let Some(shell_str) = Path::new(&shell.into_string().map_err(|_| "")?).file_name() {
+            generate_for_shell(app, &shell_str.to_string_lossy()).map_err(|_| ERR_MSG.into())
+        } else {
+            Err(ERR_MSG.into())
+        }
+    } else {
+        Err(ERR_MSG.into())
+    }
 }
