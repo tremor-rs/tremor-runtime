@@ -18,7 +18,7 @@ use halfbrown::HashMap;
 use http_types::{headers, StatusCode};
 use simd_json::prelude::*;
 
-use crate::util::*;
+use crate::util::{accept, content_type, load, save_config, ser, TremorApp};
 
 pub(crate) async fn run_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("version") {

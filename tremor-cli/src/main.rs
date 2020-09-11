@@ -23,7 +23,13 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate)]
+#![allow(
+    clippy::must_use_candidate,
+    // TODO clippy claims some filter_map uses are hard to read - investigate
+    clippy::unnecessary_filter_map,
+    clippy::filter_map_next,
+    clippy::filter_map
+)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -40,7 +46,7 @@ extern crate log;
 extern crate rental;
 
 use crate::errors::Result;
-use crate::util::*;
+use crate::util::{load_config, FormatKind, TremorApp};
 use async_std::task;
 use clap::App;
 use clap::{load_yaml, AppSettings, ArgMatches};
@@ -95,7 +101,7 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     } else if let Some(matches) = cmd.subcommand_matches("server") {
         server::run_cmd(matches)
     } else if let Some(matches) = cmd.subcommand_matches("run") {
-        run::run_cmd(matches.clone())
+        run::run_cmd(&matches)
     } else if let Some(matches) = cmd.subcommand_matches("doc") {
         doc::run_cmd(&matches)
     } else if let Some(matches) = cmd.subcommand_matches("api") {

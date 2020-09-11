@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::util::*;
+use crate::util::{get_source_kind, highlight, nanotime, slurp_string, SourceKind};
 use clap::ArgMatches;
 use simd_json::borrowed::Value;
 use simd_json::prelude::*;
@@ -53,8 +53,7 @@ impl Ingress {
         let is_pretty = matches.is_present("pretty");
 
         let buffer: Box<dyn BufRead> = match matches.value_of("INFILE") {
-            None => Box::new(BufReader::new(io::stdin())),
-            Some("-") => Box::new(BufReader::new(io::stdin())),
+            None | Some("-") => Box::new(BufReader::new(io::stdin())),
             Some(data) => Box::new(BufReader::new(File::open(data)?)),
         };
 
@@ -142,8 +141,7 @@ impl Egress {
         let is_pretty = matches.is_present("pretty");
 
         let buffer: Box<dyn Write> = match matches.value_of("OUTFILE") {
-            None => Box::new(BufWriter::new(io::stdout())),
-            Some("-") => Box::new(BufWriter::new(io::stdout())),
+            None | Some("-") => Box::new(BufWriter::new(io::stdout())),
             Some(data) => Box::new(BufWriter::new(File::create(data)?)),
         };
 
@@ -172,7 +170,7 @@ impl Egress {
         })
     }
 
-    fn process(&mut self, _src: &str, event: Value, ret: Result<Return>) -> Result<()> {
+    fn process(&mut self, _src: &str, event: &Value, ret: Result<Return>) -> Result<()> {
         match ret {
             Ok(Return::Drop) => Ok(()),
             Ok(Return::Emit { value, port }) => {
@@ -221,13 +219,13 @@ impl Egress {
             }
             Err(e) => {
                 eprintln!("error processing event: {}", e);
-                Err(e.into())
+                Err(e)
             }
         }
     }
 }
 
-fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
+fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -263,8 +261,8 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
                         &mut state,
                         &mut global_map,
                     ) {
-                        Ok(r) => egress.process(&src, event.clone(), Ok(r)),
-                        Err(e) => egress.process(&src, event, Err(e.into())),
+                        Ok(r) => egress.process(&src, &event, Ok(r)),
+                        Err(e) => egress.process(&src, &event, Err(e.into())),
                     }?;
                     Ok(())
                 },
@@ -281,7 +279,7 @@ fn run_tremor_source(matches: ArgMatches, src: String) -> Result<()> {
     }
 }
 
-fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
+fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -343,7 +341,7 @@ fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
             for (port, rvalue) in continuation.drain(..) {
                 egress.process(
                     &simd_json::to_string_pretty(&value.suffix().value())?,
-                    event.clone(),
+                    &event,
                     Ok(Return::Emit {
                         value: rvalue.data.suffix().value().clone_static(),
                         port: Some(port.to_string()),
@@ -360,7 +358,7 @@ fn run_trickle_source(matches: ArgMatches, src: String) -> Result<()> {
     Ok(())
 }
 
-fn run_pipeline_source(matches: ArgMatches, src: String) -> Result<()> {
+fn run_pipeline_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let config: tremor_runtime::config::Config = serde_yaml::from_str(&slurp_string(&src)?)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
@@ -398,7 +396,7 @@ fn run_pipeline_source(matches: ArgMatches, src: String) -> Result<()> {
             for (port, rvalue) in continuation.drain(..) {
                 egress.process(
                     &simd_json::to_string_pretty(&value.suffix().value())?,
-                    event.clone(),
+                    &event,
                     Ok(Return::Emit {
                         value: rvalue.data.suffix().value().clone_static(),
                         port: Some(port.to_string()),
@@ -413,16 +411,15 @@ fn run_pipeline_source(matches: ArgMatches, src: String) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn run_cmd(matches: ArgMatches) -> Result<()> {
+pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let script_file = matches
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
     let script_file = script_file.to_string();
     match get_source_kind(&script_file) {
-        SourceKind::Tremor => run_tremor_source(matches, script_file),
-        SourceKind::Json => run_tremor_source(matches, script_file),
-        SourceKind::Trickle => run_trickle_source(matches, script_file),
-        SourceKind::Pipeline => run_pipeline_source(matches, script_file),
+        SourceKind::Tremor | SourceKind::Json => run_tremor_source(&matches, script_file),
+        SourceKind::Trickle => run_trickle_source(&matches, &script_file),
+        SourceKind::Pipeline => run_pipeline_source(&matches, &script_file),
         SourceKind::Unsupported => {
             eprintln!("Error: Unable to execute source: {}", &script_file);
             // ALLOW: main.rs

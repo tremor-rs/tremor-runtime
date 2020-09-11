@@ -137,7 +137,7 @@ impl TargetProcess {
         loop {
             match self.stdout_receiver.try_recv() {
                 Ok(line) => {
-                    tailout.write(line.as_bytes())?;
+                    tailout.write_all(line.as_bytes())?;
                 }
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => {
@@ -149,7 +149,7 @@ impl TargetProcess {
         loop {
             match self.stderr_receiver.try_recv() {
                 Ok(line) => {
-                    tailerr.write(line.as_bytes())?;
+                    tailerr.write_all(line.as_bytes())?;
                 }
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => {
@@ -160,9 +160,9 @@ impl TargetProcess {
 
         tailout.sync_all()?;
         tailerr.sync_all()?;
-        if let Err(_) = self.process.kill() {
-            // Do nothing, it already exited
-        }
+        if self.process.kill().is_err() {
+            // Do nothing
+        };
         Ok(())
     }
 }

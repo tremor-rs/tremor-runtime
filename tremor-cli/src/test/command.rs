@@ -76,18 +76,18 @@ pub(crate) fn suite_command(
     let report_start = nanotime();
 
     if let Some(api_suites) = api_suites {
-        let api_suites = api_suites.into_iter().filter_map(std::result::Result::ok);
+        let api_suites = api_suites.filter_map(std::result::Result::ok);
         for suite in api_suites {
             let suite_start = nanotime();
-            if let Some(command_str) = slurp_string(&suite.path().to_string_lossy()).ok() {
-                if let Some(suite) = serde_yaml::from_str::<CommandRun>(&command_str).ok() {
+            if let Ok(command_str) = slurp_string(&suite.path().to_string_lossy()) {
+                if let Ok(suite) = serde_yaml::from_str::<CommandRun>(&command_str) {
                     match &suite.tags {
                         Some(tags) => {
                             if let (_, false) = by_tag.matches(&tags) {
                                 status::skip(&suite.name).ok();
                                 continue; // SKIP
                             } else {
-                                status::tags(&by_tag, &Some(&tags)).ok();
+                                status::tags(&by_tag, Some(&tags)).ok();
                             }
                         }
                         None => (),
@@ -97,43 +97,40 @@ pub(crate) fn suite_command(
                         for case in suite.cases {
                             status::h1("Command Test", &case.name).ok();
 
-                            match shell_words::split(&case.command) {
-                                Ok(args) => {
-                                    // FIXME wintel
-                                    let mut fg_process =
-                                        job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
-                                    let exit_status = fg_process.wait_with_output();
+                            if let Ok(args) = shell_words::split(&case.command) {
+                                // FIXME wintel
+                                let mut fg_process =
+                                    job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
+                                let exit_status = fg_process.wait_with_output();
 
-                                    let fg_out_file =
-                                        format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
-                                    let fg_err_file =
-                                        format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
-                                    let start = nanotime();
-                                    fg_process.tail(&fg_out_file, &fg_err_file).ok();
-                                    let elapsed = nanotime() - start;
+                                let fg_out_file =
+                                    format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
+                                let fg_err_file =
+                                    format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
+                                let start = nanotime();
+                                fg_process.tail(&fg_out_file, &fg_err_file).ok();
+                                let elapsed = nanotime() - start;
 
-                                    counter += 1;
+                                counter += 1;
 
-                                    let (case_stats, elements) = process_testcase(
-                                        &fg_out_file,
-                                        &fg_err_file,
-                                        exit_status?.code(),
-                                        elapsed,
-                                        &case,
-                                    )?;
+                                let (case_stats, elements) = process_testcase(
+                                    &fg_out_file,
+                                    &fg_err_file,
+                                    exit_status?.code(),
+                                    elapsed,
+                                    &case,
+                                )?;
 
-                                    stats.merge(&case_stats);
-                                    let suite = report::TestSuite {
-                                        name: case.name.trim().into(),
-                                        description: "Command-driven test".to_string(),
-                                        elements,
-                                        evidence: None,
-                                        stats: case_stats,
-                                        duration: nanotime() - suite_start,
-                                    };
-                                    suites.insert(case.name, suite);
-                                }
-                                Err(_) => (), // FIXME improve error handling
+                                stats.merge(&case_stats);
+                                let suite = report::TestSuite {
+                                    name: case.name.trim().into(),
+                                    description: "Command-driven test".to_string(),
+                                    elements,
+                                    evidence: None,
+                                    stats: case_stats,
+                                    duration: nanotime() - suite_start,
+                                };
+                                suites.insert(case.name, suite);
                             }
                         }
                         api_stats.merge(&stats);

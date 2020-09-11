@@ -48,8 +48,8 @@ impl TagFilter {
         let tags: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
         let includes: HashSet<String> = HashSet::from_iter(self.includes.iter().cloned());
         let excludes: HashSet<String> = HashSet::from_iter(self.excludes.iter().cloned());
-        let accepted: Vec<&String> = tags.intersection(&includes).into_iter().collect();
-        let redacted: Vec<&String> = tags.intersection(&excludes).into_iter().collect();
+        let accepted: Vec<&String> = tags.intersection(&includes).collect();
+        let redacted: Vec<&String> = tags.intersection(&excludes).collect();
 
         if self.is_empty() {
             // if there are no inclusions/exclusions we match

@@ -20,7 +20,7 @@ use super::stats;
 use super::tag;
 use crate::errors::Result;
 use crate::report;
-use crate::util::*;
+use crate::util::{nanotime, slurp_string};
 use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
@@ -42,13 +42,12 @@ pub(crate) fn run_process(
 
     if let Ok(artefacts) = artefacts {
         let artefacts = artefacts
-            .into_iter()
             .filter_map(std::result::Result::ok)
             .map(|x| x.path().to_string_lossy().to_string());
         let mut artefacts = artefacts.collect::<Vec<String>>();
         let mut args: Vec<String> = vec!["server", "run", "-n", "-f"]
             .iter()
-            .map(|x| x.to_string())
+            .map(|x| (*x).to_string())
             .collect();
         args.append(&mut artefacts);
         let process_start = nanotime();
@@ -106,55 +105,52 @@ pub(crate) fn run_process(
         evidence.insert("test: stderr".to_string(), slurp_string(&fg_err_file)?);
 
         let mut stats = stats::Stats::new();
-        match report {
-            Some((report_stats, report)) => {
-                // There were assertions which is typical of integration tests
-                // but benchmarks may also use the assertion facility
-                //
-                let mut elements = HashMap::new();
-                stats.merge(&report_stats);
-                let elapsed = nanotime() - process_start;
-                elements.insert(
-                    "integration".to_string(),
-                    report::TestSuite {
-                        description: format!("{} test suite", kind).into(),
-                        name: "name".into(),
-                        elements: report,
-                        evidence: Some(evidence),
-                        stats: report_stats,
-                        duration: elapsed,
-                    },
-                );
-                Ok(report::TestReport {
-                    description: "Tremor Test Report".into(),
-                    elements,
-                    stats,
-                    duration: elapsed,
-                })
-            }
-            None => {
-                // There were no assertions which is typical of benchmarks
-                //
-                let mut report = HashMap::new();
-                let elapsed = nanotime() - process_start;
-                report.insert(
-                    "bench".to_string(),
-                    report::TestSuite {
-                        name: "name".into(),
-                        description: format!("{} test suite", kind).into(),
-                        elements: vec![],
-                        evidence: Some(evidence),
-                        stats: stats::Stats::new(),
-                        duration: elapsed,
-                    },
-                );
-                Ok(report::TestReport {
-                    description: "Tremor Test Report".into(),
+        if let Some((report_stats, report)) = report {
+            // There were assertions which is typical of integration tests
+            // but benchmarks may also use the assertion facility
+            //
+            let mut elements = HashMap::new();
+            stats.merge(&report_stats);
+            let elapsed = nanotime() - process_start;
+            elements.insert(
+                "integration".to_string(),
+                report::TestSuite {
+                    description: format!("{} test suite", kind),
+                    name: "name".into(),
                     elements: report,
+                    evidence: Some(evidence),
+                    stats: report_stats,
+                    duration: elapsed,
+                },
+            );
+            Ok(report::TestReport {
+                description: "Tremor Test Report".into(),
+                elements,
+                stats,
+                duration: elapsed,
+            })
+        } else {
+            // There were no assertions which is typical of benchmarks
+            //
+            let mut report = HashMap::new();
+            let elapsed = nanotime() - process_start;
+            report.insert(
+                "bench".to_string(),
+                report::TestSuite {
+                    name: "name".into(),
+                    description: format!("{} test suite", kind),
+                    elements: vec![],
+                    evidence: Some(evidence),
                     stats: stats::Stats::new(),
                     duration: elapsed,
-                })
-            }
+                },
+            );
+            Ok(report::TestReport {
+                description: "Tremor Test Report".into(),
+                elements: report,
+                stats: stats::Stats::new(),
+                duration: elapsed,
+            })
         }
     } else {
         Err("Unable to walk path for artefacts capture".into())

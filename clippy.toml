@@ -1,0 +1,2 @@
+too-many-lines-threshold = 225
+enum-variant-size-threshold = 300

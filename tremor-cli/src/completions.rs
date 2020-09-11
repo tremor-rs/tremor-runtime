@@ -14,20 +14,21 @@
 
 use crate::errors::Result;
 use clap::{self, ArgMatches};
-use clap_generate::{generate, generators::*};
+use clap_generate::{
+    generate,
+    generators::{Bash, Elvish, Fish, PowerShell, Zsh},
+};
 
 pub(crate) fn run_cmd(mut app: clap::App, matches: &ArgMatches) -> Result<()> {
-    if let Some(_) = matches.subcommand_matches("bash") {
+    if matches.subcommand_matches("bash").is_some() {
         generate::<Bash, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if let Some(_) = matches.subcommand_matches("elvish") {
+    } else if matches.subcommand_matches("elvish").is_some() {
         generate::<Elvish, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if let Some(_) = matches.subcommand_matches("fish") {
+    } else if matches.subcommand_matches("fish").is_some() {
         generate::<Fish, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if let Some(_) = matches.subcommand_matches("elvish") {
-        generate::<Elvish, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if let Some(_) = matches.subcommand_matches("powershell") {
+    } else if matches.subcommand_matches("powershell").is_some() {
         generate::<PowerShell, _>(&mut app, "tremor", &mut std::io::stdout());
-    } else if let Some(_) = matches.subcommand_matches("zsh") {
+    } else if matches.subcommand_matches("zsh").is_some() {
         generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
     } else {
         app.print_long_help().ok();

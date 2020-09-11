@@ -210,26 +210,23 @@ pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn tags(filter: &TagFilter, tags: &Option<&Vec<String>>) -> Result<()> {
-    match tags {
-        Some(tags) => {
-            let (active, _status) = filter.matches(&tags);
-            let mut h = TermHighlighter::new();
-            fg_bold!(h, Yellow);
-            write!(h.get_writer(), "  Tags: ")?;
-            for tag in *tags {
-                if active.contains(tag) {
-                    fg_bold!(h, Green);
-                } else {
-                    h.reset()?;
-                }
-                write!(h.get_writer(), " {}", tag)?;
+pub(crate) fn tags(filter: &TagFilter, tags: Option<&Vec<String>>) -> Result<()> {
+    if let Some(tags) = tags {
+        let (active, _status) = filter.matches(&tags);
+        let mut h = TermHighlighter::new();
+        fg_bold!(h, Yellow);
+        write!(h.get_writer(), "  Tags: ")?;
+        for tag in tags {
+            if active.contains(&tag) {
+                fg_bold!(h, Green);
+            } else {
+                h.reset()?;
             }
-            writeln!(h.get_writer())?;
-            h.finalize()?;
-            drop(h);
+            write!(h.get_writer(), " {}", tag)?;
         }
-        None => (),
+        writeln!(h.get_writer())?;
+        h.finalize()?;
+        drop(h);
     }
     Ok(())
 }
