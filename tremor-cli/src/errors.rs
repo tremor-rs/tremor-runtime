@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//NOTE: error_chain
+#![allow(deprecated)]
+#![allow(missing_docs)]
+#![allow(clippy::large_enum_variant)]
+
 use error_chain::error_chain;
 
 impl From<http_types::Error> for Error {

@@ -98,6 +98,7 @@ fn eval_suite_entrypoint(
     (stats, elements)
 }
 
+#[allow(clippy::too_many_lines)]
 fn eval_suite_tests(
     env: &Env,
     local: &LocalStack,
@@ -227,6 +228,7 @@ fn eval_suite_tests(
     (stats, elements)
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report::TestReport> {
     println!();
     println!();

@@ -157,6 +157,7 @@ fn suite_unit(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
