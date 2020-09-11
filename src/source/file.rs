@@ -79,7 +79,7 @@ impl Int {
             ArghDyn::File(r.lines())
         };
 
-        let origin_uri = tremor_pipeline::EventOriginUri {
+        let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),

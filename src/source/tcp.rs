@@ -15,7 +15,6 @@
 use crate::source::prelude::*;
 use async_channel::TryRecvError;
 use async_std::net::TcpListener;
-use tremor_pipeline::EventOriginUri;
 
 // TODO expose this as config (would have to change buffer to be vector?)
 const BUFFER_SIZE_BYTES: usize = 8192;
