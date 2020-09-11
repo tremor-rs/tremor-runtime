@@ -671,9 +671,28 @@ dependencies = [
  "atty",
  "bitflags",
  "strsim 0.8.0",
- "textwrap",
+ "textwrap 0.11.0",
  "unicode-width",
  "vec_map",
+]
+
+[[package]]
+name = "clap"
+version = "3.0.0-beta.1"
+source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
+dependencies = [
+ "atty",
+ "bitflags",
+ "clap_derive 3.0.0-beta.1 (git+https://github.com/clap-rs/clap?rev=29df5c2)",
+ "indexmap",
+ "lazy_static",
+ "os_str_bytes",
+ "strsim 0.10.0",
+ "termcolor",
+ "textwrap 0.12.1",
+ "unicode-width",
+ "vec_map",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -684,16 +703,28 @@ checksum = "860643c53f980f0d38a5e25dfab6c3c93b2cb3aa1fe192643d17a293c6c41936"
 dependencies = [
  "atty",
  "bitflags",
- "clap_derive",
+ "clap_derive 3.0.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "indexmap",
  "lazy_static",
  "os_str_bytes",
  "strsim 0.10.0",
  "termcolor",
- "textwrap",
+ "textwrap 0.11.0",
  "unicode-width",
  "vec_map",
  "yaml-rust",
+]
+
+[[package]]
+name = "clap_derive"
+version = "3.0.0-beta.1"
+source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
+dependencies = [
+ "heck",
+ "proc-macro-error 1.0.4",
+ "proc-macro2",
+ "quote 1.0.7",
+ "syn 1.0.40",
 ]
 
 [[package]]
@@ -703,7 +734,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb51c9e75b94452505acd21d929323f5a5c6c4735a852adbd39ef5fb1b014f30"
 dependencies = [
  "heck",
- "proc-macro-error",
+ "proc-macro-error 0.4.12",
  "proc-macro2",
  "quote 1.0.7",
  "syn 1.0.40",
@@ -712,10 +743,9 @@ dependencies = [
 [[package]]
 name = "clap_generate"
 version = "3.0.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "188d8b137fa922515d549cf17ece165ddbc71bf21e723e81d84406958dcdef67"
+source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
 dependencies = [
- "clap 3.0.0-beta.1",
+ "clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap?rev=29df5c2)",
 ]
 
 [[package]]
@@ -3400,7 +3430,20 @@ version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18f33027081eba0a6d8aba6d1b1c3a3be58cbb12106341c2d5759fcd9b5277e7"
 dependencies = [
- "proc-macro-error-attr",
+ "proc-macro-error-attr 0.4.12",
+ "proc-macro2",
+ "quote 1.0.7",
+ "syn 1.0.40",
+ "version_check 0.9.2",
+]
+
+[[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr 1.0.4",
  "proc-macro2",
  "quote 1.0.7",
  "syn 1.0.40",
@@ -3417,6 +3460,17 @@ dependencies = [
  "quote 1.0.7",
  "syn 1.0.40",
  "syn-mid",
+ "version_check 0.9.2",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.7",
  "version_check 0.9.2",
 ]
 
@@ -4653,6 +4707,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "textwrap"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "203008d98caf094106cfaba70acfed15e18ed3ddb7d94e49baec153a2b462789"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5155,7 +5218,7 @@ version = "0.8.0"
 dependencies = [
  "async-std",
  "chrono",
- "clap 3.0.0-beta.1",
+ "clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap?rev=29df5c2)",
  "clap_generate",
  "criterion",
  "dirs 2.0.2",
@@ -5309,7 +5372,7 @@ dependencies = [
  "base64 0.12.3",
  "chrono",
  "cidr-utils",
- "clap 3.0.0-beta.1",
+ "clap 3.0.0-beta.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "codespan",
  "criterion",
  "dissect",

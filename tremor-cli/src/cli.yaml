@@ -18,7 +18,7 @@ subcommands:
   - explain:
     about: Explains supported commands
   - completions:
-      about: Shell completions
+      about: Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
       subcommands:
         - bash:
             about: Generate bash shell completions
