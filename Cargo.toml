@@ -97,6 +97,9 @@ grok = "1"
 # on features for these (see static-ssl feature here)
 #openssl = { version = "0.10" }
 
+# rest onramp
+tide = "0.13"
+
 [dependencies.tungstenite]
 version = "0.11"
 default-features = false

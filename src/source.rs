@@ -33,6 +33,7 @@ pub(crate) mod kafka;
 pub(crate) mod metronome;
 pub(crate) mod postgres;
 pub(crate) mod prelude;
+pub(crate) mod rest;
 pub(crate) mod tcp;
 pub(crate) mod udp;
 pub(crate) mod ws;

@@ -1,0 +1,32 @@
+onramp:
+  - id: rest
+    type: rest
+    config:
+      host: localhost
+      port: 8139
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+
+offramp:
+  - id: console
+    type: stdout
+    #postprocessors:
+    #  - lines
+
+binding:
+  - id: rest
+    links:
+      '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+
+mapping:
+  /binding/rest/01:
+    instance: "01"
