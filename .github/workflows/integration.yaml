@@ -22,8 +22,10 @@ jobs:
           profile: minimal
       - name: Build
         run: cargo build --all
+      - name: Install tremor
+        run: cargo install -p tremor-cli
       - name: Run Integration Tests
-        run: cargo run -p tremor-cli -- test integration tremor-cli/tests -i integration -e ws
+        run: tremor test integration tremor-cli/tests -i integration -e ws
   api-tests:
     strategy:
       matrix:
