@@ -15,11 +15,6 @@ default-target = "x86_64-unknown-linux-gnu"
 # Additional `RUSTFLAGS` to set (default: none)
 rustc-args = [ "-C target-cpu=native" ]
 
-[[bin]]
-name = "tremor-script"
-path = "src/main.rs"
-test = false
-
 [lib]
 name = "tremor_script"
 crate-type = ["staticlib", "cdylib", "rlib"]
