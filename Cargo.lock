@@ -4916,6 +4916,7 @@ dependencies = [
  "snap",
  "surf",
  "tempfile",
+ "tide",
  "tokio-postgres",
  "tremor-influx",
  "tremor-pipeline",
