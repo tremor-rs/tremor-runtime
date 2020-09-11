@@ -1,7 +1,2 @@
 status: 0
 name: A complex transformation pipeline
-asserts:
-  - source: events.log
-    contains:
-      - |
-        {"done":true}

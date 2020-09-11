@@ -1,7 +1,7 @@
-status: 1
+status: 0
 name: Test string codec
 asserts:
-  - source: events.log
+  - source: tests/integration/string-codec/events.log
     contains:
       - |
-        {"done":true}
+        {"first":"Sander","last":"Daelman"}

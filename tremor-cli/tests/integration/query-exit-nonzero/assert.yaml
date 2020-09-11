@@ -1,7 +1,7 @@
-status: 1
+status: 55
 name: Query exit with non zero status code
 asserts:
-  - source: events.log
+  - source: tests/integration/query-exit-nonzero/events.log
     contains:
       - |
         {"done":true}
