@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: cargo build --all
       - name: Run Integration Tests
-        run: cargo run -p tremor test integration tremor-cli/tests
+        run: cargo run -p tremor-cli -- test integration tremor-cli/tests -i integration -e ws
   api-tests:
     strategy:
       matrix:
