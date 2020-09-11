@@ -25,6 +25,6 @@ jobs:
           override: true
           profile: minimal
       - name: Build
-        run: cargo build
+        run: cargo build --all
       - name: Run eqc tests
         run: ./.github/checks/api.sh -e\
