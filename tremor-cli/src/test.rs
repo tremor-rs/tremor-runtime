@@ -236,7 +236,6 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                             && (kind == TestKind::All || kind == TestKind::Unit)
                         {
                             let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
-                            dbg!(&stats);
                             reports.insert("unit".to_string(), test_reports);
                             unit_stats.merge(&stats);
                             status::hr().ok();
