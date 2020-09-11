@@ -71,6 +71,8 @@ fn main() -> Result<()> {
     let matches = app.clone().get_matches();
     if let Err(e) = run(app, &matches) {
         eprintln!("{}", e);
+        // ALLOW: this is supposed to exit
+        std::process::exit(1);
     }
     Ok(())
 }
@@ -87,23 +89,23 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     };
 
     if let Some(_matches) = cmd.subcommand_matches("explain") {
-        return Err("Not yet implemented".into());
+        Err("Not yet implemented".into())
     } else if let Some(matches) = cmd.subcommand_matches("completions") {
-        completions::run_cmd(app, matches)?;
+        completions::run_cmd(app, matches)
     } else if let Some(matches) = cmd.subcommand_matches("server") {
-        server::run_cmd(matches)?;
+        server::run_cmd(matches)
     } else if let Some(matches) = cmd.subcommand_matches("run") {
-        run::run_cmd(matches.clone())?;
+        run::run_cmd(matches.clone())
     } else if let Some(matches) = cmd.subcommand_matches("doc") {
-        doc::run_cmd(&matches)?;
+        doc::run_cmd(&matches)
     } else if let Some(matches) = cmd.subcommand_matches("api") {
-        task::block_on(api::run_cmd(&mut config, &matches))?;
+        task::block_on(api::run_cmd(&mut config, &matches))
     } else if let Some(matches) = cmd.subcommand_matches("dbg") {
-        debug::run_cmd(&matches)?;
+        debug::run_cmd(&matches)
     } else if let Some(matches) = cmd.subcommand_matches("test") {
-        test::run_cmd(&matches)?;
+        test::run_cmd(&matches)
     } else {
         app.print_long_help().ok();
+        Ok(())
     }
-    Ok(())
 }

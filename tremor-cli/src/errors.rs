@@ -46,4 +46,10 @@ error_chain! {
         LoggingError(log4rs::Error);
         TestKindError(crate::test::UnknownKind);
     }
+    errors {
+        TestFailures(stats: crate::test::stats::Stats) {
+            description("Some tests failed")
+                display("{} out of {} tests failed.", stats.fail, stats.skip + stats.pass)
+        }
+    }
 }

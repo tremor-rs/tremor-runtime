@@ -14,6 +14,7 @@
 
 use crate::errors::Result;
 use halfbrown::hashmap;
+use report::TestSuite;
 use simd_json::{
     borrowed::{Value, Value::Array},
     StaticNode,
@@ -238,7 +239,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
     println!();
     println!();
 
-    let suites: HashMap<String, report::TestSuite> = HashMap::new();
+    let mut suites: HashMap<String, TestSuite> = HashMap::new();
 
     let script = path.to_string_lossy().to_string();
 
@@ -271,6 +272,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
 
                 //                let suite_start = nanotime();
                 for expr in &script.exprs {
+                    let mut suite_name = String::from("Unknown Suite");
                     let mut state = Value::Object(Box::new(hashmap! {}));
                     let mut event = Value::Object(Box::new(hashmap! {}));
                     let mut meta = Value::Object(Box::new(hashmap! {}));
@@ -319,28 +321,26 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                                 false
                                             }
                                         });
-                                        // let name_spec_index = fields.iter().position(|f| {
-                                        //     if let ImutExprInt::Literal(Literal { value, .. }) =
-                                        //         &f.name
-                                        //     {
-                                        //         value == "name"
-                                        //     } else {
-                                        //         false
-                                        //     }
-                                        // });
+                                        let name_spec_index = fields.iter().position(|f| {
+                                            if let ImutExprInt::Literal(Literal { value, .. }) =
+                                                &f.name
+                                            {
+                                                value == "name"
+                                            } else {
+                                                false
+                                            }
+                                        });
 
-                                        // if let Some(name_spec_index) = name_spec_index {
-                                        // if let Some(tag_spec_index) = tag_spec_index {
-                                        //     let name = if let ImutExprInt::Literal(Literal {
-                                        //         value,
-                                        //         ..
-                                        //     }) = &fields[name_spec_index].value
-                                        //     {
-                                        //         value.to_string()
-                                        //     } else {
-                                        //         "Unnamed Suite".to_string()
-                                        //     };
-                                        // }
+                                        if let Some(name_spec_index) = name_spec_index {
+                                            if let Some(tag_spec_index) = tag_spec_index {
+                                                if let ImutExprInt::Literal(Literal {
+                                                    value, ..
+                                                }) = &fields[name_spec_index].value
+                                                {
+                                                    suite_name = value.to_string()
+                                                };
+                                            }
+                                        }
                                         match tag_spec_index {
                                             None => {
                                                 if let ImutExprInt::Record(r) = item {
@@ -393,6 +393,17 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                         }
                                         // }
                                     }
+                                    suites.insert(
+                                        suite_name.clone(),
+                                        TestSuite {
+                                            name: suite_name,
+                                            description: "A suite".into(),
+                                            elements: vec![],
+                                            evidence: None,
+                                            stats: stat_s,
+                                            duration: 0,
+                                        },
+                                    );
                                 };
                             }
                         }
