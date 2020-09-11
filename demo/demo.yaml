@@ -1,52 +1,52 @@
-version: '3.3'
+version: "3.3"
 services:
   zookeeper:
-    image: 'wurstmeister/zookeeper:3.4.6'
+    image: "wurstmeister/zookeeper:3.4.6"
     ports:
-      - '2181:2181'
+      - "2181:2181"
   kafka:
-    image: 'wurstmeister/kafka:2.12-2.1.1'
+    image: "wurstmeister/kafka:2.12-2.1.1"
     depends_on:
       - zookeeper
     ports:
-      - '9092:9092'
+      - "9092:9092"
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
       KAFKA_CREATE_TOPICS: "info:1:1,error:1:1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
   elastic:
-    image: 'docker.elastic.co/elasticsearch/elasticsearch:6.6.1'
+    image: "docker.elastic.co/elasticsearch/elasticsearch:6.6.1"
     ports:
-      - '9200:9200'
-      - '9300:9300'
+      - "9200:9200"
+      - "9300:9300"
     environment:
       discovery.type: single-node
   kibana:
-    image: 'docker.elastic.co/kibana/kibana:6.6.1'
+    image: "docker.elastic.co/kibana/kibana:6.6.1"
     ports:
-      - '5601:5601'
+      - "5601:5601"
     depends_on:
       - elastic
     environment:
-      ELASTICSEARCH_URL: 'http://elastic:9200'
+      ELASTICSEARCH_URL: "http://elastic:9200"
     links:
       - elastic
   influx:
     image: influxdb:1.7
     ports:
-      - '8086:8086'
-      - '8083:8083'
+      - "8086:8086"
+      - "8083:8083"
     environment:
-      INFLUXDB_DB: 'tremor'
+      INFLUXDB_DB: "tremor"
   chronograf:
     image: chronograf:1.7
     ports:
-      - '8888:8888'
+      - "8888:8888"
     depends_on:
       - influx
   tremor:
-    image: tremorproject/tremor:latest
+    image: tremor
     depends_on:
       - kibana
       - kafka

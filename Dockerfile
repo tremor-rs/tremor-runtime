@@ -28,6 +28,7 @@ COPY tremor-influx ./tremor-influx
 COPY tremor-query ./tremor-query
 COPY tremor-server ./tremor-server
 COPY tremor-tool ./tremor-tool
+COPY tremor-cli ./tremor-cli
 
 RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
@@ -43,8 +44,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY --from=builder target/release/tremor-server /tremor-server
-COPY --from=builder target/release/tremor-tool /tremor-tool
+COPY --from=builder target/release/tremor /tremor
 
 # stdlib
 RUN mkdir -p /opt/local/tremor/lib
