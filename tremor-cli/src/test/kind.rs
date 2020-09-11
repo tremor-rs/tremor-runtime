@@ -27,6 +27,7 @@ pub(crate) enum TestKind {
 
 /// An unknown test kind
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct UnknownKind(String);
 
 impl Display for UnknownKind {

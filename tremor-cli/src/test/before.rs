@@ -40,7 +40,7 @@ impl Before {
         Ok(Some(process))
     }
 
-    #[allow(clippy::module_name_repetitions)]
+    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn block_on(&self) -> Result<()> {
         if let Some(conditions) = &self.conditionals {
             for (k, v) in conditions.iter() {
