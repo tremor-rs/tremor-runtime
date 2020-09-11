@@ -1,4 +1,4 @@
-nam-: EQC Tests
+name: EQC Tests
 
 on: [push]
 
