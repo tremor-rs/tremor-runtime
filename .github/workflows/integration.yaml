@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: cargo build --all
       - name: Run Integration Tests
-        run: make it
+        run: 
   api-tests:
     strategy:
       matrix:
@@ -47,5 +47,5 @@ jobs:
         run: cargo build --all
       - name: Run curl tests
         run: ./.github/checks/api.sh -c
-      - name: Run tremor-tool tests
-        run: ./.github/checks/api.sh -t
+#      - name: Run tremor-tool tests
+#        run: ./.github/checks/api.sh -t
