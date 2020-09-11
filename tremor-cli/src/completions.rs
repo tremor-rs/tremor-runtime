@@ -32,39 +32,34 @@ pub(crate) fn run_cmd(app: clap::App, matches: &ArgMatches) -> Result<()> {
 
 fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
     match shell {
-        "bash" => Ok(generate::<Bash, _>(
-            &mut app,
-            "tremor",
-            &mut std::io::stdout(),
-        )),
-        "elvish" => Ok(generate::<Elvish, _>(
-            &mut app,
-            "tremor",
-            &mut std::io::stdout(),
-        )),
-        "fish" => Ok(generate::<Fish, _>(
-            &mut app,
-            "tremor",
-            &mut std::io::stdout(),
-        )),
-        "powershell" => Ok(generate::<PowerShell, _>(
-            &mut app,
-            "tremor",
-            &mut std::io::stdout(),
-        )),
-        "zsh" => Ok(generate::<Zsh, _>(
-            &mut app,
-            "tremor",
-            &mut std::io::stdout(),
-        )),
+        "bash" => {
+            generate::<Bash, _>(&mut app, "tremor", &mut std::io::stdout());
+            Ok(())
+        }
+        "elvish" => {
+            generate::<Elvish, _>(&mut app, "tremor", &mut std::io::stdout());
+            Ok(())
+        }
+        "fish" => {
+            generate::<Fish, _>(&mut app, "tremor", &mut std::io::stdout());
+            Ok(())
+        }
+        "powershell" => {
+            generate::<PowerShell, _>(&mut app, "tremor", &mut std::io::stdout());
+            Ok(())
+        }
+        "zsh" => {
+            generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
+            Ok(())
+        }
         _ => Err("Unsupported shell".into()),
     }
 }
 
 fn guess_shell(app: clap::App) -> Result<()> {
-    if let Some(_) = std::env::var_os("ZSH_NAME") {
+    if std::env::var_os("ZSH_NAME").is_some() {
         generate_for_shell(app, "zsh")
-    } else if let Some(_) = std::env::var_os("PSModulePath") {
+    } else if std::env::var_os("PSModulePath").is_some() {
         generate_for_shell(app, "powershell")
     } else if let Some(shell) = std::env::var_os("SHELL") {
         if let Some(shell_str) = Path::new(&shell.into_string().map_err(|_| "")?).file_name() {
