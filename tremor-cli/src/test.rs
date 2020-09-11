@@ -21,6 +21,7 @@ use crate::util::*;
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::Path;
 
 mod after;
@@ -35,6 +36,7 @@ pub mod tag;
 mod unit;
 
 use kind::TestKind;
+pub(crate) use kind::UnknownKind;
 use metadata::Meta;
 use std::{fs::File, io::Write};
 use tag::TagFilter;
@@ -156,7 +158,7 @@ fn suite_unit(
 }
 
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().into();
+    let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
@@ -167,6 +169,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     } else {
         vec![]
     };
+
     let excludes: Vec<String> = if matches.is_present("EXCLUDES") {
         if let Some(matches) = matches.values_of("EXCLUDES") {
             matches.map(std::string::ToString::to_string).collect()

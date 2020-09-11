@@ -44,5 +44,6 @@ error_chain! {
         Io(std::io::Error) #[doc = "Error during std::io"];
         SendError(std::sync::mpsc::SendError<String>);
         LoggingError(log4rs::Error);
+        TestKindError(crate::test::UnknownKind);
     }
 }

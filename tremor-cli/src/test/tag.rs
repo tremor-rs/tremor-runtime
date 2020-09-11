@@ -71,12 +71,12 @@ impl TagFilter {
         self.includes.len() == 0 && self.excludes.len() == 0
     }
 
-    pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
-        let mut includes: Vec<String> = Vec::from_iter(self.includes.iter().cloned());
-        let excludes: Vec<String> = Vec::from_iter(self.excludes.iter().cloned());
-        if let Some(mut tags) = tags {
-            includes.append(&mut tags);
-        }
-        TagFilter::new(includes, excludes)
-    }
+    // pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
+    //     let mut includes: Vec<String> = Vec::from_iter(self.includes.iter().cloned());
+    //     let excludes: Vec<String> = Vec::from_iter(self.excludes.iter().cloned());
+    //     if let Some(mut tags) = tags {
+    //         includes.append(&mut tags);
+    //     }
+    //     TagFilter::new(includes, excludes)
+    // }
 }

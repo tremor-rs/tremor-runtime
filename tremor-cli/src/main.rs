@@ -69,7 +69,10 @@ fn main() -> Result<()> {
     let app = app.global_setting(AppSettings::ColoredHelp);
     let app = app.global_setting(AppSettings::ColorAlways);
     let matches = app.clone().get_matches();
-    run(app, &matches)
+    if let Err(e) = run(app, &matches) {
+        eprintln!("{}", e);
+    }
+    Ok(())
 }
 
 fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
