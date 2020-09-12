@@ -12,8 +12,23 @@ pipeline:
         - in
       outputs:
         - out
+        - error
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            {
+              "method": $method,
+              "path": $path,
+              "query": $query,
+              "headers": $headers,
+              "body": event,
+            }
     links:
-      in: [ out ]
+      in: [ runtime ]
+      runtime: [ out ]
+      runtime/error: [ error ]
 
 offramp:
   - id: console
@@ -26,6 +41,7 @@ binding:
     links:
       '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [ '/offramp/console/{instance}/in' ]
+      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
 mapping:
   /binding/rest/01:

@@ -16,10 +16,9 @@
 
 use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
-use halfbrown::HashMap;
-use simd_json::json;
 use tide::http::Method;
 use tide::{Body, Request, Response};
+use tremor_script::Value;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -88,16 +87,6 @@ impl Int {
     }
 }
 
-#[derive(Serialize)]
-pub struct TremorRestRequest {
-    headers: HashMap<String, Vec<String>>,
-    path: String,
-    query_params: String,
-    method: String,
-    //body: Vec<u8>,
-    body: String,
-}
-
 #[derive(Clone)]
 struct ServerState {
     tx: Sender<SourceReply>,
@@ -131,36 +120,54 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
                 req.header(name)
                     .iter()
                     .map(|value| value.as_str().to_string())
-                    .collect(),
+                    .collect::<Value>(),
             )
         })
-        .collect();
+        .collect::<Value>();
 
-    // TODO pass all of these as event meta (except body -- that goes as event data)
-    // then can get rid of this struct
-    let request = TremorRestRequest {
-        headers,
-        path: url.path().to_string(),
-        // TODO introduce config param to pass this as a hashmap (useful when needed)
-        // also document duplicate query key behavior in that case
-        query_params: url.query().unwrap_or("").to_string(),
-        method: req.method().to_string(),
-        // TODO need to ultimately decode the body based on the request content-type
-        // then this will be sent under SourceReply::Structured (along with event meta)
-        //body: req.body_bytes().await?,
-        body: req.body_string().await?,
-    };
-    let data = json!(request).encode().into_bytes();
+    // request metadata
+    let mut meta = Value::object_with_capacity(4);
+    meta.insert("method", req.method().to_string())?;
+    meta.insert("path", url.path().to_string())?;
+    // TODO introduce config param to pass this as a hashmap (useful when needed)
+    // also document duplicate query key behavior in that case
+    meta.insert("query", url.query().unwrap_or("").to_string())?;
+    meta.insert("headers", headers)?;
+
+    // TODO need to ultimately decode the body based on the request content-type
+    //
+    // alt strategy than the current one(s) here:
+    // modify current codec and still pass data as SourceReply::Data
+    // (adding capability there for meta). or can pass codec name along with the data
+    let data = req.body_string().await?;
+    //
+    //let body = req.body_bytes().await?;
+    //
+    // need rental for this to work
+    //let data = Value::from(std::str::from_utf8(&body)?);
+    //
+    // this does not allow us to pass meta
+    //use crate::codec::Codec;
+    //let codec = crate::codec::string::String {};
+    //let data = codec.decode(body, 0)?.unwrap();
+    //
+    // works but is same logic as codecs, duplicated
+    //let data = tremor_script::LineValue::try_new(vec![body], |data| {
+    //    std::str::from_utf8(data[0].as_slice())
+    //        .map(|v| tremor_script::ValueAndMeta::from_parts(Value::from(v), meta))
+    //})
+    //.map_err(|e| e.0)?;
 
     req.state()
         .tx
-        .send(SourceReply::Data {
+        .send(SourceReply::Structured {
             origin_uri,
-            data,
-            stream: 0, // TODO some value here?
+            data: (data, meta).into(),
+            //data,
         })
         .await?;
 
+    // TODO should throw 500 on any internal error when handling request?
     let status = match req.method() {
         Method::Post | Method::Put => 201,
         Method::Delete => 200,
