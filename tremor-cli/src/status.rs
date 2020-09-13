@@ -137,7 +137,7 @@ pub(crate) fn assert(
     Ok(())
 }
 
-pub(crate) fn assert_has(label: &str, what: &str, ok: bool) -> Result<()> {
+pub(crate) fn assert_has(label: &str, what: &str, info: Option<&String>, ok: bool) -> Result<()> {
     let mut h = TermHighlighter::new();
     if ok {
         fg_bold!(h, Green);
@@ -151,6 +151,11 @@ pub(crate) fn assert_has(label: &str, what: &str, ok: bool) -> Result<()> {
     write!(h.get_writer(), ": ")?;
     writeln!(h.get_writer(), "{}", &what)?;
     h.reset()?;
+    if let Some(info) = info {
+        if !ok {
+            writeln!(h.get_writer(), "{}", info)?;
+        }
+    };
     h.finalize()?;
     drop(h);
     Ok(())
