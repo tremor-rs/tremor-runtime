@@ -31,11 +31,9 @@ pub(crate) struct Before {
 
 impl Before {
     pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd).ok_or_else(|| {
-            Error::from(format!("Could not find executable {} on path", &self.cmd,))
-        });
+        let cmd = job::which(&self.cmd)?;
 
-        let process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
+        let process = job::TargetProcess::new_with_stderr(&cmd, &self.args)?;
         self.block_on()?;
         Ok(Some(process))
     }

@@ -60,10 +60,7 @@ pub(crate) fn run_process(
         // FIXME consider using current exe
         let bench_rootx = bench_root.to_string();
 
-        let mut process = match job::which("tremor") {
-            Some(cmd_exec_name) => job::TargetProcess::new_with_stderr(&cmd_exec_name, &args)?,
-            None => return Err("Unable to find suitable `tremor` binary on path".into()),
-        };
+        let mut process = job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args)?;
         let process_status = process.wait_with_output();
 
         let fg_out_file = format!("{}/fg.out.log", bench_root);
