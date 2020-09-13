@@ -20,10 +20,8 @@ jobs:
         with:
           override: true
           profile: minimal
-      - name: Build and install tremor
-        run: cargo install --path tremor-cli
       - name: Run Integration Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib tremor test integration tests -i integration -e ws
+        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test integration tests -i integration -e ws
   api-tests:
     strategy:
       matrix:
