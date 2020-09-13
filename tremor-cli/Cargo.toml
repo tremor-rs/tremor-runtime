@@ -27,6 +27,7 @@ tremor-script = { path = "../tremor-script" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-influx = { path = "../tremor-influx" }
 serde_derive = "1"
+difference = "2"
 # we need to wait for the next clap release, meanwhile:
 # see https://github.com/clap-rs/clap/pull/2100
 clap = { git = "https://github.com/clap-rs/clap", rev = "29df5c2", features = [ "yaml", "color" ] }

@@ -16,6 +16,7 @@ use crate::errors::{self, Result};
 use crate::test::stats;
 use crate::util::slurp_string;
 use crate::{open_file, report, status};
+use difference::Changeset;
 use errors::Error;
 use serde::{Deserialize, Deserializer};
 use std::io::prelude::*;
@@ -56,16 +57,16 @@ fn file_contains(path_str: &str, what: &[String], base: Option<&String>) -> Resu
     Ok(true)
 }
 
-fn file_equals(path_str: &str, other: &str, base: Option<&String>) -> Result<bool> {
+fn file_equals(path_str: &str, other: &str, base: Option<&String>) -> Result<Changeset> {
     let mut got_f = open_file(path_str, base)?;
     let mut expected_f = open_file(other, base)?;
 
-    let mut got = Vec::new();
-    let mut expected = Vec::new();
-    got_f.read_to_end(&mut got)?;
-    expected_f.read_to_end(&mut expected)?;
+    let mut got = String::new();
+    let mut expected = String::new();
+    got_f.read_to_string(&mut got)?;
+    expected_f.read_to_string(&mut expected)?;
 
-    Ok(got == expected)
+    Ok(Changeset::new(&expected, &got, "\n"))
 }
 
 #[derive(Debug)]
@@ -248,6 +249,7 @@ pub(crate) fn process_filebased_asserts(
                         status::assert_has(
                             &format!("Assert {}", counter),
                             &format!("Contains `{}` in `{}`", &c.trim(), &file),
+                            None,
                             condition,
                         )?;
                     }
@@ -271,16 +273,19 @@ pub(crate) fn process_filebased_asserts(
                 if let Some(equals_file) = equals_file {
                     // By line reporting
                     counter += 1;
-                    let condition = file_equals(&file, &equals_file, base.as_ref())?;
+                    let changeset = file_equals(&file, &equals_file, base.as_ref())?;
+                    let info = Some(changeset.to_string());
+                    let condition = changeset.distance == 0;
                     status::assert_has(
                         &format!("Assert {}", counter),
                         &format!("Fille `{}` equals `{}`", &file, equals_file),
+                        info.as_ref(),
                         condition,
                     )?;
 
                     elements.push(report::TestElement {
                         description: format!("File `{}` equals", file),
-                        info: Some(equals_file.clone()),
+                        info,
                         hidden: false,
                         keyword: report::KeywordKind::Predicate,
                         result: report::ResultKind {

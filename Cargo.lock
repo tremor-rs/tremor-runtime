@@ -5221,6 +5221,7 @@ dependencies = [
  "clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap?rev=29df5c2)",
  "clap_generate",
  "criterion",
+ "difference",
  "dirs 2.0.2",
  "env_logger",
  "error-chain 0.12.4",
