@@ -70,10 +70,9 @@ force:
 ###############################################################################
 
 stdlib-doc:
-	cargo build -p tremor-cli;
 	-rm -rf docs
 	-mkdir docs
-	-TREMOR_PATH=./tremor-script/lib ./target/debug/tremor doc tremor-script/lib docs
+	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs
 
 chk_copyright:
 	@./.github/checks/copyright.sh
